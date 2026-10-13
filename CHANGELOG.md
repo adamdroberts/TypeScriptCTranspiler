@@ -1,3 +1,5 @@
+Composite JSON source output now follows a shared owner/property continuation graph with enumerability, nested hook/getter effects, abrupt ordering, filtered Lists, spacing, raw JSON and cycle ancestry. Independent Node/native properties and one generated deep owner stress pass in both memory modes; exotic source precision and exhaustive target evidence remain open.
+
 Preserved ordered descriptor getter/Proxy effects, abrupt field gates and inherited Object.create source owners through the shared worklist. Added independent Node/native semantic properties and one generated deep source-owner input in both memory modes; exhaustive target coverage remains open.
 
 Parsed JSON object/array source facts now use one iterative ordinary owner worklist, preserving fields, prototypes and List extents. Synchronous for-of bindings and possible iterator close effects share protocol/receiver/exception graphs, including inherited return mutations and opaque-write rejection. Independent Node/native partitions and one generated mixed-owner depth input cover both memory modes; composite revivers, serialization and exhaustive target coverage remain open.

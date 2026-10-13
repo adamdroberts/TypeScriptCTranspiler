@@ -24,10 +24,10 @@ test('raw JSON source owners retain validated text through ordinary calls',()=>{
   ['try{JSON.rawJSON({toString(){throw "43;"}})}catch(body){eval(body)}','43;'],
   ['let body="47;";JSON.rawJSON({toString(){body="53;";return "1"}});eval(body);','53;'],
   ['const raw=JSON.rawJSON("59");raw.rawJSON="61";eval(JSON.stringify(raw));','59'],
+  ['eval("("+JSON.stringify({rawJSON:"67"})+")");','({"rawJSON":"67"})'],
  ] as const){const result=graph([{path:'main.js',source}]);expect({source,error:result.error}).toEqual({source,error:null});expect(result.directEvalSources.some(entry=>entry.source===expected)).toBe(true);}
  for(const source of [
   'eval(JSON.stringify(JSON.rawJSON(opaque())));',
-  'eval(JSON.stringify({rawJSON:"67"}));',
   'eval(JSON.stringify(new Proxy(JSON.rawJSON("71"),{})));',
   'const value={body:"73;"};JSON.rawJSON({toString(){opaque(value);return "1"}});eval(value.body);',
  ])expect({source,error:graph([{path:'main.js',source}]).error}).toMatchObject({error:expect.stringContaining('direct eval source is not a finite static string expression')});

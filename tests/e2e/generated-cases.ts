@@ -117,6 +117,11 @@ export interface JsonParseSourceOwnerDepthSpec {
     depth: number;
 }
 
+export interface JsonCompositeSourceDepthSpec {
+    generator: "json-composite-source-depth";
+    depth: number;
+}
+
 export interface DescriptorSourceOwnerDepthSpec {
     generator: "descriptor-source-owner-depth";
     depth: number;
@@ -208,6 +213,7 @@ export type GeneratedCaseSpec =
     | JsonReviverDepthSpec
     | JsonNamespaceOwnerDepthSpec
     | JsonParseSourceOwnerDepthSpec
+    | JsonCompositeSourceDepthSpec
     | DescriptorSourceOwnerDepthSpec
     | ReflectConstructArgumentWidthSpec
     | ArrowFormalBindingTreeDepthSpec
@@ -290,7 +296,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth") {
+    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
             throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
@@ -1611,6 +1617,14 @@ function classExpressionMethodWidthSource(width: number): string {
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
+        case "json-composite-source-depth": {
+            let text="17";for(let depth=0;depth<spec.depth;depth++)text=depth%2?"["+text+"]":"{\"child\":"+text+"}";
+            return `const value: any = JSON.parse(${JSON.stringify(text)});
+const body = JSON.stringify(value);
+const restored: any = eval("JSON.parse("+JSON.stringify(body)+")");
+console.log("JSON composite source depth:",JSON.stringify(restored)===body);
+`;
+        }
         case "descriptor-source-owner-depth": {
             const nodes=Array.from({length:spec.depth},(_,index)=>`const value${index}: any = {};Object.defineProperty(value${index},"item",{get enumerable(){return true},get configurable(){return true},get value(){return ${index?"value"+(index-1):"{body:'193;'}"}},get writable(){return true}});`);
             return nodes.join("\n")+`\nconsole.log("descriptor source owner depth:",eval(value${spec.depth-1}${".item".repeat(spec.depth)}.body)===193);\n`;
