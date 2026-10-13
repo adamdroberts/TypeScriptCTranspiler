@@ -1,3 +1,5 @@
+Fixed Module preflight collisions between the source name namespace and internal namespace-object bindings. Export resolution now uses an explicit frame worklist, with independent Node/native identity and resolution-phase properties plus a deep preflight graph; full host eligibility and exhaustive target coverage remain open.
+
 Added primitive brand/payload source owners and shared boxed JSON coercions, with actual construction targets, owned function prototypes and derived return projections. Independent Node/native properties and one deep boxed-leaf owner stress cover both memory modes; exotic source precision and exhaustive target evidence remain open.
 
 Retained original JSON token/owner records and composite reviver source continuations, with live property effects, SameValue contexts and actual formal-return projections. Independent Node/native partitions and a generated deep record input cover both memory modes; unknown runtime sources retain explicit admission, and exhaustive target evidence remains open.

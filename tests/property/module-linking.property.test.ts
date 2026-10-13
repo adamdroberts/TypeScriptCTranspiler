@@ -101,7 +101,7 @@ test("module linking detects circular indirect exports through the shared resolv
 
 test("module linking uses the same worklists for one representative deep graph", () => {
     const sources = new Map<string, string>();
-    const depth = 384;
+    const depth = 16384;
     sources.set("test/root.js", 'import { token } from "./depth-0.js";\n');
     for (let index = 0; index < depth; index++) {
         sources.set(

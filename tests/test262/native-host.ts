@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import {moduleNamespaceBinding,resolveModuleExport,type ModuleExportResolution} from "../../src/module-export-resolution";
 import { earlyPrivateStaticSemanticsFailure } from "../../src/emit/private-names";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -50,12 +51,12 @@ export interface ParseFailure {
 
 interface ModuleImportEntry {
     readonly moduleRequest: ModuleRequest;
-    readonly importName: string | "namespace";
+    readonly importName: string | typeof moduleNamespaceBinding;
 }
 
 interface ModuleIndirectExportEntry {
     readonly moduleRequest: ModuleRequest;
-    readonly importName: string | "namespace";
+    readonly importName: string | typeof moduleNamespaceBinding;
 }
 
 interface ModuleRecord {
@@ -66,11 +67,6 @@ interface ModuleRecord {
     readonly indirectExports: Map<string, ModuleIndirectExportEntry>;
     readonly starExports: ModuleRequest[];
 }
-
-type ExportResolution =
-    | { readonly modulePath: string; readonly bindingName: string }
-    | "ambiguous"
-    | null;
 
 export interface FiniteEvalScriptSourceGraph {
     readonly agentSources: readonly string[];
@@ -341,7 +337,7 @@ function moduleRecord(source: string, filename: string): { record: ModuleRecord 
             }
             const bindings = statement.importClause.namedBindings;
             if (bindings && ts.isNamespaceImport(bindings)) {
-                addImport(bindings.name.text, { moduleRequest, importName: "namespace" });
+                addImport(bindings.name.text, { moduleRequest, importName: moduleNamespaceBinding });
             } else if (bindings) {
                 for (const element of bindings.elements) {
                     addImport(element.name.text, {
@@ -370,7 +366,7 @@ function moduleRecord(source: string, filename: string): { record: ModuleRecord 
                 if (moduleRequest) {
                     addExplicitExport(moduleName(statement.exportClause.name), null, {
                         moduleRequest,
-                        importName: "namespace",
+                        importName: moduleNamespaceBinding,
                     });
                 }
                 continue;
@@ -453,44 +449,8 @@ function resolvedModule(
     return resolved ? records.get(resolved) ?? null : null;
 }
 
-function sameResolution(left: Exclude<ExportResolution, "ambiguous" | null>, right: typeof left): boolean {
-    return left.modulePath === right.modulePath && left.bindingName === right.bindingName;
-}
-
-function resolveExport(
-    records: ReadonlyMap<string, ModuleRecord>,
-    record: ModuleRecord,
-    exportName: string,
-    resolveSet: Set<string> = new Set(),
-): ExportResolution {
-    const key = `${record.path}\0${exportName}`;
-    if (resolveSet.has(key)) return null;
-    resolveSet.add(key);
-
-    const localName = record.localExports.get(exportName);
-    if (localName !== undefined) return { modulePath: record.path, bindingName: localName };
-
-    const indirect = record.indirectExports.get(exportName);
-    if (indirect) {
-        const imported = resolvedModule(records, record, indirect.moduleRequest);
-        if (!imported) return null;
-        return indirect.importName === "namespace"
-            ? { modulePath: imported.path, bindingName: "*namespace*" }
-            : resolveExport(records, imported, indirect.importName, resolveSet);
-    }
-
-    if (exportName === "default") return null;
-    let starResolution: Exclude<ExportResolution, "ambiguous" | null> | null = null;
-    for (const moduleRequest of record.starExports) {
-        const imported = resolvedModule(records, record, moduleRequest);
-        if (!imported) return null;
-        const resolution = resolveExport(records, imported, exportName, resolveSet);
-        if (resolution === "ambiguous") return resolution;
-        if (resolution === null) continue;
-        if (starResolution === null) starResolution = resolution;
-        else if (!sameResolution(starResolution, resolution)) return "ambiguous";
-    }
-    return starResolution;
+function resolveExport(records:ReadonlyMap<string,ModuleRecord>,record:ModuleRecord,exportName:string):ModuleExportResolution {
+    return resolveModuleExport<ModuleRequest,ModuleRecord>(record,exportName,(importer,request)=>resolvedModule(records,importer,request));
 }
 
 /** Analyze one complete, attested Module resource graph. The source-derived
@@ -596,7 +556,7 @@ export function analyzeModuleGraph(
             }
         }
         for (const entry of frame.record.imports) {
-            if (entry.importName === "namespace") continue;
+            if (entry.importName === moduleNamespaceBinding) continue;
             const imported = resolvedModule(records, frame.record, entry.moduleRequest)!;
             const resolution = resolveExport(records, imported, entry.importName);
             if (resolution === null || resolution === "ambiguous") {

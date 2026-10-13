@@ -3065,6 +3065,62 @@
         "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
         "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/module-namespace-marker.property.test.ts",
+      "targets": [
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-smr-resolveexport#source-text-module-export-graph"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/module-linking.property.test.ts",
+      "targets": [
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-smr-resolveexport#source-text-module-export-graph"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "module_namespace_binding_name",
+      "targets": [
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-smr-resolveexport#source-text-module-export-graph"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/module-export-resolution.ts#moduleNamespaceBinding",
+      "targets": [
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-smr-resolveexport#source-text-module-export-graph"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/module-export-resolution.ts#ModuleExportRecord",
+      "targets": [
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-smr-resolveexport#source-text-module-export-graph"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/module-export-resolution.ts#resolveModuleExport",
+      "targets": [
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-smr-resolveexport#source-text-module-export-graph"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/module-export-resolution.ts#ModuleExportResolution",
+      "targets": [
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-smr-resolveexport#source-text-module-export-graph"
+      ]
     }
   ]
 }
