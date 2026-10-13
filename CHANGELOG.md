@@ -327,6 +327,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Preserve unbounded numeric source-key domains through retained scalar facts and project finite owner locations with one shared key worklist. Add Node/native source-context and opaque-effect partitions with a deep prototype graph.
+
 - Keep ambient import aliases out of source C-name ownership and select native EventEmitter constructors through their semantic import identity. Add Node/native alias and shadow partitions with a deep source module graph.
 
 - Lower grouped values iteratively and preserve grouped typeof/call References through the shared operation graph. Test: `grouping_reference_depth`.

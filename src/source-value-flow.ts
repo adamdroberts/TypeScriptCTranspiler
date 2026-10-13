@@ -74,7 +74,7 @@ type Atom =
     | { readonly tag: "operation"; readonly operation: Operation }
     | { readonly tag: "bound"; readonly target: Cell; readonly receiver: Cell; readonly prefix: readonly Cell[] | null; readonly fields: ObjectOwner }
     | { readonly tag: "primitive"; readonly value: Primitive }
-    | { readonly tag: "non-string" }
+    | { readonly tag: "non-string"; readonly domain?: "numeric" }
     | { readonly tag: "unknown-string" }
     | { readonly tag: "abrupt" }
     | { readonly tag: "pending-source" }
@@ -226,6 +226,7 @@ class SourceValueFlow {
     private readonly symbolRegistry = new Map<string, symbol>();
     private readonly wellKnownSymbols = new Map([...runtimeWellKnownSymbolDescriptions].map(([name, description]) => [name, Symbol(description)]));
     private readonly nonString: Atom = { tag: "non-string" };
+    private readonly numericValue: Atom = { tag: "non-string", domain: "numeric" };
     private readonly unknown: Atom = { tag: "unknown" };
     private readonly opaqueObject: Atom = { tag: "opaque-object" };
     private readonly abrupt: Atom = {tag:"abrupt"};
@@ -1044,7 +1045,7 @@ class SourceValueFlow {
         const {proof, pending, unresolved} = this.primitiveState(key, rule);
         if (proof.primitiveComplete) return [...new Set(proof.values.map(value => typeof value === "symbol" ? value : String(value)))];
         if (pending && !unresolved) return undefined;
-        if (context) {
+        if (context && !this.numericKeyDomain(key)) {
             const handler = this.exceptionHandlers.get(context);
             if (handler) this.publish(handler, this.unknown);
             this.onActive(context, () => this.opaqueEffect(context));
@@ -1135,9 +1136,23 @@ class SourceValueFlow {
     private computedProperty(base: Cell, key: Cell, context: ts.Node): Cell {
         const result = this.newCell(), selected = new Set<SourcePropertyKey>();
         let rule!: Rule;
-        rule = this.rule([key], () => {
+        rule = this.rule([base, key], () => {
             const names = this.propertyKeys(key, rule, context);
-            if (names === null) this.publish(result, this.unknown);
+            if (names === null && this.numericKeyDomain(key)) {
+                const keys = this.propertyDomainKeys(base, context, rule, "numeric");
+                if (keys === undefined) return;
+                if (keys === null) this.publish(result, this.unknown);
+                else {
+                    // The numeric domain has unbounded cardinality. Known
+                    // owner locations plus absence cover every possible key.
+                    this.publish(result, this.primitive(undefined));
+                    for (const name of keys) if (!selected.has(name)) {
+                        selected.add(name);
+                        this.copy(this.property(base, name, context), result);
+                    }
+                }
+            }
+            else if (names === null) this.publish(result, this.unknown);
             else if (names?.length === 0) this.publish(result, this.abrupt);
             else for (const name of names ?? []) if (!selected.has(name)) {
                 selected.add(name);
@@ -1145,6 +1160,14 @@ class SourceValueFlow {
             }
         });
         return result;
+    }
+    private numericKeyDomain(key: Cell): boolean {
+        return key.values.size > 0 && [...key.values].every(atom =>
+            atom.tag === "abrupt" ||
+            atom.tag === "primitive" && (typeof atom.value === "number" || typeof atom.value === "bigint") ||
+            atom.tag === "non-string" && atom.domain === "numeric" ||
+            atom.tag === "text-operation" && (atom.operation === "coerce" ||
+                atom.operation === "numeric" && atom.numeric!.result !== "boolean" && atom.numeric!.conversion !== "default"));
     }
     private writeTarget(raw: ts.Expression, value: Cell, context: ts.Node, mode: "set"|"delete" = "set"): void {
         const target = unwrap(raw);
@@ -1402,18 +1425,28 @@ class SourceValueFlow {
         })];
     }
     private indexedPropertyPositions(receiver:Cell,context:ts.Node,rule:Rule):readonly number[]|null|undefined {
-        const positions=new Set<number>(),owners:ObjectOwner[]=[],visited=new Set<ObjectOwner>();
+        const keys=this.propertyDomainKeys(receiver,context,rule,"index");
+        return keys===null||keys===undefined?keys:keys.map(Number).sort((left,right)=>left-right);
+    }
+    private propertyDomainKeys(receiver:Cell,context:ts.Node,rule:Rule,domain:"index"|"numeric"):readonly string[]|null|undefined {
+        const keys=new Set<string>(),owners:ObjectOwner[]=[],visited=new Set<ObjectOwner>();
         const add=(key:SourcePropertyKey|null)=>{
             if(typeof key!=="string")return;
             const index=Number(key);
-            if(Number.isSafeInteger(index)&&index>=0&&String(index)===key)positions.add(index);
+            if(domain==="index"){
+                if(Number.isSafeInteger(index)&&index>=0&&String(index)===key)keys.add(key);
+            }else if(String(index)===key)keys.add(key);
+            else {
+                try {if(String(BigInt(key))===key)keys.add(key);} catch {}
+            }
         };
         this.watch(rule,receiver);
         for(const atom of receiver.values){
             if(atom.tag==="pending-source")return undefined;
             if(atom.tag==="abrupt"||atom.tag==="primitive"&&(atom.value===null||atom.value===undefined))continue;
             if(atom.tag==="primitive"&&typeof atom.value==="string"){
-                for(let index=0;index<atom.value.length;index++)positions.add(index);
+                if(domain==="numeric")return null;
+                for(let index=0;index<atom.value.length;index++)keys.add(String(index));
             }else{
                 const owner=this.ordinaryOwner(atom);
                 if(!owner||atom.tag==="builtin"&&!owner.closedIndices)return null;
@@ -1439,7 +1472,7 @@ class SourceValueFlow {
                 }
             }
         }
-        return [...positions].sort((left,right)=>left-right);
+        return [...keys];
     }
     private property(base: Cell, key: SourcePropertyKey, context?: ts.Node, ownOnly=false): Cell {
         const result = this.newCell();
@@ -1788,7 +1821,7 @@ class SourceValueFlow {
                 write = this.rule([converted[0]!], () => {
                     const state = this.primitiveState(converted[0]!, write, true);
                     if (state.pending) return;
-                    this.publish(stored, state.proof.primitiveComplete && !state.proof.values.length ? this.abrupt : this.nonString);
+                    this.publish(stored, state.proof.primitiveComplete && !state.proof.values.length ? this.abrupt : this.numericValue);
                 });
             }
             const handler = this.exceptionHandlers.get(node);
