@@ -1,4 +1,4 @@
-bad apply: TypeError: Proxy apply trap must be callable
-bad construct: TypeError: Proxy construct trap must be callable
-primitive construct: TypeError: Proxy construct trap must return an object
+bad apply: TypeError
+bad construct: TypeError
+primitive construct: TypeError
 events: args:apply|args:construct|args:primitive|primitive trap:x

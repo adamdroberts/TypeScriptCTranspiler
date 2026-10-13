@@ -1,10 +1,10 @@
 metadata:  0 false
-construct: TypeError: Reflect.construct target is not a supported constructor
+construct: TypeError
 direct before: 1
 direct first: undefined
 direct second: undefined
-direct after: TypeError: Cannot perform 'get' on a proxy that has been revoked
+direct after: TypeError
 detached before: 2
 detached first: undefined
 detached second: undefined
-detached after: TypeError: Cannot perform 'get' on a proxy that has been revoked
+detached after: TypeError

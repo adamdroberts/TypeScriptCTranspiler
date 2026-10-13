@@ -24,14 +24,14 @@ const reflectProxy: any = new Proxy({ a: 1 }, { ownKeys: numericOwnKeys as any }
 try {
     console.log("reflect numeric:", Reflect.ownKeys(reflectProxy, mark("r")).join(","));
 } catch (e: any) {
-    console.log("reflect numeric:", e);
+    console.log("reflect numeric:", (e instanceof Error ? e.name : typeof e));
 }
 
 const objectProxy: any = new Proxy({ a: 1 }, { ownKeys: mixedOwnKeys as any });
 try {
     console.log("object mixed:", Object.keys(objectProxy, mark("o")).join(","));
 } catch (e: any) {
-    console.log("object mixed:", e);
+    console.log("object mixed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const validProxy: any = new Proxy({ a: 1 }, { ownKeys: stringOwnKeys as any });

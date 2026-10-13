@@ -1,10 +1,10 @@
-get target: Reflect.get target must be an object
-set target: Reflect.set target must be an object
-has target: Reflect.has target must be an object
-delete target: Reflect.deleteProperty target must be an object
-ownKeys target: Reflect.ownKeys target must be an object
-gopd target: Reflect.getOwnPropertyDescriptor target must be an object
-define target: Reflect.defineProperty target must be an object
+get target: TypeError
+set target: TypeError
+has target: TypeError
+delete target: TypeError
+ownKeys target: TypeError
+gopd target: TypeError
+define target: TypeError
 trace: gsvhdpfD
 valid get: 1
 valid set: true 2

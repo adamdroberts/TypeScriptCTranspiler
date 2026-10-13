@@ -44,14 +44,14 @@ console.log("isExtensible p2:", Object.isExtensible(p2));
 try {
     console.log("non-extensible get:", Object.getPrototypeOf(p2));
 } catch (err: any) {
-    console.log("non-extensible get error:", err);
+    console.log("non-extensible get error:", (err instanceof Error ? err.name : typeof err));
 }
 
 // Case 3: Non-extensible nested target. Mismatch in setPrototypeOf must throw.
 try {
     console.log("non-extensible set:", Reflect.setPrototypeOf(p2, nextProto));
 } catch (err: any) {
-    console.log("non-extensible set error:", err);
+    console.log("non-extensible set error:", (err instanceof Error ? err.name : typeof err));
 }
 
 console.log("events:", events.join("|"));

@@ -3661,6 +3661,76 @@
       "targets": [
         "sec-evaluatecall#finite-host-callable-location-source-projections"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/prototype-validation.property.test.ts",
+      "targets": [
+        "sec-reflect.setprototypeof#ordinary-prototype-domain-and-exception-owners"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "prototype_validation_depth",
+      "targets": [
+        "sec-reflect.setprototypeof#ordinary-prototype-domain-and-exception-owners"
+      ],
+      "stressReview": {
+        "dimension": "retained prototype validation exception-owner graph depth",
+        "parameter": "depth",
+        "representativeHighDepth": 4096,
+        "rationale": "One shared generated source retains fresh TypeError owners through an ordinary linked graph independently of validation call count or source shape.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "reflect_object_target_validation",
+      "targets": [
+        "sec-reflect.setprototypeof#ordinary-prototype-domain-and-exception-owners"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "reflect_property_method_missing_arguments",
+      "targets": [
+        "sec-reflect.setprototypeof#ordinary-prototype-domain-and-exception-owners"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "reflect_static_missing_arguments",
+      "targets": [
+        "sec-reflect.setprototypeof#ordinary-prototype-domain-and-exception-owners"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "proxy_construct_return_objects",
+      "targets": [
+        "sec-reflect.setprototypeof#ordinary-prototype-domain-and-exception-owners"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "proxy_spread_call",
+      "targets": [
+        "sec-reflect.setprototypeof#ordinary-prototype-domain-and-exception-owners"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_reflect_set_prototype_of",
+      "targets": [
+        "sec-reflect.setprototypeof#ordinary-prototype-domain-and-exception-owners"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_object_require_valid_prototype",
+      "targets": [
+        "sec-reflect.setprototypeof#ordinary-prototype-domain-and-exception-owners"
+      ]
     }
   ]
 }

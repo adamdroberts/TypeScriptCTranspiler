@@ -157,7 +157,7 @@ const badProxy: any = new Proxy({}, { getOwnPropertyDescriptor: badDescriptor as
 try {
     console.log("bad descriptor:", Object.getOwnPropertyDescriptor(badProxy, "x", mark("bad descriptor")));
 } catch (e: any) {
-    console.log("bad descriptor:", e);
+    console.log("bad descriptor:", (e instanceof Error ? e.name : typeof e));
 }
 
 const fixedTarget: any = {};
@@ -171,7 +171,7 @@ const hideFixedProxy: any = new Proxy(fixedTarget, { getOwnPropertyDescriptor: h
 try {
     console.log("hide fixed:", Object.getOwnPropertyDescriptor(hideFixedProxy, "fixed", mark("hide fixed")));
 } catch (e: any) {
-    console.log("hide fixed:", e);
+    console.log("hide fixed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const closedTarget: any = { x: 1 };
@@ -180,14 +180,14 @@ const hideClosedProxy: any = new Proxy(closedTarget, { getOwnPropertyDescriptor:
 try {
     console.log("hide closed:", Object.getOwnPropertyDescriptor(hideClosedProxy, "x", mark("hide closed")));
 } catch (e: any) {
-    console.log("hide closed:", e);
+    console.log("hide closed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const newClosedProxy: any = new Proxy(closedTarget, { getOwnPropertyDescriptor: dataDescriptor as any });
 try {
     console.log("new closed:", Object.getOwnPropertyDescriptor(newClosedProxy, "missing", mark("new closed"))?.value);
 } catch (e: any) {
-    console.log("new closed:", e);
+    console.log("new closed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const arrayDescriptorObjectProxy: any = new Proxy({}, { getOwnPropertyDescriptor: arrayDescriptorObject as any });
@@ -206,28 +206,28 @@ const mixedDescriptorProxy: any = new Proxy({}, { getOwnPropertyDescriptor: mixe
 try {
     console.log("mixed descriptor:", Object.getOwnPropertyDescriptor(mixedDescriptorProxy, "x", mark("mixed descriptor"))?.value);
 } catch (e: any) {
-    console.log("mixed descriptor:", e);
+    console.log("mixed descriptor:", (e instanceof Error ? e.name : typeof e));
 }
 
 const badGetterProxy: any = new Proxy({}, { getOwnPropertyDescriptor: badGetterDescriptor as any });
 try {
     console.log("bad getter:", Object.getOwnPropertyDescriptor(badGetterProxy, "x", mark("bad getter"))?.get);
 } catch (e: any) {
-    console.log("bad getter:", e);
+    console.log("bad getter:", (e instanceof Error ? e.name : typeof e));
 }
 
 const badSetterProxy: any = new Proxy({}, { getOwnPropertyDescriptor: badSetterDescriptor as any });
 try {
     console.log("bad setter:", Object.getOwnPropertyDescriptor(badSetterProxy, "x", mark("bad setter"))?.set);
 } catch (e: any) {
-    console.log("bad setter:", e);
+    console.log("bad setter:", (e instanceof Error ? e.name : typeof e));
 }
 
 const newFixedProxy: any = new Proxy({}, { getOwnPropertyDescriptor: fixedNewDescriptor as any });
 try {
     console.log("new fixed:", Object.getOwnPropertyDescriptor(newFixedProxy, "x", mark("new fixed"))?.value);
 } catch (e: any) {
-    console.log("new fixed:", e);
+    console.log("new fixed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const configurableTarget: any = {};
@@ -241,56 +241,56 @@ const configurableProxy: any = new Proxy(configurableTarget, { getOwnPropertyDes
 try {
     console.log("config false:", Object.getOwnPropertyDescriptor(configurableProxy, "x", mark("config false"))?.configurable);
 } catch (e: any) {
-    console.log("config false:", e);
+    console.log("config false:", (e instanceof Error ? e.name : typeof e));
 }
 
 const wrongFixedProxy: any = new Proxy(fixedTarget, { getOwnPropertyDescriptor: wrongFixedDescriptor as any });
 try {
     console.log("wrong fixed:", Object.getOwnPropertyDescriptor(wrongFixedProxy, "fixed", mark("wrong fixed"))?.value);
 } catch (e: any) {
-    console.log("wrong fixed:", e);
+    console.log("wrong fixed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const inheritedWrongFixedProxy: any = new Proxy(fixedTarget, { getOwnPropertyDescriptor: inheritedWrongFixedDescriptor as any });
 try {
     console.log("inherited wrong fixed:", Object.getOwnPropertyDescriptor(inheritedWrongFixedProxy, "fixed", mark("inherited wrong fixed"))?.value);
 } catch (e: any) {
-    console.log("inherited wrong fixed:", e);
+    console.log("inherited wrong fixed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const inheritedConfigurableProxy: any = new Proxy(fixedTarget, { getOwnPropertyDescriptor: inheritedConfigurableDescriptor as any });
 try {
     console.log("inherited configurable:", Reflect.getOwnPropertyDescriptor(inheritedConfigurableProxy, "fixed", mark("inherited configurable"))?.configurable);
 } catch (e: any) {
-    console.log("inherited configurable:", e);
+    console.log("inherited configurable:", (e instanceof Error ? e.name : typeof e));
 }
 
 const writableFixedProxy: any = new Proxy(fixedTarget, { getOwnPropertyDescriptor: writableFixedDescriptor as any });
 try {
     console.log("writable fixed:", Object.getOwnPropertyDescriptor(writableFixedProxy, "fixed", mark("writable fixed"))?.writable);
 } catch (e: any) {
-    console.log("writable fixed:", e);
+    console.log("writable fixed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const wrongEnumerableProxy: any = new Proxy(fixedTarget, { getOwnPropertyDescriptor: wrongEnumerableDescriptor as any });
 try {
     console.log("wrong enumerable:", Object.getOwnPropertyDescriptor(wrongEnumerableProxy, "fixed", mark("wrong enumerable"))?.enumerable);
 } catch (e: any) {
-    console.log("wrong enumerable:", e);
+    console.log("wrong enumerable:", (e instanceof Error ? e.name : typeof e));
 }
 
 const missingValueProxy: any = new Proxy(fixedTarget, { getOwnPropertyDescriptor: missingValueDescriptor as any });
 try {
     console.log("missing value:", Object.getOwnPropertyDescriptor(missingValueProxy, "fixed", mark("missing value"))?.value);
 } catch (e: any) {
-    console.log("missing value:", e);
+    console.log("missing value:", (e instanceof Error ? e.name : typeof e));
 }
 
 const missingEnumerableProxy: any = new Proxy(fixedTarget, { getOwnPropertyDescriptor: missingEnumerableDescriptor as any });
 try {
     console.log("missing enumerable:", Object.getOwnPropertyDescriptor(missingEnumerableProxy, "fixed", mark("missing enumerable"))?.enumerable);
 } catch (e: any) {
-    console.log("missing enumerable:", e);
+    console.log("missing enumerable:", (e instanceof Error ? e.name : typeof e));
 }
 
 const accessorTarget: any = {};
@@ -310,35 +310,35 @@ const accessorProxy: any = new Proxy(accessorTarget, { getOwnPropertyDescriptor:
 try {
     console.log("accessor as data:", Object.getOwnPropertyDescriptor(accessorProxy, "x", mark("accessor as data"))?.value);
 } catch (e: any) {
-    console.log("accessor as data:", e);
+    console.log("accessor as data:", (e instanceof Error ? e.name : typeof e));
 }
 
 const wrongAccessorGetterProxy: any = new Proxy(accessorTarget, { getOwnPropertyDescriptor: wrongAccessorGetterDescriptor as any });
 try {
     console.log("accessor wrong getter:", Object.getOwnPropertyDescriptor(wrongAccessorGetterProxy, "x", mark("accessor wrong getter"))?.get);
 } catch (e: any) {
-    console.log("accessor wrong getter:", e);
+    console.log("accessor wrong getter:", (e instanceof Error ? e.name : typeof e));
 }
 
 const wrongAccessorSetterProxy: any = new Proxy(setterOnlyAccessorTarget, { getOwnPropertyDescriptor: wrongAccessorSetterDescriptor as any });
 try {
     console.log("accessor wrong setter:", Object.getOwnPropertyDescriptor(wrongAccessorSetterProxy, "x", mark("accessor wrong setter"))?.set);
 } catch (e: any) {
-    console.log("accessor wrong setter:", e);
+    console.log("accessor wrong setter:", (e instanceof Error ? e.name : typeof e));
 }
 
 const missingAccessorGetterProxy: any = new Proxy(accessorTarget, { getOwnPropertyDescriptor: missingAccessorGetterDescriptor as any });
 try {
     console.log("accessor missing getter:", Object.getOwnPropertyDescriptor(missingAccessorGetterProxy, "x", mark("accessor missing getter"))?.get);
 } catch (e: any) {
-    console.log("accessor missing getter:", e);
+    console.log("accessor missing getter:", (e instanceof Error ? e.name : typeof e));
 }
 
 const missingAccessorSetterProxy: any = new Proxy(setterOnlyAccessorTarget, { getOwnPropertyDescriptor: missingAccessorSetterDescriptor as any });
 try {
     console.log("accessor missing setter:", Object.getOwnPropertyDescriptor(missingAccessorSetterProxy, "x", mark("accessor missing setter"))?.set);
 } catch (e: any) {
-    console.log("accessor missing setter:", e);
+    console.log("accessor missing setter:", (e instanceof Error ? e.name : typeof e));
 }
 
 const realProxy: any = new Proxy(fixedTarget, { getOwnPropertyDescriptor: realDescriptor as any });
@@ -352,7 +352,7 @@ const keysProxy: any = new Proxy(fixedTarget, {
 try {
     console.log("keys descriptor:", Object.keys(keysProxy, mark("keys descriptor")).join(","));
 } catch (e: any) {
-    console.log("keys descriptor:", e);
+    console.log("keys descriptor:", (e instanceof Error ? e.name : typeof e));
 }
 
 console.log("events:", events.join("|"));

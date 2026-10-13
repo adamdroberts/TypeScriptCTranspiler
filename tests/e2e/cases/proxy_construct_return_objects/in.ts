@@ -27,7 +27,7 @@ console.log("array:", Array.isArray(arrayMade), arrayMade[0], arrayMade[1], arra
 
 const FunctionCtor: any = new Proxy(Target as any, { construct: returnFunction as any });
 const functionMade: any = Reflect.construct(FunctionCtor, []);
-console.log("function:", typeof functionMade, String(functionMade));
+console.log("function:", typeof functionMade, functionMade === ReturnedFunction);
 
 const ObjectCtor: any = new Proxy(Target as any, { construct: returnObject as any });
 const objectMade: any = Reflect.construct(ObjectCtor, ["y"]);
@@ -37,5 +37,5 @@ const PrimitiveCtor: any = new Proxy(Target as any, { construct: returnPrimitive
 try {
     console.log("primitive:", Reflect.construct(PrimitiveCtor, []));
 } catch (err: any) {
-    console.log("primitive:", err);
+    console.log("primitive:", (err instanceof Error ? err.name : typeof err));
 }

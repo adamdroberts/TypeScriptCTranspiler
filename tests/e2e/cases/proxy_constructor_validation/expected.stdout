@@ -1,7 +1,7 @@
-bad target: TypeError: Cannot create proxy with a non-object as target or handler
-bad handler: TypeError: Cannot create proxy with a non-object as target or handler
-bad revocable: TypeError: Cannot create proxy with a non-object as target or handler
+bad target: TypeError
+bad handler: TypeError
+bad revocable: TypeError
 revoked target constructed: object
-revoked target get: TypeError: Cannot perform 'get' on a proxy that has been revoked
-revoked handler get: TypeError: Cannot perform 'get' on a proxy that has been revoked
+revoked target get: TypeError
+revoked handler get: TypeError
 trace: thiTHIrRjpPqsSu

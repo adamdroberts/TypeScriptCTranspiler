@@ -40,5 +40,5 @@ console.log("revoked type after:", typeof nestedRevocable);
 try {
     console.log("revoked after:", new nestedRevocable("after"));
 } catch (e: any) {
-    console.log("revoked after:", e);
+    console.log("revoked after:", (e instanceof Error ? e.name : typeof e));
 }

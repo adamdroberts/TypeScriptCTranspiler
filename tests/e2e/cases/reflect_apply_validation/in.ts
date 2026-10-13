@@ -7,14 +7,14 @@ const badTarget: any = 1;
 try {
     console.log("bad target:", Reflect.apply(badTarget, null, []));
 } catch (e: any) {
-    console.log("bad target:", e);
+    console.log("bad target:", (e instanceof Error ? e.name : typeof e));
 }
 
 const badArgs: any = 1;
 try {
     console.log("bad args:", Reflect.apply(dynamicAdd, null, badArgs));
 } catch (e: any) {
-    console.log("bad args:", e);
+    console.log("bad args:", (e instanceof Error ? e.name : typeof e));
 }
 
 let trapSeen = false;
@@ -27,7 +27,7 @@ const callable: any = new Proxy(dynamicAdd, { apply: applyTrap as any });
 try {
     console.log("proxy bad args:", Reflect.apply(callable, null, badArgs));
 } catch (e: any) {
-    console.log("proxy bad args:", e, trapSeen);
+    console.log("proxy bad args:", (e instanceof Error ? e.name : typeof e), trapSeen);
 }
 
 console.log("valid:", Reflect.apply(dynamicAdd, null, [2, 3]));

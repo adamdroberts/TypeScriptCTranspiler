@@ -21,7 +21,7 @@ const fixedHasProxy: any = new Proxy(fixedHasTarget, { has: falseHas as any });
 try {
     console.log("has fixed:", "fixed" in fixedHasProxy);
 } catch (e: any) {
-    console.log("has fixed:", e);
+    console.log("has fixed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const closedHasTarget: any = { open: 2 };
@@ -30,7 +30,7 @@ const closedHasProxy: any = new Proxy(closedHasTarget, { has: falseHas as any })
 try {
     console.log("has closed:", "open" in closedHasProxy);
 } catch (e: any) {
-    console.log("has closed:", e);
+    console.log("has closed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const fixedDeleteTarget: any = {};
@@ -44,7 +44,7 @@ const fixedDeleteProxy: any = new Proxy(fixedDeleteTarget, { deleteProperty: tru
 try {
     console.log("delete fixed:", delete fixedDeleteProxy.fixed);
 } catch (e: any) {
-    console.log("delete fixed:", e);
+    console.log("delete fixed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const closedDeleteTarget: any = { open: 4 };
@@ -53,7 +53,7 @@ const closedDeleteProxy: any = new Proxy(closedDeleteTarget, { deleteProperty: t
 try {
     console.log("delete closed:", delete closedDeleteProxy.open);
 } catch (e: any) {
-    console.log("delete closed:", e);
+    console.log("delete closed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const looseTarget: any = { open: 5 };

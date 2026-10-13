@@ -1,5 +1,5 @@
-function bad: TypeError: Reflect.construct newTarget is not a constructor
-proxy bad: TypeError: Reflect.construct newTarget is not a constructor
+function bad: TypeError
+proxy bad: TypeError
 valid: object target
 getter target: true
 setter target: true

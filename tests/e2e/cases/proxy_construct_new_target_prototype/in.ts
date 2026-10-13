@@ -45,5 +45,5 @@ try {
     const fail: any = Reflect.construct(targetCtor, ["revoked"], revoked.proxy);
     console.log("revoked:", fail.value);
 } catch (err: any) {
-    console.log("revoked:", err);
+    console.log("revoked:", (err instanceof Error ? err.name : typeof err));
 }

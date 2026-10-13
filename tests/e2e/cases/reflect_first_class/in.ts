@@ -17,6 +17,6 @@ try {
     Reflect.construct(apply, []);
     console.log("construct:", "ok");
 } catch (err: any) {
-    console.log("construct:", err);
+    console.log("construct:", (err instanceof Error ? err.name : typeof err));
 }
 console.log("apply:", apply(add, undefined, [2, 3]));

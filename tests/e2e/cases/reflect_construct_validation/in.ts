@@ -8,14 +8,14 @@ const badTarget: any = 1;
 try {
     console.log("bad target:", Reflect.construct(badTarget, []));
 } catch (e: any) {
-    console.log("bad target:", e);
+    console.log("bad target:", (e instanceof Error ? e.name : typeof e));
 }
 
 const badArgs: any = 1;
 try {
     console.log("bad args:", Reflect.construct(dynamicTarget, badArgs));
 } catch (e: any) {
-    console.log("bad args:", e);
+    console.log("bad args:", (e instanceof Error ? e.name : typeof e));
 }
 
 let trapSeen = false;
@@ -28,14 +28,14 @@ const proxy: any = new Proxy(dynamicTarget, { construct: constructTrap as any })
 try {
     console.log("proxy bad args:", Reflect.construct(proxy, badArgs));
 } catch (e: any) {
-    console.log("proxy bad args:", e, trapSeen);
+    console.log("proxy bad args:", (e instanceof Error ? e.name : typeof e), trapSeen);
 }
 
 const badNewTarget: any = { name: "bad" };
 try {
     console.log("bad newTarget before args:", Reflect.construct(dynamicTarget, badArgs, badNewTarget));
 } catch (e: any) {
-    console.log("bad newTarget before args:", e);
+    console.log("bad newTarget before args:", (e instanceof Error ? e.name : typeof e));
 }
 
 const valid: any = Reflect.construct(dynamicTarget, ["ok"]);

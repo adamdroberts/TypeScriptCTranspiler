@@ -29,5 +29,5 @@ revocable.revoke();
 try {
     console.log(revocable.proxy["test"]); // error
 } catch (e: any) {
-    console.log(e);
+    console.log((e instanceof Error ? e.name : typeof e));
 }

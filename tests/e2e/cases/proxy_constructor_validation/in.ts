@@ -9,21 +9,21 @@ try {
     const badTarget: any = new Proxy(mark("t", 1) as any, mark("h", {}) as any, mark("i", "ignored"));
     console.log("bad target:", badTarget);
 } catch (e: any) {
-    console.log("bad target:", e);
+    console.log("bad target:", (e instanceof Error ? e.name : typeof e));
 }
 
 try {
     const badHandler: any = new Proxy(mark("T", {}) as any, mark("H", 1) as any, mark("I", "ignored"));
     console.log("bad handler:", badHandler);
 } catch (e: any) {
-    console.log("bad handler:", e);
+    console.log("bad handler:", (e instanceof Error ? e.name : typeof e));
 }
 
 try {
     const badRevocable: any = Proxy.revocable(mark("r", "x") as any, mark("R", {}) as any, mark("j", "ignored"));
     console.log("bad revocable:", badRevocable);
 } catch (e: any) {
-    console.log("bad revocable:", e);
+    console.log("bad revocable:", (e instanceof Error ? e.name : typeof e));
 }
 
 const revokedTarget: any = Proxy.revocable(mark("p", {}) as any, mark("P", {}) as any);
@@ -36,10 +36,10 @@ try {
     try {
         console.log("revoked target get:", acceptedRevokedTarget.a);
     } catch (e: any) {
-        console.log("revoked target get:", e);
+        console.log("revoked target get:", (e instanceof Error ? e.name : typeof e));
     }
 } catch (e: any) {
-    console.log("revoked target constructed:", e);
+    console.log("revoked target constructed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const revokedHandler: any = Proxy.revocable(mark("s", {}) as any, mark("S", {}) as any);
@@ -48,7 +48,7 @@ const acceptedRevokedHandler: any = new Proxy(mark("u", { a: 1 }) as any, revoke
 try {
     console.log("revoked handler get:", acceptedRevokedHandler.a);
 } catch (e: any) {
-    console.log("revoked handler get:", e);
+    console.log("revoked handler get:", (e instanceof Error ? e.name : typeof e));
 }
 
 console.log("trace:", trace);

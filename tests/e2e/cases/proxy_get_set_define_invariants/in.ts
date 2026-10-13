@@ -48,7 +48,7 @@ const fixedGetProxy: any = new Proxy(fixedGetTarget, { get: wrongGet as any });
 try {
     console.log("get fixed:", Reflect.get(fixedGetProxy, "fixed", fixedGetProxy, mark("get fixed")));
 } catch (e: any) {
-    console.log("get fixed:", e);
+    console.log("get fixed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const getterlessTarget: any = {};
@@ -61,7 +61,7 @@ const getterlessProxy: any = new Proxy(getterlessTarget, { get: wrongGet as any 
 try {
     console.log("get accessor:", Reflect.get(getterlessProxy, "hidden", getterlessProxy, mark("get accessor")));
 } catch (e: any) {
-    console.log("get accessor:", e);
+    console.log("get accessor:", (e instanceof Error ? e.name : typeof e));
 }
 
 const undefinedGetterProxy: any = new Proxy(getterlessTarget, { get: passGet as any });
@@ -78,7 +78,7 @@ const fixedSetProxy: any = new Proxy(fixedSetTarget, { set: trueSet as any });
 try {
     console.log("set fixed:", Reflect.set(fixedSetProxy, "fixed", "changed", fixedSetProxy, mark("set fixed")));
 } catch (e: any) {
-    console.log("set fixed:", e);
+    console.log("set fixed:", (e instanceof Error ? e.name : typeof e));
 }
 console.log("set same:", Reflect.set(fixedSetProxy, "fixed", "fixed", fixedSetProxy, mark("set same")));
 
@@ -92,7 +92,7 @@ const setterlessProxy: any = new Proxy(setterlessTarget, { set: trueSet as any }
 try {
     console.log("set accessor:", Reflect.set(setterlessProxy, "hidden", "value", setterlessProxy, mark("set accessor")));
 } catch (e: any) {
-    console.log("set accessor:", e);
+    console.log("set accessor:", (e instanceof Error ? e.name : typeof e));
 }
 
 const closedTarget: any = {};
@@ -101,14 +101,14 @@ const closedProxy: any = new Proxy(closedTarget, { defineProperty: trueDefine as
 try {
     console.log("define closed:", Reflect.defineProperty(closedProxy, "x", { value: 1, configurable: true }, mark("define closed")));
 } catch (e: any) {
-    console.log("define closed:", e);
+    console.log("define closed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const newNonConfigProxy: any = new Proxy({}, { defineProperty: trueDefine as any });
 try {
     console.log("define new fixed:", Reflect.defineProperty(newNonConfigProxy, "x", { value: 1, configurable: false }, mark("define new fixed")));
 } catch (e: any) {
-    console.log("define new fixed:", e);
+    console.log("define new fixed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const configurableTarget: any = {};
@@ -122,7 +122,7 @@ const configurableProxy: any = new Proxy(configurableTarget, { defineProperty: t
 try {
     console.log("define configurable fixed:", Reflect.defineProperty(configurableProxy, "x", { configurable: false }, mark("define configurable fixed")));
 } catch (e: any) {
-    console.log("define configurable fixed:", e);
+    console.log("define configurable fixed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const fixedDefineTarget: any = {};
@@ -136,7 +136,7 @@ const fixedDefineProxy: any = new Proxy(fixedDefineTarget, { defineProperty: tru
 try {
     console.log("define fixed changed:", Reflect.defineProperty(fixedDefineProxy, "x", { value: 2 }, mark("define fixed changed")));
 } catch (e: any) {
-    console.log("define fixed changed:", e);
+    console.log("define fixed changed:", (e instanceof Error ? e.name : typeof e));
 }
 console.log("define fixed same:", Reflect.defineProperty(fixedDefineProxy, "x", { value: 1 }, mark("define fixed same")));
 
@@ -151,7 +151,7 @@ const writableDefineProxy: any = new Proxy(writableDefineTarget, { definePropert
 try {
     console.log("define writable downgrade:", Reflect.defineProperty(writableDefineProxy, "x", { writable: false }, mark("define writable downgrade")));
 } catch (e: any) {
-    console.log("define writable downgrade:", e);
+    console.log("define writable downgrade:", (e instanceof Error ? e.name : typeof e));
 }
 
 const accessorDefineTarget: any = {};
@@ -164,7 +164,7 @@ const accessorDefineProxy: any = new Proxy(accessorDefineTarget, { definePropert
 try {
     console.log("define accessor data:", Reflect.defineProperty(accessorDefineProxy, "x", { value: 1 }, mark("define accessor data")));
 } catch (e: any) {
-    console.log("define accessor data:", e);
+    console.log("define accessor data:", (e instanceof Error ? e.name : typeof e));
 }
 
 console.log("events:", events.join("|"));

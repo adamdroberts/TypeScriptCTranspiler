@@ -1,4 +1,4 @@
 reflect define: false false
-object define: TypeError: TypeError: Object.defineProperty failed
-object define properties: TypeError: Object.defineProperties failed
+object define: TypeError
+object define properties: TypeError
 after: false false

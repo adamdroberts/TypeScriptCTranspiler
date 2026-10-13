@@ -20,43 +20,43 @@ function markDesc(label: string): any {
 try {
     console.log("get target:", Reflect.get(badTarget, mark("g")));
 } catch (e: any) {
-    console.log("get target:", e);
+    console.log("get target:", (e instanceof Error ? e.name : typeof e));
 }
 
 try {
     console.log("set target:", Reflect.set(badTarget, mark("s"), markValue("v")));
 } catch (e: any) {
-    console.log("set target:", e);
+    console.log("set target:", (e instanceof Error ? e.name : typeof e));
 }
 
 try {
     console.log("has target:", Reflect.has(badTarget, mark("h")));
 } catch (e: any) {
-    console.log("has target:", e);
+    console.log("has target:", (e instanceof Error ? e.name : typeof e));
 }
 
 try {
     console.log("delete target:", Reflect.deleteProperty(badTarget, mark("d")));
 } catch (e: any) {
-    console.log("delete target:", e);
+    console.log("delete target:", (e instanceof Error ? e.name : typeof e));
 }
 
 try {
     console.log("ownKeys target:", Reflect.ownKeys(badTarget).join(","));
 } catch (e: any) {
-    console.log("ownKeys target:", e);
+    console.log("ownKeys target:", (e instanceof Error ? e.name : typeof e));
 }
 
 try {
     console.log("gopd target:", Reflect.getOwnPropertyDescriptor(badTarget, mark("p")));
 } catch (e: any) {
-    console.log("gopd target:", e);
+    console.log("gopd target:", (e instanceof Error ? e.name : typeof e));
 }
 
 try {
     console.log("define target:", Reflect.defineProperty(badTarget, mark("f"), markDesc("D")));
 } catch (e: any) {
-    console.log("define target:", e);
+    console.log("define target:", (e instanceof Error ? e.name : typeof e));
 }
 console.log("trace:", trace);
 

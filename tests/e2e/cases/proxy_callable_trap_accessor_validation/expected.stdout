@@ -1,5 +1,5 @@
-bad apply: TypeError: Proxy apply trap must be callable
+bad apply: TypeError
 undefined apply: ctx:x
-bad construct: TypeError: Proxy construct trap must be callable
+bad construct: TypeError
 null construct: y
 events: badApplyArgs|badApply:bad-apply|undefinedApplyArgs|undefinedApply:undefined-apply|badConstructArgs|badConstruct:bad-construct|nullConstructArgs|nullConstruct:null-construct

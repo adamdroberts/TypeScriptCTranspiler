@@ -22,12 +22,12 @@ const frozenGetProxy: any = new Proxy(frozenGetTarget, { get: wrongGet as any })
 try {
     console.log("get frozen index:", Reflect.get(frozenGetProxy, "0", frozenGetProxy, mark("get frozen index")));
 } catch (err: any) {
-    console.log("get frozen index:", err);
+    console.log("get frozen index:", (err instanceof Error ? err.name : typeof err));
 }
 try {
     console.log("get frozen length:", Reflect.get(frozenGetProxy, "length", frozenGetProxy, mark("get frozen length")));
 } catch (err: any) {
-    console.log("get frozen length:", err);
+    console.log("get frozen length:", (err instanceof Error ? err.name : typeof err));
 }
 
 const sealedGetTarget: any = ["sealed"];
@@ -41,13 +41,13 @@ const frozenSetProxy: any = new Proxy(frozenSetTarget, { set: trueSet as any });
 try {
     console.log("set frozen index:", Reflect.set(frozenSetProxy, "0", "changed", frozenSetProxy, mark("set frozen index")));
 } catch (err: any) {
-    console.log("set frozen index:", err);
+    console.log("set frozen index:", (err instanceof Error ? err.name : typeof err));
 }
 console.log("set frozen same:", Reflect.set(frozenSetProxy, "0", "fixed", frozenSetProxy, mark("set frozen same")));
 try {
     console.log("set frozen length:", Reflect.set(frozenSetProxy, "length", 2, frozenSetProxy, mark("set frozen length")));
 } catch (err: any) {
-    console.log("set frozen length:", err);
+    console.log("set frozen length:", (err instanceof Error ? err.name : typeof err));
 }
 console.log("set frozen length same:", Reflect.set(frozenSetProxy, "length", 1, frozenSetProxy, mark("set frozen length same")));
 

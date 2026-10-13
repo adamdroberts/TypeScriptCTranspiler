@@ -14,37 +14,37 @@ function proto(label: string, value: any): any {
 try {
     console.log("get proto target:", Reflect.getPrototypeOf(badTarget));
 } catch (e: any) {
-    console.log("get proto target:", e);
+    console.log("get proto target:", (e instanceof Error ? e.name : typeof e));
 }
 
 try {
     console.log("set proto target:", Reflect.setPrototypeOf(badTarget, proto("t", null)));
 } catch (e: any) {
-    console.log("set proto target:", e);
+    console.log("set proto target:", (e instanceof Error ? e.name : typeof e));
 }
 
 try {
     console.log("set proto value:", Reflect.setPrototypeOf(validTarget, proto("p", 1)));
 } catch (e: any) {
-    console.log("set proto value:", e);
+    console.log("set proto value:", (e instanceof Error ? e.name : typeof e));
 }
 
 try {
     console.log("is extensible target:", Reflect.isExtensible(badTarget));
 } catch (e: any) {
-    console.log("is extensible target:", e);
+    console.log("is extensible target:", (e instanceof Error ? e.name : typeof e));
 }
 
 try {
     console.log("prevent target:", Reflect.preventExtensions(badTarget));
 } catch (e: any) {
-    console.log("prevent target:", e);
+    console.log("prevent target:", (e instanceof Error ? e.name : typeof e));
 }
 
 try {
     console.log("prevent primitive:", Reflect.preventExtensions(1));
 } catch (e: any) {
-    console.log("prevent primitive:", e);
+    console.log("prevent primitive:", (e instanceof Error ? e.name : typeof e));
 }
 console.log("trace:", trace);
 

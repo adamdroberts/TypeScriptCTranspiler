@@ -12,7 +12,7 @@ callable.revoke();
 try {
     console.log(Reflect.apply(callable.proxy, { base: 0 }, [1, 1]));
 } catch (e: any) {
-    console.log("apply after:", e);
+    console.log("apply after:", (e instanceof Error ? e.name : typeof e));
 }
 
 const constructable: any = Proxy.revocable(Target as any, {});
@@ -22,5 +22,5 @@ constructable.revoke();
 try {
     console.log(Reflect.construct(constructable.proxy, ["again"]));
 } catch (e: any) {
-    console.log("construct after:", e);
+    console.log("construct after:", (e instanceof Error ? e.name : typeof e));
 }

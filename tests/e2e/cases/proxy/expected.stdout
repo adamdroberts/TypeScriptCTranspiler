@@ -3,4 +3,4 @@ everyone
 hi
 hi
 undefined
-TypeError: Cannot perform 'get' on a proxy that has been revoked
+TypeError

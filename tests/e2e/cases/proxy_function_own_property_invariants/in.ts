@@ -71,7 +71,7 @@ const fixedGetProxy: any = new Proxy(fixedGetTarget, { get: fakeGet as any });
 try {
   console.log("fixed get:", Reflect.get(fixedGetProxy, "fixed"));
 } catch (err: any) {
-  console.log("fixed get:", err);
+  console.log("fixed get:", (err instanceof Error ? err.name : typeof err));
 }
 
 const configurableSetTarget: any = ConfigurableSet as any;
@@ -95,7 +95,7 @@ const fixedSetProxy: any = new Proxy(fixedSetTarget, { set: trueSet as any });
 try {
   console.log("fixed set:", Reflect.set(fixedSetProxy, "fixed", "fake"));
 } catch (err: any) {
-  console.log("fixed set:", err);
+  console.log("fixed set:", (err instanceof Error ? err.name : typeof err));
 }
 
 const configurableDescriptorTarget: any = ConfigurableDescriptor as any;
@@ -111,7 +111,7 @@ Object.preventExtensions(configurableDescriptorTarget);
 try {
   console.log("cfg hidden closed desc:", Reflect.getOwnPropertyDescriptor(configurableDescriptorProxy, "cfg") === undefined);
 } catch (err: any) {
-  console.log("cfg hidden closed desc:", err);
+  console.log("cfg hidden closed desc:", (err instanceof Error ? err.name : typeof err));
 }
 
 const configurableDefineTarget: any = ConfigurableDefine as any;
@@ -125,7 +125,7 @@ const configurableDefineProxy: any = new Proxy(configurableDefineTarget, { defin
 try {
   console.log("cfg define nonconfig:", Reflect.defineProperty(configurableDefineProxy, "cfg", { value: "next", configurable: false }));
 } catch (err: any) {
-  console.log("cfg define nonconfig:", err);
+  console.log("cfg define nonconfig:", (err instanceof Error ? err.name : typeof err));
 }
 
 const configurableDeleteTarget: any = ConfigurableDelete as any;
@@ -140,7 +140,7 @@ const closedDeleteProxy: any = new Proxy(closedDeleteTarget, { deleteProperty: t
 try {
   console.log("side delete closed:", Reflect.deleteProperty(closedDeleteProxy, "side"));
 } catch (err: any) {
-  console.log("side delete closed:", err);
+  console.log("side delete closed:", (err instanceof Error ? err.name : typeof err));
 }
 
 const closedHasTarget: any = ClosedHas as any;
@@ -150,7 +150,7 @@ const closedHasProxy: any = new Proxy(closedHasTarget, { has: falseHas as any })
 try {
   console.log("side has closed:", Reflect.has(closedHasProxy, "side"));
 } catch (err: any) {
-  console.log("side has closed:", err);
+  console.log("side has closed:", (err instanceof Error ? err.name : typeof err));
 }
 
 const missingClosedKeysTarget: any = MissingClosedKeys as any;
@@ -160,7 +160,7 @@ const missingClosedKeysProxy: any = new Proxy(missingClosedKeysTarget, { ownKeys
 try {
   console.log("side keys missing:", Reflect.ownKeys(missingClosedKeysProxy).join(","));
 } catch (err: any) {
-  console.log("side keys missing:", err);
+  console.log("side keys missing:", (err instanceof Error ? err.name : typeof err));
 }
 
 const exactClosedKeysTarget: any = ExactClosedKeys as any;
@@ -176,7 +176,7 @@ const extraClosedKeysProxy: any = new Proxy(extraClosedKeysTarget, { ownKeys: ex
 try {
   console.log("side keys extra:", Reflect.ownKeys(extraClosedKeysProxy).join(","));
 } catch (err: any) {
-  console.log("side keys extra:", err);
+  console.log("side keys extra:", (err instanceof Error ? err.name : typeof err));
 }
 
 const missingFixedKeysTarget: any = MissingFixedKeys as any;
@@ -190,5 +190,5 @@ const missingFixedKeysProxy: any = new Proxy(missingFixedKeysTarget, { ownKeys: 
 try {
   console.log("fixed keys missing:", Reflect.ownKeys(missingFixedKeysProxy).join(","));
 } catch (err: any) {
-  console.log("fixed keys missing:", err);
+  console.log("fixed keys missing:", (err instanceof Error ? err.name : typeof err));
 }

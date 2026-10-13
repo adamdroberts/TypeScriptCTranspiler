@@ -46,14 +46,14 @@ const missingFixedProxy: any = new Proxy(fixedTarget, { ownKeys: missingFixed as
 try {
     console.log("missing fixed:", Reflect.ownKeys(missingFixedProxy, mark("missing fixed")).join(","));
 } catch (e: any) {
-    console.log("missing fixed:", e);
+    console.log("missing fixed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const duplicateProxy: any = new Proxy({ a: 1 }, { ownKeys: duplicateKeys as any });
 try {
     console.log("duplicate:", Reflect.ownKeys(duplicateProxy, mark("duplicate")).join(","));
 } catch (e: any) {
-    console.log("duplicate:", e);
+    console.log("duplicate:", (e instanceof Error ? e.name : typeof e));
 }
 
 const extraTarget: any = { a: 1 };
@@ -62,7 +62,7 @@ const extraProxy: any = new Proxy(extraTarget, { ownKeys: extraOnClosed as any }
 try {
     console.log("extra closed:", Reflect.ownKeys(extraProxy, mark("extra closed")).join(","));
 } catch (e: any) {
-    console.log("extra closed:", e);
+    console.log("extra closed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const missingTarget: any = { a: 1 };
@@ -71,7 +71,7 @@ const missingProxy: any = new Proxy(missingTarget, { ownKeys: missingOnClosed as
 try {
     console.log("missing closed:", Reflect.ownKeys(missingProxy, mark("missing closed")).join(","));
 } catch (e: any) {
-    console.log("missing closed:", e);
+    console.log("missing closed:", (e instanceof Error ? e.name : typeof e));
 }
 
 const exactTarget: any = { a: 1 };
@@ -90,7 +90,7 @@ const objectKeysProxy: any = new Proxy(objectKeysTarget, { ownKeys: onlyOpen as 
 try {
     console.log("object keys:", Object.keys(objectKeysProxy, mark("object keys")).join(","));
 } catch (e: any) {
-    console.log("object keys:", e);
+    console.log("object keys:", (e instanceof Error ? e.name : typeof e));
 }
 
 console.log("events:", events.join("|"));

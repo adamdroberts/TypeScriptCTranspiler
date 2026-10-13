@@ -23,14 +23,14 @@ const badNewTarget: any = { name: "bad" };
 try {
     console.log("function bad:", Reflect.construct(target, [], badNewTarget));
 } catch (e: any) {
-    console.log("function bad:", e);
+    console.log("function bad:", (e instanceof Error ? e.name : typeof e));
 }
 
 const proxy: any = new Proxy(Target as any, { construct: trapConstruct as any });
 try {
     console.log("proxy bad:", Reflect.construct(proxy, [], badNewTarget));
 } catch (e: any) {
-    console.log("proxy bad:", e);
+    console.log("proxy bad:", (e instanceof Error ? e.name : typeof e));
 }
 
 const valid: any = Reflect.construct(target, [], Other as any);
@@ -51,20 +51,20 @@ const getterProxy: any = new Proxy(descriptor.get, { construct: eventTrapConstru
 try {
     console.log("getter target:", Reflect.construct(getterProxy, []).reached);
 } catch (e: any) {
-    console.log("getter target:", e);
+    console.log("getter target:", (e instanceof Error ? e.name : typeof e));
 }
 
 const setterProxy: any = new Proxy(descriptor.set, { construct: eventTrapConstruct as any });
 try {
     console.log("setter target:", Reflect.construct(setterProxy, []).reached);
 } catch (e: any) {
-    console.log("setter target:", e);
+    console.log("setter target:", (e instanceof Error ? e.name : typeof e));
 }
 
 try {
     console.log("getter newTarget:", Reflect.construct(target, [], getterProxy).value);
 } catch (e: any) {
-    console.log("getter newTarget:", e);
+    console.log("getter newTarget:", (e instanceof Error ? e.name : typeof e));
 }
 
 const accessorMethods: any = { get value(): number { return 1; }, set value(value: number) {} };

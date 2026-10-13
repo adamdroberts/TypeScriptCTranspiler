@@ -1,13 +1,13 @@
 callable proxy trap: callable-proxy:x
-bad get: TypeError: Proxy get trap must be callable
-bad set: TypeError: Proxy set trap must be callable
-bad has: TypeError: Proxy has trap must be callable
-bad delete: TypeError: Proxy deleteProperty trap must be callable
-bad define: TypeError: Proxy defineProperty trap must be callable
-bad descriptor: TypeError: Proxy getOwnPropertyDescriptor trap must be callable
-bad ownKeys: TypeError: Proxy ownKeys trap must be callable
-bad getProto: TypeError: Proxy getPrototypeOf trap must be callable
-bad setProto: TypeError: Proxy setPrototypeOf trap must be callable
-bad isExtensible: TypeError: Proxy isExtensible trap must be callable
-bad preventExtensions: TypeError: Proxy preventExtensions trap must be callable
+bad get: TypeError
+bad set: TypeError
+bad has: TypeError
+bad delete: TypeError
+bad define: TypeError
+bad descriptor: TypeError
+bad ownKeys: TypeError
+bad getProto: TypeError
+bad setProto: TypeError
+bad isExtensible: TypeError
+bad preventExtensions: TypeError
 events: get-key|set-key|set-value|has-key|delete-key|define-key|define-desc|descriptor-key|setProto-value

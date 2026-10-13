@@ -12,7 +12,7 @@ const obj: any = { undefined: "present" };
 try {
     console.log("get no target:", get());
 } catch (err: any) {
-    console.log("get no target:", err);
+    console.log("get no target:", (err instanceof Error ? err.name : typeof err));
 }
 
 console.log("get omitted key:", get(obj));
@@ -24,23 +24,23 @@ console.log("set omitted key/value:", set(obj), Object.hasOwn(obj, "undefined"),
 try {
     console.log("define no target:", define());
 } catch (err: any) {
-    console.log("define no target:", err);
+    console.log("define no target:", (err instanceof Error ? err.name : typeof err));
 }
 
 try {
     console.log("define missing descriptor:", define(obj, "x"));
 } catch (err: any) {
-    console.log("define missing descriptor:", err);
+    console.log("define missing descriptor:", (err instanceof Error ? err.name : typeof err));
 }
 
 try {
     console.log("setProto no target:", setProto());
 } catch (err: any) {
-    console.log("setProto no target:", err);
+    console.log("setProto no target:", (err instanceof Error ? err.name : typeof err));
 }
 
 try {
     console.log("setProto missing prototype:", setProto(obj));
 } catch (err: any) {
-    console.log("setProto missing prototype:", err);
+    console.log("setProto missing prototype:", (err instanceof Error ? err.name : typeof err));
 }

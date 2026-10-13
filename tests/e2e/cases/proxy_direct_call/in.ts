@@ -22,12 +22,12 @@ revocable.revoke();
 try {
     console.log("rev after:", revocable.proxy(1, 2));
 } catch (e: any) {
-    console.log("rev after:", e);
+    console.log("rev after:", (e instanceof Error ? e.name : typeof e));
 }
 
 const objectProxy: any = new Proxy({ value: 1 }, {});
 try {
     console.log("object call:", objectProxy());
 } catch (e: any) {
-    console.log("object call:", e);
+    console.log("object call:", (e instanceof Error ? e.name : typeof e));
 }

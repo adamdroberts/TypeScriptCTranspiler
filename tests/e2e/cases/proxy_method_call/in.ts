@@ -23,12 +23,12 @@ revocable.revoke();
 try {
     console.log("rev after:", revokedHolder.fn(1, 2));
 } catch (e: any) {
-    console.log("rev after:", e);
+    console.log("rev after:", (e instanceof Error ? e.name : typeof e));
 }
 
 const objectHolder: any = { fn: new Proxy({ value: 1 }, {}) };
 try {
     console.log("object method:", objectHolder.fn());
 } catch (e: any) {
-    console.log("object method:", e);
+    console.log("object method:", (e instanceof Error ? e.name : typeof e));
 }

@@ -1,10 +1,10 @@
-get no target: Reflect.get target must be an object
+get no target: TypeError
 get omitted key: present
 has omitted key: true
 desc omitted key: present
 delete omitted key: true false
 set omitted key/value: true true undefined
-define no target: Reflect.defineProperty target must be an object
-define missing descriptor: TypeError: Property descriptor must be an object
-setProto no target: Reflect.setPrototypeOf target must be an object
-setProto missing prototype: Reflect.setPrototypeOf prototype must be an object or null
+define no target: TypeError
+define missing descriptor: TypeError
+setProto no target: TypeError
+setProto missing prototype: TypeError

@@ -37,10 +37,10 @@ console.log("revoked type after:", typeof outerRevoked);
 try {
     console.log("revoked string:", String(outerRevoked));
 } catch (e: any) {
-    console.log("revoked string:", e);
+    console.log("revoked string:", (e instanceof Error ? e.name : typeof e));
 }
 try {
     console.log("revoked json:", JSON.stringify(outerRevoked));
 } catch (e: any) {
-    console.log("revoked json:", e);
+    console.log("revoked json:", (e instanceof Error ? e.name : typeof e));
 }

@@ -30,7 +30,7 @@ const closedGetProxy: any = new Proxy(closedGetTarget, { getPrototypeOf: otherPr
 try {
     console.log("get closed:", Object.getPrototypeOf(closedGetProxy, mark("get closed")).marker);
 } catch (err: any) {
-    console.log("get closed:", err);
+    console.log("get closed:", (err instanceof Error ? err.name : typeof err));
 }
 
 const exactGetProxy: any = new Proxy(closedGetTarget, { getPrototypeOf: function(target: any): any { events.push("base proto trap:" + target.length); return baseProto; } as any });
@@ -43,7 +43,7 @@ const closedSetProxy: any = new Proxy(closedSetTarget, { setPrototypeOf: trueSet
 try {
     console.log("set closed:", Reflect.setPrototypeOf(closedSetProxy, nextProto, mark("set closed")));
 } catch (err: any) {
-    console.log("set closed:", err);
+    console.log("set closed:", (err instanceof Error ? err.name : typeof err));
 }
 console.log("set same:", Reflect.setPrototypeOf(closedSetProxy, baseProto, mark("set same")));
 console.log("events:", events.join("|"));

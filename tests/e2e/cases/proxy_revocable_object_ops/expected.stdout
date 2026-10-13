@@ -1,17 +1,17 @@
 before: 1 true a
-get: TypeError: Cannot perform 'get' on a proxy that has been revoked
-set: TypeError: Cannot perform 'set' on a proxy that has been revoked
-has: TypeError: Cannot perform 'has' on a proxy that has been revoked
-delete: TypeError: Cannot perform 'deleteProperty' on a proxy that has been revoked
-ownKeys: TypeError: Cannot perform 'ownKeys' on a proxy that has been revoked
-keys: TypeError: Cannot perform 'ownKeys' on a proxy that has been revoked
-descriptor: TypeError: Cannot perform 'getOwnPropertyDescriptor' on a proxy that has been revoked
-define: TypeError: Cannot perform 'defineProperty' on a proxy that has been revoked
-get proto: TypeError: Cannot perform 'getPrototypeOf' on a proxy that has been revoked
-set proto: TypeError: Cannot perform 'setPrototypeOf' on a proxy that has been revoked
-is extensible: TypeError: Cannot perform 'isExtensible' on a proxy that has been revoked
-prevent extensions: TypeError: Cannot perform 'preventExtensions' on a proxy that has been revoked
-seal: TypeError: Cannot perform 'seal' on a proxy that has been revoked
-freeze: TypeError: Cannot perform 'freeze' on a proxy that has been revoked
-is sealed: TypeError: Cannot perform 'isSealed' on a proxy that has been revoked
-is frozen: TypeError: Cannot perform 'isFrozen' on a proxy that has been revoked
+get: TypeError
+set: TypeError
+has: TypeError
+delete: TypeError
+ownKeys: TypeError
+keys: TypeError
+descriptor: TypeError
+define: TypeError
+get proto: TypeError
+set proto: TypeError
+is extensible: TypeError
+prevent extensions: TypeError
+seal: TypeError
+freeze: TypeError
+is sealed: TypeError
+is frozen: TypeError

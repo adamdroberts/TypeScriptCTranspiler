@@ -250,6 +250,16 @@
       ],
       "reason": "The official ES2015 section 24.3.3 defines JSON @@toStringTag and its descriptor attributes (https://262.ecma-international.org/6.0/#sec-json-@@tostringtag). It maps to the retained normative JSON Symbol.toStringTag owner in the pinned edition, independently of filenames.",
       "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es6id",
+      "match": "exact",
+      "value": "26.1.14",
+      "clauses": [
+        "sec-reflect.setprototypeof"
+      ],
+      "reason": "The legacy ES6 Reflect.setPrototypeOf intrinsic section maps to its pinned normative target/prototype validation and SetPrototypeOf operation independently of filenames and scenario inventory size.",
+      "reviewedBy": "tsc2c compliance review"
     }
   ],
   "pathRules": [

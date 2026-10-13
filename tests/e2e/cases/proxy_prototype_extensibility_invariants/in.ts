@@ -56,7 +56,7 @@ const badProtoProxy: any = new Proxy({}, { getPrototypeOf: badPrototype as any }
 try {
     console.log("bad proto:", Object.getPrototypeOf(badProtoProxy, mark("bad proto")));
 } catch (e: any) {
-    console.log("bad proto:", e);
+    console.log("bad proto:", (e instanceof Error ? e.name : typeof e));
 }
 
 const closedProtoTarget: any = {};
@@ -66,7 +66,7 @@ const closedProtoProxy: any = new Proxy(closedProtoTarget, { getPrototypeOf: oth
 try {
     console.log("closed proto:", Object.getPrototypeOf(closedProtoProxy, mark("closed proto")).marker);
 } catch (e: any) {
-    console.log("closed proto:", e);
+    console.log("closed proto:", (e instanceof Error ? e.name : typeof e));
 }
 
 const closedSetTarget: any = {};
@@ -76,7 +76,7 @@ const closedSetProxy: any = new Proxy(closedSetTarget, { setPrototypeOf: trueSet
 try {
     console.log("set closed:", Object.setPrototypeOf(closedSetProxy, otherProto, mark("set closed")) === closedSetProxy);
 } catch (e: any) {
-    console.log("set closed:", e);
+    console.log("set closed:", (e instanceof Error ? e.name : typeof e));
 }
 console.log("set same:", Object.setPrototypeOf(closedSetProxy, baseProto, mark("set same")) === closedSetProxy);
 
@@ -84,7 +84,7 @@ const extensibleMismatchProxy: any = new Proxy({}, { isExtensible: falseIsExtens
 try {
     console.log("extensible mismatch:", Object.isExtensible(extensibleMismatchProxy, mark("extensible mismatch")));
 } catch (e: any) {
-    console.log("extensible mismatch:", e);
+    console.log("extensible mismatch:", (e instanceof Error ? e.name : typeof e));
 }
 
 const closedExtensibleTarget: any = {};
@@ -93,14 +93,14 @@ const closedExtensibleProxy: any = new Proxy(closedExtensibleTarget, { isExtensi
 try {
     console.log("closed extensible mismatch:", Object.isExtensible(closedExtensibleProxy, mark("closed extensible mismatch")));
 } catch (e: any) {
-    console.log("closed extensible mismatch:", e);
+    console.log("closed extensible mismatch:", (e instanceof Error ? e.name : typeof e));
 }
 
 const preventMismatchProxy: any = new Proxy({}, { preventExtensions: fakePreventExtensions as any });
 try {
     console.log("prevent mismatch:", Object.preventExtensions(preventMismatchProxy, mark("prevent mismatch")) === preventMismatchProxy);
 } catch (e: any) {
-    console.log("prevent mismatch:", e);
+    console.log("prevent mismatch:", (e instanceof Error ? e.name : typeof e));
 }
 
 const realTarget: any = {};

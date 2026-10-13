@@ -2370,7 +2370,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-reflect.ownkeys` — Reflect.ownKeys ( _target_ ): exact disposition and partitions missing.
   - [ ] `sec-reflect.preventextensions` — Reflect.preventExtensions ( _target_ ): exact disposition and partitions missing.
   - [ ] `sec-reflect.set` — Reflect.set ( _target_, _propertyKey_, _V_ [ , _receiver_ ] ): exact disposition and partitions missing.
-  - [ ] `sec-reflect.setprototypeof` — Reflect.setPrototypeOf ( _target_, _proto_ ): exact disposition and partitions missing.
+  - [ ] `sec-reflect.setprototypeof` — Reflect.setPrototypeOf ( _target_, _proto_ )
+    - [ ] `ordinary-prototype-domain-and-exception-owners` (algorithm, unbounded): Ordinary prototype domains preserve validation order and actual exception owners.
   - [ ] `sec-reflect-%symbol.tostringtag%` — Reflect [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
   - [ ] `sec-proxy-objects` — Proxy Objects: exact disposition and partitions missing.
   - [ ] `sec-proxy-constructor` — The Proxy Constructor: exact disposition and partitions missing.

@@ -14,24 +14,24 @@ try {
     const omitted: any = Reflect.construct(target, ["omitted"]);
     console.log("omitted:", omitted.value);
 } catch (err: any) {
-    console.log("omitted:", err);
+    console.log("omitted:", (err instanceof Error ? err.name : typeof err));
 }
 
 try {
     const explicit: any = Reflect.construct(target, ["explicit"], other);
     console.log("explicit:", explicit.value, Object.getPrototypeOf(explicit) === other.prototype);
 } catch (err: any) {
-    console.log("explicit:", err);
+    console.log("explicit:", (err instanceof Error ? err.name : typeof err));
 }
 
 try {
     console.log("undefined:", Reflect.construct(target, ["bad"], undefined));
 } catch (err: any) {
-    console.log("undefined:", err);
+    console.log("undefined:", (err instanceof Error ? err.name : typeof err));
 }
 
 try {
     console.log("method undefined:", reflect.construct(target, ["bad"], undefined));
 } catch (err: any) {
-    console.log("method undefined:", err);
+    console.log("method undefined:", (err instanceof Error ? err.name : typeof err));
 }

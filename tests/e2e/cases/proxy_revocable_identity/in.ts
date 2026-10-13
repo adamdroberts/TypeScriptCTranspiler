@@ -15,17 +15,17 @@ console.log("after:", typeof callable.proxy, typeof objectProxy.proxy);
 try {
     console.log("string:", String(callable.proxy));
 } catch (e: any) {
-    console.log("string:", e);
+    console.log("string:", (e instanceof Error ? e.name : typeof e));
 }
 
 try {
     console.log("json callable:", JSON.stringify(callable.proxy));
 } catch (e: any) {
-    console.log("json callable:", e);
+    console.log("json callable:", (e instanceof Error ? e.name : typeof e));
 }
 
 try {
     console.log("json object:", JSON.stringify(objectProxy.proxy));
 } catch (e: any) {
-    console.log("json object:", e);
+    console.log("json object:", (e instanceof Error ? e.name : typeof e));
 }

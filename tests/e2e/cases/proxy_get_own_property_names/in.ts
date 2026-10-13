@@ -39,7 +39,7 @@ const badProxy: any = new Proxy({}, { ownKeys: badOwnKeys as any });
 try {
     console.log("bad:", Object.getOwnPropertyNames(badProxy).join(","));
 } catch (e: any) {
-    console.log("bad:", e, events);
+    console.log("bad:", (e instanceof Error ? e.name : typeof e), events);
 }
 
 const revoked = Proxy.revocable({ value: 1 } as any, {});
@@ -47,5 +47,5 @@ revoked.revoke();
 try {
     console.log("revoked:", Object.getOwnPropertyNames(revoked.proxy as any).join(","));
 } catch (e: any) {
-    console.log("revoked:", e);
+    console.log("revoked:", (e instanceof Error ? e.name : typeof e));
 }

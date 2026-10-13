@@ -19,14 +19,14 @@ const objectApply: any = new Proxy({ value: 1 }, { apply: applyTrap as any });
 try {
     console.log("object apply:", Reflect.apply(objectApply, null, args("apply")));
 } catch (e: any) {
-    console.log("object apply:", e);
+    console.log("object apply:", (e instanceof Error ? e.name : typeof e));
 }
 
 const objectConstruct: any = new Proxy({ value: 1 }, { construct: constructTrap as any });
 try {
     console.log("object construct:", Reflect.construct(objectConstruct, args("construct")));
 } catch (e: any) {
-    console.log("object construct:", e);
+    console.log("object construct:", (e instanceof Error ? e.name : typeof e));
 }
 
 console.log("events:", events.join("|"));

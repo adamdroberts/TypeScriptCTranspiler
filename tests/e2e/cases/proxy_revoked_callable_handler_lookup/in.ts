@@ -6,7 +6,7 @@ function report(label: string, run: any): void {
     try {
         console.log(label + ":", String(run()));
     } catch (e: any) {
-        console.log(label + ":", e);
+        console.log(label + ":", (e instanceof Error ? e.name : typeof e));
     }
 }
 

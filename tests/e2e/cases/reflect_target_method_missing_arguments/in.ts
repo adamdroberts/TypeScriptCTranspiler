@@ -7,23 +7,23 @@ const preventExtensions: any = reflect.preventExtensions;
 try {
     console.log("getPrototypeOf:", getPrototypeOf());
 } catch (err: any) {
-    console.log("getPrototypeOf:", err);
+    console.log("getPrototypeOf:", (err instanceof Error ? err.name : typeof err));
 }
 
 try {
     console.log("isExtensible:", isExtensible());
 } catch (err: any) {
-    console.log("isExtensible:", err);
+    console.log("isExtensible:", (err instanceof Error ? err.name : typeof err));
 }
 
 try {
     console.log("ownKeys:", ownKeys());
 } catch (err: any) {
-    console.log("ownKeys:", err);
+    console.log("ownKeys:", (err instanceof Error ? err.name : typeof err));
 }
 
 try {
     console.log("preventExtensions:", preventExtensions());
 } catch (err: any) {
-    console.log("preventExtensions:", err);
+    console.log("preventExtensions:", (err instanceof Error ? err.name : typeof err));
 }

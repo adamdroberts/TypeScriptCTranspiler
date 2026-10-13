@@ -24,7 +24,7 @@ try {
         }, mark("add closed")),
     );
 } catch (err: any) {
-    console.log("add closed:", err);
+    console.log("add closed:", (err instanceof Error ? err.name : typeof err));
 }
 
 const openProxy: any = new Proxy(["a"], { defineProperty: trueDefine as any });
@@ -39,7 +39,7 @@ try {
         }, mark("new nonconfig")),
     );
 } catch (err: any) {
-    console.log("new nonconfig:", err);
+    console.log("new nonconfig:", (err instanceof Error ? err.name : typeof err));
 }
 
 const frozenTarget: any = ["x"];
@@ -56,7 +56,7 @@ try {
         }, mark("change frozen")),
     );
 } catch (err: any) {
-    console.log("change frozen:", err);
+    console.log("change frozen:", (err instanceof Error ? err.name : typeof err));
 }
 
 const sealedTarget: any = ["s"];
@@ -79,6 +79,6 @@ try {
         }, mark("sealed downgrade")),
     );
 } catch (err: any) {
-    console.log("sealed downgrade:", err);
+    console.log("sealed downgrade:", (err instanceof Error ? err.name : typeof err));
 }
 console.log("events:", events.join("|"));

@@ -47,12 +47,12 @@ const badProxy: any = new Proxy({}, { getOwnPropertyDescriptor: badDescriptor as
 try {
     console.log("bad has:", Object.hasOwn(badProxy, "x"));
 } catch (e: any) {
-    console.log("bad has:", e);
+    console.log("bad has:", (e instanceof Error ? e.name : typeof e));
 }
 try {
     console.log("bad enum:", Object.prototype.propertyIsEnumerable.call(badProxy, "x"));
 } catch (e: any) {
-    console.log("bad enum:", e);
+    console.log("bad enum:", (e instanceof Error ? e.name : typeof e));
 }
 
 const revoked = Proxy.revocable({ value: 1 } as any, {});
@@ -60,10 +60,10 @@ revoked.revoke();
 try {
     console.log("revoked has:", Object.hasOwn(revoked.proxy as any, "value"));
 } catch (e: any) {
-    console.log("revoked has:", e);
+    console.log("revoked has:", (e instanceof Error ? e.name : typeof e));
 }
 try {
     console.log("revoked enum:", Object.prototype.propertyIsEnumerable.call(revoked.proxy as any, "value"));
 } catch (e: any) {
-    console.log("revoked enum:", e);
+    console.log("revoked enum:", (e instanceof Error ? e.name : typeof e));
 }

@@ -4328,6 +4328,58 @@
         }
       ],
       "rationale": "The source worklist retains reachable callable and actual-List facts independently of cardinality. This host bridge does not establish the complete Call or EvaluateCall algorithms."
+    },
+    {
+      "clause": "sec-reflect.setprototypeof",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "ordinary-prototype-domain-and-exception-owners",
+          "title": "Ordinary prototype domains preserve validation order and actual exception owners",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "graph",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-reflect.setprototypeof"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/prototype-validation.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "prototype_validation_depth"
+            ],
+            "e2e": [
+              "reflect_object_target_validation",
+              "reflect_property_method_missing_arguments",
+              "reflect_static_missing_arguments",
+              "proxy_construct_return_objects",
+              "proxy_spread_call"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "runtime/tsc_value.c#tsc_reflect_set_prototype_of",
+              "runtime/tsc_value.c#tsc_value_object_require_valid_prototype"
+            ]
+          },
+          "rationale": "Reflect.setPrototypeOf now delegates invalid-prototype validation to the same canonical ordinary-value predicate and actual TypeError owner used by Object prototype validation. Target validation still precedes prototype validation and valid Object/null inputs enter the shared mutation operation without coercion. The duplicate predicate/string-throw predecessor is deleted. prototype-validation.property compares primitive domains, ordinary/function/proxy prototype identity, borrowed Realm methods, trap and abrupt ordering, closed targets and retained exception owners with independent Node in typed/erased native profiles and both memory modes. The property and prototype_validation_depth CLI share one generated retained-error graph. Proxy/Reflect regression catches now observe Error kinds with exact independently derived Node stdout; a source-tree Node verifier retains the comparison. Constructor-trap function returns compare actual identity, while typed SourceText erasure remains open. Existing CType, APIs and declarations suffice. This scoped validation/error proof does not establish complete prototype mutation, Proxy invariants, Realm eligibility or exhaustive target coverage."
+        }
+      ],
+      "rationale": "Canonical primitive/ordinary owners and exception construction cover arbitrary retained values through one predicate and owner graph; the full mutation and exotic operation contracts remain open."
     }
   ],
   "groups": [

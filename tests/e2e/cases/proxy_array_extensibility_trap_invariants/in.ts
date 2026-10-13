@@ -25,7 +25,7 @@ const openMismatch: any = new Proxy(openTarget, { isExtensible: falseIsExtensibl
 try {
     console.log("open false:", Object.isExtensible(openMismatch, mark("open false")));
 } catch (err: any) {
-    console.log("open false:", err);
+    console.log("open false:", (err instanceof Error ? err.name : typeof err));
 }
 
 const closedTarget: any = [2];
@@ -34,7 +34,7 @@ const closedMismatch: any = new Proxy(closedTarget, { isExtensible: trueIsExtens
 try {
     console.log("closed true:", Reflect.isExtensible(closedMismatch, mark("closed true")));
 } catch (err: any) {
-    console.log("closed true:", err);
+    console.log("closed true:", (err instanceof Error ? err.name : typeof err));
 }
 
 const fakePreventTarget: any = [3];
@@ -42,7 +42,7 @@ const fakePrevent: any = new Proxy(fakePreventTarget, { preventExtensions: trueP
 try {
     console.log("fake prevent:", Reflect.preventExtensions(fakePrevent, mark("fake prevent")));
 } catch (err: any) {
-    console.log("fake prevent:", err);
+    console.log("fake prevent:", (err instanceof Error ? err.name : typeof err));
 }
 console.log("fake still extensible:", Object.isExtensible(fakePreventTarget));
 
@@ -52,7 +52,7 @@ const realPrevent: any = new Proxy(realPreventTarget, { preventExtensions: trueP
 try {
     console.log("real prevent:", Reflect.preventExtensions(realPrevent, mark("real prevent")));
 } catch (err: any) {
-    console.log("real prevent:", err);
+    console.log("real prevent:", (err instanceof Error ? err.name : typeof err));
 }
 
 console.log("events:", events.join("|"));

@@ -58,7 +58,7 @@ const getNoGetterProxy: any = new Proxy(getNoGetterTarget, { get: fakeGet as any
 try {
     console.log("get no getter:", Reflect.get(getNoGetterProxy, "acc"));
 } catch (err: any) {
-    console.log("get no getter:", err);
+    console.log("get no getter:", (err instanceof Error ? err.name : typeof err));
 }
 
 const setNoSetterTarget: any = SetNoSetter as any;
@@ -71,7 +71,7 @@ const setNoSetterProxy: any = new Proxy(setNoSetterTarget, { set: trueSet as any
 try {
     console.log("set no setter:", Reflect.set(setNoSetterProxy, "acc", "fake"));
 } catch (err: any) {
-    console.log("set no setter:", err);
+    console.log("set no setter:", (err instanceof Error ? err.name : typeof err));
 }
 
 const defineDataTarget: any = DefineData as any;
@@ -85,7 +85,7 @@ const defineDataProxy: any = new Proxy(defineDataTarget, { defineProperty: trueD
 try {
     console.log("define data:", Reflect.defineProperty(defineDataProxy, "acc", { value: "fake" }));
 } catch (err: any) {
-    console.log("define data:", err);
+    console.log("define data:", (err instanceof Error ? err.name : typeof err));
 }
 
 const defineGetterTarget: any = DefineGetter as any;
@@ -99,7 +99,7 @@ const defineGetterProxy: any = new Proxy(defineGetterTarget, { defineProperty: t
 try {
     console.log("define getter:", Reflect.defineProperty(defineGetterProxy, "acc", { get: otherGetter }));
 } catch (err: any) {
-    console.log("define getter:", err);
+    console.log("define getter:", (err instanceof Error ? err.name : typeof err));
 }
 
 const descriptorDataTarget: any = DescriptorData as any;
@@ -114,7 +114,7 @@ try {
     const desc: any = Reflect.getOwnPropertyDescriptor(descriptorDataProxy, "acc");
     console.log("descriptor data:", desc.value);
 } catch (err: any) {
-    console.log("descriptor data:", err);
+    console.log("descriptor data:", (err instanceof Error ? err.name : typeof err));
 }
 
 const descriptorGetterTarget: any = DescriptorGetter as any;
@@ -129,7 +129,7 @@ try {
     const desc: any = Reflect.getOwnPropertyDescriptor(descriptorGetterProxy, "acc");
     console.log("descriptor getter:", desc.get === otherGetter);
 } catch (err: any) {
-    console.log("descriptor getter:", err);
+    console.log("descriptor getter:", (err instanceof Error ? err.name : typeof err));
 }
 
 const descriptorMatchTarget: any = DescriptorMatch as any;

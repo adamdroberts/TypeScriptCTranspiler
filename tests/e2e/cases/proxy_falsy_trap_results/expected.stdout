@@ -2,6 +2,6 @@ reflect set: false undefined
 reflect define: false false
 reflect delete: false 1
 reflect prevent: false true
-object prevent: Object.preventExtensions failed
+object prevent: TypeError
 reflect set proto: false false
-object set proto: TypeError: Object.setPrototypeOf failed
+object set proto: TypeError

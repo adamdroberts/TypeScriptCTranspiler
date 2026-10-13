@@ -22,21 +22,21 @@ const badApply: any = new Proxy(add as any, { apply: 1 as any });
 try {
     console.log("bad apply:", Reflect.apply(badApply, { base: 10 }, list("apply", 2)));
 } catch (e: any) {
-    console.log("bad apply:", e);
+    console.log("bad apply:", (e instanceof Error ? e.name : typeof e));
 }
 
 const badConstruct: any = new Proxy(Target as any, { construct: 1 as any });
 try {
     console.log("bad construct:", Reflect.construct(badConstruct, list("construct", "x")));
 } catch (e: any) {
-    console.log("bad construct:", e);
+    console.log("bad construct:", (e instanceof Error ? e.name : typeof e));
 }
 
 const primitiveResult: any = new Proxy(Target as any, { construct: primitiveConstruct as any });
 try {
     console.log("primitive construct:", Reflect.construct(primitiveResult, list("primitive", "x")));
 } catch (e: any) {
-    console.log("primitive construct:", e);
+    console.log("primitive construct:", (e instanceof Error ? e.name : typeof e));
 }
 
 console.log("events:", events.join("|"));

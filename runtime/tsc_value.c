@@ -5315,9 +5315,7 @@ tsc_value_t tsc_reflect_get_prototype_of(tsc_value_t v) {
 
 bool tsc_reflect_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
     require_reflect_object_target(v, "Reflect.setPrototypeOf target must be an object");
-    if (!value_is_valid_prototype(prototype)) {
-        tsc_throw_str(tsc_str_from_cstr("Reflect.setPrototypeOf prototype must be an object or null"));
-    }
+    tsc_value_object_require_valid_prototype(prototype);
     return tsc_value_set_prototype_of(v, prototype);
 }
 

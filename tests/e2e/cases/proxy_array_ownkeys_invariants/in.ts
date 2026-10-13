@@ -44,7 +44,7 @@ const openMissingLength: any = new Proxy(["x"], { ownKeys: missingLength as any 
 try {
     console.log("missing length:", Reflect.ownKeys(openMissingLength, mark("missing length")).join("|"));
 } catch (err: any) {
-    console.log("missing length:", err);
+    console.log("missing length:", (err instanceof Error ? err.name : typeof err));
 }
 
 const openExtra: any = new Proxy(["x"], { ownKeys: extraOpen as any });
@@ -56,7 +56,7 @@ const closedMissing: any = new Proxy(closedMissingTarget, { ownKeys: missingClos
 try {
     console.log("missing closed:", Reflect.ownKeys(closedMissing, mark("missing closed")).join("|"));
 } catch (err: any) {
-    console.log("missing closed:", err);
+    console.log("missing closed:", (err instanceof Error ? err.name : typeof err));
 }
 
 const closedExtraTarget: any = ["a", "b"];
@@ -65,7 +65,7 @@ const closedExtra: any = new Proxy(closedExtraTarget, { ownKeys: extraClosed as 
 try {
     console.log("extra closed:", Reflect.ownKeys(closedExtra, mark("extra closed")).join("|"));
 } catch (err: any) {
-    console.log("extra closed:", err);
+    console.log("extra closed:", (err instanceof Error ? err.name : typeof err));
 }
 
 const closedExactTarget: any = ["a", "b"];
@@ -79,7 +79,7 @@ const sealedMissing: any = new Proxy(sealedMissingTarget, { ownKeys: missingClos
 try {
     console.log("missing sealed:", Object.keys(sealedMissing, mark("missing sealed")).join("|"));
 } catch (err: any) {
-    console.log("missing sealed:", err);
+    console.log("missing sealed:", (err instanceof Error ? err.name : typeof err));
 }
 
 const sideMissingConfigTarget: any = ["c"];
@@ -93,7 +93,7 @@ const sideMissingConfig: any = new Proxy(sideMissingConfigTarget, { ownKeys: mis
 try {
     console.log("missing side configurable:", Reflect.ownKeys(sideMissingConfig, mark("missing side configurable")).join("|"));
 } catch (err: any) {
-    console.log("missing side configurable:", err);
+    console.log("missing side configurable:", (err instanceof Error ? err.name : typeof err));
 }
 
 const sideMissingFixedTarget: any = ["f"];
@@ -106,7 +106,7 @@ const sideMissingFixed: any = new Proxy(sideMissingFixedTarget, { ownKeys: missi
 try {
     console.log("missing side fixed:", Reflect.ownKeys(sideMissingFixed, mark("missing side fixed")).join("|"));
 } catch (err: any) {
-    console.log("missing side fixed:", err);
+    console.log("missing side fixed:", (err instanceof Error ? err.name : typeof err));
 }
 
 const sideExactTarget: any = ["ok"];
