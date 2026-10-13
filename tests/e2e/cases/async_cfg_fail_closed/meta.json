@@ -1,3 +1,0 @@
-{
-  "description": "A captured local function declaration remains fail-closed instead of being lifted without its lexical environment"
-}

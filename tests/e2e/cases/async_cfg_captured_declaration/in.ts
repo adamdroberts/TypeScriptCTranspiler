@@ -1,4 +1,4 @@
-async function unsupportedCapturedDeclaration(): Promise<number> {
+async function capturedDeclaration(): Promise<number> {
     const offset = 2;
     await Promise.resolve(1);
     function nested(): number {
@@ -7,4 +7,4 @@ async function unsupportedCapturedDeclaration(): Promise<number> {
     return nested();
 }
 
-unsupportedCapturedDeclaration().then((value) => console.log(value));
+capturedDeclaration().then((value) => console.log(value));
