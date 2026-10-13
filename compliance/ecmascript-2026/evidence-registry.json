@@ -2662,6 +2662,76 @@
       "targets": [
         "sec-json.parse#ordered-text-parse-and-callable-reviver-root"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/descriptor-conversion-source.property.test.ts",
+      "targets": [
+        "sec-topropertydescriptor#ordered-presence-get-and-abrupt-descriptor-fields"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "descriptor_conversion_source",
+      "targets": [
+        "sec-topropertydescriptor#ordered-presence-get-and-abrupt-descriptor-fields"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "descriptor_source_owner_depth",
+      "targets": [
+        "sec-topropertydescriptor#ordered-presence-get-and-abrupt-descriptor-fields"
+      ],
+      "stressReview": {
+        "dimension": "descriptor-created ordinary source owner depth",
+        "parameter": "depth",
+        "representativeHighDepth": 256,
+        "rationale": "One deep source-owner graph traverses the ordered descriptor and property worklist, independently of fixture-family counts.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#propertyDescriptor",
+      "targets": [
+        "sec-topropertydescriptor#ordered-presence-get-and-abrupt-descriptor-fields"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#hasProperty",
+      "targets": [
+        "sec-topropertydescriptor#ordered-presence-get-and-abrupt-descriptor-fields"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#proxyReadEffects",
+      "targets": [
+        "sec-topropertydescriptor#ordered-presence-get-and-abrupt-descriptor-fields"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#createObject",
+      "targets": [
+        "sec-topropertydescriptor#ordered-presence-get-and-abrupt-descriptor-fields"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/global-bindings.ts#runtimeDescriptorFields",
+      "targets": [
+        "sec-topropertydescriptor#ordered-presence-get-and-abrupt-descriptor-fields"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#parse_property_descriptor",
+      "targets": [
+        "sec-topropertydescriptor#ordered-presence-get-and-abrupt-descriptor-fields"
+      ]
     }
   ]
 }

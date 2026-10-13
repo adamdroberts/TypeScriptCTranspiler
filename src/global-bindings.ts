@@ -37,6 +37,12 @@ export const runtimeIteratorMethods: ReadonlySet<string> = new Set(
             .matchAll(/^TSC_ITERATOR_(?:HELPER|CONSUMER)\((\w+), /gm)].map(match=>match[1]!)),
 );
 
+/** The native ToPropertyDescriptor reads are the canonical ordered fields. */
+export const runtimeDescriptorFields: readonly {name:string;kind:"boolean"|"value"|"callable"}[] =
+    [...fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_value.c"),"utf8")
+        .matchAll(/out\.has_(\w+) = descriptor_field\(desc, "(\w+)", /g)]
+        .map(([,slot,name])=>({name:name!,kind:slot==="value"?"value":slot==="getter"||slot==="setter"?"callable":"boolean"}));
+
 /** The native well-known Symbol table is the canonical identity collection. */
 export const runtimeWellKnownSymbolDescriptions: ReadonlyMap<string, string> = new Map(
     fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_builtin.c"), "utf8")

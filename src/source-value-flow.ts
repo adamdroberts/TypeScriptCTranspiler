@@ -14,7 +14,7 @@ import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
 import {declarativeSourceBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding, sourceBindingTarget} from "./source-bindings";
-import {runtimeGlobalBindings, runtimeErrorKinds, runtimeIteratorMethods, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
+import {runtimeGlobalBindings, runtimeErrorKinds, runtimeIteratorMethods, runtimeDescriptorFields, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
     readonly roots?: readonly string[];
@@ -44,7 +44,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | `agent-member:${string}`;
+    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | `agent-member:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
@@ -131,7 +131,8 @@ interface OwnPresence {
     readonly contexts: Map<ts.Node|undefined,Cell>;
     initial: boolean;
 }
-interface ObjectOwner { readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, OwnPresence>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; closedIndices?:boolean; rawJSON?:Cell; }
+interface ObjectOwner { readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, OwnPresence>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; closedIndices?:boolean; rawJSON?:Cell; proxy?:{target:Cell;handler:Cell;context:ts.Node}; }
+interface SourceDescriptorRecord {readonly normal:Cell;readonly fields:Map<string,{present:Cell;value:Cell}>;}
 interface FunctionOwner {
     readonly definition: CallableDefinition; readonly node: FunctionNode | null; readonly kind: DynamicFunctionKind; readonly fields: ObjectOwner;
     readonly returns: Cell; readonly throws: Cell; readonly receiver: Cell; readonly active: Cell; readonly sourceText: string;
@@ -151,7 +152,7 @@ const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
 const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operation>> = new Map<string, ReadonlyMap<string, Operation>>([
     ["JSON", new Map([...jsonMethods.values()].map(descriptor=>[descriptor.name,descriptor.operation]))],
     ["console", new Map([...consoleOperations].map(name=>[name,"host-print" as const]))],
-    ["Object", new Map([["getPrototypeOf", "prototype"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
+    ["Object", new Map([["getPrototypeOf", "prototype"], ["create", "create-object"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
         ["getOwnPropertyDescriptor", "own-descriptor"], ["getOwnPropertyDescriptors", "own-descriptors"]])],
     ["Reflect", new Map([["getPrototypeOf", "prototype"], ["apply", "reflect-apply"], ["construct", "construct"],
         ["defineProperty", "define-property"], ["set", "set-property"], ["deleteProperty", "delete-property"], ["getOwnPropertyDescriptor", "own-descriptor"]])],
@@ -210,6 +211,9 @@ class SourceValueFlow {
     private readonly jsonSerializations = new Map<ts.Node, Map<string, Cell>>();
     private readonly rawJSONResults = new Map<ts.Node, Map<Cell, Cell>>();
     private readonly jsonParses = new Map<ts.Node, Map<string, Cell>>();
+    private readonly descriptorRecords = new Map<ts.Node,Map<Cell,SourceDescriptorRecord>>();
+    private readonly objectCreations = new Map<ts.Node,Map<string,Cell>>();
+    private readonly proxyReads = new Set<string>();
     private readonly normalResults = new Map<Cell, Atom>();
     private readonly exceptionHandlers = new Map<ts.Node, Cell>();
     private readonly exceptionCells = new Set<Cell>();
@@ -1418,6 +1422,85 @@ class SourceValueFlow {
             else for (const name of names ?? []) this.writeProperty(base,name,value,true,mode,context,receiver);
         });
     }
+    private proxyReadEffects(owner:ObjectOwner,key:SourcePropertyKey,trap:"get"|"has",context?:ts.Node):void {
+        const proxy=owner.proxy;if(!proxy)return;context??=proxy.context;
+        const signature=owner.shape.id+":"+this.keyIdentity(key)+":"+trap+":"+this.cell(context).id;
+        if(this.proxyReads.has(signature))return;this.proxyReads.add(signature);
+        const method=this.property(proxy.handler,trap,context),callee=this.newCell(),property=this.newCell(),receiver=this.newCell();
+        this.publish(property,this.primitive(key));this.publish(receiver,{tag:"object",owner});
+        this.rule([method],()=>{for(const atom of method.values)if(atom!==this.primitive(undefined)&&atom!==this.primitive(null))this.publish(callee,atom);});
+        this.invoke(context,callee,proxy.handler,[{cell:proxy.target,spread:false},{cell:property,spread:false},...(trap==="get"?[{cell:receiver,spread:false}]:[])],this.newCell());
+    }
+    private hasProperty(base:Cell,key:SourcePropertyKey,context:ts.Node):Cell {
+        const result=this.newCell();let rule!:Rule;
+        rule=this.rule([base],()=>{
+            const pending=[...base.values],visited=new Set<ObjectOwner>();
+            while(pending.length){
+                const atom=pending.pop()!;
+                if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
+                if(atom===this.primitive(null)){this.publish(result,this.primitive(false));continue;}
+                const owner=this.ordinaryOwner(atom);
+                if(owner?.proxy)this.proxyReadEffects(owner,key,"has",context);
+                if(!owner){this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));this.onActive(context,()=>this.opaqueEffect(context));continue;}
+                if(visited.has(owner))continue;visited.add(owner);this.watch(rule,owner.shape);
+                if(this.opaqueShape(owner,context)){this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));this.onActive(context,()=>this.opaqueEffect(context));continue;}
+                const presence=this.propertyPresence(owner,key,context);this.watch(rule,presence);
+                if(presence.values.has(this.primitive(true)))this.publish(result,this.primitive(true));
+                if(!presence.values.has(this.primitive(false)))continue;
+                if(owner.prototype){this.watch(rule,owner.prototype);pending.push(...owner.prototype.values);}
+                else this.publish(result,this.primitive(false));
+            }
+        });
+        return result;
+    }
+    private propertyDescriptor(descriptor:Cell,context:ts.Node):SourceDescriptorRecord {
+        let records=this.descriptorRecords.get(context);if(!records){records=new Map();this.descriptorRecords.set(context,records);}
+        const prior=records.get(descriptor);if(prior)return prior;
+        const fields=new Map<string,{present:Cell;value:Cell}>(),normal=this.newCell(),record={fields,normal},inputs=new Map<Atom,Cell>();records.set(descriptor,record);
+        const input=(atom:Atom)=>{let value=inputs.get(atom);if(!value){value=this.newCell();inputs.set(atom,value);this.publish(value,atom);}return value;};
+        const initial=this.newCell();
+        this.rule([descriptor],()=>{for(const atom of descriptor.values){
+            if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(normal,atom);continue;}
+            if(this.ordinaryOwner(atom)||atom.tag==="opaque-object"||atom.tag==="unknown")this.publish(initial,atom);
+            else {this.publish(normal,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}
+        }});
+        let active=initial;
+        for(const field of runtimeDescriptorFields) {
+            const receiver=active,present=this.hasProperty(receiver,field.name,context),selected=this.newCell(),value=this.newCell(),next=this.newCell();
+            fields.set(field.name,{present,value});
+            this.rule([present],()=>{
+                if(present.values.has(this.primitive(false))){this.publish(value,this.primitive(undefined));this.copy(receiver,next);}
+                if(present.values.has(this.primitive(true)))this.copy(receiver,selected);
+            });
+            const read=this.property(selected,field.name,context);let convert!:Rule;
+            convert=this.rule([read],()=>{for(const atom of read.values){
+                if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(normal,atom);continue;}
+                if(field.kind==="callable"&&atom!==this.primitive(undefined)) {
+                    const kinds=this.primitiveKinds(input(atom));
+                    if(!(kinds&KIND_FUNCTION)){this.publish(normal,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));continue;}
+                    if(kinds&~KIND_FUNCTION){const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}
+                }
+                if(field.kind==="boolean") {
+                    const state=this.primitiveState(input(atom),convert,true);
+                    if(state.proof.primitiveComplete)for(const choice of state.proof.values)this.publish(value,this.primitive(Boolean(choice)));
+                    else if(this.ordinaryOwner(atom))this.publish(value,this.primitive(true));
+                    else {this.publish(value,this.primitive(false));this.publish(value,this.primitive(true));}
+                }else this.publish(value,atom);
+                this.copy(selected,next);
+            }});
+            active=next;
+        }
+        const complete=active,flags=["get","set","value","writable"].map(name=>fields.get(name)!.present);let validate!:Rule;
+        validate=this.rule([complete,...flags],()=>{
+            const states=flags.map(input=>this.primitiveState(input,validate,true));
+            if(states.some(state=>state.pending&&!state.unresolved))return;
+            for(const tuple of this.primitiveTuples(states.map(state=>state.proof.values))) {
+                if((tuple[0]||tuple[1])&&(tuple[2]||tuple[3])){this.publish(normal,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}
+                else this.copy(complete,normal);
+            }
+        });
+        return record;
+    }
     private defineProperty(base:Cell,key:Cell,descriptor:Cell,context:ts.Node): void {
         // Every normal DefineProperty completion creates an own location.
         // Register that edge before descriptor absence reads settle, so the
@@ -1432,19 +1515,23 @@ class SourceValueFlow {
                 this.publish(record.facts,this.primitive(true));
             }
         });
-        const getter=this.property(descriptor,"get",context),setter=this.property(descriptor,"set",context),value=this.property(descriptor,"value",context);
+        const converted=this.propertyDescriptor(descriptor,context),getter=converted.fields.get("get")!.value,setter=converted.fields.get("set")!.value,value=converted.fields.get("value")!.value;
+        const getterPresent=converted.fields.get("get")!.present,setterPresent=converted.fields.get("set")!.present;
         let rule!:Rule;
-        rule=this.rule([base,key,getter,setter],()=>{
+        rule=this.rule([base,key,getter,setter,getterPresent,setterPresent,converted.normal],()=>{
+            if(![...converted.normal.values].some(atom=>atom.tag!=="abrupt"&&atom.tag!=="pending-source"))return;
             const keys = this.propertyKeys(key, rule, context);
             if (keys === undefined) return;
             const names:readonly(SourcePropertyKey|null)[]=keys ?? [null];
-            const accessor=[...getter.values,...setter.values].some(atom=>atom.tag !== "abrupt" && atom!==this.primitive(undefined));
+            const accessor=getterPresent.values.has(this.primitive(true))||setterPresent.values.has(this.primitive(true));
+            const data=getterPresent.values.has(this.primitive(false))&&setterPresent.values.has(this.primitive(false));
             for(const name of names){
                 if(accessor){for(const atom of base.values){const owner=this.ordinaryOwner(atom);
                     if(owner){this.defineAccessor(owner,name,"get",getter,context);this.defineAccessor(owner,name,"set",setter,context);}
                     else if(atom.tag==="unknown"||atom.tag==="opaque-object") {this.publish(this.globalMutation,this.unknown);this.opaqueEffect(context);}
                     else if(atom.tag!=="abrupt"&&atom.tag!=="pending-source"){const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context!));}
-                }}else if(getter.values.size && setter.values.size)this.writeProperty(base,name,value,true,"define",context);
+                }}
+                if(data&&getter.values.size&&setter.values.size)this.writeProperty(base,name,value,true,"define",context);
             }
         });
     }
@@ -1462,6 +1549,20 @@ class SourceValueFlow {
                 this.defineProperty(base,propertyKey,this.property(descriptors,name,context),context);
             }
         }});
+    }
+    private createObject(prototype:Cell,properties:Cell,context:ts.Node):Cell {
+        let creations=this.objectCreations.get(context);if(!creations){creations=new Map();this.objectCreations.set(context,creations);}
+        const key=prototype.id+":"+properties.id,prior=creations.get(key);if(prior)return prior;
+        const result=this.newCell(),descriptors=this.newCell(),owner=this.owner(context);creations.set(key,result);owner.prototype??=this.newCell();
+        this.rule([prototype],()=>{for(const value of prototype.values){
+            if(this.ordinaryOwner(value)||value===this.primitive(null)||value.tag==="opaque-object"||value.tag==="unknown") {
+                this.publish(owner.prototype!,value);this.publish(result,{tag:"object",owner});
+            }else if(value.tag==="pending-source"||value.tag==="abrupt")this.publish(result,value);
+            else {this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}
+        }});
+        this.rule([properties],()=>{for(const value of properties.values)if(value!==this.primitive(undefined))this.publish(descriptors,value);});
+        this.defineProperties(result,descriptors,context);
+        return result;
     }
     private ownDescriptors(base:Cell,key:Cell|null,context:ts.Node,result:Cell): void {
         const records=new Map<ObjectOwner,Map<SourcePropertyKey,{value:Cell;owner:ObjectOwner}>>();
@@ -1866,6 +1967,7 @@ class SourceValueFlow {
             const owner = worklist.pop()!;
             if (visited.has(owner)) continue;
             visited.add(owner);
+            if(owner.proxy)this.proxyReadEffects(owner,key,"get",context);
             if(rule)this.watch(rule,owner.shape);
             if(!this.definitionsReady(owner,rule))continue;
             this.copyRead(this.field(owner, key), result, context);
@@ -2749,9 +2851,9 @@ class SourceValueFlow {
                 }
             } });
         } else if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
-            // Successful [[Construct]] always produces an Object, even when
-            // its target's implementation lies outside this source graph.
-            if (ts.isNewExpression(node)) this.publish(result, {tag:"object",owner:this.owner(node)});
+            // Owned construction locations are retained until the callee's
+            // native/exotic result facts have joined the same owner graph.
+            if(ts.isNewExpression(node))this.publish(result,{tag:"object",owner:this.owner(node)});
             const target = unwrap(node.expression);
             const activation=this.enclosingActivation(node);
             const superOwner=target.kind===ts.SyntaxKind.SuperKeyword && activation?.node && ts.isConstructorDeclaration(activation.node) && ts.isClassLike(activation.node.parent) ? this.function(activation.node.parent) : null;
@@ -2889,7 +2991,12 @@ class SourceValueFlow {
                         const path = new Set(invocation.boundPath); path.add(atom);
                         worklist.push({...invocation, target:atom.owner.base, direct:false, boundPath:path});
                     }
-                    if (invocation.construct) this.publish(result!,{tag:"object",owner:this.owner(node)});
+                    if(invocation.construct&&atom.tag==="builtin"&&atom.name==="Proxy") {
+                        const owner=this.owner(node);
+                        owner.proxy??={target:this.newCell(),handler:this.newCell(),context:node};
+                        this.copy(argument(0)??omittedArgument,owner.proxy.target);this.copy(argument(1)??omittedArgument,owner.proxy.handler);
+                        this.publish(owner.shape,this.unknown);this.publish(result,{tag:"object",owner});
+                    }else if(invocation.construct)this.publish(result!,{tag:"object",owner:this.owner(node)});
                     const evolvingPrimitiveResult = constructorArguments !== undefined || atom.tag === "builtin" && (atom.normalResult === "primitive-string" || atom.name === "Symbol" || NUMERIC_CONVERSIONS.has(atom.name));
                     if (!evolvingPrimitiveResult && (atom.tag !== "operation" || PROPERTY_MUTATIONS.has(atom.operation)) && handled(atom, signature)) continue;
                     if (atom.tag === "intrinsic" && atom.domain === "constructor") {
@@ -3019,6 +3126,10 @@ class SourceValueFlow {
                             if (handler) this.copy(atom.owner.throws, handler);
                         }
                     } else if (atom.tag === "operation") {
+                        if(atom.operation==="create-object") {
+                            this.copy(this.createObject(argument(0)??omittedArgument,argument(1)??omittedArgument,node),result);
+                            continue;
+                        }
                         if(atom.operation==="array-values"){this.copy(this.arrayIterator(invocation.receiver,node),result);continue;}
                         if(atom.operation==="json-parse"){
                             this.copy(this.jsonParse(argument(0)??omittedArgument,argument(1)??omittedArgument,node),result);continue;
@@ -3128,7 +3239,7 @@ class SourceValueFlow {
                         }
                         if(PROPERTY_MUTATIONS.has(atom.operation)){
                             const handler=this.exceptionHandlers.get(node);
-                            if(handler)this.publish(handler,this.unknown);
+                            if(handler)this.publish(handler,this.nativeException(node));
                             const target=argv?.[0],key=argv?.[1];
                             if(!target){this.publish(this.globalMutation,this.unknown);continue;}
                             if(atom.operation==="define-properties" && argv?.[1])this.defineProperties(target,argv[1],node);

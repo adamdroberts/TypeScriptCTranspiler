@@ -1,3 +1,5 @@
+Preserved ordered descriptor getter/Proxy effects, abrupt field gates and inherited Object.create source owners through the shared worklist. Added independent Node/native semantic properties and one generated deep source-owner input in both memory modes; exhaustive target coverage remains open.
+
 Parsed JSON object/array source facts now use one iterative ordinary owner worklist, preserving fields, prototypes and List extents. Synchronous for-of bindings and possible iterator close effects share protocol/receiver/exception graphs, including inherited return mutations and opaque-write rejection. Independent Node/native partitions and one generated mixed-owner depth input cover both memory modes; composite revivers, serialization and exhaustive target coverage remain open.
 
 JSON namespace publication and source metadata now share one method descriptor collection. Added the required Symbol.toStringTag, ordinary source method owners and InitialName text, with mutable Reference/Realm/actual-List properties and one generated deep owner stress in both memory modes. Complete composite JSON source precision and exhaustive target coverage remain open.
