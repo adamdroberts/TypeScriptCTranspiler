@@ -2,7 +2,7 @@ import {sourceNumericOperation, type SourceNumericOperation, type SourcePrimitiv
 import ts from "typescript";
 import { callableSourceText } from "./callable-source-text";
 import { normalizeAssignmentTarget, unwrapTransparentExpression as unwrap } from "./emit/binding-tree";
-import { callableNameInput, expectedArgumentCount, functionBodyCompletions, type FunctionBodyCompletions, NAME_EVALUATING_ASSIGNMENTS } from "./function-static-semantics";
+import { callableNameInput, expectedArgumentCount, functionBodyCompletions, statementBodyCompletions, type FunctionBodyCompletions, type StatementBodyCompletions, NAME_EVALUATING_ASSIGNMENTS } from "./function-static-semantics";
 import {consoleOperations} from "./console-operations";
 import {test262AgentOperations} from "./test262-agent-operations";
 import { sourceUnitBodyIncluded, sourceUnitFileName } from "./program";
@@ -231,6 +231,8 @@ class SourceValueFlow {
     private readonly abrupt: Atom = {tag:"abrupt"};
     private readonly pendingSource: Atom = {tag:"pending-source"};
     private readonly evaluations = new Map<string, Cell[]>();
+    private readonly evaluationThrows = new Map<string,Cell[]>();
+    private readonly scriptCompletions = new Map<ts.SourceFile,{summary:StatementBodyCompletions;throws:Cell}>();
     private readonly evaluationOrigins = new Map<string, Cell[]>();
     private readonly sourceOrigins = new Map<ts.SourceFile, Cell>();
     private readonly dynamicSourceTexts = new Map<FunctionNode, string>();
@@ -295,15 +297,17 @@ class SourceValueFlow {
                 const callers=this.evaluationOrigins.get(entry.source)??[];
                 callers.push(origins);this.evaluationOrigins.set(entry.source,callers);
             }
-            const completion = this.newCell();
-            if(!file.statements.length)this.publish(completion,this.primitive(undefined));
-            const worklist: ts.Node[] = [...file.statements];
-            while (worklist.length) {
-                const node = worklist.pop()!;
-                if (functionNode(node) || ts.isClassLike(node)) continue;
-                if (ts.isExpressionStatement(node)) this.copy(this.cell(node.expression), completion);
-                else node.forEachChild(child => { worklist.push(child); });
+            const completion = this.newCell(),summary=statementBodyCompletions(file),exceptions=this.exceptionCell();
+            this.scriptCompletions.set(file,{summary,throws:exceptions});
+            if(!summary.complete)this.publish(completion,this.unknown);
+            for(const value of summary.normalValues){
+                if(value==="undefined")this.publish(completion,this.primitive(undefined));
+                else if(value==="unknown")this.publish(completion,this.unknown);
+                else this.copy(this.cell(value),completion);
             }
+            if(!summary.normal)this.publish(completion,this.abrupt);
+            const errors=this.evaluationThrows.get(entry.source)??[];
+            errors.push(exceptions);this.evaluationThrows.set(entry.source,errors);
             const values = this.evaluations.get(entry.source) ?? [];
             values.push(completion); this.evaluations.set(entry.source, values);
         }
@@ -322,12 +326,15 @@ class SourceValueFlow {
             if (file.isDeclarationFile) continue;
             if (!sourceUnitBodyIncluded(program, file) && !(entries.evaluations ?? []).some(entry => entry.entry && path.resolve(entry.entry) === path.resolve(file.fileName)) &&
                 !(entries.functions ?? []).some(entry => entry.entry && path.resolve(entry.entry) === path.resolve(file.fileName))) continue;
-            const worklist: Array<{node: ts.Node; handler: Cell | null}> = [{node: file, handler: null}];
+            const script=this.scriptCompletions.get(file);
+            const worklist: Array<{node: ts.Node; handler: Cell | null}> = [{node: file, handler: script?.throws??null}];
             while (worklist.length) {
                 const {node, handler} = worklist.pop()!;
                 if ((ts.isStatement(node) || ts.isCatchClause(node)) && !ts.isFunctionDeclaration(node)) {
                     const activation = this.enclosingActivation(node);
                     if (activation?.completion && !activation.completion.reachable.has(node)) continue;
+                    const analyzed=ts.isCatchClause(node)?node.block:node;
+                    if(!activation&&script?.summary.analyzed.has(analyzed)&&!script.summary.reachable.has(node))continue;
                 }
                 if (handler) this.exceptionHandlers.set(node, handler);
                 if (ts.isTryStatement(node)) {
@@ -2396,6 +2403,8 @@ class SourceValueFlow {
                                         if (handler) this.onActive(node, () => this.publish(handler, this.opaqueObject));
                                     }
                                     for (const value of generated ?? []) this.copy(value, result!);
+                                    const handler=this.exceptionHandlers.get(node);
+                                    if(handler)for(const errors of this.evaluationThrows.get(String(text))??[])this.copy(errors,handler);
                                 }
                                 if (atom.operation === "eval") for (const value of source.values) {
                                     if (value.tag === "unknown-string") this.publish(result,this.unknown);

@@ -21,7 +21,7 @@ import { AgentStoragePlan } from "./agent-storage";
 import { planAsyncControlFlowGraph, type AsyncControlFlowTarget } from "./async-cfg";
 import { normalizeAssignmentTarget, unwrapTransparentExpression } from "./binding-tree";
 import { callableSourceText } from "../callable-source-text";
-import { callableName, expectedArgumentCount } from "../function-static-semantics";
+import { callableName, expectedArgumentCount, statementCompletionStartsUndefined } from "../function-static-semantics";
 import { isTailPositionCall } from "../tail-position";
 import { planResumableExpression, type ResumableReference, type ResumableExpressionState } from "./resumable-expression";
 import {
@@ -28802,6 +28802,12 @@ class Emitter {
 
     private emitStmt(buf: CBuf, stmt: ts.Statement): void {
         this.emitLineDirective(buf, stmt);
+        const completion=this.isTest262ScriptEvaluationNode(stmt)&&statementCompletionStartsUndefined(stmt)
+            ?this.scriptCompletionTargets[this.scriptCompletionTargets.length-1]:undefined;
+        if(completion){
+            buf.line(`${completion.value} = tsc_value_undefined();`);
+            buf.line(`${completion.gcRoot} = NULL;`);
+        }
         if (ts.isExpressionStatement(stmt)) return this.emitExprStmt(buf, stmt);
         if (ts.isVariableStatement(stmt)) return this.emitVarStmt(buf, stmt);
         if (ts.isFunctionDeclaration(stmt)) {
@@ -28843,14 +28849,6 @@ class Emitter {
             buf.indent++;
             buf.line(`tsc_environment_scope_t ${scope} __attribute__((cleanup(tsc_environment_scope_leave))) = {0};`);
             buf.line(`tsc_environment_object_enter(&${scope}, ${object});`);
-            const completion = this.isTest262ScriptEvaluationNode(stmt)
-                ? this.scriptCompletionTargets[this.scriptCompletionTargets.length - 1] : undefined;
-            if (completion) {
-                // WithStatement applies UpdateEmpty(C, undefined). Its body
-                // starts empty independently of the surrounding StatementList.
-                buf.line(`${completion.value} = tsc_value_undefined();`);
-                buf.line(`${completion.gcRoot} = NULL;`);
-            }
             this.emitStmt(buf, stmt.statement);
             buf.indent--;
             buf.line("}");
@@ -31897,12 +31895,6 @@ class Emitter {
         buf.line(`${T_VALUE.c} ${dv} = ${this.coerce(disc, T_VALUE, sw.expression)};`);
         buf.line(`void* volatile ${dvRoot} = tsc_value_gc_root(${dv});`);
         buf.line(`(void)${dvRoot};`);
-        if (scriptCompletion) {
-            /* Switch Evaluation applies UpdateEmpty(..., undefined), so an
-             * empty/unmatched switch replaces an earlier Script value. */
-            buf.line(`${scriptCompletion.value} = tsc_value_undefined();`);
-            buf.line(`${scriptCompletion.gcRoot} = NULL;`);
-        }
 
         const lexicalDeclarations = this.directSwitchLexicalDeclarations(sw);
         const lexicalScope = this.createScopeLexicalBindings(buf, lexicalDeclarations);
@@ -32303,12 +32295,6 @@ class Emitter {
         const scope = this.syncCompletionScope(statement, frame, undefined, environment);
         const completion = this.isTest262ScriptEvaluationNode(statement)
             ? this.scriptCompletionTargets[this.scriptCompletionTargets.length - 1] : undefined;
-        if (completion) {
-            // TryStatement applies UpdateEmpty(..., undefined), so its Block
-            // starts with an empty value rather than the preceding statement.
-            buf.line(`${completion.value} = tsc_value_undefined();`);
-            buf.line(`${completion.gcRoot} = NULL;`);
-        }
         const emitProtected = (protectedScope: SyncCompletionScope, emitBody: () => void): void => {
             buf.line(`TSC_TRY_FRAME(${protectedScope.frame});`);
             buf.line(`tsc_try_push(&${protectedScope.frame});`);
