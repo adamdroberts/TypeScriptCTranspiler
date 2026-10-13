@@ -10,11 +10,12 @@ import { sourceUnitBodyIncluded, sourceUnitFileName } from "./program";
 import { ecmaParseGoal } from "./ecmascript-source";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
+import {nativePrimitiveFormat} from "./util-format-source";
 import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
 import {declarativeSourceBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding, sourceBindingTarget} from "./source-bindings";
-import {runtimeGlobalBindings, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
+import {runtimeGlobalBindings, runtimeUtilExports, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
     readonly roots?: readonly string[];
@@ -44,7 +45,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}`;
+    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "util-format" | "native-require" | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
@@ -240,6 +241,8 @@ class SourceValueFlow {
     private readonly catchGuards = new Map<ts.CatchClause, Cell>();
     private readonly bindings = new Map<ts.Symbol, Cell>();
     private readonly globals = new Map<string, Cell>();
+    private readonly utilModules = new Map<boolean,{value:Cell;owner:ObjectOwner}>();
+    private readonly utilExportValues = new Map<string,Cell>();
     private readonly globalLexicals = new Map<string, Cell>();
     private readonly objects = new Map<ts.Node, ObjectOwner>();
     private readonly literalLists = new WeakMap<ObjectOwner,{node:ts.ArrayLiteralExpression;parts:readonly ListPart[];holes:ReadonlySet<Cell>}>();
@@ -737,6 +740,16 @@ class SourceValueFlow {
     }
     private binding(node: ts.Identifier): Cell {
         const origin = declarativeSourceBindingSymbol(this.checker, node);
+        for(const declaration of origin?.declarations??[]){
+            let current:ts.Node|undefined=declaration;
+            while(current&&!ts.isImportDeclaration(current)&&!ts.isSourceFile(current))current=current.parent;
+            if(!current||!ts.isImportDeclaration(current)||!ts.isStringLiteralLike(current.moduleSpecifier)||
+                !["util","node:util"].includes(current.moduleSpecifier.text))continue;
+            if(current.importClause?.isTypeOnly||ts.isImportSpecifier(declaration)&&declaration.isTypeOnly)continue;
+            if(ts.isImportSpecifier(declaration))return this.utilExport((declaration.propertyName??declaration.name).text);
+            if(ts.isNamespaceImport(declaration))return this.utilModule(true);
+            if(ts.isImportClause(declaration)&&declaration.name)return this.utilModule(false);
+        }
         const projected = sourceBindingTarget(this.checker, origin), symbol = projected.symbol;
         const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
         if (declaration && ts.isSourceFile(declaration)) {
@@ -1686,6 +1699,27 @@ class SourceValueFlow {
         const binding = runtimeGlobalBindings.get(key);
         return binding?.kind === "value" && !binding.writable && !binding.configurable;
     }
+    private utilExport(name:string):Cell {
+        const prior=this.utilExportValues.get(name);if(prior)return prior;
+        const value=this.newCell();this.utilExportValues.set(name,value);
+        if(name==="format")this.publish(value,this.operation("util-format"));
+        else if(runtimeUtilExports.has(name)&&name!=="types")this.copy(this.globalBinding(name),value);
+        else this.publish(value,this.unknown);
+        return value;
+    }
+    private utilModule(namespace:boolean):Cell {
+        const prior=this.utilModules.get(namespace);if(prior)return prior.value;
+        const prototype=namespace?this.newCell():this.objectPrototype();
+        if(namespace)this.publish(prototype,this.primitive(null));
+        const value=this.newCell(),owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype,ordinary:true};
+        this.utilModules.set(namespace,{value,owner});this.publish(value,{tag:"object",owner});
+        // Opaque code can mutate the default object, but namespace export
+        // binding locations cannot be replaced through that object.
+        if(!namespace)this.copy(this.opaqueMutation,owner.shape);
+        for(const name of runtimeUtilExports)this.defineField(owner,name,this.utilExport(name));
+        if(namespace)this.defineField(owner,"default",this.utilModule(false));
+        return value;
+    }
     private globalBinding(key: string): Cell {
         let cell = this.globals.get(key);
         if (!cell) {
@@ -1693,6 +1727,7 @@ class SourceValueFlow {
             if (!this.immutableGlobalBinding(key)) this.copy(this.globalMutation,cell);
             if (key === "Function") this.publish(cell,this.intrinsic("constructor","ordinary"));
             if (key === "eval") this.publish(cell,this.operation("eval"));
+            if (key === "require") this.publish(cell,this.operation("native-require"));
             if (key === "print") this.publish(cell,this.operation("host-print"));
             if (key === "$262") this.publish(cell,this.host);
             if (key === "undefined") this.publish(cell,this.primitive(undefined));
@@ -2250,12 +2285,12 @@ class SourceValueFlow {
         if(atom.tag === "function")return atom.owner.fields;
         if(atom.tag === "bound")return atom.fields;
         if(atom.tag === "builtin")return atom.fields;
-        if(atom.tag==="operation"&&jsonOperations.has(atom.operation as JSONSourceOperation)) {
+        if(atom.tag==="operation"&&(jsonOperations.has(atom.operation as JSONSourceOperation)||atom.operation==="util-format")) {
             let owner=this.intrinsicOwners.get(atom);
             if(!owner) {
                 owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);
                 this.copy(this.opaqueMutation,owner.shape);
-                const descriptor=jsonOperations.get(atom.operation as JSONSourceOperation)!,name=this.newCell(),length=this.newCell();
+                const descriptor=atom.operation==="util-format"?{name:"format",length:1}:jsonOperations.get(atom.operation as JSONSourceOperation)!,name=this.newCell(),length=this.newCell();
                 this.publish(name,this.primitive(descriptor.name));this.publish(length,this.primitive(descriptor.length));
                 this.defineField(owner,"name",name);this.defineField(owner,"length",length);
             }
@@ -3495,6 +3530,27 @@ class SourceValueFlow {
                         const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));
                         continue;
                     }
+                    if(atom.tag==="operation"&&atom.operation==="util-format") {
+                        if(!argv){this.publish(result,this.unknown);continue;}
+                        const states=argv.map(input=>this.primitiveState(input,rule,true));
+                        if(states.some(state=>state.pending))continue;
+                        if(states.some(state=>!state.proof.primitiveComplete)){this.copy(this.executionOrigins(node),result);this.opaqueEffect(node);continue;}
+                        for(const tuple of this.primitiveTuples(states.map(state=>state.proof.values))){
+                            const text=tuple.some(value=>typeof value==="symbol")?null:nativePrimitiveFormat(tuple as Exclude<Primitive,symbol>[]);
+                            this.publish(result,text===null?this.unknown:this.text(text));
+                        }
+                        continue;
+                    }
+                    if(atom.tag==="operation"&&atom.operation==="native-require") {
+                        const specifier=argument(0);
+                        if(specifier){this.watchText(rule,specifier);const state=this.primitiveState(specifier,rule,true);if(state.pending)continue;
+                            for(const name of state.proof.values)if(name==="util"||name==="node:util")this.copy(this.utilModule(false),result);
+                            if(state.proof.primitiveComplete&&state.proof.values.every(name=>name==="util"||name==="node:util"))continue;
+                        }
+                        this.publish(result,this.opaqueObject);this.opaqueEffect(node);
+                        const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.unknown);
+                        continue;
+                    }
                     if (atom.tag === "operation" && PROPERTY_MUTATIONS.has(atom.operation)) {
                         const activation = this.enclosingActivation(node);
                         if (activation) {this.watch(rule,activation.active);if(!activation.active.values.size)continue;}
@@ -4062,6 +4118,10 @@ class SourceValueFlow {
         for (const [cell,proof] of proofs) this.primitiveProofCache.set(cell,proof);
         return proofs.get(root) ?? incomplete;
     }
+    expressionTexts(expressions:readonly ts.Expression[]):ReadonlyMap<ts.Expression,readonly string[]|null> {
+        const cells=expressions.map(expression=>this.cell(expression));this.solve();
+        return new Map(expressions.map((expression,index)=>[expression,this.choices(cells[index]!)]));
+    }
     solve(): { constructors: ConstructorInvocation[]; evaluations: EvaluationInvocation[] } {
         for (;;) {
             while (this.moduleNamespacePending.length || this.initializers.length || this.queueCursor < this.queue.length || this.primitiveChanges.size) {
@@ -4124,6 +4184,11 @@ class SourceValueFlow {
             }),
         };
     }
+}
+
+/** Expression queries project the same source value/location/call solution. */
+export function sourceExpressionTexts(program:ts.Program,expressions:readonly ts.Expression[],entries:SourceValueGraphEntries={}):ReadonlyMap<ts.Expression,readonly string[]|null> {
+    return new SourceValueFlow(program,entries).expressionTexts(expressions);
 }
 
 type SourceValueSolution = ReturnType<SourceValueFlow["solve"]>;

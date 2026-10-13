@@ -1,3 +1,5 @@
+Derived finite formatter requests from actual source callable/location facts, retaining mutable defaults and original import captures. Removed textual util-name admission and NUL tuple encoding; independent Node/native properties and one shared deep input check the supported domain. Opaque prior CommonJS/host effects remain conservative and open.
+
 Retained complete filesystem argument Lists before byte-view and integer validation. Shared byte-source witnesses serve filesystem reads and codecs, including typed/DataView offsets, backing revalidation and synchronized shared storage. One native descriptor collection replaces emitter/native fixed-argument selectors; independent Node/native properties and a shared generated argument stress cover both memory profiles.
 
 Closed recursive captured return-source projections through one identity-aware memo graph, retaining empty substitutions without cloning. Independent Node/native semantic properties and a deep typed CLI input preserve actual returns and opaque effects; ambient semantic profiles retain one independently checked GC stress.

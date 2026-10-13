@@ -727,7 +727,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-evaluatenew` — EvaluateNew ( _constructExpr_: a |NewExpression| Parse Node or a |MemberExpression| Parse Node, _arguments_: ~empty~ or an |Arguments| Parse Node, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
   - [ ] `sec-function-calls` — Function Calls: exact disposition and partitions missing.
   - [ ] `sec-function-calls-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
-  - [ ] `sec-evaluatecall` — EvaluateCall ( _func_: an ECMAScript language value, _ref_: an ECMAScript language value or a Reference Record, _arguments_: a Parse Node, _tailPosition_: a Boolean, ): either a normal completion containing an ECMAScript language value or an abrupt completion: exact disposition and partitions missing.
+  - [ ] `sec-evaluatecall` — EvaluateCall ( _func_: an ECMAScript language value, _ref_: an ECMAScript language value or a Reference Record, _arguments_: a Parse Node, _tailPosition_: a Boolean, ): either a normal completion containing an ECMAScript language value or an abrupt completion
+    - [ ] `finite-host-callable-location-source-projections` (algorithm, unbounded): Finite source callable locations and actual Lists retain request text proofs.
   - [ ] `sec-super-keyword` — The super Keyword: exact disposition and partitions missing.
   - [ ] `sec-super-keyword-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
   - [ ] `sec-getsuperconstructor` — GetSuperConstructor ( ): an ECMAScript language value: exact disposition and partitions missing.

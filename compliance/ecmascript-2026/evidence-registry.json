@@ -3605,6 +3605,62 @@
       "targets": [
         "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/util-format-source.property.test.ts",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "util_format_source_depth",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ],
+      "stressReview": {
+        "dimension": "retained source-call forwarding depth",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One shared generated input retains a formatter callable and actual argument through the canonical source return graph and CLI independently of forwarding depth.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "dynamic_require_mutable_util_format",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#sourceExpressionTexts",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#utilModule",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-file-expression-proof.ts#sourceFileCallTexts",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/util-format-source.ts#nativePrimitiveFormat",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
     }
   ]
 }

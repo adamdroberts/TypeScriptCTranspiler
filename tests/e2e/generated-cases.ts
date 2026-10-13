@@ -51,6 +51,7 @@ export interface DynamicImportSourceDepthSpec {
     depth: number;
 }
 export interface FsReadActualListWidthSpec {generator:"fs-read-actual-list-width";width:number;}
+export interface UtilFormatSourceDepthSpec { generator:"util-format-source-depth"; depth:number; }
 export interface ReturnProjectionDepthSpec { generator:"return-projection-depth"; depth:number; }
 export interface ImportMetaReferenceWidthSpec {
     generator: "import-meta-reference-width";
@@ -217,6 +218,7 @@ export type GeneratedCaseSpec =
     | ModuleNamespaceExportWidthSpec
     | ModuleRequestWidthSpec
     | DynamicImportSourceDepthSpec
+    | UtilFormatSourceDepthSpec
     | ReturnProjectionDepthSpec
     | FsReadActualListWidthSpec
     | ImportMetaReferenceWidthSpec
@@ -319,7 +321,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth" || spec.generator === "boxed-json-source-depth" || spec.generator === "dynamic-import-source-depth" || spec.generator === "return-projection-depth") {
+    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth" || spec.generator === "boxed-json-source-depth" || spec.generator === "dynamic-import-source-depth" || spec.generator === "return-projection-depth" || spec.generator === "util-format-source-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
             throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
@@ -1773,6 +1775,11 @@ console.log("raw JSON text width:", valid);
                 `const stressView=Buffer.alloc(4);let stressSeen=0;const stressOptions={get offset(){stressSeen++;return 0},get length(){stressSeen++;return 4},get position(){stressSeen++;return 0}};\n` +
                 `const stressBytes=stressRead(stressFD,stressView,stressOptions,...Array.from({length:${spec.width}},()=>++stressSeen));\n` +
                 `console.log('bytes:',stressBytes,'seen:',stressSeen,'text:',stressView.toString());stressClose(stressFD);stressRemove(stressPath);\n`;
+        case "util-format-source-depth":
+            return `import {format as stressFormat} from 'util';\n` +
+                `let stressRead:any=(value:any)=>stressFormat('%s','23;');\n` +
+                `for(let index=0;index<${spec.depth};index++){const previous=stressRead;stressRead=(value:any)=>previous(value)}\n` +
+                `console.log('source:',eval(stressRead(17)));\n`;
         case "return-projection-depth":
             return `export {};\nconst marker:any={source:'23;'};let read:any=(ignored:any)=>marker.source;\n` +
                 `for(let index=0;index<${spec.depth};index++){const previous=read;read=(ignored:any)=>previous(ignored)}\n` +
