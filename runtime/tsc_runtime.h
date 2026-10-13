@@ -1324,6 +1324,9 @@ struct tsc_map* tsc_value_map_group_by(tsc_value_t items, tsc_value_t callback,
     const tsc_group_by_map_layout_t* layout);
 
 typedef struct tsc_module_graph tsc_module_graph_t;
+/* Generated mutable storage shares the semantic agent across dispatch
+ * contexts and stays distinct for independent ECMAScript agents. */
+void* tsc_agent_storage(const void* key, size_t size);
 typedef struct {
     tsc_value_t (*execute)(void);
     const size_t* requests;

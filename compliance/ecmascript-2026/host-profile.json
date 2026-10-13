@@ -72,6 +72,7 @@
     "src/emit/class-definition.ts",
     "src/emit/module-evaluation.ts",
     "src/emit/private-names.ts",
+    "src/emit/agent-storage.ts",
     "src/emit/index.ts",
     "src/emit/lexical-declarations.ts",
     "src/emit/mangle.ts",

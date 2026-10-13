@@ -9,4 +9,4 @@ global.$262={agent:{
     monotonicNow(){return performance.now();},
     leaving(){Atomics.store(control,2,1);workerData.report.close();parentPort.close();}
 }};
-Atomics.store(control,0,1);Atomics.notify(control,0);try{vm.runInThisContext(workerData.source)}catch(error){failure(error)}
+Atomics.store(control,0,1);Atomics.notify(control,0);try{vm.runInThisContext(workerData.source,{importModuleDynamically:vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER})}catch(error){failure(error)}

@@ -17,6 +17,7 @@ import { directLexicalDeclarations, lexicalDeclarationsFromList, type ScopeLexic
 import { escapeRegExpString } from "../regexp-escape";
 import * as path from "node:path";
 import { CBuf, escapeCString, utf8ByteLen } from "./cbuf";
+import { AgentStoragePlan } from "./agent-storage";
 import { planAsyncControlFlowGraph, type AsyncControlFlowTarget } from "./async-cfg";
 import { normalizeAssignmentTarget, unwrapTransparentExpression } from "./binding-tree";
 import { callableSourceText } from "../callable-source-text";
@@ -563,6 +564,7 @@ class Emitter {
     private structDecls = new CBuf();
     /** File-scope variable declarations (one per module-level const/let). */
     private globalDecls = new CBuf();
+    private readonly agentStorage = new AgentStoragePlan();
     private protos = new CBuf();
     private defs = new CBuf();
     private closureDefs = new CBuf();
@@ -12701,13 +12703,15 @@ class Emitter {
             out.line();
         }
         for (const modId of emitOrder) {
-            out.line(`static bool mod_instantiated_${modId} = false;`);
+            this.agentStorage.declare("bool",`mod_instantiated_${modId}`);
             if (this.isCommonJsSourceFile(this.graph.modules.get(modId)!.sf)) {
-                out.line(`static int mod_state_${modId} = 0;`);
-                out.line(`static tsc_value_t mod_error_${modId};`);
-                out.line(`static void* volatile mod_error_root_${modId} = NULL;`);
+                this.agentStorage.declare("int",`mod_state_${modId}`);
+                this.agentStorage.declare("tsc_value_t",`mod_error_${modId}`);
+                this.agentStorage.declare("void* volatile",`mod_error_root_${modId}`);
             }
         }
+        this.agentStorage.declare("tsc_module_graph_t*","mod_retained_graph");
+        out.write(this.agentStorage.emit());
         out.line();
         // Forward declarations for mod_inits and user functions.
         for (const modId of emitOrder) {
@@ -12828,7 +12832,6 @@ class Emitter {
             out.line(`    { ${execute}, ${count ? `mod_requests_${modId}` : "NULL"}, ${count}, ${this.modAsyncInits.has(modId)} },`);
         }
         out.line("};");
-        out.line("static tsc_module_graph_t* mod_retained_graph;");
         out.line("static tsc_module_graph_t* mod_runtime_graph(void) {");
         out.line("    if (!mod_retained_graph) mod_retained_graph = tsc_module_graph_new(mod_definitions, sizeof(mod_definitions) / sizeof(mod_definitions[0]));");
         out.line("    return mod_retained_graph;"); out.line("}");
@@ -13151,14 +13154,14 @@ class Emitter {
     private emitCommonJsModuleBinding(instantiation: CBuf, source: ts.SourceFile, moduleId: string): void {
         const plan = this.collectCommonJsModuleBinding(source, moduleId);
         if (!plan) return;
-        this.globalDecls.line(`static tsc_object_t* ${plan.record};`);
-        this.globalDecls.line(`static tsc_value_t ${plan.initialExports};`);
+        this.agentStorage.declare("tsc_object_t*",plan.record);
+        this.agentStorage.declare("tsc_value_t",plan.initialExports);
         // The original exports owner is retained even after both wrapper
         // variables and module.exports have been reassigned.
-        this.globalDecls.line(`static void* volatile ${plan.initialExports}_root;`);
+        this.agentStorage.declare("void* volatile",`${plan.initialExports}_root`);
         for (const binding of plan.bindings.values()) {
-            this.globalDecls.line(`static tsc_value_t ${binding.value};`);
-            this.globalDecls.line(`static void* volatile ${binding.root};`);
+            this.agentStorage.declare("tsc_value_t",binding.value);
+            this.agentStorage.declare("void* volatile",binding.root);
         }
         instantiation.line(`${plan.record} = tsc_object_new();`);
         instantiation.line(`${plan.initialExports} = tsc_value_object(tsc_object_new());`);
@@ -13221,8 +13224,8 @@ class Emitter {
             if (syntax) unsupported(sf, `invalid JSON module: ${syntax.message}`);
             const binding = this.collectJsonModuleBinding(sf, modId);
             if (!binding) unsupported(sf, "JSON module binding plan is unavailable");
-            this.globalDecls.line(`static tsc_value_t ${binding.cName};`);
-            this.globalDecls.line(`static void* volatile ${binding.gcRoot};`);
+            this.agentStorage.declare("tsc_value_t",binding.cName);
+            this.agentStorage.declare("void* volatile",binding.gcRoot);
             instantiationBuf.line(`${binding.cName} = tsc_value_undefined();`);
             instantiationBuf.line(`${binding.gcRoot} = NULL;`);
             initBuf.line(`${binding.cName} = tsc_json_parse(${this.stringLit(sf.text)});`);
@@ -17571,7 +17574,7 @@ class Emitter {
         const moduleBinding = this.moduleDefaultExportBindings.get(stmt);
         if (!this.commonJsExportGlobals.has(cName)) {
             this.commonJsExportGlobals.add(cName);
-            this.globalDecls.line(`static ${ty.c} ${cName};`);
+            this.agentStorage.declare(`${ty.c}`,cName);
         }
         const value = retainedValue ?? this.emitExpr(stmt.expression);
         buf.line(`${cName} = ${this.coerce(value, ty, stmt.expression)};`);
@@ -18278,7 +18281,7 @@ class Emitter {
                 if (rest) {
                     const localName = this.declaredName(rest);
                     const value = this.emitDynamicRequireRestObject(nativeAddon, excluded, element);
-                    this.globalDecls.line(`static tsc_value_t ${localName};`);
+                    this.agentStorage.declare("tsc_value_t",localName);
                     initBuf.line(`${localName} = ${value.c};`);
                     const sym = this.symbolForIdentifier(rest);
                     if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
@@ -18290,7 +18293,7 @@ class Emitter {
                 }
                 const localName = this.declaredName(element.name);
                 const value = this.emitNativeAddonRequireDestructureValue(nativeAddon, exportName, element);
-                this.globalDecls.line(`static tsc_value_t ${localName};`);
+                this.agentStorage.declare("tsc_value_t",localName);
                 initBuf.line(`${localName} = ${value.c};`);
                 const sym = this.symbolForIdentifier(element.name);
                 if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
@@ -18307,7 +18310,7 @@ class Emitter {
             if (rest) {
                 const localName = this.declaredName(rest);
                 const value = this.emitCommonJsRequireRestObject(element, info, excluded);
-                this.globalDecls.line(`static tsc_value_t ${localName};`);
+                this.agentStorage.declare("tsc_value_t",localName);
                 initBuf.line(`${localName} = ${value.c};`);
                 const sym = this.symbolForIdentifier(rest);
                 if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
@@ -18323,7 +18326,7 @@ class Emitter {
                 if (value) {
                     const localName = this.declaredName(element.name);
                     const sym = this.symbolForIdentifier(element.name);
-                    this.globalDecls.line(`static tsc_value_t ${localName};`);
+                    this.agentStorage.declare("tsc_value_t",localName);
                     if (!element.initializer) {
                         initBuf.line(`${localName} = ${value.c};`);
                     } else {
@@ -18339,7 +18342,7 @@ class Emitter {
                 }
                 const fallback = this.emitExpr(element.initializer);
                 const localName = this.declaredName(element.name);
-                this.globalDecls.line(`static ${fallback.ty.c} ${localName};`);
+                this.agentStorage.declare(`${fallback.ty.c}`,localName);
                 initBuf.line(`${localName} = ${fallback.c};`);
                 const sym = this.symbolForIdentifier(element.name);
                 if (sym) this.requireDestructureTypes.set(sym, fallback.ty);
@@ -18351,7 +18354,7 @@ class Emitter {
             }
             const ty = this.commonJsExportedCType(decl);
             const localName = this.declaredName(element.name);
-            this.globalDecls.line(`static ${ty.c} ${localName};`);
+            this.agentStorage.declare(`${ty.c}`,localName);
             initBuf.line(`${localName} = ${cName};`);
             const sym = this.symbolForIdentifier(element.name);
             if (sym) this.requireDestructureTypes.set(sym, ty);
@@ -18375,7 +18378,7 @@ class Emitter {
             const value = this.commonJsModuleMetadataValue(exportName, d.getSourceFile());
             if (!value) unsupported(element, `unsupported CommonJS module destructuring property "${exportName}"`);
             const localName = this.declaredName(element.name);
-            this.globalDecls.line(`static ${value.ty.c} ${localName};`);
+            this.agentStorage.declare(`${value.ty.c}`,localName);
             initBuf.line(`${localName} = ${value.c};`);
             const sym = this.symbolForIdentifier(element.name);
             if (sym) this.requireDestructureTypes.set(sym, value.ty);
@@ -19341,11 +19344,14 @@ class Emitter {
 
         const signature = `static tsc_value_t ${plan.factory}(void)`;
         this.protos.line(`${signature};`);
+        const cache = this.freshTemp("_module_namespace_owner");
+        this.agentStorage.declare("tsc_object_t*",cache);
         const body = new CBuf();
         body.open(signature);
-        body.line("static tsc_object_t* namespace_object = NULL;");
+        body.line(`tsc_object_t* namespace_object = ${cache};`);
         body.open("if (!namespace_object)");
         body.line("namespace_object = tsc_module_namespace_new();");
+        body.line(`${cache} = namespace_object;`);
         for (const entry of plan.exports) {
             body.line(
                 `if (!tsc_module_namespace_define(namespace_object, ` +
@@ -20345,7 +20351,7 @@ class Emitter {
         const existing = this.globalDynamicRoots.get(symbol);
         if (existing) return existing;
         const root = this.freshTemp(`_${name}_global_gc_root`);
-        this.globalDecls.line(`static void* volatile ${root};`);
+        this.agentStorage.declare("void* volatile",root);
         this.globalDynamicRoots.set(symbol, root);
         return root;
     }
@@ -21349,7 +21355,7 @@ class Emitter {
     private emitSourceModuleEnvironment(instantiation: CBuf, evaluation: CBuf, sf: ts.SourceFile): void {
         if (!this.isSourceModuleEnvironment(sf)) return;
         const environment = this.freshTemp("_module_environment");
-        this.globalDecls.line(`static tsc_environment_t* ${environment};`);
+        this.agentStorage.declare("tsc_environment_t*",environment);
         instantiation.line(`${environment} = tsc_environment_module_new();`);
         for (const buffer of [instantiation,evaluation]) {
             const scope = this.freshTemp("_module_environment_scope");
@@ -21387,8 +21393,8 @@ class Emitter {
             add(binding.name.text,binding.cName,binding.gcRoot,`&${binding.initialized}`,true,binding.immutable);
         for (const [declaration,binding] of this.moduleFunctionDeclarations) {
             if (declaration.getSourceFile() !== sf) continue;
-            this.globalDecls.line(`static tsc_value_t ${binding.cName};`);
-            this.globalDecls.line(`static void* volatile ${binding.gcRoot};`);
+            this.agentStorage.declare("tsc_value_t",binding.cName);
+            this.agentStorage.declare("void* volatile",binding.gcRoot);
             const callable = this.emitFunctionDeclarationReferenceClosure(declaration,this.sourceFunctionValueType(declaration));
             instantiation.line(`${binding.cName} = ${this.coerce(callable,T_VALUE,declaration)};`);
             instantiation.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.cName});`);
@@ -21410,9 +21416,9 @@ class Emitter {
                     // then retain that value in the importing environment.
                     const value = this.freshTemp("_module_commonjs_binding"), root = this.freshTemp("_module_commonjs_root");
                     const initialized = this.freshTemp("_module_commonjs_initialized");
-                    this.globalDecls.line(`static tsc_value_t ${value};`);
-                    this.globalDecls.line(`static void* volatile ${root};`);
-                    this.globalDecls.line(`static bool ${initialized};`);
+                    this.agentStorage.declare("tsc_value_t",value);
+                    this.agentStorage.declare("void* volatile",root);
+                    this.agentStorage.declare("bool",initialized);
                     instantiation.line(`${value} = tsc_value_undefined(); ${root} = NULL; ${initialized} = false;`);
                     evaluation.line(`${value} = ${this.commonJsImportedValue(imported).c}; ${root} = tsc_value_gc_root(${value}); ${initialized} = true;`);
                     add(name.text,value,root,`&${initialized}`,true,true);
@@ -21421,8 +21427,8 @@ class Emitter {
                 const nativeOwner = this.importedHostModuleOwner(name);
                 if (nativeOwner) {
                     const value = this.freshTemp("_module_native_binding"), root = this.freshTemp("_module_native_root");
-                    this.globalDecls.line("static tsc_value_t " + value + ";");
-                    this.globalDecls.line("static void* volatile " + root + ";");
+                    this.agentStorage.declare("tsc_value_t",value);
+                    this.agentStorage.declare("void* volatile",root);
                     instantiation.line(value + " = " + nativeOwner.c + "; " + root + " = tsc_value_gc_root(" + value + ");");
                     add(name.text,value,root,"NULL",true,true);
                     continue;
@@ -21435,8 +21441,8 @@ class Emitter {
                 const namespace = this.moduleNamespacePlanForIdentifier(name);
                 if (namespace) {
                     const value = this.freshTemp("_module_namespace_binding"),root = this.freshTemp("_module_namespace_root");
-                    this.globalDecls.line(`static tsc_value_t ${value};`);
-                    this.globalDecls.line(`static void* volatile ${root};`);
+                    this.agentStorage.declare("tsc_value_t",value);
+                    this.agentStorage.declare("void* volatile",root);
                     instantiation.line(`${value} = ${namespace.factory}();`);
                     instantiation.line(`${root} = tsc_value_gc_root(${value});`);
                     add(name.text,value,root,"NULL",true,true);
@@ -21514,8 +21520,8 @@ class Emitter {
     private emitModuleVarDeclarationInstantiation(buf: CBuf, sf: ts.SourceFile): void {
         for (const binding of this.collectModuleVarBindings(sf)) {
             this.symbolStorageTypes.set(binding.symbol, T_VALUE);
-            this.globalDecls.line(`static tsc_value_t ${binding.cName};`);
-            this.globalDecls.line(`static void* volatile ${binding.gcRoot};`);
+            this.agentStorage.declare("tsc_value_t",binding.cName);
+            this.agentStorage.declare("void* volatile",binding.gcRoot);
             this.globalDynamicRoots.set(binding.symbol, binding.gcRoot);
             buf.line(`${binding.cName} = tsc_value_undefined();`);
             buf.line(`${binding.gcRoot} = NULL;`);
@@ -21629,9 +21635,9 @@ class Emitter {
     private emitModuleLexicalDeclarationInstantiation(buf: CBuf, sf: ts.SourceFile): void {
         for (const binding of this.collectModuleLexicalBindings(sf)) {
             this.symbolStorageTypes.set(binding.symbol, T_VALUE);
-            this.globalDecls.line(`static tsc_value_t ${binding.cName};`);
-            this.globalDecls.line(`static bool ${binding.initialized};`);
-            this.globalDecls.line(`static void* volatile ${binding.gcRoot};`);
+            this.agentStorage.declare("tsc_value_t",binding.cName);
+            this.agentStorage.declare("bool",binding.initialized);
+            this.agentStorage.declare("void* volatile",binding.gcRoot);
             this.globalDynamicRoots.set(binding.symbol, binding.gcRoot);
             buf.line(`${binding.cName} = tsc_value_undefined();`);
             buf.line(`${binding.initialized} = false;`);
@@ -21669,7 +21675,7 @@ class Emitter {
                 );
                 this.topLevelLexicalInitializationStates.set(symbol, initialized);
                 states.push(initialized);
-                this.globalDecls.line(`static bool ${initialized};`);
+                this.agentStorage.declare("bool",initialized);
                 buf.line(`${initialized} = false;`);
             }
         }
@@ -21734,9 +21740,9 @@ class Emitter {
         const binding = this.collectModuleDefaultExportBinding(sf, this.currentModuleId);
         if (!binding) return;
         this.commonJsExportGlobals.add(binding.cName);
-        this.globalDecls.line(`static tsc_value_t ${binding.cName};`);
-        this.globalDecls.line(`static bool ${binding.initialized};`);
-        this.globalDecls.line(`static void* volatile ${binding.gcRoot};`);
+        this.agentStorage.declare("tsc_value_t",binding.cName);
+        this.agentStorage.declare("bool",binding.initialized);
+        this.agentStorage.declare("void* volatile",binding.gcRoot);
         buf.line(`${binding.cName} = tsc_value_undefined();`);
         buf.line(`${binding.initialized} = false;`);
         buf.line(`${binding.gcRoot} = NULL;`);
@@ -24761,29 +24767,29 @@ class Emitter {
         const ctorParams = this.collectParams(ctor?.parameters ?? []);
 
         if (ts.canHaveDecorators(cd) && (ts.getDecorators(cd) ?? []).length > 0) {
-            this.defs.line(`static tsc_value_t ${this.classDecoratorReplacementName(cd)};`);
+            this.agentStorage.declare("tsc_value_t",this.classDecoratorReplacementName(cd));
         }
         for (const m of cd.members) {
             if (ts.isPropertyDeclaration(m) && this.classMemberHasDecorators(m)) {
-                this.defs.line(`static tsc_array_t* ${this.classFieldDecoratorInitializersName(cd, m)};`);
+                this.agentStorage.declare("tsc_array_t*",this.classFieldDecoratorInitializersName(cd, m));
             }
             if (ts.isMethodDeclaration(m) && isStatic(m) && this.classMemberHasDecorators(m)) {
-                this.defs.line(`static tsc_value_t ${this.classStaticMethodDecoratorReplacementName(cd, m)};`);
+                this.agentStorage.declare("tsc_value_t",this.classStaticMethodDecoratorReplacementName(cd, m));
             }
             if (ts.isMethodDeclaration(m) && !isStatic(m) && this.classMemberHasDecorators(m)) {
-                this.defs.line(`static tsc_value_t ${this.classInstanceMethodDecoratorReplacementName(cd, m)};`);
+                this.agentStorage.declare("tsc_value_t",this.classInstanceMethodDecoratorReplacementName(cd, m));
             }
             if (ts.isGetAccessorDeclaration(m) && isStatic(m) && this.classMemberHasDecorators(m)) {
-                this.defs.line(`static tsc_value_t ${this.classStaticGetterDecoratorReplacementName(cd, m)};`);
+                this.agentStorage.declare("tsc_value_t",this.classStaticGetterDecoratorReplacementName(cd, m));
             }
             if (ts.isGetAccessorDeclaration(m) && !isStatic(m) && this.classMemberHasDecorators(m)) {
-                this.defs.line(`static tsc_value_t ${this.classInstanceGetterDecoratorReplacementName(cd, m)};`);
+                this.agentStorage.declare("tsc_value_t",this.classInstanceGetterDecoratorReplacementName(cd, m));
             }
             if (ts.isSetAccessorDeclaration(m) && isStatic(m) && this.classMemberHasDecorators(m)) {
-                this.defs.line(`static tsc_value_t ${this.classStaticSetterDecoratorReplacementName(cd, m)};`);
+                this.agentStorage.declare("tsc_value_t",this.classStaticSetterDecoratorReplacementName(cd, m));
             }
             if (ts.isSetAccessorDeclaration(m) && !isStatic(m) && this.classMemberHasDecorators(m)) {
-                this.defs.line(`static tsc_value_t ${this.classInstanceSetterDecoratorReplacementName(cd, m)};`);
+                this.agentStorage.declare("tsc_value_t",this.classInstanceSetterDecoratorReplacementName(cd, m));
             }
         }
         this.defs.line();
@@ -25278,7 +25284,7 @@ class Emitter {
             if (!key) {
                 key = this.freshTemp("_class_computed_key");
                 this.classComputedMemberKeys.set(name, key);
-                this.protos.line(`static tsc_str_t* ${key};`);
+                this.agentStorage.declare("tsc_str_t*",key);
             }
             return { publicName, propertyKey: key };
         }
@@ -28998,7 +29004,7 @@ class Emitter {
                 continue;
             }
 
-            this.globalDecls.line(`static ${ct.c} ${name};`);
+            this.agentStorage.declare(`${ct.c}`,name);
             let dynamicRoot: string | null = null;
             if (sym && ct.kind === "value") {
                 dynamicRoot = this.ensureGlobalDynamicRoot(sym, name);
@@ -31607,9 +31613,9 @@ class Emitter {
         } else {
             const cell = this.freshTemp("_class_name_cell"),root = this.freshTemp("_class_name_root_cell"),
                 initialized = this.freshTemp("_class_name_initialized_cell");
-            this.globalDecls.line(`static volatile tsc_value_t ${cell};`);
-            this.globalDecls.line(`static void* ${root};`);
-            this.globalDecls.line(`static bool ${initialized};`);
+            this.agentStorage.declare("volatile tsc_value_t",cell);
+            this.agentStorage.declare("void*",root);
+            this.agentStorage.declare("bool",initialized);
             environment.set(symbol, { type: T_VALUE, ptr: `(&${cell})`,rootPtr: `(&${root})`,
                 initializedPtr: `(&${initialized})`,lexicalName:definition.name!.text,immutable:true,
                 creationScope:this.argumentValueScopes.at(-1) });
@@ -35987,8 +35993,8 @@ class Emitter {
         if (!staticName) {
             staticName = `__tsc_fnref_closure_${this.functionRefClosureStatics.size}`;
             this.functionRefClosureStatics.set(key, staticName);
-            this.globalDecls.line(`static ${type.closureName} ${staticName};`);
-            this.globalDecls.line(`static bool ${staticName}_initialized;`);
+            this.agentStorage.declare(`${type.closureName}`,staticName);
+            this.agentStorage.declare("bool",`${staticName}_initialized`);
         }
         return {
             c:
@@ -41232,7 +41238,7 @@ class Emitter {
             if (existing) return `(void*)&${existing}`;
             const name = `tsc_event_identity_${this.eventListenerIdentities.size}`;
             this.eventListenerIdentities.set(key, name);
-            this.globalDecls.line(`static int ${name};`);
+            this.agentStorage.declare("int",name);
             return `(void*)&${name}`;
         }
         return `(void*)${fallback}`;

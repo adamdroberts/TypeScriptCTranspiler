@@ -32,7 +32,14 @@ typedef struct {
     double delay_ms;
     double trigger_ms;
 } tsc_timeout_entry_t;
+typedef struct tsc_agent_storage_entry {
+    const void* key;
+    size_t size;
+    void* value;
+    struct tsc_agent_storage_entry* next;
+} tsc_agent_storage_entry_t;
 struct tsc_agent {
+    tsc_agent_storage_entry_t* storage;
     tsc_realm_t* realm;
     tsc_function_identity_entry_t* function_identity_entries;
     size_t function_identity_count,function_identity_capacity;
@@ -74,6 +81,20 @@ tsc_agent_t* tsc_agent_swap(tsc_agent_t* agent){
     tsc_agent_t* previous=g_current_agent;g_current_agent=agent;return previous;
 }
 bool tsc_agent_owns_jobs(void){return tsc_agent_current()->owns_jobs;}
+void* tsc_agent_storage(const void* key,size_t size) {
+    if (!key || !size) tsc_panic("agent storage requires a canonical declaration");
+    tsc_agent_t* owner = tsc_agent_current()->identity_owner;
+    pthread_mutex_lock(&g_agent_mutex);
+    for (tsc_agent_storage_entry_t* entry=owner->storage;entry;entry=entry->next) {
+        if (entry->key != key) continue;
+        if (entry->size != size) {pthread_mutex_unlock(&g_agent_mutex);tsc_panic("agent storage requires a canonical declaration");}
+        void* value=entry->value;pthread_mutex_unlock(&g_agent_mutex);return value;
+    }
+    tsc_agent_storage_entry_t* entry=TSC_GC_MALLOC(sizeof(*entry));
+    void* value=TSC_GC_MALLOC(size);memset(value,0,size);
+    *entry=(tsc_agent_storage_entry_t){.key=key,.size=size,.value=value,.next=owner->storage};
+    owner->storage=entry;pthread_mutex_unlock(&g_agent_mutex);return value;
+}
 uint64_t tsc_agent_next_module_async_evaluation_order(void) {
     tsc_agent_t* agent = tsc_agent_current();
     if (agent->module_async_evaluation_count == UINT64_MAX)

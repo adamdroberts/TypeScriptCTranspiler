@@ -26,10 +26,14 @@ typedef struct node {
 } node_t;
 static tsc_agent_t* primary;
 static unsigned primary_jobs;
+static const char generated_storage_key;
+typedef struct {size_t value;void* owner;} generated_storage_t;
+static generated_storage_t* generated_storage(void){return tsc_agent_storage(&generated_storage_key,sizeof(generated_storage_t));}
 static void primary_job(void* unused){(void)unused;if(tsc_agent_current()!=primary)abort();++primary_jobs;}
 #ifdef TSC_THREADS
 static void* legacy_worker(void* env){
  if(tsc_realm_current()!=env||tsc_agent_owns_jobs())abort();
+ if(generated_storage()->value!=71)abort();
  tsc_queue_microtask(primary_job,NULL);
  tsc_agent_t* agent=tsc_agent_swap(NULL);tsc_agent_release(agent);return NULL;
 }
@@ -45,6 +49,15 @@ static tsc_value_t switch_probe(void* env,tsc_value_t receiver,tsc_array_t* args
 static void check_execution_state(void){
  if(tsc_agent_next_module_async_evaluation_order()!=0)abort();
  tsc_agent_t* other=tsc_agent_new();
+ generated_storage_t* original_storage=generated_storage();original_storage->value=71;
+ tsc_agent_t* original_agent=tsc_agent_swap(other);
+ generated_storage_t* independent_storage=generated_storage();
+ if(independent_storage==original_storage||independent_storage->value)abort();
+ independent_storage->value=23;
+ tsc_realm_t* stored_realm=tsc_realm_current();tsc_realm_swap(tsc_realm_new());
+ if(generated_storage()!=independent_storage||generated_storage()->value!=23)abort();
+ tsc_realm_swap(stored_realm);tsc_agent_swap(original_agent);
+ if(generated_storage()!=original_storage||generated_storage()->value!=71)abort();
  tsc_call_activation_t first={0},second={0};
  tsc_call_activation_push(&first,NULL,tsc_value_num(1),tsc_value_undefined());
  tsc_agent_t* previous=tsc_agent_swap(other);
@@ -123,17 +136,23 @@ static void check_graph(size_t length,bool concurrent){
  if(tsc_atomic_waiter_count(storage->shared_storage,0)||primary_jobs)abort();
 }
 #ifndef TSC_NO_GC
-static void **realm_link,**block_link,**promise_link;
+static void **realm_link,**block_link,**promise_link,**storage_link;
 static tsc_agent_t* volatile retired;
+static __attribute__((noinline)) void setup_storage_root(tsc_agent_t* agent){
+ tsc_agent_t* previous=tsc_agent_swap(agent);generated_storage()->owner=TSC_GC_MALLOC(64);
+ storage_link=GC_MALLOC_ATOMIC(sizeof(void*));*storage_link=generated_storage()->owner;tsc_agent_swap(previous);
+ if(GC_general_register_disappearing_link(storage_link,*storage_link)!=GC_SUCCESS)abort();
+}
 static __attribute__((noinline)) void setup_retired(void){
  tsc_array_buffer_t* buffer=tsc_shared_array_buffer_allocate(8,8,false);node_t* node=make_node(buffer,1,true);retired=node->agent;
  realm_link=GC_MALLOC_ATOMIC(sizeof(void*));*realm_link=node->realm;
  block_link=GC_MALLOC_ATOMIC(sizeof(void*));*block_link=buffer->shared_storage;
  promise_link=GC_MALLOC_ATOMIC(sizeof(void*));*promise_link=node->promise;
+ setup_storage_root(node->agent);
  if(GC_general_register_disappearing_link(realm_link,*realm_link)!=GC_SUCCESS||GC_general_register_disappearing_link(block_link,*block_link)!=GC_SUCCESS||GC_general_register_disappearing_link(promise_link,*promise_link)!=GC_SUCCESS)abort();
 }
 static __attribute__((noinline)) void collect(void){volatile uintptr_t scrub[4096];for(size_t i=0;i<4096;++i)scrub[i]=0;GC_clear_stack(NULL);GC_gcollect();GC_invoke_finalizers();}
-static __attribute__((noinline)) bool retained(void){return *realm_link&&*block_link&&*promise_link;}
+static __attribute__((noinline)) bool retained(void){return *realm_link&&*block_link&&*promise_link&&*storage_link;}
 #endif
 int main(int argc,char** argv){
  tsc_bootstrap(argc,argv);primary=tsc_agent_current();tsc_realm_t* primary_realm=tsc_realm_current();tsc_atomics_set_can_block(false);
@@ -158,7 +177,7 @@ int main(int argc,char** argv){
 #endif
 #ifndef TSC_NO_GC
  setup_retired();collect();if(!retained())return 3;
- tsc_agent_release(retired);collect();if(*realm_link||*block_link||*promise_link){fprintf(stderr,"retired roots: realm=%d block=%d promise=%d\n",!!*realm_link,!!*block_link,!!*promise_link);return 4;}
+ tsc_agent_release(retired);collect();if(*realm_link||*block_link||*promise_link||*storage_link){fprintf(stderr,"retired roots: realm=%d block=%d promise=%d storage=%d\n",!!*realm_link,!!*block_link,!!*promise_link,!!*storage_link);return 4;}
  puts("retired-agent-roots-released:true");
 #endif
  return 0;
