@@ -2499,7 +2499,9 @@
       "kind": "implementation",
       "id": "src/source-value-flow.ts#jsonParse",
       "targets": [
-        "sec-json.parse#ordered-text-parse-and-callable-reviver-root"
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
       ]
     },
     {
@@ -2630,9 +2632,11 @@
     },
     {
       "kind": "implementation",
-      "id": "src/source-value-flow.ts#jsonValue",
+      "id": "src/source-value-flow.ts#jsonRecord",
       "targets": [
-        "sec-json.parse#ordered-text-parse-and-callable-reviver-root"
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
       ]
     },
     {
@@ -2837,6 +2841,85 @@
         "sec-serializejsonproperty#ordered-get-tojson-replacer-and-output-continuations",
         "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
         "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/json-reviver-source-record.property.test.ts",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/source-return-origins.property.test.ts",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/source-value-unknown-merge.property.test.ts",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "json_reviver_source_record",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "json_reviver_source_record_depth",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
+      ],
+      "stressReview": {
+        "dimension": "mixed JSON reviver source record/owner depth",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One deep mixed record tree enters the same property, callback and actual return worklist, independently of fixture-family inventories or successive depth counts.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#SourceJSONRecord",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#jsonInternalize",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#projectReturn",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
       ]
     }
   ]

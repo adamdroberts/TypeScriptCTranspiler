@@ -122,6 +122,11 @@ export interface JsonCompositeSourceDepthSpec {
     depth: number;
 }
 
+export interface JsonReviverSourceRecordDepthSpec {
+    generator: "json-reviver-source-record-depth";
+    depth: number;
+}
+
 export interface DescriptorSourceOwnerDepthSpec {
     generator: "descriptor-source-owner-depth";
     depth: number;
@@ -214,6 +219,7 @@ export type GeneratedCaseSpec =
     | JsonNamespaceOwnerDepthSpec
     | JsonParseSourceOwnerDepthSpec
     | JsonCompositeSourceDepthSpec
+    | JsonReviverSourceRecordDepthSpec
     | DescriptorSourceOwnerDepthSpec
     | ReflectConstructArgumentWidthSpec
     | ArrowFormalBindingTreeDepthSpec
@@ -296,7 +302,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth") {
+    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
             throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
@@ -1617,6 +1623,13 @@ function classExpressionMethodWidthSource(width: number): string {
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
+        case "json-reviver-source-record-depth": {
+            let text='"43;"';for(let depth=0;depth<spec.depth;depth++)text=depth%2?'['+text+']':'{"child":'+text+'}';
+            const selected="value"+Array.from({length:spec.depth},(_,i)=>(spec.depth-1-i)%2?"[0]":".child").join("");
+            return `const value: any = JSON.parse(${JSON.stringify(text)},function(key: string,value: any,context: any): any {return value});
+console.log("JSON reviver source record depth:",eval(${selected})===43);
+`;
+        }
         case "json-composite-source-depth": {
             let text="17";for(let depth=0;depth<spec.depth;depth++)text=depth%2?"["+text+"]":"{\"child\":"+text+"}";
             return `const value: any = JSON.parse(${JSON.stringify(text)});

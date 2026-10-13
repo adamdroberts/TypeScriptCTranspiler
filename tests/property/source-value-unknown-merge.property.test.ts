@@ -38,11 +38,13 @@ test('unresolved expression facts survive joins, calls, properties and actual Li
 
 test('merged unknown source requires admission and executes its explicit registry in both memory modes',async()=>{
     const directory=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-unknown-merge-native-'));
-    const pieces=['var source=false?"31;":JSON.parse(\'"37;"\');','var alias0=source;'];
+    const pieces=['var source=false?"31;":JSON.parse(/.*/.exec(\'"37;"\')[0]);','var alias0=source;'];
     const depth=512;for(let index=1;index<depth;index++)pieces.push(`var alias${index}=alias${index-1};`);
     pieces.push(`if(NATIVE_GC)$262.gc();print(eval(alias${depth-1}));`);
     try{
         const entry=path.join(directory,'source.js'),manifest=path.join(directory,'manifest.json');
+        await fs.writeFile(entry,'var source=false?"31;":JSON.parse(\'"37;"\');eval(source);');
+        expect(sourceEvaluationInvocations(ts.createProgram([entry],{allowJs:true,noLib:true})).map(call=>call.choices)).toEqual([['37;']]);
         await fs.writeFile(entry,pieces.join('\n').replaceAll('NATIVE_GC','false'));await fs.writeFile(manifest,JSON.stringify({eval:['31;','37;']}));
         const calls=sourceEvaluationInvocations(ts.createProgram([entry],{allowJs:true,noLib:true}));expect(calls.map(call=>call.choices)).toEqual([null]);
         const diagnostics:string[]=[],rejected=await compile({entry,output:path.join(directory,'rejected'),noGc:true,buildDir:path.join(directory,'reject-build'),

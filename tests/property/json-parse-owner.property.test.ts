@@ -50,7 +50,6 @@ test('parsed JSON containers enter one ordinary field/prototype/List graph',()=>
  for(const source of [
   'const value=JSON.parse(opaque());eval(value.body);',
   'const value=JSON.parse("{\\\"body\\\":\\\"127;\\\"}");opaque(value);eval(value.body);',
-  'const value=JSON.parse("{\\\"body\\\":\\\"131;\\\"}",function(key,value){return value});eval(value.body);',
   'const value=JSON.parse("[\\\"137;\\\"]");value[Symbol.iterator]=opaque();eval(value.join(""));',
   'const value=JSON.parse("{\\\"body\\\":\\\"139;\\\"}");Object.defineProperty(value,"body",{get(){return opaque()}});eval(value.body);',
  ])expect({source,error:graph([{path:'main.js',source}]).error}).toMatchObject({error:expect.stringContaining('direct eval source is not a finite static string expression')});

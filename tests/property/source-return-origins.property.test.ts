@@ -13,12 +13,17 @@ test('shared returns preserve earlier captures and retain unknown call partition
   expect({expression,error:finiteEvalScriptSourceGraph([{path:'main.js',source}]).error}).toEqual({expression,error:null});
  }
  for(const body of [
-  'forward("17;");const source=forward(opaque());eval(source);',
-  'const source=forward(forward(opaque()));eval(source);',
-  'const source=forward(flag?"17;":opaque());eval(source);',
   'for(let i=0;i<2;i++){const saved=forward("17;");forward(opaque());eval(saved);}',
   'function run(){const saved=forward("17;");if(flag)run();forward(opaque());eval(saved);}run();',
   'async function run(){const saved=forward("17;");await 0;forward(opaque());eval(saved);}run();',
+ ]){
+  const result=finiteEvalScriptSourceGraph([{path:'main.js',source:definitions+body}]);expect({body,error:result.error}).toEqual({body,error:null});expect(result.directEvalSources.some(entry=>entry.source==='17;')).toBe(true);
+  const oracle=Bun.spawnSync(['node','-e','const flag=false;function opaque(){return 0}'+definitions+body],{stdout:'pipe',stderr:'pipe'});expect({code:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({code:0,stderr:''});
+ }
+ for(const body of [
+  'forward("17;");const source=forward(opaque());eval(source);',
+  'const source=forward(forward(opaque()));eval(source);',
+  'const source=forward(flag?"17;":opaque());eval(source);',
   'const source=new opaque();eval(source.code);',
  ])expect({body,error:finiteEvalScriptSourceGraph([{path:'main.js',source:definitions+body}]).error}).toMatchObject({error:expect.stringContaining('direct eval source is not a finite static string expression')});
 });

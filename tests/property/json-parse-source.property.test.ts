@@ -22,11 +22,10 @@ test('JSON parse source facts retain scalar roots and actual reviver effects',()
   ['let body="43;";JSON.parse({toString(){body="47;";return "1"}});eval(body);','47;'],
   ['eval(JSON.parse("[]",function(){return "53;"}));','53;'],
  ] as const){const result=graph([{path:'main.js',source}]);expect({source,error:result.error}).toEqual({source,error:null});expect(result.directEvalSources.some(entry=>entry.source===expected)).toBe(true);}
- for(const source of ['JSON.parse("[]",function(){throw "59;"});','eval(JSON.parse("invalid"));','eval(JSON.parse(Symbol()));']){const result=graph([{path:'main.js',source}]);expect(result.error).toBeNull();expect(result.directEvalSources).toEqual([]);}
+ for(const source of ['JSON.parse("[]",function(){throw "59;"});','eval(JSON.parse("invalid"));','eval(JSON.parse(Symbol()));','eval(JSON.parse("[]",function(key,value,context){return context.source}));']){const result=graph([{path:'main.js',source}]);expect(result.error).toBeNull();expect(result.directEvalSources).toEqual([]);}
  for(const source of [
   'eval(JSON.parse(opaque()));',
   'eval(JSON.parse("1",opaque()));',
-  'eval(JSON.parse("[]",function(key,value,context){return context.source}));',
   'const owner={body:"61;"};JSON.parse("{}",function(){opaque(owner);return 1});eval(owner.body);',
  ])expect({source,error:graph([{path:'main.js',source}]).error}).toMatchObject({error:expect.stringContaining('direct eval source is not a finite static string expression')});
 });

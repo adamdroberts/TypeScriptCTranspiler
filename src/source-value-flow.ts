@@ -135,6 +135,7 @@ interface OwnPresence {
 }
 interface ObjectOwner { readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, OwnPresence>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; closedIndices?:boolean; rawJSON?:Cell; proxy?:{target:Cell;handler:Cell;context:ts.Node}; }
 interface SourceDescriptorRecord {readonly normal:Cell;readonly fields:Map<string,{present:Cell;value:Cell}>;}
+interface SourceJSONRecord {readonly value:Atom;readonly children:Map<string,SourceJSONRecord>;readonly source:string|null;readonly array:boolean;}
 interface FunctionOwner {
     readonly definition: CallableDefinition; readonly node: FunctionNode | null; readonly kind: DynamicFunctionKind; readonly fields: ObjectOwner;
     readonly returns: Cell; readonly throws: Cell; readonly receiver: Cell; readonly active: Cell; readonly sourceText: string;
@@ -216,6 +217,9 @@ class SourceValueFlow {
     private readonly descriptorRecords = new Map<ts.Node,Map<Cell,SourceDescriptorRecord>>();
     private readonly objectCreations = new Map<ts.Node,Map<string,Cell>>();
     private readonly proxyReads = new Set<string>();
+    private readonly sourceCells = new WeakMap<SourceFacts,Cell>();
+    private readonly formalInputs = new Map<Cell,Set<Cell>>();
+    private readonly returnProjections = new Map<string,Cell>();
     private readonly normalResults = new Map<Cell, Atom>();
     private readonly exceptionHandlers = new Map<ts.Node, Cell>();
     private readonly exceptionCells = new Set<Cell>();
@@ -476,7 +480,30 @@ class SourceValueFlow {
             }
         }
     }
-    private newCell(): Cell { return { id: this.nextCell++, values: new SourceFacts(), users: new Set() }; }
+    private newCell(): Cell { const cell={id:this.nextCell++,values:new SourceFacts(),users:new Set<Rule>()};this.sourceCells.set(cell.values,cell);return cell; }
+    /** Return copy graphs retain actual formal inputs independently of other
+     * invocations. Local writes and derived facts stay conservative; the
+     * ordinary invocation graph still owns all effects and exceptions. */
+    private projectReturn(root:Cell,inputs:ReadonlyMap<Cell,Cell>):Cell {
+        const key=root.id+":"+[...inputs].map(([formal,input])=>formal.id+"="+input.id).join(","),prior=this.returnProjections.get(key);if(prior)return prior;
+        const projected=new Map<Cell,Cell>(),atoms=new Map<Atom,Atom>(),pending:Cell[]=[];
+        const project=(source:Cell):Cell=>{let cell=projected.get(source);if(!cell){cell=this.newCell();projected.set(source,cell);pending.push(source);}return cell;};
+        const result=project(root);this.returnProjections.set(key,result);
+        const extend=()=>{while(pending.length){const source=pending.pop()!,target=projected.get(source)!;let read!:Rule;
+            read=this.rule([source],()=>{
+                for(const atom of Set.prototype.values.call(source.values) as Iterable<Atom>){
+                    let value=atom;
+                    if(atom.tag==="text-operation") {let previous=atoms.get(atom);if(!previous){previous={...atom,parts:atom.parts.map(project)};atoms.set(atom,previous);}value=previous;}
+                    this.publish(target,value);
+                }
+                const actual=inputs.get(source),arguments_=actual?this.formalInputs.get(source):undefined;
+                if(actual)this.copy(actual,target);
+                for(const facts of source.values.sources){const origin=this.sourceCells.get(facts)!;if(arguments_?.has(origin))continue;this.copy(project(origin),target);}
+                extend();
+            });
+        }};
+        extend();return result;
+    }
     private updateStored(node: ts.Node): Cell {
         let value = this.numericWrites.get(node);
         if (!value) {value = this.newCell(); this.numericWrites.set(node,value);}
@@ -2227,75 +2254,140 @@ class SourceValueFlow {
         }
         return choices;
     }
-    /** Materialize parsed JSON into the ordinary location graph. A single
-     * object worklist supplies fields, prototypes and array extents, without
-     * source-depth or container-shape cases. */
-    private jsonValue(value:unknown):Atom {
-        const owners=new Map<object,{atom:Atom;owner:ObjectOwner}>(),pending:object[]=[];
-        const atom=(value:unknown):Atom=>{
-            if(value===null||typeof value!=="object")return this.primitive(value as Primitive);
-            const prior=owners.get(value);if(prior)return prior.atom;
-            const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:Array.isArray(value)?this.arrayPrototype():this.objectPrototype()};
-            this.copy(this.opaqueMutation,owner.shape);
-            const result:Atom={tag:"object",owner};owners.set(value,{atom:result,owner});pending.push(value);return result;
+    /** Original JSON token records and ordinary owners share one iterative
+     * frame tree. Only the last decoded definition is attached to an owner. */
+    private jsonRecord(text:string):SourceJSONRecord {
+        JSON.parse(text); // The host grammar validator cannot run user code.
+        let offset=0;
+        const whitespace=()=>{while(/[\t\n\r ]/.test(text[offset]??"x"))offset++;};
+        const token=()=>{
+            const start=offset;
+            if(text[offset]==='"'){offset++;while(offset<text.length){const c=text[offset++]!;if(c==='"')break;if(c==='\\')offset++;}}
+            else while(offset<text.length&&!/[\t\n\r ,\]}]/.test(text[offset]!))offset++;
+            return text.slice(start,offset);
         };
-        const result=atom(value);
-        while(pending.length) {
-            const value=pending.pop()!,owner=owners.get(value)!.owner;
-            for(const key of Object.keys(value)) {
-                const field=this.newCell();this.publish(field,atom((value as Record<string,unknown>)[key]));this.defineField(owner,key,field,true);
+        const pending:{record:SourceJSONRecord}[]=[];
+        const read=():SourceJSONRecord=>{
+            whitespace();const c=text[offset];
+            if(c==='{'||c==='['){
+                offset++;const array=c==='[',owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:array?this.arrayPrototype():this.objectPrototype()};this.copy(this.opaqueMutation,owner.shape);
+                const record:SourceJSONRecord={value:{tag:"object",owner},children:new Map(),source:null,array};pending.push({record});return record;
             }
-            if(Array.isArray(value)) {
-                owner.listLength=this.field(owner,"length");
-                const length=this.newCell();this.publish(length,this.primitive(value.length));this.defineField(owner,"length",length,false);
-            }
+            const source=token();return {value:this.primitive(JSON.parse(source)),children:new Map(),source,array:false};
+        };
+        const root=read();
+        while(pending.length){
+            const frame=pending[pending.length-1]!;whitespace();
+            if(text[offset]==='}'||text[offset]===']'){offset++;pending.pop();continue;}
+            if(text[offset]===','){offset++;continue;}
+            let key:string;
+            if(frame.record.array)key=String(frame.record.children.size);
+            else {key=JSON.parse(token());whitespace();offset++;}
+            const value=read();frame.record.children.set(key,value);
         }
-        return result;
+        const records=[root],visited=new Set<SourceJSONRecord>();
+        while(records.length){
+            const record=records.pop()!;if(visited.has(record))continue;visited.add(record);
+            const owner=this.ordinaryOwner(record.value);if(!owner)continue;
+            for(const [key,child]of record.children){const value=this.newCell();this.publish(value,child.value);this.defineField(owner,key,value,true);records.push(child);}
+            if(record.array){owner.listLength=this.field(owner,"length");const length=this.newCell();this.publish(length,this.primitive(record.children.size));this.defineField(owner,"length",length,false);}
+        }
+        return root;
+    }
+    private jsonInternalize(snapshot:SourceJSONRecord,callee:Cell,context:ts.Node):Cell {
+        const inputs=new Map<Atom,Cell>();const cell=(atom:Atom)=>{let input=inputs.get(atom);if(!input){input=this.newCell();inputs.set(atom,input);this.publish(input,atom);}return input;};
+        const holderOwner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()},holder=this.newCell();this.publish(holder,{tag:"object",owner:holderOwner});this.defineField(holderOwner,"",cell(snapshot.value),true);
+        const entries=new Map<string,Cell>(),records=new Map<SourceJSONRecord,number>();let nextRecord=0;
+        const fail=(output:Cell)=>{this.publish(output,this.unknown);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.unknown);this.onActive(context,()=>this.opaqueEffect(context));};
+        const visit=(receiver:Cell,key:string,record:SourceJSONRecord|null,ancestors:ReadonlySet<ObjectOwner>):Cell=>{
+            if(record&&!records.has(record))records.set(record,nextRecord++);
+            const signature=receiver.id+":"+JSON.stringify(key)+":"+(record?records.get(record):"changed")+":"+[...ancestors].map(owner=>owner.shape.id).join(","),prior=entries.get(signature);if(prior)return prior;
+            const result=this.newCell(),read=this.property(receiver,key,context),callbackValue=this.newCell(),callbackContext=this.newCell(),name=this.newCell();entries.set(signature,result);this.publish(name,this.primitive(key));
+            this.invoke(context,callee,receiver,[{cell:name,spread:false},{cell:callbackValue,spread:false},{cell:callbackContext,spread:false}],result);
+            const opened=new Set<Atom>();let open!:Rule;
+            open=this.rule([read],()=>{for(const atom of read.values){
+                if(opened.has(atom))continue;
+                if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);opened.add(atom);continue;}
+                const owner=this.ordinaryOwner(atom),unmodified=record?.value===atom||!!owner&&this.ordinaryOwner(record?.value??this.abrupt)===owner;
+                const contextOwner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()},contextValue=this.newCell();this.publish(contextValue,{tag:"object",owner:contextOwner});
+                if(!owner){
+                    if(record?.source!==null&&record?.value.tag==="primitive"){
+                        const state=this.primitiveState(cell(atom),open,true);if(state.pending&&!state.unresolved)continue;
+                        if(state.proof.values.some(value=>Object.is(value,record.value.tag==="primitive"?record.value.value:undefined))){const source=this.newCell();this.publish(source,this.primitive(record.source));this.defineField(contextOwner,"source",source,true);}
+                        if(!state.proof.primitiveComplete||state.proof.values.some(value=>!Object.is(value,record.value.tag==="primitive"?record.value.value:undefined))){const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};this.publish(contextValue,{tag:"object",owner});}
+                    }
+                    opened.add(atom);if(atom.tag==="unknown"||atom.tag==="opaque-object"){fail(result);continue;}
+                    this.publish(callbackValue,atom);this.copy(contextValue,callbackContext);continue;
+                }
+                if(ancestors.has(owner)){opened.add(atom);fail(result);continue;}
+                this.watch(open,owner.shape);if(!this.definitionsReady(owner,open))continue;
+                if(this.opaqueShape(owner,context)||owner.proxy||owner.accessors.has(null)){opened.add(atom);fail(result);continue;}
+                const selections:string[][]=[];
+                if(owner.listLength){
+                    const length=this.primitiveState(owner.listLength,open,true);if(length.pending&&!length.unresolved)continue;
+                    const positions=this.indexedPropertyPositions(cell(atom),context,open);if(positions===undefined)continue;
+                    if(!length.proof.primitiveComplete||positions===null){opened.add(atom);fail(result);continue;}
+                    // Capture each represented List extent once, then visit
+                    // every index through the same property continuation.
+                    for(const value of length.proof.values){const extent=Number(value),keys=positions.filter(index=>index<extent);if(!Number.isSafeInteger(extent)||extent<0||keys.length!==extent){fail(result);continue;}selections.push(keys.map(String));}
+                }else {
+                    const keys=[...owner.own?.keys()??[]].filter((key):key is string=>typeof key==="string").sort((a,b)=>{const ai=Number(a),bi=Number(b),ia=String(ai)===a&&Number.isInteger(ai)&&ai>=0&&ai<0xffffffff,ib=String(bi)===b&&Number.isInteger(bi)&&bi>=0&&bi<0xffffffff;return ia&&ib?ai-bi:ia?-1:ib?1:0;});
+                    const names:string[]=[],choices:Primitive[][]=[];let ready=true;
+                    for(const key of keys){
+                        const location=this.ownPresence(owner,key),presence=this.propertyPresence(owner,key,context);this.watch(open,presence);
+                        if(!presence.values.size){ready=false;continue;}
+                        if(!presence.values.has(this.primitive(true)))continue;
+                        const enumerable=this.primitiveState(location.enumerable,open,true);if(enumerable.pending&&!enumerable.unresolved){ready=false;continue;}
+                        if(!enumerable.proof.primitiveComplete){fail(result);ready=false;continue;}
+                        names.push(key);choices.push([...new Set([...enumerable.proof.values.map(Boolean),...(presence.values.has(this.primitive(false))?[false]:[])])]);
+                    }
+                    if(!ready)continue;
+                    for(const tuple of this.primitiveTuples(choices))selections.push(names.filter((_,index)=>!!tuple[index]));
+                }
+                opened.add(atom);
+                const path=new Set(ancestors);path.add(owner);
+                for(const keys of selections){
+                    let previous:Cell|null=null;
+                    for(const key of keys){
+                        const selected=this.newCell();
+                        if(previous){const prior=previous;let advance!:Rule;advance=this.rule([prior],()=>{const state=this.primitiveState(prior,advance,true);if(state.pending&&!state.unresolved)return;if(state.proof.values.length||!state.proof.primitiveComplete&&state.unresolved)this.publish(selected,atom);});}else this.publish(selected,atom);
+                        const child=visit(selected,key,unmodified?record?.children.get(key)??null:null,path),stored=this.newCell(),removed=this.newCell();
+                        this.rule([child],()=>{for(const value of child.values){if(value.tag==="abrupt"||value.tag==="pending-source")continue;if(value===this.primitive(undefined))this.publish(removed,value);else this.publish(stored,value);}});
+                        this.rule([stored],()=>{if(stored.values.size)this.writeProperty(selected,key,stored,true,"define",context);});
+                        this.rule([removed],()=>{if(removed.values.size)this.writeProperty(selected,key,removed,true,"delete",context);});
+                        previous=child;
+                    }
+                    if(previous){const prior=previous;let finish!:Rule;finish=this.rule([prior],()=>{const state=this.primitiveState(prior,finish,true);if(state.pending&&!state.unresolved)return;if(state.proof.values.length||!state.proof.primitiveComplete&&state.unresolved){this.publish(callbackValue,atom);this.copy(contextValue,callbackContext);}});}
+                    else {this.publish(callbackValue,atom);this.copy(contextValue,callbackContext);}
+                }
+            }});
+            return result;
+        };
+        return visit(holder,"",snapshot,new Set());
     }
     private jsonParse(source:Cell,reviver:Cell,context:ts.Node):Cell {
-        let calls=this.jsonParses.get(context);
-        if(!calls){calls=new Map();this.jsonParses.set(context,calls);}
+        let calls=this.jsonParses.get(context);if(!calls){calls=new Map();this.jsonParses.set(context,calls);}
         const signature=source.id+":"+reviver.id,prior=calls.get(signature);if(prior)return prior;
-        const result=this.newCell();calls.set(signature,result);
-        const text=this.stringHintCell(source,context),parsed=this.newCell(),receiver=this.newCell(),key=this.newCell(),callbackValue=this.newCell(),callbackContext=this.newCell(),callee=this.newCell();
-        const inputs=new Map<Atom,Cell>(),selected=new Set<string>();
+        const result=this.newCell(),text=this.stringHintCell(source,context);calls.set(signature,result);
+        const inputs=new Map<Atom,Cell>(),selected=new Map<string,SourceJSONRecord>(),routed=new Set<string>();
         const cell=(atom:Atom)=>{let input=inputs.get(atom);if(!input){input=this.newCell();inputs.set(atom,input);this.publish(input,atom);}return input;};
-        this.invoke(context,callee,receiver,[{cell:key,spread:false},{cell:callbackValue,spread:false},{cell:callbackContext,spread:false}],result);
         let parse!:Rule;
-        parse=this.rule([text],()=>{
+        parse=this.rule([text,reviver],()=>{
             const state=this.primitiveState(text,parse,true);
             for(const value of state.proof.values){
-                const input=String(value);if(selected.has(input))continue;selected.add(input);
-                try {
-                    const value=JSON.parse(input),composite=value!==null&&typeof value==="object";
-                    const atom=this.jsonValue(value);
-                    this.publish(parsed,atom);
-                    const holderOwner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};
-                    this.defineField(holderOwner,"",cell(atom));
-                    this.publish(receiver,{tag:"object",owner:holderOwner});this.publish(key,this.primitive(""));
-                    const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};
-                    if(!composite)this.defineField(owner,"source",cell(this.primitive(input.trim())));
-                    this.publish(callbackContext,{tag:"object",owner});this.publish(callbackValue,atom);
-                    // A composite reviver can observe or replace descendants.
-                    // Its unrepresented live snapshot stays conservative while
-                    // activating the actual callable through the shared graph.
-                    if(composite){this.publish(receiver,this.opaqueObject);this.publish(key,this.unknownString);this.publish(callbackValue,this.unknown);this.publish(callbackContext,this.opaqueObject);}
-                }catch{this.publish(parsed,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}
+                const input=String(value);if(selected.has(input))continue;
+                try{selected.set(input,this.jsonRecord(input));}catch{this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}
             }
-            for(const atom of text.values)if(atom.tag==="abrupt"||atom.tag==="pending-source")this.publish(parsed,atom);
-            if(state.proof.primitiveComplete||state.pending&&!state.unresolved)return;
-            this.publish(parsed,this.unknown);this.publish(receiver,this.opaqueObject);this.publish(key,this.unknownString);this.publish(callbackValue,this.unknown);this.publish(callbackContext,this.opaqueObject);
-            const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));
-        });
-        this.rule([reviver,parsed],()=>{
-            for(const atom of parsed.values)if(atom.tag==="abrupt"||atom.tag==="pending-source")this.publish(result,atom);
-            if(![...parsed.values].some(atom=>atom.tag!=="abrupt"&&atom.tag!=="pending-source"))return;
-            for(const atom of reviver.values){
+            for(const [input,record]of selected)for(const atom of reviver.values){
+                const key=input+":"+cell(atom).id;if(routed.has(key))continue;routed.add(key);
                 if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
                 const kinds=this.primitiveKinds(cell(atom));
-                if(kinds&KIND_FUNCTION||atom.tag==="unknown"||atom.tag==="opaque-object")this.publish(callee,atom);
-                if(!(kinds&KIND_FUNCTION)||atom.tag==="unknown"||atom.tag==="opaque-object")this.copy(parsed,result);
+                if(kinds&KIND_FUNCTION||atom.tag==="unknown"||atom.tag==="opaque-object")this.copy(this.jsonInternalize(record,cell(atom),context),result);
+                if(!(kinds&KIND_FUNCTION)||atom.tag==="unknown"||atom.tag==="opaque-object")this.publish(result,record.value);
             }
+            for(const atom of text.values)if(atom.tag==="abrupt"||atom.tag==="pending-source")this.publish(result,atom);
+            if(state.proof.primitiveComplete||state.pending&&!state.unresolved)return;
+            this.publish(result,this.unknown);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.unknown);this.onActive(context,()=>this.opaqueEffect(context));
         });
         return result;
     }
@@ -3102,6 +3194,7 @@ class SourceValueFlow {
                         if(invocation.construct && ts.isClassLike(atom.owner.definition) && !atom.owner.node && atom.owner.base){
                             continue;
                         }
+                        const actualFormals=new Map<Cell,Cell>();
                         for (const [index, parameter] of (atom.owner.node?.parameters ?? []).filter(parameter => !ts.isIdentifier(parameter.name) || parameter.name.text !== "this").entries()) {
                             if (parameter.dotDotDotToken) {
                                 let location = this.restLocations.get(parameter);
@@ -3122,6 +3215,7 @@ class SourceValueFlow {
                                 const value = argument(index);
                                 if (value) this.bind(parameter.name, value);
                                 else this.bind(parameter.name, omittedArgument);
+                                if(ts.isIdentifier(parameter.name)){const formal=this.binding(parameter.name),actual=value??omittedArgument;let sources=this.formalInputs.get(formal);if(!sources){sources=new Set();this.formalInputs.set(formal,sources);}sources.add(actual);actualFormals.set(formal,actual);}
                             }
                             if (parameter.initializer) this.bind(parameter.name, this.cell(parameter.initializer));
                         }
@@ -3137,7 +3231,7 @@ class SourceValueFlow {
                             // opaque value. Capture with the same ordering
                             // proof used for location reads; dynamic callers
                             // keep the complete conservative union.
-                            } else this.copyRead(atom.owner.returns, result!,node);
+                            } else this.copyRead(this.projectReturn(atom.owner.returns,actualFormals), result!,node);
                             const handler = this.exceptionHandlers.get(node);
                             if (handler) this.copy(atom.owner.throws, handler);
                         }
