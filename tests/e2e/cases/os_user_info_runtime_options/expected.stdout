@@ -1,0 +1,4 @@
+alias: string
+options: aaaaag true
+abrupt: true
+default: string aaaaagv

@@ -16894,31 +16894,61 @@ tsc_array_t* tsc_os_loadavg(void) {
     return a;
 }
 
-tsc_value_t tsc_os_user_info_opts(const tsc_str_t* encoding) {
-    uid_t uid = getuid();
-    gid_t gid = getgid();
-    struct passwd* pw = getpwuid(uid);
-    tsc_object_t* out = tsc_object_new();
-    tsc_object_set(out, tsc_str_from_lit("uid", 3), tsc_value_num((double)uid));
-    tsc_object_set(out, tsc_str_from_lit("gid", 3), tsc_value_num((double)gid));
-    tsc_str_t* username = tsc_str_from_cstr(pw && pw->pw_name ? pw->pw_name : "");
-    tsc_str_t* homedir = pw && pw->pw_dir ? tsc_str_from_cstr(pw->pw_dir) : tsc_os_homedir();
-    tsc_str_t* shell = tsc_str_from_cstr(pw && pw->pw_shell ? pw->pw_shell : "");
-    bool buffer_encoding = encoding && tsc_str_eq(encoding, tsc_str_from_lit("buffer", 6));
-    if (buffer_encoding) {
-        tsc_object_set(out, tsc_str_from_lit("username", 8), tsc_value_buffer(tsc_buffer_from_str(username, NULL)));
-        tsc_object_set(out, tsc_str_from_lit("homedir", 7), tsc_value_buffer(tsc_buffer_from_str(homedir, NULL)));
-        tsc_object_set(out, tsc_str_from_lit("shell", 5), tsc_value_buffer(tsc_buffer_from_str(shell, NULL)));
-    } else {
-        tsc_object_set(out, tsc_str_from_lit("username", 8), tsc_value_string(username));
-        tsc_object_set(out, tsc_str_from_lit("homedir", 7), tsc_value_string(homedir));
-        tsc_object_set(out, tsc_str_from_lit("shell", 5), tsc_value_string(shell));
+/* The complete actual List settles before ordinary encoding Get. Non-object
+ * options and non-string/unknown encodings select the Node UTF-8 default. */
+static tsc_value_t os_user_info(const tsc_str_t* encoding) {
+    struct passwd record, *pw = NULL;
+    long configured = sysconf(_SC_GETPW_R_SIZE_MAX);
+    size_t capacity = configured > 0 ? (size_t)configured : 1024;
+    char* volatile storage = NULL;
+    int status;
+    for(;;) {
+        storage=TSC_GC_MALLOC(capacity);
+        status=getpwuid_r(geteuid(),&record,storage,capacity,&pw);
+        if(status!=ERANGE)break;
+        if(capacity>SIZE_MAX/2)break;
+        capacity*=2;
     }
-    return tsc_value_object(out);
+    if(status || !pw || !pw->pw_name || !pw->pw_dir)
+        tsc_throw_error(TSC_ERROR_ERROR,tsc_str_from_cstr("os.userInfo account failure cannot be represented"));
+    tsc_object_t* volatile out = tsc_object_new_with_prototype(tsc_value_null());
+    (void)tsc_value_create_data_property(tsc_value_object(out),tsc_value_string(tsc_str_from_lit("uid",3)),tsc_value_num((double)pw->pw_uid));
+    (void)tsc_value_create_data_property(tsc_value_object(out),tsc_value_string(tsc_str_from_lit("gid",3)),tsc_value_num((double)pw->pw_gid));
+    const char* names[] = {"username", "homedir", "shell"};
+    const char* fields[] = {pw->pw_name,pw->pw_dir,pw->pw_shell ? pw->pw_shell : ""};
+    bool buffer_encoding = encoding && str_lit_eq(encoding, "buffer");
+    for (size_t index = 0; index < sizeof(names)/sizeof(names[0]); ++index) {
+        tsc_buffer_t* volatile bytes = tsc_buffer_alloc(strlen(fields[index]), 0);
+        if(bytes->len)memcpy(bytes->data,fields[index],bytes->len);
+        tsc_value_t value = buffer_encoding ? tsc_value_buffer(bytes)
+            : tsc_value_string(tsc_buffer_to_string(bytes, encoding));
+        void* volatile root = tsc_value_gc_root(value);
+        (void)tsc_value_create_data_property(tsc_value_object(out),tsc_value_string(tsc_str_from_cstr(names[index])),value);
+        (void)root;
+    }
+    (void)storage;return tsc_value_object(out);
 }
 
-tsc_value_t tsc_os_user_info(void) {
-    return tsc_os_user_info_opts(NULL);
+static tsc_value_t os_user_info_apply(void* environment,tsc_value_t receiver,tsc_array_t* arguments) {
+    (void)environment;(void)receiver;
+    tsc_value_t options = arguments && arguments->len ? TSC_ARR(tsc_value_t,arguments,0) : tsc_value_undefined();
+    void* volatile options_root = tsc_value_gc_root(options);
+    tsc_value_t value = !value_is_null_value(options) && str_lit_eq(tsc_value_typeof(options),"object")
+        ? tsc_value_get_prop(options,tsc_str_from_lit("encoding",8)) : tsc_value_undefined();
+    void* volatile value_root = tsc_value_gc_root(value);
+    tsc_str_t* volatile encoding = value_is_box(value) && value_tag(value)==TSC_VALUE_TAG_STRING
+        ? tsc_str_to_lower(tsc_value_as_string(value)) : NULL;
+    if(encoding && (str_lit_eq(encoding,"base64url") || str_lit_eq(encoding,"ucs2") ||
+        str_lit_eq(encoding,"ucs-2") || str_lit_eq(encoding,"utf16le") || str_lit_eq(encoding,"utf-16le")))
+        tsc_throw_error(TSC_ERROR_ERROR,tsc_str_from_cstr("os.userInfo encoding cannot be represented"));
+    if(encoding && !str_lit_eq(encoding,"buffer") && !tsc_buffer_is_encoding(encoding))encoding=NULL;
+    tsc_value_t result=os_user_info(encoding);
+    (void)options_root;(void)value_root;return result;
+}
+
+tsc_value_t tsc_os_user_info_function(void) {
+    return tsc_value_function_named_kind(os_user_info_apply,os_user_info_apply,NULL,1,
+        tsc_str_from_lit("userInfo",8),TSC_FUNCTION_IDENTITY_BUILTIN);
 }
 
 #if !defined(_WIN32)

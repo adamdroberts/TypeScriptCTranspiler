@@ -51,6 +51,7 @@ export interface DynamicImportSourceDepthSpec {
     depth: number;
 }
 export interface FsReadActualListWidthSpec {generator:"fs-read-actual-list-width";width:number;}
+export interface OsUserInfoOptionDepthSpec { generator:"os-user-info-option-depth"; depth:number; }
 export interface EventTargetActualsDepthSpec { generator:"event-target-actuals-depth"; depth:number; }
 export interface ParseGoalSourceDepthSpec { generator:"parse-goal-source-depth"; depth:number; }
 export interface JSONScalarSourceDepthSpec { generator:"json-scalar-source-depth"; depth:number; }
@@ -225,6 +226,7 @@ export type GeneratedCaseSpec =
     | ModuleNamespaceExportWidthSpec
     | ModuleRequestWidthSpec
     | DynamicImportSourceDepthSpec
+    | OsUserInfoOptionDepthSpec
     | EventTargetActualsDepthSpec
     | ParseGoalSourceDepthSpec
     | JSONScalarSourceDepthSpec
@@ -335,7 +337,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth" || spec.generator === "boxed-json-source-depth" || spec.generator === "dynamic-import-source-depth" || spec.generator === "return-projection-depth" || spec.generator === "util-format-source-depth" || spec.generator === "prototype-validation-depth" || spec.generator === "descriptor-projection-depth" || spec.generator === "map-insertion-depth" || spec.generator === "error-brand-depth" || spec.generator === "json-scalar-source-depth" || spec.generator === "parse-goal-source-depth" || spec.generator === "event-target-actuals-depth") {
+    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth" || spec.generator === "boxed-json-source-depth" || spec.generator === "dynamic-import-source-depth" || spec.generator === "return-projection-depth" || spec.generator === "util-format-source-depth" || spec.generator === "prototype-validation-depth" || spec.generator === "descriptor-projection-depth" || spec.generator === "map-insertion-depth" || spec.generator === "error-brand-depth" || spec.generator === "json-scalar-source-depth" || spec.generator === "parse-goal-source-depth" || spec.generator === "event-target-actuals-depth" || spec.generator === "os-user-info-option-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
             throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
@@ -1789,6 +1791,10 @@ console.log("raw JSON text width:", valid);
                 `const stressView=Buffer.alloc(4);let stressSeen=0;const stressOptions={get offset(){stressSeen++;return 0},get length(){stressSeen++;return 4},get position(){stressSeen++;return 0}};\n` +
                 `const stressBytes=stressRead(stressFD,stressView,stressOptions,...Array.from({length:${spec.width}},()=>++stressSeen));\n` +
                 `console.log('bytes:',stressBytes,'seen:',stressSeen,'text:',stressView.toString());stressClose(stressFD);stressRemove(stressPath);\n`;
+        case "os-user-info-option-depth":
+            return `import {userInfo as optionDepthUserInfo} from 'node:os';let optionDepthReads=0;let optionDepthOwner:any={get encoding(){optionDepthReads++;return 'buffer'}};\n` +
+                `for(let index=0;index<${spec.depth};index++)optionDepthOwner=Object.create(optionDepthOwner);\n` +
+                `const optionDepthResult=optionDepthUserInfo(optionDepthOwner);console.log('option-depth:',optionDepthReads===1,Buffer.isBuffer(optionDepthResult.username));\n`;
         case "event-target-actuals-depth":
             return `// @ts-nocheck\nconst eventTargetActualsOwner=new EventTarget();let eventTargetActualsCount=0;const eventTargetActualsListeners=[];\n` +
                 `for(let index=0;index<${spec.depth};index++){const value={index};const callback=()=>{if(value.index===index)eventTargetActualsCount++};eventTargetActualsListeners.push(callback);eventTargetActualsOwner.addEventListener('retained',callback,{capture:Boolean(index%2),once:true})}\n` +

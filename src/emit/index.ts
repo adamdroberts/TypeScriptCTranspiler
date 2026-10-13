@@ -19750,7 +19750,7 @@ class Emitter {
     }
 
     private isOsModuleIdentifier(id: ts.Identifier): boolean {
-        return id.text === "os" ||
+        return id.text === "os" && this.isUnshadowedGlobalIdentifier(id,"os") ||
             this.isNamespaceImportFrom(id, ["os", "node:os"]) ||
             this.isDefaultImportFrom(id, ["os", "node:os"]);
     }
@@ -34409,6 +34409,9 @@ class Emitter {
     }
     private importedHostModuleOwner(expression: ts.Expression): EmitResult | null {
         const expr = unwrapTransparentExpression(expression);
+        if (ts.isIdentifier(expr) && this.namedImportExportName(expr,["os","node:os"]) === "userInfo" ||
+            ts.isPropertyAccessExpression(expr) && expr.name.text === "userInfo" && ts.isIdentifier(expr.expression) && this.isOsModuleIdentifier(expr.expression))
+            return {c:"tsc_os_user_info_function()",ty:T_VALUE};
         const fsNames = ["fs", "node:fs"];
         if (ts.isIdentifier(expr)) {
             let receiver: ts.Node=expr;
@@ -44056,9 +44059,8 @@ class Emitter {
     }
 
     private emitOsCall(call: ts.CallExpression, name: string): EmitResult {
-        const ignored = this.ignoredArgumentSpecs(call.arguments, 0);
         const ret = (ty: CType, c: string): EmitResult =>
-            this.emitSequencedExpr(ty, ignored, () => c);
+            this.emitSequencedExpr(ty, this.ignoredArgumentSpecs(call.arguments, 0), () => c);
         switch (name) {
             case "platform": return ret(T_STRING, `tsc_os_platform()`);
             case "type": return ret(T_STRING, `tsc_os_type()`);
@@ -44075,18 +44077,9 @@ class Emitter {
             case "freemem": return ret(T_NUMBER, `tsc_os_freemem()`);
             case "uptime": return ret(T_NUMBER, `tsc_os_uptime()`);
             case "loadavg": return ret(arrayType(T_NUMBER), `tsc_os_loadavg()`);
-            case "userInfo":
-                const userInfoEncoding = this.validateOsUserInfoOptions(call.arguments[0]);
-                const specs: SequencedCallArg[] = [];
-                if (call.arguments[0] && this.shouldEvaluateSideEffectfulVoidDefault(call.arguments[0])) {
-                    specs.push({ value: this.emitExpr(call.arguments[0]), target: T_VOID, node: call.arguments[0] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(call.arguments, call.arguments[0] ? 1 : 0));
-                return this.emitSequencedExpr(
-                    T_VALUE,
-                    specs,
-                    () => `tsc_os_user_info_opts(tsc_str_from_lit("${userInfoEncoding}", ${userInfoEncoding.length}))`,
-                );
+            case "userInfo": {
+                return this.emitDynamicValueCall(call,{c:"tsc_os_user_info_function()",ty:T_VALUE});
+            }
             case "cpus": {
                 // Minimal: return an array-of-empty-objects of length cpu_count.
                 // Most user code just wants os.cpus().length, so this is fine.
@@ -44231,38 +44224,6 @@ class Emitter {
             );
         }
         unsupported(call, `querystring.${name}`);
-    }
-
-    private validateOsUserInfoOptions(options: ts.Expression | undefined): "utf8" | "buffer" {
-        if (!options || this.isUndefinedLikeExpression(options)) return "utf8";
-        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedLikeExpression(resolvedOptions)) return "utf8";
-        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
-            unsupported(options, "os.userInfo options must be an object literal in this subset");
-        }
-        let result: "utf8" | "buffer" = "utf8";
-        for (const prop of resolvedOptions.properties) {
-            if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, "os.userInfo options only support encoding property assignments");
-            }
-            const key = this.staticPropertyName(prop.name);
-            if (key !== "encoding") {
-                unsupported(prop.name, `os.userInfo unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
-            }
-            const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
-            if (this.isUndefinedExpression(valueNode)) {
-                continue;
-            }
-            const encoding = this.sideEffectFreeStringLiteralText(valueNode, new Set());
-            if (encoding === "utf8" || encoding === "utf-8") {
-                result = "utf8";
-            } else if (encoding === "buffer") {
-                result = "buffer";
-            } else {
-                unsupported(prop.initializer, "os.userInfo currently supports UTF-8 or buffer encoding options only");
-            }
-        }
-        return result;
     }
 
     private objectProperties(tsType: ts.Type): ts.Symbol[] {
