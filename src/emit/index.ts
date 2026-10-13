@@ -13607,7 +13607,7 @@ class Emitter {
         if (this.isJavaScriptSourceFile(id.getSourceFile())) return null;
         const sym = this.symbolForIdentifier(id);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-        if (decl && this.isNamespaceTopLevelDeclaration(decl)) {
+        if (decl && !this.isAmbientDeclaration(decl) && this.isNamespaceTopLevelDeclaration(decl)) {
             const name = this.declarationName(decl);
             return name ? this.declaredName(name) : null;
         }
