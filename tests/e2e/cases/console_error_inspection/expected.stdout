@@ -1,0 +1,3 @@
+caught: TypeError: before
+changed: Renamed: after { name: 'Renamed', code: 'E_SAMPLE' }
+descriptor: Renamed: after { name: 'Renamed', code: 'E_SAMPLE', extra: [Getter] }

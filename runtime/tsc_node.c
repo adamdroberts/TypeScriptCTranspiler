@@ -7862,7 +7862,7 @@ typedef struct console_inspect_frame {
     tsc_array_t* keys;
     size_t next, written;
     int depth;
-    bool array, opened;
+    bool array, error, opened;
 } console_inspect_frame_t;
 static void console_inspect_append(tsc_jsonbuf_t* output,const char* text) {
     tsc_jsonbuf_append(output,text,strlen(text));
@@ -7911,12 +7911,20 @@ static tsc_str_t* console_inspect(tsc_value_t value,bool hidden,int depth) {
                 console_inspect_append(&output,circular?"[Circular]":frame->array?"[Array]":"[Object]");
                 frame=frame->parent;continue;
             }
+            tsc_object_t* owner=object&&value_tag(frame->value)==TSC_VALUE_TAG_OBJECT?value_ptr(frame->value):NULL;
+            tsc_error_t* error=owner&&owner->is_error?owner->class_ptr:NULL;
+            frame->error=error!=NULL;
+            if(error) {
+                tsc_str_t* text=tsc_error_diagnostic_string(error);
+                if(text)tsc_jsonbuf_append(&output,text->data,text->len);
+            }
             frame->keys=tsc_reflect_own_keys(frame->value);frame->opened=true;
-            tsc_jsonbuf_byte(&output,frame->array?'[':'{');
+            if(!frame->error)tsc_jsonbuf_byte(&output,frame->array?'[':'{');
         }
         if(frame->next>=frame->keys->len) {
             if(frame->written)tsc_jsonbuf_byte(&output,' ');
-            tsc_jsonbuf_byte(&output,frame->array?']':'}');frame=frame->parent;continue;
+            if(!frame->error||frame->written)tsc_jsonbuf_byte(&output,frame->array?']':'}');
+            frame=frame->parent;continue;
         }
         tsc_value_t key=TSC_ARR(tsc_value_t,frame->keys,frame->next++);
         tsc_value_t descriptor=tsc_value_get_own_property_computed_descriptor(frame->value,key);
@@ -7924,7 +7932,11 @@ static tsc_str_t* console_inspect(tsc_value_t value,bool hidden,int depth) {
         if(!tsc_value_is_object(descriptor))continue;
         bool enumerable=tsc_value_is_truthy(tsc_value_get_prop(descriptor,tsc_str_from_lit("enumerable",10)));
         if(!hidden&&!enumerable)continue;
-        if(frame->written++)console_inspect_append(&output,", ");else tsc_jsonbuf_byte(&output,' ');
+        if(frame->written++)console_inspect_append(&output,", ");
+        else {
+            if(frame->error)console_inspect_append(&output," {");
+            tsc_jsonbuf_byte(&output,' ');
+        }
         tsc_str_t* name=tsc_value_to_explicit_string(key);
         bool indexed=frame->array&&name&&name->len;
         for(size_t index=0;indexed&&index<name->len;++index)indexed=name->data[index]>='0'&&name->data[index]<='9';
