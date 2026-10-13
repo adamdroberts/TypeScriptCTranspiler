@@ -1,0 +1,4 @@
+tag: JSON
+name: parse
+length: 3
+native: function rawJSON() { [native code] }

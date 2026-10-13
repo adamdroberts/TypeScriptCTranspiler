@@ -1,0 +1,5 @@
+/* name, length, native callback, source operation */
+TSC_JSON_METHOD(parse, 2, json_parse_apply, PARSE)
+TSC_JSON_METHOD(stringify, 3, json_stringify_apply, STRINGIFY)
+TSC_JSON_METHOD(rawJSON, 1, json_raw_apply, RAW)
+TSC_JSON_METHOD(isRawJSON, 1, json_is_raw_apply, IS_RAW)

@@ -9619,10 +9619,12 @@ tsc_value_t tsc_builtin_json(void) {
         tsc_runtime_lock();
         if (!json) {
             tsc_object_t* built = tsc_object_new();
-            intrinsic_define_method(built, "parse", 5, 2.0, json_parse_apply, NULL);
-            intrinsic_define_method(built, "stringify", 9, 3.0, json_stringify_apply, NULL);
-            intrinsic_define_method(built, "rawJSON", 7, 1.0, json_raw_apply, NULL);
-            intrinsic_define_method(built, "isRawJSON", 9, 1.0, json_is_raw_apply, NULL);
+#define TSC_JSON_METHOD(name, length, callback, source) intrinsic_define_method(built, #name, sizeof(#name)-1, (double)length, callback, NULL);
+#include "tsc_json_methods.def"
+#undef TSC_JSON_METHOD
+            (void)tsc_value_define_symbol_property_desc(tsc_value_object(built),
+                tsc_symbol_to_string_tag(),tsc_value_string(tsc_str_from_lit("JSON",4)),
+                true,false,true,false,true,true,true);
             state->json = built;
             json = built;
         }

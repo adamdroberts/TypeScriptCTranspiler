@@ -107,6 +107,11 @@ export interface JsonReviverDepthSpec {
     depth: number;
 }
 
+export interface JsonNamespaceOwnerDepthSpec {
+    generator: "json-namespace-owner-depth";
+    depth: number;
+}
+
 export interface ReflectConstructArgumentWidthSpec {
     generator: "reflect-construct-argument-width";
     width: number;
@@ -191,6 +196,7 @@ export type GeneratedCaseSpec =
     | StringRawTemplateWidthSpec
     | JsonRawTextWidthSpec
     | JsonReviverDepthSpec
+    | JsonNamespaceOwnerDepthSpec
     | ReflectConstructArgumentWidthSpec
     | ArrowFormalBindingTreeDepthSpec
     | ArrayStaticFactoryItemWidthSpec
@@ -272,7 +278,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth") {
+    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
             throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
@@ -1593,6 +1599,18 @@ function classExpressionMethodWidthSource(width: number): string {
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
+        case "json-namespace-owner-depth":
+            return `const owner = JSON, parse = owner.parse;
+let chain: any = { previous: null, owner, parse };
+for (let depth = 0; depth < ${spec.depth}; depth++) chain = { previous: chain, owner, parse };
+let count = 0, valid = true;
+const args: any[] = ["17"];
+for (let node: any = chain; node; node = node.previous) {
+    valid = valid && node.owner === owner && node.parse === parse && node.owner[Symbol.toStringTag] === "JSON";
+    args.push(count++);
+}
+console.log("JSON namespace owner depth:", valid && count === ${spec.depth}+1 && Reflect.apply(parse, owner, args) === 17);
+`;
         case "json-reviver-depth":
             return `const text = "[".repeat(${spec.depth}) + "17" + "]".repeat(${spec.depth});
 let calls = 0, sources = 0, valid = true;

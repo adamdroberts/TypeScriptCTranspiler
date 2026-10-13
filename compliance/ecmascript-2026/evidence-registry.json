@@ -1964,7 +1964,9 @@
         "sec-json.rawjson#validated-scalar-text-and-frozen-raw-owner",
         "sec-json.israwjson#internal-brand-without-proxy-or-property-access",
         "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
-        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context",
+        "sec-json-object#ordinary-realm-namespace-and-canonical-method-owners",
+        "sec-json-%symbol.tostringtag%#ordinary-configurable-json-tag-descriptor"
       ]
     },
     {
@@ -2374,7 +2376,9 @@
         "sec-json.israwjson#internal-brand-without-proxy-or-property-access",
         "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
         "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
-        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context",
+        "sec-json-object#ordinary-realm-namespace-and-canonical-method-owners",
+        "sec-json-%symbol.tostringtag%#ordinary-configurable-json-tag-descriptor"
       ]
     },
     {
@@ -2531,6 +2535,69 @@
       "id": "runtime/tsc_value.c#tsc_value_object_is",
       "targets": [
         "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/json-namespace-owner.property.test.ts",
+      "targets": [
+        "sec-json-object#ordinary-realm-namespace-and-canonical-method-owners",
+        "sec-json-%symbol.tostringtag%#ordinary-configurable-json-tag-descriptor"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "json_namespace_owner_depth",
+      "targets": [
+        "sec-json-object#ordinary-realm-namespace-and-canonical-method-owners",
+        "sec-json-%symbol.tostringtag%#ordinary-configurable-json-tag-descriptor"
+      ],
+      "stressReview": {
+        "dimension": "retained JSON namespace/method owner graph and actual argument-List depth",
+        "parameter": "depth",
+        "representativeHighDepth": 16384,
+        "rationale": "One representative generated graph retains canonical namespace, method and tag identities while forwarding its accumulated actual List through ordinary call lowering; successive depths are not completion units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "json_namespace_owner",
+      "targets": [
+        "sec-json-object#ordinary-realm-namespace-and-canonical-method-owners",
+        "sec-json-%symbol.tostringtag%#ordinary-configurable-json-tag-descriptor"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_json_methods.def#TSC_JSON_METHOD",
+      "targets": [
+        "sec-json-object#ordinary-realm-namespace-and-canonical-method-owners",
+        "sec-json-%symbol.tostringtag%#ordinary-configurable-json-tag-descriptor"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_builtin_json",
+      "targets": [
+        "sec-json-object#ordinary-realm-namespace-and-canonical-method-owners",
+        "sec-json-%symbol.tostringtag%#ordinary-configurable-json-tag-descriptor"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/json-methods.ts#jsonMethods",
+      "targets": [
+        "sec-json-object#ordinary-realm-namespace-and-canonical-method-owners",
+        "sec-json-%symbol.tostringtag%#ordinary-configurable-json-tag-descriptor"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#ordinaryOwner",
+      "targets": [
+        "sec-json-object#ordinary-realm-namespace-and-canonical-method-owners",
+        "sec-json-%symbol.tostringtag%#ordinary-configurable-json-tag-descriptor"
       ]
     }
   ]

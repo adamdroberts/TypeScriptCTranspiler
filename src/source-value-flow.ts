@@ -4,6 +4,7 @@ import { callableSourceText } from "./callable-source-text";
 import { normalizeAssignmentTarget, unwrapTransparentExpression as unwrap } from "./emit/binding-tree";
 import { callableNameInput, expectedArgumentCount, functionBodyCompletions, statementBodyCompletions, type FunctionBodyCompletions, type StatementBodyCompletions, NAME_EVALUATING_ASSIGNMENTS } from "./function-static-semantics";
 import {consoleOperations} from "./console-operations";
+import {jsonMethods, jsonOperations, type JSONSourceOperation} from "./json-methods";
 import {test262AgentOperations} from "./test262-agent-operations";
 import { sourceUnitBodyIncluded, sourceUnitFileName } from "./program";
 import { ecmaParseGoal } from "./ecmascript-source";
@@ -148,7 +149,7 @@ const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
 // Initial intrinsic member identities, installed on their canonical owners.
 // Source lookups and later writes use the ordinary field graph.
 const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operation>> = new Map<string, ReadonlyMap<string, Operation>>([
-    ["JSON", new Map([["stringify", "json-stringify"], ["parse", "json-parse"], ["rawJSON", "json-raw"], ["isRawJSON", "json-is-raw"]])],
+    ["JSON", new Map([...jsonMethods.values()].map(descriptor=>[descriptor.name,descriptor.operation]))],
     ["console", new Map([...consoleOperations].map(name=>[name,"host-print" as const]))],
     ["Object", new Map([["getPrototypeOf", "prototype"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
         ["getOwnPropertyDescriptor", "own-descriptor"], ["getOwnPropertyDescriptors", "own-descriptors"]])],
@@ -1531,6 +1532,11 @@ class SourceValueFlow {
                 for (const [name, operation] of INITIAL_SOURCE_OPERATIONS.get(key) ?? []) {
                     const value = this.newCell();this.publish(value,this.operation(operation));this.defineField(fields,name,value);
                 }
+                if(key==="JSON") {
+                    fields.prototype=this.objectPrototype();
+                    const tag=this.wellKnownSymbols.get("toStringTag")!,value=this.newCell();
+                    this.publish(value,this.primitive("JSON"));this.defineField(fields,tag,value);
+                }
                 if (descriptor.normalResult !== "not-callable") fields.prototype = this.callablePrototype("ordinary");
                 if(runtimeErrorKinds.has(key))this.defineField(fields,"prototype",this.errorPrototype(key));
                 if(key==="Object")this.defineField(fields,"prototype",this.objectPrototype());
@@ -1774,6 +1780,17 @@ class SourceValueFlow {
         if(atom.tag === "function")return atom.owner.fields;
         if(atom.tag === "bound")return atom.fields;
         if(atom.tag === "builtin")return atom.fields;
+        if(atom.tag==="operation"&&jsonOperations.has(atom.operation as JSONSourceOperation)) {
+            let owner=this.intrinsicOwners.get(atom);
+            if(!owner) {
+                owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);
+                this.copy(this.opaqueMutation,owner.shape);
+                const descriptor=jsonOperations.get(atom.operation as JSONSourceOperation)!,name=this.newCell(),length=this.newCell();
+                this.publish(name,this.primitive(descriptor.name));this.publish(length,this.primitive(descriptor.length));
+                this.defineField(owner,"name",name);this.defineField(owner,"length",length);
+            }
+            return owner;
+        }
         if(atom.tag === "operation" && (atom.operation==="agent-start"||atom.operation.startsWith("agent-member:"))){
             let owner=this.intrinsicOwners.get(atom);
             if(!owner){
@@ -3090,6 +3107,8 @@ class SourceValueFlow {
                                 else if (receiver.tag === "bound") this.publish(result!, this.text("function () { [native code] }"));
                                 else if (receiver.tag === "builtin" && receiver.normalResult !== "not-callable")
                                     this.publish(result!, this.text(`function ${receiver.name}() { [native code] }`));
+                                else if(receiver.tag==="operation"&&jsonOperations.has(receiver.operation as JSONSourceOperation))
+                                    this.publish(result!,this.text(`function ${jsonOperations.get(receiver.operation as JSONSourceOperation)!.name}() { [native code] }`));
                                 else if(receiver.tag==="primitive") {
                                     this.publish(result!,this.abrupt);
                                     const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));

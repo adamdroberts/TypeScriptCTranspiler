@@ -1478,6 +1478,7 @@ interface Math {
 declare const Math: Math;
 
 interface JSON {
+    readonly [Symbol.toStringTag]: string;
     stringify(value?: any, replacer?: any, space?: any, ...ignored: any[]): any;
     parse(text?: any, reviver?: any, ...ignored: any[]): any;
     rawJSON(text?: any, ...ignored: any[]): { readonly rawJSON: string };

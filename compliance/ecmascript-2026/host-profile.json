@@ -119,6 +119,8 @@
     "tests/test262/self.test.ts",
     "tests/test262/spec-catalog.ts",
     "runtime/tsc_console_methods.def",
+    "runtime/tsc_json_methods.def",
+    "src/json-methods.ts",
     "runtime/tsc_weak_collections.def",
     "src/console-operations.ts",
     "src/crypto-digest-owners.ts",

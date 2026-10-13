@@ -230,6 +230,26 @@
       ],
       "reason": "The pinned ES5 grouping section exercises preservation of Expression completion and Reference identity; current grammar and early-error clauses are separate obligations. Matching uses the metadata section boundary, never fixture names.",
       "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es5id",
+      "match": "prefix",
+      "value": "15.12-",
+      "clauses": [
+        "sec-json-object"
+      ],
+      "reason": "The ES5 JSON object section metadata boundary identifies namespace object, call/construct rejection and default property enumerability. The boundary excludes dotted parse/stringify algorithm sections and does not depend on test filenames or inventory size.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es6id",
+      "match": "exact",
+      "value": "24.3.3",
+      "clauses": [
+        "sec-json-%symbol.tostringtag%"
+      ],
+      "reason": "The official ES2015 section 24.3.3 defines JSON @@toStringTag and its descriptor attributes (https://262.ecma-international.org/6.0/#sec-json-@@tostringtag). It maps to the retained normative JSON Symbol.toStringTag owner in the pinned edition, independently of filenames.",
+      "reviewedBy": "tsc2c compliance review"
     }
   ],
   "pathRules": [
