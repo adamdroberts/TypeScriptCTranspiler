@@ -4409,6 +4409,56 @@
             ]
           },
           "rationale": "Finite formatter call proofs now project the shared source value/location/call graph. Native util default objects retain mutable property locations; named and namespace exports retain the original callable. Bound/reflected calls, known getter/return projections, complete Lists and primitive formatter tuples use that same solution. One parsed-source identity caches the proof without mutating a consumer checker tree. The textual util-name resolver, Node formatter execution and NUL-delimited tuple predecessor are deleted. util-format-source.property compares finite and opaque callable partitions and independent Node/native request execution across typed/erased inputs and both memory modes, sharing one deep forwarding input with the typed CLI. Object formatter coercion, opaque prior host/CommonJS load effects, fully correlated activations, complete Node formatting, Module/Realm/agent eligibility and exhaustive target evidence remain open. Earlier opaque loads conservatively invalidate later default-owner proofs, while immutable namespace export binding locations remain distinct from default-object mutations."
+        },
+        {
+          "id": "ordinary-native-target-actuals-and-registration-owners",
+          "title": "Native target calls retain ordinary callee lookup, complete actuals and registration owners",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "canonical-collection",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-evaluatecall"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/event-target-actuals.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "event_target_actuals_depth"
+            ],
+            "e2e": [
+              "event_target_actuals"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#EventTarget",
+              "stdlib/lib.core.d.ts#AddEventListenerOptions",
+              "stdlib/lib.core.d.ts#AbortControllerConstructor"
+            ],
+            "implementation": [
+              "src/emit/index.ts#emitEventTargetMethod",
+              "src/emit/index.ts#emitDynamicMethod",
+              "runtime/tsc_value.c#native_target_operation",
+              "runtime/tsc_value.c#native_target_options",
+              "runtime/tsc_node.c#tsc_event_target_add",
+              "runtime/tsc_node.c#tsc_event_target_dispatch",
+              "runtime/tsc_core.c#tsc_abort_controller_constructor_value"
+            ]
+          },
+          "rationale": "EventTarget add/remove/dispatch now use ordinary boxed member lookup and the complete actual-argument List. The fixed literal option parser and private EventTarget callback adapters are deleted. One ordered descriptor collection reads live option getters and symbol hooks, retaining roots through conversion; one linked registration collection keys identity by actual listener value, type and capture, preserves removed registration identity, removes once records before reentrancy and carries passive state. Callable and live handleEvent object listeners share the callback bridge. Signal intake uses ordinary aborted and addEventListener reads with actual cancellation calls; signal listener slots retain decoded callable roots, while weak target/listener links let abandoned object listener owners release. AbortController now publishes an ordinary Realm constructor through the canonical global binding table, retains actual newTarget prototypes and uses receiver-based private controller state for borrowed abort calls; the bare constructor emitter predecessor is removed. Declarations expose object/null listeners, signal options and the controller owner without adding a CType. event-target-actuals.property compares option domains/getter/conversion/abrupt order, complete and ignored actuals, mutable/bound/reflected methods, capture and once identities, live listener mutation, object receivers and cancellation, captured/derived controller owners, GC retention and one shared high-depth listener graph with independent Node across typed/erased native profiles and both memory modes. A scrubbed native collector proof verifies registered object payload retention and abandoned target/payload release. event_target_actuals supplies typed CLI coverage; the capture option regression stdout is independently reconciled with Node. Node-private weak/resist/node-style listener modes fail closed with one stable diagnostic. Complete Event/EventTarget constructor/prototype/dispatch/error-job parity, private listener modes, signal ephemeron cycles through original type objects, the existing strong callable identity cache, complete host/Realm behavior and eligible exhaustive ECMAScript 2026 evidence remain open. EventTarget itself is a host extension; this row only binds its shared ordinary call lowering, without promoting target intrinsic or host eligibility claims."
         }
       ],
       "rationale": "The source worklist retains reachable callable and actual-List facts independently of cardinality. This host bridge does not establish the complete Call or EvaluateCall algorithms."

@@ -1,3 +1,5 @@
+Replaced EventTarget literal option parsing and callback adapters with ordinary actual-value calls, one live option descriptor collection and capture-aware linked listener records. Added object listeners, passive/cancellation handling, rooted signal listener slots and ordinary AbortController construction with borrowed receiver state. Independent Node properties and collector proofs verify the scoped repair.
+
 Unified native Script and Module strictness with canonical source-unit goals, removing reliance on TypeScript binding markers and host observation options. Ordered Script initialization owners now supply global declaration classification, repairing the reproduced isolated-Script eval dispatch mismatch.
 
 Preserved pure JSON source facts for unbounded primitive kind domains. Unknown scalar text no longer invents mutation effects, repairing finite eval-spread admission through ordinary assertion code while object hooks and unknown source rejection retain their existing paths.

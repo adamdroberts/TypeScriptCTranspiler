@@ -316,6 +316,7 @@ typedef enum {
 struct tsc_object {
     tsc_array_t* private_elements;
     bool is_abort_signal;
+    bool is_abort_controller;
     bool is_event_emitter;
     bool is_event_target;
     bool is_event;
@@ -433,19 +434,20 @@ struct tsc_event_emitter {
     tsc_event_listener_t* listeners;
 };
 
-typedef struct {
+typedef struct tsc_dom_event_listener {
     tsc_str_t* type;
     tsc_event_target_listener_fn_t fn;
     void* env;
-    void* identity;
-    bool once;
+    tsc_value_t identity;
+    void* identity_root;
+    bool once, capture, passive, removed;
+    struct tsc_dom_event_listener* next;
 } tsc_dom_event_listener_t;
 
 struct tsc_event_target {
     tsc_native_object_owner_t object_owner;
-    size_t len;
-    size_t cap;
     tsc_dom_event_listener_t* listeners;
+    tsc_dom_event_listener_t* tail;
 };
 
 struct tsc_event {
@@ -455,6 +457,7 @@ struct tsc_event {
     tsc_event_target_t* current_target;
     bool default_prevented;
     bool cancelable;
+    bool in_passive_listener, dispatching;
 };
 
 
@@ -787,7 +790,6 @@ size_t find_byte(const char* data, size_t start, size_t end, char needle);
 size_t first_of_url_tail(const char* data, size_t start, size_t end);
 tsc_str_t* tsc_url_resolve_base(const tsc_str_t* input, const tsc_str_t* base);
 int tsc_dns_lookup_ai_flags(double hints);
-void event_target_reserve(tsc_event_target_t* target, size_t cap);
 tsc_value_t value_accessor_getter_identity(tsc_accessor_getter_t getter, void* env);
 tsc_value_t value_accessor_setter_identity(tsc_accessor_setter_t setter, void* env);
 tsc_value_t tsc_value_dynamic_accessor_getter(void* env, tsc_value_t receiver);

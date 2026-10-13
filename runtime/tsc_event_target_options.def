@@ -1,0 +1,8 @@
+/* Node EventTarget dictionary evaluation order; one shared actual-value plan. */
+TSC_EVENT_TARGET_OPTION(once, "once", false)
+TSC_EVENT_TARGET_OPTION(capture, "capture", false)
+TSC_EVENT_TARGET_OPTION(passive, "passive", false)
+TSC_EVENT_TARGET_OPTION(signal, "signal", false)
+TSC_EVENT_TARGET_OPTION(weak, "kWeak", true)
+TSC_EVENT_TARGET_OPTION(resist, "kResistStopPropagation", true)
+TSC_EVENT_TARGET_OPTION(node_style, "kIsNodeStyleListener", true)

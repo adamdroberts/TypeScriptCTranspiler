@@ -2670,9 +2670,21 @@ interface EventConstructor {
 }
 declare var Event: EventConstructor;
 
+interface AbortSignal {
+    readonly aborted: boolean;
+    readonly reason: any;
+    onabort: ((event: any) => void) | null;
+    throwIfAborted(): void;
+    addEventListener(type: string, listener: (event: any) => void, options?: any, ...ignored: any[]): void;
+    removeEventListener(type: string, listener: (event: any) => void, options?: any, ...ignored: any[]): void;
+}
+interface AbortController { readonly signal: AbortSignal; abort(reason?: any, ...ignored: any[]): void; }
+interface AbortControllerConstructor { new(...ignored: any[]): AbortController; readonly prototype: AbortController; }
+declare var AbortController: AbortControllerConstructor;
+interface EventListenerObject { handleEvent(event: Event): void; }
 interface EventTarget {
-    addEventListener(type: string, listener: (this: EventTarget, event: Event) => void, options?: boolean | AddEventListenerOptions, ...ignored: any[]): void;
-    removeEventListener(type: string, listener: (this: EventTarget, event: Event) => void, options?: boolean | EventListenerOptions, ...ignored: any[]): void;
+    addEventListener(type: string, listener: ((this: EventTarget, event: Event) => void) | EventListenerObject | null, options?: boolean | AddEventListenerOptions, ...ignored: any[]): void;
+    removeEventListener(type: string, listener: ((this: EventTarget, event: Event) => void) | EventListenerObject | null, options?: boolean | EventListenerOptions, ...ignored: any[]): void;
     dispatchEvent(event: Event, ...ignored: any[]): boolean;
 }
 interface EventTargetConstructor {
@@ -2686,6 +2698,7 @@ interface EventListenerOptions {
 interface AddEventListenerOptions extends EventListenerOptions {
     once?: boolean;
     passive?: boolean;
+    signal?: AbortSignal;
 }
 
 interface EventEmitter {

@@ -136,12 +136,21 @@ static void native_emitter_listener(void* env, tsc_event_emitter_t* emitter, tsc
 
 static void native_target_listener(void* env, tsc_event_target_t* target, tsc_event_t* event) {
     native_event_callback_t* state = env;
+    tsc_value_t callback = state->callback, receiver = tsc_value_event_target(target);
+    if (!tsc_value_is_callable(callback)) {
+        tsc_value_t method = tsc_value_get_prop(callback, tsc_str_from_lit("handleEvent", 11));
+        if (!tsc_value_is_truthy(method)) return;
+        receiver = callback;
+        callback = tsc_value_get_prop(callback, tsc_str_from_lit("handleEvent", 11));
+    }
+    void* volatile callback_root = tsc_value_gc_root(callback);
+    void* volatile receiver_root = tsc_value_gc_root(receiver);
     tsc_value_t value = tsc_value_event(event);
-    void* volatile value_gc_root = tsc_value_gc_root(value);
+    void* volatile value_root = tsc_value_gc_root(value);
     tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
     tsc_array_push_value(args, value);
-    (void)value_gc_root;
-    (void)tsc_value_apply_function(state->callback, tsc_value_event_target(target), tsc_value_array(args));
+    (void)callback_root; (void)receiver_root; (void)value_root;
+    (void)tsc_value_apply_function(callback, receiver, tsc_value_array(args));
 }
 
 static tsc_value_t native_emitter_on(void* env, tsc_value_t receiver, tsc_array_t* args) {
@@ -198,21 +207,140 @@ static tsc_value_t native_emitter_operation(void* env, tsc_value_t receiver, tsc
     return tsc_value_undefined();
 }
 
+typedef enum {
+#define TSC_EVENT_TARGET_OPTION(slot, spelling, symbol) NATIVE_TARGET_OPTION_##slot,
+#include "tsc_event_target_options.def"
+#undef TSC_EVENT_TARGET_OPTION
+    NATIVE_TARGET_OPTION_COUNT
+} native_target_option_t;
+static const struct { const char* name; bool symbol; } native_target_options[] = {
+#define TSC_EVENT_TARGET_OPTION(slot, spelling, symbol) {spelling, symbol},
+#include "tsc_event_target_options.def"
+#undef TSC_EVENT_TARGET_OPTION
+};
+typedef struct { tsc_symbol_t* symbols[NATIVE_TARGET_OPTION_COUNT]; } native_target_option_keys_t;
+static const char native_target_option_keys_state;
+static native_target_option_keys_t* native_target_option_keys(void) {
+    tsc_runtime_lock();
+    native_target_option_keys_t* keys = tsc_realm_state_get(&native_target_option_keys_state);
+    if (!keys) {
+        keys = TSC_GC_MALLOC(sizeof(*keys)); memset(keys, 0, sizeof(*keys));
+        tsc_realm_state_set(&native_target_option_keys_state, keys);
+        for (size_t i=0; i<NATIVE_TARGET_OPTION_COUNT; ++i)
+            if (native_target_options[i].symbol) keys->symbols[i] = tsc_symbol_new(tsc_str_from_cstr(native_target_options[i].name));
+    }
+    tsc_runtime_unlock(); return keys;
+}
+static bool native_target_listener_valid(tsc_value_t callback) {
+    if (tsc_value_is_callable(callback)) return true;
+    if (tsc_value_is_nullish(callback)) return false;
+    if (tsc_value_is_callable(tsc_value_get_prop(callback, tsc_str_from_lit("handleEvent", 11)))) return true;
+    if (tsc_value_is_object(callback)) return true;
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("event listener is not an object or callable"));
+}
+typedef struct {
+    tsc_event_target_t* target;
+    void* callback_root;
+} native_target_abort_links_t;
+typedef struct {
+    native_target_abort_links_t* links;
+    tsc_value_t type, callback;
+    void* type_root;
+    bool had_callback_root, capture;
+} native_target_abort_t;
+static void native_target_abort(void* env) {
+    native_target_abort_t* state = env;
+    tsc_event_target_t* volatile target = state->links->target;
+    void* volatile callback_root = state->links->callback_root;
+    if (!target || (state->had_callback_root && !callback_root)) return;
+    tsc_value_t receiver=tsc_value_event_target(target);
+    tsc_value_t method=tsc_value_get_prop(receiver,tsc_str_from_lit("removeEventListener",19));
+    void* volatile method_root=tsc_value_gc_root(method);
+    tsc_array_t* args=tsc_array_new(sizeof(tsc_value_t),3);
+    tsc_array_push_value(args,state->type);tsc_array_push_value(args,state->callback);tsc_array_push_value(args,tsc_value_bool(state->capture));
+    (void)tsc_value_apply_function(method,receiver,tsc_value_array(args));
+    (void)callback_root; (void)method_root;
+}
+static tsc_value_t native_target_abort_apply(void* env,tsc_value_t receiver,tsc_array_t* args) {
+    (void)receiver;(void)args;native_target_abort(env);return tsc_value_undefined();
+}
+static native_target_abort_t* native_target_abort_new(tsc_event_target_t* target, tsc_value_t type, tsc_value_t callback, bool capture) {
+    native_target_abort_t* state=TSC_GC_MALLOC(sizeof(*state));
+    native_target_abort_links_t* links=TSC_GC_MALLOC_ATOMIC(sizeof(*links));
+    links->target=target; links->callback_root=tsc_value_gc_root(callback);
+    *state=(native_target_abort_t){ .links=links,.type=type,.callback=callback,.type_root=tsc_value_gc_root(type),.had_callback_root=links->callback_root!=NULL,.capture=capture };
+#ifndef TSC_NO_GC
+    if (GC_base(target)) (void)GC_general_register_disappearing_link((void**)&links->target,GC_base(target));
+    if (links->callback_root && GC_base(links->callback_root))
+        (void)GC_general_register_disappearing_link(&links->callback_root,GC_base(links->callback_root));
+#endif
+    return state;
+}
 static tsc_value_t native_target_operation(void* env, tsc_value_t receiver, tsc_array_t* args) {
     tsc_event_target_t* target = tsc_value_as_event_target(receiver);
     uintptr_t operation = (uintptr_t)env;
+    if (!args || args->len < (operation==2 ? 1 : 2))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("EventTarget required arguments are missing"));
     if (operation == 2) return tsc_value_bool(tsc_event_target_dispatch(target, tsc_value_as_event(native_event_argument(args, 0))));
-    tsc_str_t* name = tsc_value_to_string(native_event_argument(args, 0));
-    tsc_value_t callback = native_event_argument(args, 1);
-    if (tsc_value_is_nullish(callback)) return tsc_value_undefined();
-    if (operation == 1) {
-        tsc_event_target_remove(target, name, native_target_listener, tsc_value_gc_root(callback));
-    } else {
-        native_event_callback_t* state = native_event_callback_new(callback);
-        tsc_value_t options = native_event_argument(args, 2);
-        bool once = tsc_value_is_object(options) && tsc_value_is_truthy(tsc_value_get_prop(options, tsc_str_from_lit("once", 4)));
-        tsc_event_target_add(target, name, native_target_listener, state, state->callback_gc_root, once);
+    tsc_value_t callback = native_event_argument(args, 1), options = native_event_argument(args, 2);
+    void* volatile callback_root = tsc_value_gc_root(callback);
+    void* volatile options_root = tsc_value_gc_root(options);
+    bool once=false, capture=false, passive=false;
+    tsc_value_t signal = tsc_value_undefined();
+    void* volatile signal_root = NULL;
+    if (operation == 0 && !tsc_value_is_nullish(options)) {
+        if (value_is_box(options) && (value_tag(options)==TSC_VALUE_TAG_TRUE || value_tag(options)==TSC_VALUE_TAG_FALSE)) capture=tsc_value_is_truthy(options);
+        else {
+            if (!tsc_value_is_object(options)) tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("EventTarget options must be an object or Boolean"));
+            native_target_option_keys_t* keys = native_target_option_keys();
+            tsc_value_t values[NATIVE_TARGET_OPTION_COUNT];
+            void* volatile roots[NATIVE_TARGET_OPTION_COUNT];
+            for (size_t i=0; i<NATIVE_TARGET_OPTION_COUNT; ++i) {
+                values[i] = native_target_options[i].symbol
+                    ? tsc_value_get_symbol_prop(options, keys->symbols[i])
+                    : tsc_value_get_prop(options,tsc_str_from_cstr(native_target_options[i].name));
+                roots[i] = tsc_value_gc_root(values[i]);
+            }
+            once=tsc_value_is_truthy(values[NATIVE_TARGET_OPTION_once]);
+            capture=tsc_value_is_truthy(values[NATIVE_TARGET_OPTION_capture]);
+            passive=tsc_value_is_truthy(values[NATIVE_TARGET_OPTION_passive]);
+            signal=values[NATIVE_TARGET_OPTION_signal]; signal_root=roots[NATIVE_TARGET_OPTION_signal];
+            if (tsc_value_is_truthy(values[NATIVE_TARGET_OPTION_weak]) || tsc_value_is_truthy(values[NATIVE_TARGET_OPTION_resist]) || tsc_value_is_truthy(values[NATIVE_TARGET_OPTION_node_style]))
+                tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("Node-private EventTarget listener flags are not represented"));
+            if (!tsc_value_is_undefined(signal)) {
+                if (!tsc_value_is_object(signal) || tsc_value_is_callable(signal) || !tsc_value_has_prop(signal,tsc_str_from_lit("aborted",7)))
+                    tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("EventTarget options.signal must provide an aborted property"));
+                if (tsc_value_is_truthy(tsc_value_get_prop(signal,tsc_str_from_lit("aborted",7)))) return tsc_value_undefined();
+                native_target_abort_t* cancellation=native_target_abort_new(target,native_event_argument(args,0),callback,capture);
+                tsc_value_t method=tsc_value_get_prop(signal,tsc_str_from_lit("addEventListener",16));
+                void* volatile method_root=tsc_value_gc_root(method);
+                tsc_value_t handler=tsc_value_function_builtin_named(native_target_abort_apply,cancellation,0,tsc_str_from_lit("",0));
+                void* volatile handler_root=tsc_value_gc_root(handler);
+                tsc_object_t* abort_options=tsc_object_new();
+                tsc_value_set_prototype_of(tsc_value_object(abort_options),tsc_value_null());
+                tsc_object_define(abort_options,tsc_str_from_lit("once",4),tsc_value_bool(true),true,true,true);
+                tsc_value_set_symbol_prop(tsc_value_object(abort_options),keys->symbols[NATIVE_TARGET_OPTION_weak],receiver);
+                tsc_value_set_symbol_prop(tsc_value_object(abort_options),keys->symbols[NATIVE_TARGET_OPTION_resist],tsc_value_bool(true));
+                tsc_array_t* actuals=tsc_array_new(sizeof(tsc_value_t),3);
+                tsc_array_push_value(actuals,tsc_value_string(tsc_str_from_lit("abort",5)));
+                tsc_array_push_value(actuals,handler);tsc_array_push_value(actuals,tsc_value_object(abort_options));
+                (void)tsc_value_apply_function(method,signal,tsc_value_array(actuals));
+                (void)method_root;(void)handler_root;
+            }
+        }
     }
+    if (!native_target_listener_valid(callback)) return tsc_value_undefined();
+    tsc_str_t* volatile name=tsc_value_to_string(native_event_argument(args,0));
+    if (operation == 1) {
+        capture=value_is_box(options)&&(value_tag(options)==TSC_VALUE_TAG_TRUE || value_tag(options)==TSC_VALUE_TAG_FALSE)
+            ? tsc_value_is_truthy(options) : !tsc_value_is_nullish(options)&&tsc_value_eq(tsc_value_get_prop(options,tsc_str_from_lit("capture",7)),tsc_value_bool(true));
+        tsc_event_target_remove(target,name,native_target_listener,callback,capture);
+    } else {
+        native_event_callback_t* state=TSC_GC_MALLOC(sizeof(*state));
+        state->callback=callback; state->callback_gc_root=(void*)callback_root;
+        tsc_event_target_add(target,name,native_target_listener,state,callback,once,capture,passive);
+    }
+    (void)callback_root; (void)options_root; (void)signal_root;
     return tsc_value_undefined();
 }
 

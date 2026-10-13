@@ -1003,6 +1003,8 @@ typedef struct {
     void* env;
 } tsc_abort_callback_t;
 
+typedef struct { tsc_value_t value; void* root; } tsc_abort_listener_t;
+
 typedef struct {
     tsc_object_t* signal;
     tsc_object_t* controller;
@@ -1019,7 +1021,7 @@ typedef struct {
     double* immediate_ids;
     size_t immediate_len;
     size_t immediate_cap;
-    tsc_value_t* listeners;
+    tsc_abort_listener_t* listeners;
     size_t listener_len;
     size_t listener_cap;
 } tsc_abort_controller_state_t;
@@ -1044,9 +1046,12 @@ tsc_value_t tsc_abort_error_value(void) {
 }
 
 static tsc_value_t abort_controller_abort(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)this_arg;
-    tsc_abort_controller_state_t* state = (tsc_abort_controller_state_t*)env;
-    if (!state || state->aborted) return tsc_value_undefined();
+    (void)env;
+    tsc_object_t* owner=value_is_object_value(this_arg)?value_ptr(this_arg):NULL;
+    if (!owner || !owner->is_abort_controller || owner->is_proxy || !owner->class_ptr)
+        tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("incompatible AbortController receiver"));
+    tsc_abort_controller_state_t* state=owner->class_ptr;
+    if (state->aborted) return tsc_value_undefined();
     state->aborted = true;
     tsc_value_t reason = args && args->len > 0
         ? TSC_ARR(tsc_value_t, args, 0)
@@ -1061,9 +1066,9 @@ static tsc_value_t abort_controller_abort(void* env, tsc_value_t this_arg, tsc_a
     tsc_value_t event_value = tsc_value_object(event);
     tsc_array_push_raw(event_args, &event_value);
     for (size_t i = 0; i < state->listener_len; i++) {
-        if (tsc_value_is_callable(state->listeners[i])) {
+        if (tsc_value_is_callable(state->listeners[i].value)) {
             (void)tsc_value_apply_function(
-                state->listeners[i],
+                state->listeners[i].value,
                 tsc_value_object(state->signal),
                 tsc_value_array(event_args)
             );
@@ -1080,6 +1085,7 @@ static tsc_value_t abort_controller_abort(void* env, tsc_value_t this_arg, tsc_a
             tsc_value_array(event_args)
         );
     }
+    if (state->listener_len) memset(state->listeners,0,state->listener_len*sizeof(*state->listeners));
     state->listener_len = 0;
     for (size_t i = 0; i < state->callback_len; i++) {
         if (state->callbacks[i].fn) {
@@ -1121,10 +1127,10 @@ static tsc_value_t abort_signal_add_event_listener(void* env, tsc_value_t this_a
     }
     if (state->listener_len == state->listener_cap) {
         size_t next = state->listener_cap ? state->listener_cap * 2 : 4;
-        state->listeners = (tsc_value_t*)TSC_GC_REALLOC(state->listeners, next * sizeof(tsc_value_t));
+        state->listeners = (tsc_abort_listener_t*)TSC_GC_REALLOC(state->listeners, next * sizeof(*state->listeners));
         state->listener_cap = next;
     }
-    state->listeners[state->listener_len++] = listener;
+    state->listeners[state->listener_len++] = (tsc_abort_listener_t){listener,tsc_value_gc_root(listener)};
     return tsc_value_undefined();
 }
 
@@ -1137,13 +1143,14 @@ static tsc_value_t abort_signal_remove_event_listener(void* env, tsc_value_t thi
         return tsc_value_undefined();
     }
     for (size_t i = 0; i < state->listener_len; i++) {
-        if (tsc_value_object_is(state->listeners[i], listener)) {
+        if (tsc_value_object_is(state->listeners[i].value, listener)) {
             memmove(
                 state->listeners + i,
                 state->listeners + i + 1,
-                (state->listener_len - i - 1) * sizeof(tsc_value_t)
+                (state->listener_len - i - 1) * sizeof(*state->listeners)
             );
             state->listener_len--;
+            state->listeners[state->listener_len]=(tsc_abort_listener_t){0};
             break;
         }
     }
@@ -1219,7 +1226,8 @@ tsc_value_t tsc_abort_controller_new(void) {
         )
     );
 
-    tsc_object_t* controller = tsc_object_new();
+    tsc_object_t* controller = tsc_object_new_class(state);
+    controller->is_abort_controller=true;
     tsc_object_set(controller, tsc_str_from_lit("signal", 6), tsc_value_object(state->signal));
     tsc_object_set(
         controller,
@@ -1233,6 +1241,35 @@ tsc_value_t tsc_abort_controller_new(void) {
     );
     state->controller = controller;
     return tsc_value_object(controller);
+}
+
+typedef struct { tsc_value_t constructor, prototype; void* constructor_root; void* prototype_root; } tsc_abort_constructor_t;
+static const char abort_constructor_state_key;
+static tsc_value_t abort_constructor_call(void* env,tsc_value_t receiver,tsc_array_t* args) {
+    (void)env;(void)receiver;(void)args;
+    tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("AbortController requires new"));
+}
+static tsc_value_t abort_constructor_construct(void* env,tsc_value_t receiver,tsc_array_t* args) {
+    (void)receiver;(void)args;tsc_abort_constructor_t* state=env;
+    tsc_value_t prototype=tsc_value_get_prop(tsc_value_current_new_target(),tsc_str_from_lit("prototype",9));
+    if(!tsc_value_is_object(prototype))prototype=state->prototype;
+    void* volatile prototype_root=tsc_value_gc_root(prototype);
+    tsc_value_t value=tsc_abort_controller_new();
+    (void)tsc_value_set_prototype_of(value,prototype);(void)prototype_root;return value;
+}
+tsc_value_t tsc_abort_controller_constructor_value(void) {
+    tsc_runtime_lock();
+    tsc_abort_constructor_t* state=tsc_realm_state_get(&abort_constructor_state_key);
+    if(!state) {
+        state=TSC_GC_MALLOC(sizeof(*state));memset(state,0,sizeof(*state));tsc_realm_state_set(&abort_constructor_state_key,state);
+        state->prototype=tsc_value_object(tsc_object_new());state->prototype_root=tsc_value_gc_root(state->prototype);
+        state->constructor=tsc_value_function_named_kind(abort_constructor_call,abort_constructor_construct,state,0,tsc_str_from_lit("AbortController",15),TSC_FUNCTION_IDENTITY_BUILTIN);
+        state->constructor_root=tsc_value_gc_root(state->constructor);
+        ((tsc_function_identity_t*)value_ptr(state->constructor))->construct_allocates_receiver=false;
+        (void)tsc_value_define_property_desc(state->constructor,tsc_str_from_lit("prototype",9),state->prototype,true,false,true,false,true,false,true);
+        (void)tsc_value_define_property_desc(state->prototype,tsc_str_from_lit("constructor",11),state->constructor,true,true,true,false,true,true,true);
+    }
+    tsc_runtime_unlock();return state->constructor;
 }
 
 bool tsc_abort_signal_is_aborted(tsc_value_t signal) {

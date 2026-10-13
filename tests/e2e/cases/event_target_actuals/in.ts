@@ -1,0 +1,12 @@
+const eventTargetActuals = new EventTarget();
+let eventTargetSeen = 0;
+const eventTargetListener = () => eventTargetSeen++;
+let eventCapture = false;
+eventTargetActuals.addEventListener('value', eventTargetListener, { capture: eventCapture });
+eventCapture = true;
+eventTargetActuals.addEventListener('value', eventTargetListener, { capture: eventCapture });
+eventTargetActuals.dispatchEvent(new Event('value'));
+eventTargetActuals.removeEventListener('value', eventTargetListener, true);
+eventTargetActuals.dispatchEvent(new Event('value'));
+new EventTarget().addEventListener('inline', () => {}, { capture: undefined });
+console.log('capture:', eventTargetSeen);

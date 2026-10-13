@@ -1489,6 +1489,7 @@
       "kind": "implementation",
       "id": "src/emit/index.ts#emitDynamicMethod",
       "targets": [
+        "sec-evaluatecall#ordinary-native-target-actuals-and-registration-owners",
         "sec-reflect-object#realm-global-ordinary-object-and-noncallable-surface",
         "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
       ]
@@ -4034,6 +4035,98 @@
       "targets": [
         "sec-strict-mode-code#canonical-source-goal-and-strict-context",
         "sec-performeval#canonical-source-goal-and-strict-context"
+      ]
+    }
+  ,
+    {
+      "kind": "property",
+      "id": "tests/property/event-target-actuals.property.test.ts",
+      "targets": [
+        "sec-evaluatecall#ordinary-native-target-actuals-and-registration-owners"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "event_target_actuals_depth",
+      "targets": [
+        "sec-evaluatecall#ordinary-native-target-actuals-and-registration-owners"
+      ],
+      "stressReview": {
+        "dimension": "retained EventTarget callback and payload registration graph depth",
+        "parameter": "depth",
+        "representativeHighDepth": 4096,
+        "rationale": "One shared generated owner graph retains actual callbacks and payload identities through the canonical registration collection and removes once records independently of listener cardinality or fixture shape.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "event_target_actuals",
+      "targets": [
+        "sec-evaluatecall#ordinary-native-target-actuals-and-registration-owners"
+      ]
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#EventTarget",
+      "targets": [
+        "sec-evaluatecall#ordinary-native-target-actuals-and-registration-owners"
+      ]
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#AddEventListenerOptions",
+      "targets": [
+        "sec-evaluatecall#ordinary-native-target-actuals-and-registration-owners"
+      ]
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#AbortControllerConstructor",
+      "targets": [
+        "sec-evaluatecall#ordinary-native-target-actuals-and-registration-owners"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitEventTargetMethod",
+      "targets": [
+        "sec-evaluatecall#ordinary-native-target-actuals-and-registration-owners"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#native_target_operation",
+      "targets": [
+        "sec-evaluatecall#ordinary-native-target-actuals-and-registration-owners"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#native_target_options",
+      "targets": [
+        "sec-evaluatecall#ordinary-native-target-actuals-and-registration-owners"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_node.c#tsc_event_target_add",
+      "targets": [
+        "sec-evaluatecall#ordinary-native-target-actuals-and-registration-owners"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_node.c#tsc_event_target_dispatch",
+      "targets": [
+        "sec-evaluatecall#ordinary-native-target-actuals-and-registration-owners"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_core.c#tsc_abort_controller_constructor_value",
+      "targets": [
+        "sec-evaluatecall#ordinary-native-target-actuals-and-registration-owners"
       ]
     }
   ]

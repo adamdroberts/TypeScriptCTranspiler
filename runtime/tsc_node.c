@@ -7390,6 +7390,8 @@ tsc_event_t* tsc_event_new(tsc_str_t* type, bool cancelable) {
     event->current_target = NULL;
     event->default_prevented = false;
     event->cancelable = cancelable;
+    event->in_passive_listener = false;
+    event->dispatching = false;
     return event;
 }
 
@@ -7414,84 +7416,69 @@ bool tsc_event_cancelable(const tsc_event_t* event) {
 }
 
 void tsc_event_prevent_default(tsc_event_t* event) {
-    if (event && event->cancelable) event->default_prevented = true;
+    if (event && event->cancelable && !event->in_passive_listener) event->default_prevented = true;
 }
 
 tsc_event_target_t* tsc_event_target_new(void) {
-    tsc_event_target_t* target = (tsc_event_target_t*)TSC_GC_MALLOC(sizeof(tsc_event_target_t));
-    target->object_owner = (tsc_native_object_owner_t){0};
-    target->len = 0;
-    target->cap = 0;
-    target->listeners = NULL;
+    tsc_event_target_t* target = TSC_GC_MALLOC(sizeof(*target));
+    memset(target, 0, sizeof(*target));
     return target;
 }
 
-void event_target_reserve(tsc_event_target_t* target, size_t cap) {
-    if (!target || target->cap >= cap) return;
-    size_t next = target->cap ? target->cap * 2 : 4;
-    if (next < cap) next = cap;
-    tsc_dom_event_listener_t* items = (tsc_dom_event_listener_t*)TSC_GC_MALLOC(sizeof(tsc_dom_event_listener_t) * next);
-    if (target->listeners && target->len > 0) {
-        memcpy(items, target->listeners, sizeof(tsc_dom_event_listener_t) * target->len);
-    }
-    target->listeners = items;
-    target->cap = next;
-}
-
-void tsc_event_target_add(tsc_event_target_t* target, tsc_str_t* type, tsc_event_target_listener_fn_t fn, void* env, void* identity, bool once) {
-    if (!target || !type || !fn) return;
-    void* actual_identity = identity ? identity : env;
-    for (size_t i = 0; i < target->len; i++) {
-        if (tsc_str_eq(target->listeners[i].type, type) && target->listeners[i].fn == fn && target->listeners[i].identity == actual_identity) {
-            return;
-        }
-    }
-    event_target_reserve(target, target->len + 1);
-    target->listeners[target->len++] = (tsc_dom_event_listener_t){ type, fn, env, actual_identity, once };
-}
-
-void tsc_event_target_remove(tsc_event_target_t* target, const tsc_str_t* type, tsc_event_target_listener_fn_t fn, void* identity) {
-    if (!target || !type || !fn) return;
-    for (size_t i = 0; i < target->len; i++) {
-        if (!tsc_str_eq(target->listeners[i].type, type)) continue;
-        if (target->listeners[i].fn != fn || target->listeners[i].identity != identity) continue;
-        for (size_t j = i + 1; j < target->len; j++) target->listeners[j - 1] = target->listeners[j];
-        target->len--;
+static void event_target_remove_record(tsc_event_target_t* target, tsc_dom_event_listener_t* record) {
+    tsc_dom_event_listener_t* previous = NULL;
+    for (tsc_dom_event_listener_t* item = target->listeners; item; item = item->next) {
+        if (item != record) { previous = item; continue; }
+        item->removed = true;
+        if (previous) previous->next = item->next; else target->listeners = item->next;
+        if (target->tail == item) target->tail = previous;
         return;
     }
 }
 
+void tsc_event_target_add(tsc_event_target_t* target, tsc_str_t* type, tsc_event_target_listener_fn_t fn, void* env, tsc_value_t identity, bool once, bool capture, bool passive) {
+    if (!target || !type || !fn) return;
+    for (tsc_dom_event_listener_t* item = target->listeners; item; item = item->next)
+        if (tsc_str_eq(item->type, type) && item->fn == fn && tsc_value_eq(item->identity, identity) && item->capture == capture) return;
+    tsc_dom_event_listener_t* item = TSC_GC_MALLOC(sizeof(*item));
+    *item = (tsc_dom_event_listener_t){ .type=type, .fn=fn, .env=env, .identity=identity, .identity_root=tsc_value_gc_root(identity),
+        .once=once, .capture=capture, .passive=passive };
+    if (target->tail) target->tail->next = item; else target->listeners = item;
+    target->tail = item;
+}
+
+void tsc_event_target_remove(tsc_event_target_t* target, const tsc_str_t* type, tsc_event_target_listener_fn_t fn, tsc_value_t identity, bool capture) {
+    if (!target || !type || !fn) return;
+    for (tsc_dom_event_listener_t* item = target->listeners; item; item = item->next)
+        if (tsc_str_eq(item->type, type) && item->fn == fn && tsc_value_eq(item->identity, identity) && item->capture == capture) {
+            event_target_remove_record(target, item); return;
+        }
+}
+
 bool tsc_event_target_dispatch(tsc_event_target_t* target, tsc_event_t* event) {
     if (!target || !event) return true;
-    if (!event->target) event->target = target;
+    if (event->dispatching) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Event is already being dispatched"));
+    event->target = target;
     event->current_target = target;
-    size_t snapshot_len = target->len;
-    tsc_dom_event_listener_t* snapshot = NULL;
-    if (snapshot_len > 0) {
-        snapshot = (tsc_dom_event_listener_t*)TSC_GC_MALLOC(sizeof(tsc_dom_event_listener_t) * snapshot_len);
-        memcpy(snapshot, target->listeners, sizeof(tsc_dom_event_listener_t) * snapshot_len);
+    event->dispatching = true;
+    TSC_TRY_FRAME(frame); tsc_try_push(&frame);
+    if (setjmp(frame.jb)) {
+        tsc_try_pop();
+        event->current_target = NULL; event->dispatching = false; event->in_passive_listener = false;
+        tsc_rethrow();
     }
-    for (size_t i = 0; i < snapshot_len; i++) {
-        if (!tsc_str_eq(snapshot[i].type, event->type)) continue;
-        bool still_registered = false;
-        for (size_t j = 0; j < target->len; j++) {
-            if (
-                tsc_str_eq(target->listeners[j].type, snapshot[i].type) &&
-                target->listeners[j].fn == snapshot[i].fn &&
-                target->listeners[j].identity == snapshot[i].identity
-            ) {
-                still_registered = true;
-                break;
-            }
+    for (tsc_dom_event_listener_t* item = target->listeners; item;) {
+        tsc_dom_event_listener_t* next = item->next;
+        if (!item->removed && tsc_str_eq(item->type, event->type)) {
+            if (item->once) event_target_remove_record(target, item);
+            event->in_passive_listener = item->passive;
+            item->fn(item->env, target, event);
+            event->in_passive_listener = false;
         }
-        if (still_registered) {
-            if (snapshot[i].once) {
-                tsc_event_target_remove(target, snapshot[i].type, snapshot[i].fn, snapshot[i].identity);
-            }
-            snapshot[i].fn(snapshot[i].env, target, event);
-        }
+        item = next;
     }
-    event->current_target = NULL;
+    tsc_try_pop();
+    event->current_target = NULL; event->dispatching = false;
     return !(event->cancelable && event->default_prevented);
 }
 

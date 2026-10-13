@@ -683,7 +683,6 @@ class Emitter {
     private decoratorAddInitializerAdapter: string | null = null;
     private decoratorApplyFieldInitializersHelper = false;
     private eventListenerAdapters = new Map<string, string>();
-    private eventTargetListenerAdapters = new Map<string, string>();
     private eventListenerIdentities = new Map<string, string>();
     private capturedCellsCache = new WeakMap<ts.Node, Map<ts.Symbol, CaptureCell>>();
     private parameterScopeReferences = new WeakMap<ts.Identifier, { symbol: ts.Symbol | undefined } | null>();
@@ -38620,95 +38619,11 @@ class Emitter {
         recv: EmitResult,
         method: string,
     ): EmitResult {
-        const args = call.arguments;
-        switch (method) {
-            case "addEventListener": {
-                if (args.length < 2) unsupported(call, "EventTarget.addEventListener expects type, listener, and optional options");
-                const options = this.eventTargetListenerOptions(args[2], "EventTarget.addEventListener");
-                const type = this.emitRequiredStringArgument(args[0]!);
-                const listener = this.emitEventListenerExpression(args[1]!);
-                const adapter = this.ensureEventTargetListenerAdapter(args[1]!, listener.ty);
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value: type, target: T_STRING, node: args[0]! },
-                    { value: listener, target: listener.ty, node: args[1]! },
-                ];
-                if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
-                    specs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 3));
-                return this.emitSequencedExpr(T_VOID, specs, ([target, eventType, fn]) =>
-                    `tsc_event_target_add(${target}, ${eventType}, ${adapter}, (void*)${fn}, ${this.eventListenerIdentity(args[1]!, fn)}, ${options.once ? "true" : "false"})`,
-                );
-            }
-            case "removeEventListener": {
-                if (args.length < 2) unsupported(call, "EventTarget.removeEventListener expects type, listener, and optional options");
-                this.eventTargetListenerOptions(args[2], "EventTarget.removeEventListener");
-                const type = this.emitRequiredStringArgument(args[0]!);
-                const listener = this.emitEventListenerExpression(args[1]!);
-                const adapter = this.ensureEventTargetListenerAdapter(args[1]!, listener.ty);
-                const specs: SequencedCallArg[] = [
-                    { value: recv },
-                    { value: type, target: T_STRING, node: args[0]! },
-                    { value: listener, target: listener.ty, node: args[1]! },
-                ];
-                if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
-                    specs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
-                }
-                specs.push(...this.ignoredArgumentSpecs(args, 3));
-                return this.emitSequencedExpr(T_VOID, specs, ([target, eventType, fn]) =>
-                    `tsc_event_target_remove(${target}, ${eventType}, ${adapter}, ${this.eventListenerIdentity(args[1]!, fn)})`,
-                );
-            }
-            case "dispatchEvent": {
-                if (args.length < 1) unsupported(call, "EventTarget.dispatchEvent expects event");
-                const event = this.emitExpr(args[0]!);
-                return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: recv },
-                    { value: event, target: T_EVENT, node: args[0]! },
-                    ...this.ignoredArgumentSpecs(args, 1),
-                ], ([target, eventC]) => `tsc_event_target_dispatch(${target}, ${eventC})`);
-            }
-            case "toLocaleString":
-            case "toString":
-            case "valueOf":
-                return this.emitBuiltinObjectPrototypeMethod(call, recv, method, "EventTarget");
-        }
+        if (method === "addEventListener" || method === "removeEventListener" || method === "dispatchEvent")
+            return this.emitDynamicMethod(call, {c:this.boxObjectIdentity(recv.c,recv.ty,call.expression),ty:T_VALUE}, method);
+        if (method === "toLocaleString" || method === "toString" || method === "valueOf")
+            return this.emitBuiltinObjectPrototypeMethod(call,recv,method,"EventTarget");
         unsupported(call, `EventTarget method .${method}`);
-    }
-
-    private eventTargetListenerOptions(options: ts.Expression | undefined, label: string): { once: boolean } {
-        const out = { once: false };
-        if (!options || this.isUndefinedLikeExpression(options)) return out;
-        options = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedLikeExpression(options)) return out;
-        if (this.sideEffectFreeBooleanLiteralValue(options, new Set()) !== null) {
-            return out;
-        }
-        if (!ts.isObjectLiteralExpression(options)) {
-            unsupported(options, `${label} options must be a boolean literal or object literal in this subset`);
-        }
-        for (const prop of options.properties) {
-            if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, `${label} options only support property assignments`);
-            }
-            const key = this.staticPropertyName(prop.name);
-            if (key !== "once" && key !== "capture" && key !== "passive") {
-                unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
-            }
-            const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
-            if (this.isUndefinedExpression(valueNode)) {
-                continue;
-            }
-            const value = this.sideEffectFreeBooleanLiteralValue(valueNode, new Set());
-            if (value === null) {
-                unsupported(prop.initializer, `${label}.${key} must be a boolean literal in this subset`);
-            }
-            if (key === "once") {
-                out.once = value;
-            }
-        }
-        return out;
     }
 
     private emitEventMethod(
@@ -40726,32 +40641,6 @@ class Emitter {
         const callback = this.coerce({ c: "fn", ty: prepared }, T_VALUE, expr);
         const receiver = this.coerce({ c: "emitter", ty: T_EVENT_EMITTER }, T_VALUE, expr);
         buf.line(`(void)tsc_value_apply_function(${callback}, ${receiver}, tsc_value_array(args));`);
-        buf.close();
-        buf.line();
-        this.closureDefs.write(buf.toString());
-        return name;
-    }
-
-    private ensureEventTargetListenerAdapter(expr: ts.Expression, type: CType): string {
-        const prepared = this.prepareType(type);
-        if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
-            unsupported(expr, "EventTarget listener must be a function");
-        }
-        if (prepared.thisParam && prepared.thisParam.kind !== "eventtarget" && prepared.thisParam.kind !== "value") {
-            unsupported(expr, "EventTarget listener this parameter must be EventTarget");
-        }
-        const key = `eventtarget:${this.typeKey(prepared)}`;
-        const existing = this.eventTargetListenerAdapters.get(key);
-        if (existing) return existing;
-        const name = `tsc_event_target_listener_${this.eventTargetListenerAdapters.size}`;
-        this.eventTargetListenerAdapters.set(key, name);
-        this.protos.line(`void ${name}(void* env, tsc_event_target_t* target, tsc_event_t* event);`);
-        const buf = new CBuf();
-        buf.open(`void ${name}(void* env, tsc_event_target_t* target, tsc_event_t* event)`);
-        buf.line(`${prepared.c} fn = (${prepared.c})env;`);
-        const callback = this.coerce({ c: "fn", ty: prepared }, T_VALUE, expr);
-        const receiver = this.coerce({ c: "target", ty: T_EVENT_TARGET }, T_VALUE, expr);
-        buf.line(`(void)${this.emitCallbackApplication(callback, receiver, [{ c: "event", ty: T_EVENT }], expr).c};`);
         buf.close();
         buf.line();
         this.closureDefs.write(buf.toString());
@@ -45334,13 +45223,6 @@ class Emitter {
                 ...optionSpecs,
                 ...this.ignoredArgumentSpecs(args, 2),
             ], ([eventType]) => `tsc_event_new(${eventType}, ${cancelable})`);
-        }
-        if (cls === "AbortController") {
-            return this.emitSequencedExpr(
-                T_VALUE,
-                this.ignoredArgumentSpecs(n.arguments ?? [], 0),
-                () => "tsc_abort_controller_new()",
-            );
         }
         const classDecl = targetClassDecl ?? this.findClassDecl(cls);
         const classLike = classDecl ?? targetClassExpression;

@@ -1,1 +1,1 @@
-{"description":"EventTarget add/remove listener options with once, capture, and passive literals"}
+{"description":"EventTarget actual add/remove options retain capture-specific registration identity and once reentrancy"}

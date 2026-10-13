@@ -974,6 +974,7 @@ bool tsc_global_reference_delete(tsc_str_t* key);
 tsc_str_t* tsc_global_reference_typeof(tsc_str_t* key);
 tsc_value_t tsc_value_sloppy_this(tsc_value_t value);
 tsc_value_t tsc_abort_controller_new(void);
+tsc_value_t tsc_abort_controller_constructor_value(void);
 tsc_value_t tsc_abort_error_value(void);
 bool tsc_abort_signal_is_aborted(tsc_value_t signal);
 bool tsc_abort_signal_is_native(tsc_value_t signal);
@@ -1412,8 +1413,8 @@ bool tsc_event_default_prevented(const tsc_event_t* event);
 bool tsc_event_cancelable(const tsc_event_t* event);
 void tsc_event_prevent_default(tsc_event_t* event);
 tsc_event_target_t* tsc_event_target_new(void);
-void tsc_event_target_add(tsc_event_target_t* target, tsc_str_t* type, tsc_event_target_listener_fn_t fn, void* env, void* identity, bool once);
-void tsc_event_target_remove(tsc_event_target_t* target, const tsc_str_t* type, tsc_event_target_listener_fn_t fn, void* identity);
+void tsc_event_target_add(tsc_event_target_t* target, tsc_str_t* type, tsc_event_target_listener_fn_t fn, void* env, tsc_value_t identity, bool once, bool capture, bool passive);
+void tsc_event_target_remove(tsc_event_target_t* target, const tsc_str_t* type, tsc_event_target_listener_fn_t fn, tsc_value_t identity, bool capture);
 bool tsc_event_target_dispatch(tsc_event_target_t* target, tsc_event_t* event);
 
 struct tsc_dns_lookup_result {
