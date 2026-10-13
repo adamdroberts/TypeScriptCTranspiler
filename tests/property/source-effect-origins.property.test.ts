@@ -7,6 +7,20 @@ import {finiteEvalScriptSourceGraph} from '../test262/native-host';
 import {parseHostObservation} from '../test262/protocol';
 
 const admitted='var admitted=1;';
+test('generated Script effects preserve caller and actual argument ordering',()=>{
+ for(const prior of [false,true]){
+  const read='$262.evalScript(owner.code);',effect='$262.evalScript("opaque(globalThis);");';
+  const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:`const owner={code:${JSON.stringify(admitted)}};`+(prior?effect+read:read+effect)}]);
+  if(prior)expect(graph.error).toContain('evalScript source is not a finite static string expression');else expect(graph.error).toBeNull();
+ }
+ for(const prefix of ['', 'mutate(owner),']){
+  const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:`function run(owner,text){opaque(owner);$262.evalScript(text);}const owner={code:${JSON.stringify(admitted)}};run(owner,(${prefix}owner.code));`}]);
+  if(prefix)expect(graph.error).toContain('evalScript source is not a finite static string expression');else expect(graph.error).toBeNull();
+ }
+ const later=finiteEvalScriptSourceGraph([{path:'main.js',source:`function run(owner,text){opaque(owner);$262.evalScript(text);}const owner={code:${JSON.stringify(admitted)}};run(owner,owner.code);$262.evalScript(owner.code);`}]);
+ expect(later.error).toContain('evalScript source is not a finite static string expression');
+});
+
 test('effect origins preserve earlier captures and reject reads after opaque activations',()=>{
  for(const dispatch of ['opaque(o);','forward(o);','Reflect.apply(forward,undefined,[o]);','cycle(o);'])for(const earlier of [false,true]){
   const definitions='function forward(o){opaque(o);}function cycle(o){if(flag)cycle(o);else opaque(o);}';
@@ -33,7 +47,7 @@ test('activation origins close over the call graph and declared Script order ind
   for(const noGc of [false,true])for(const typed of [false,true]){
    const directory=join(root,noGc+'-'+typed);await mkdir(directory);
    const depth=typed&&!noGc?64:1;
-   const functions=Array.from({length:depth},(_,index)=>`function f${index}(){return ${index+1<depth?'f'+(index+1)+'()':'Math.random()'};}`).join('\n');
+   const functions=Array.from({length:depth},(_,index)=>`function f${index}(){return ${index+1<depth?'f'+(index+1)+'()':'(0,eval)("Math.random();")'};}`).join('\n');
    const sources=[`globalThis.setting={body:'return "saved";'};`,functions+'\nconst body=globalThis.setting.body;f0();console.log(Function(body)());','Math.random();'];
    const reference=join(directory,'reference.js');await writeFile(reference,sources.join('\n'));
    const node=Bun.spawnSync(['node',reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(node.stdout.toString()).toBe('saved\n');

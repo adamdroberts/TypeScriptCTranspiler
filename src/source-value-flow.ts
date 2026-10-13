@@ -222,6 +222,8 @@ class SourceValueFlow {
     private readonly abrupt: Atom = {tag:"abrupt"};
     private readonly pendingSource: Atom = {tag:"pending-source"};
     private readonly evaluations = new Map<string, Cell[]>();
+    private readonly evaluationOrigins = new Map<string, Cell[]>();
+    private readonly sourceOrigins = new Map<ts.SourceFile, Cell>();
     private readonly dynamicSourceTexts = new Map<FunctionNode, string>();
     private readonly callablePrototypes = new Map<DynamicFunctionKind, Cell>();
     private ordinaryObjectPrototype?: Cell;
@@ -277,6 +279,12 @@ class SourceValueFlow {
             }
             const file = entry.entry ? program.getSourceFile(path.resolve(entry.entry)) : undefined;
             if (!file) continue;
+            if(entry.kind!=="agent"){
+                let origins=this.sourceOrigins.get(file);
+                if(!origins){origins=this.newCell();this.sourceOrigins.set(file,origins);}
+                const callers=this.evaluationOrigins.get(entry.source)??[];
+                callers.push(origins);this.evaluationOrigins.set(entry.source,callers);
+            }
             const completion = this.newCell();
             const worklist: ts.Node[] = [...file.statements];
             while (worklist.length) {
@@ -504,6 +512,8 @@ class SourceValueFlow {
         if(context){
             const activation=this.enclosingActivation(context);
             if(activation)return activation.active;
+            const source=this.sourceOrigins.get(this.sourceFile(context));
+            if(source)return source;
             if(!this.dynamicContext(context)){
                 let cell=this.originCells.get(context);
                 if(!cell){
@@ -556,6 +566,7 @@ class SourceValueFlow {
         if (ts.isCallExpression(effect) || ts.isNewExpression(effect)) {
             for (let parent: ts.Node | undefined = context; parent; parent = parent.parent) {
                 if (parent === effect.expression) return false;
+                if (effect.arguments?.some(argument=>argument===parent)) return false;
                 if (parent === effect) break;
             }
         }
@@ -2189,6 +2200,8 @@ class SourceValueFlow {
                                         continue;
                                     }
                                     const generated = this.evaluations.get(String(text));
+                                    for(const origins of this.evaluationOrigins.get(String(text))??[])
+                                        this.copy(this.executionOrigins(node),origins);
                                     if (!generated) this.publish(result!,this.pendingSource);
                                     if (this.invalidEvaluations.has(String(text))) {
                                         const handler = this.exceptionHandlers.get(node);
