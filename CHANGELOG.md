@@ -1,3 +1,5 @@
+Unified native Script and Module strictness with canonical source-unit goals, removing reliance on TypeScript binding markers and host observation options. Ordered Script initialization owners now supply global declaration classification, repairing the reproduced isolated-Script eval dispatch mismatch.
+
 Preserved pure JSON source facts for unbounded primitive kind domains. Unknown scalar text no longer invents mutation effects, repairing finite eval-spread admission through ordinary assertion code while object hooks and unknown source rejection retain their existing paths.
 
 Corrected the typed DCE fixture to materialize Iterator results before array reads and convert ordinary own keys before String comparison. The project typed checker and independent Node consumer checks verify the input repair; native regression execution remains in progress.

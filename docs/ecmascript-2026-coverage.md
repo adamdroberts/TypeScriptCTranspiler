@@ -631,7 +631,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-parsetext` — Static Semantics: ParseText ( _sourceText_: a String or a sequence of Unicode code points, _goalSymbol_: a nonterminal in one of the ECMAScript grammars, ): a Parse Node or a non-empty List of SyntaxError objects: exact disposition and partitions missing.
   - [ ] `sec-types-of-source-code` — Types of Source Code: exact disposition and partitions missing.
   - [ ] `sec-directive-prologues-and-the-use-strict-directive` — Directive Prologues and the Use Strict Directive: exact disposition and partitions missing.
-  - [ ] `sec-strict-mode-code` — Strict Mode Code: exact disposition and partitions missing.
+  - [ ] `sec-strict-mode-code` — Strict Mode Code
+    - [ ] `canonical-source-goal-and-strict-context` (syntax, unbounded): Canonical source goals preserve strict contexts and Script initialization ownership.
   - [ ] `sec-isstrict` — Static Semantics: IsStrict ( _node_: a Parse Node, ): a Boolean: exact disposition and partitions missing.
   - [ ] `sec-non-ecmascript-functions` — Non-ECMAScript Functions: exact disposition and partitions missing.
 - [ ] **ECMAScript Language: Lexical Grammar** (`sec-ecmascript-language-lexical-grammar`) — tracking: `in-progress`, scope: `required`
@@ -1094,7 +1095,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-undefined` — undefined: exact disposition and partitions missing.
   - [ ] `sec-function-properties-of-the-global-object` — Function Properties of the Global Object: exact disposition and partitions missing.
   - [ ] `sec-eval-x` — eval ( _x_ ): exact disposition and partitions missing.
-  - [ ] `sec-performeval` — PerformEval ( _x_: an ECMAScript language value, _strictCaller_: a Boolean, _direct_: a Boolean, ): either a normal completion containing an ECMAScript language value or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-performeval` — PerformEval ( _x_: an ECMAScript language value, _strictCaller_: a Boolean, _direct_: a Boolean, ): either a normal completion containing an ECMAScript language value or a throw completion
+    - [ ] `canonical-source-goal-and-strict-context` (algorithm, unbounded): Canonical source goals preserve strict contexts and Script initialization ownership.
   - [ ] `sec-hostensurecancompilestrings` — HostEnsureCanCompileStrings ( _calleeRealm_: a Realm Record, _parameterStrings_: a List of Strings, _bodyString_: a String, _direct_: a Boolean, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-evaldeclarationinstantiation` — EvalDeclarationInstantiation ( _body_: a |ScriptBody| Parse Node, _varEnv_: an Environment Record, _lexEnv_: a Declarative Environment Record, _privateEnv_: a PrivateEnvironment Record or null, _strict_: a Boolean, ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-isfinite-number` — isFinite ( _number_ ): exact disposition and partitions missing.

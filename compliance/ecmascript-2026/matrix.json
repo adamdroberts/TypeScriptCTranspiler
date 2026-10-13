@@ -4722,6 +4722,107 @@
       ],
       "rationale": "One owner brand and one error-kind collection determine the result independently of source shape and retained-owner cardinality. Scoped evidence does not promote complete error or host conformance."
     }
+  ,
+    {
+      "clause": "sec-strict-mode-code",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "canonical-source-goal-and-strict-context",
+          "title": "Canonical source goals preserve strict contexts and Script initialization ownership",
+          "surface": "syntax",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-strict-mode-code"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/parse-goal-emission.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "parse_goal_source_depth"
+            ],
+            "e2e": [
+              "parse_goal_source"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "src/emit/index.ts#Emitter",
+              "src/emit/index.ts#isTest262ScriptSourceFile",
+              "src/emit/index.ts#nodeIsInStrictMode",
+              "src/ecmascript-source.ts#ecmaParseGoal"
+            ]
+          },
+          "rationale": "Native emission now classifies Script and Module strictness through the canonical source-unit parse goal instead of TypeScript external-module binding markers. The ordered initialization module collection supplies Script root ownership, excluding CommonJS wrappers, and the shared Script classifier uses the same goal for global declarations. Generated function and eval contexts keep their existing contextual modes. The host-option-dependent predecessor and strictness marker check are removed. This repairs the independently reproduced ordinary isolated-Script direct-eval dispatch mismatch: admitted sloppy source was previously invoked as strict. parse-goal-emission.property compares Script, directive-strict Script and Module roots, function/class/raw directive contexts, global var/lexical separation, retained local eval and one shared deep forwarding graph with independent Node over typed/erased native inputs in both memory modes. parse_goal_source checks the typed CLI, and its generated depth input is shared with the property. Existing source-unit, Script binding and CommonJS owner properties guard neighboring graphs. Existing CType, declarations and native Environment/eval kernels suffice. Complete Script/Module/Realm/agent behavior, host eligibility and eligible exhaustive ECMAScript 2026 evidence remain open."
+        }
+      ],
+      "rationale": "One canonical source-unit goal and ordered initialization collection supplies native strictness and Script/eval ownership independently of source-record or function graph cardinality. Scoped evidence does not establish complete host or language conformance."
+    },
+    {
+      "clause": "sec-performeval",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "canonical-source-goal-and-strict-context",
+          "title": "Canonical source goals preserve strict contexts and Script initialization ownership",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-performeval"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/parse-goal-emission.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "parse_goal_source_depth"
+            ],
+            "e2e": [
+              "parse_goal_source"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "src/emit/index.ts#Emitter",
+              "src/emit/index.ts#isTest262ScriptSourceFile",
+              "src/emit/index.ts#nodeIsInStrictMode",
+              "src/ecmascript-source.ts#ecmaParseGoal"
+            ]
+          },
+          "rationale": "Native emission now classifies Script and Module strictness through the canonical source-unit parse goal instead of TypeScript external-module binding markers. The ordered initialization module collection supplies Script root ownership, excluding CommonJS wrappers, and the shared Script classifier uses the same goal for global declarations. Generated function and eval contexts keep their existing contextual modes. The host-option-dependent predecessor and strictness marker check are removed. This repairs the independently reproduced ordinary isolated-Script direct-eval dispatch mismatch: admitted sloppy source was previously invoked as strict. parse-goal-emission.property compares Script, directive-strict Script and Module roots, function/class/raw directive contexts, global var/lexical separation, retained local eval and one shared deep forwarding graph with independent Node over typed/erased native inputs in both memory modes. parse_goal_source checks the typed CLI, and its generated depth input is shared with the property. Existing source-unit, Script binding and CommonJS owner properties guard neighboring graphs. Existing CType, declarations and native Environment/eval kernels suffice. Complete Script/Module/Realm/agent behavior, host eligibility and eligible exhaustive ECMAScript 2026 evidence remain open."
+        }
+      ],
+      "rationale": "One canonical source-unit goal and ordered initialization collection supplies native strictness and Script/eval ownership independently of source-record or function graph cardinality. Scoped evidence does not establish complete host or language conformance."
+    }
   ],
   "groups": [
     {

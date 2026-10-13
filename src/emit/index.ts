@@ -741,7 +741,11 @@ class Emitter {
             .flatMap(source => source.entry ? [path.resolve(source.entry)] : []));
         this.test262ScriptEntryPaths = new Set(
             [
-                ...(options.test262Observation?.scriptEntries ?? []),
+                ...graph.initializationModuleIds.flatMap(id => {
+                    const source = graph.modules.get(id)!.sf;
+                    return ecmaParseGoal(source) === "script" && sourceUnitFormat(source) !== "commonjs"
+                        ? [source.fileName] : [];
+                }),
                 ...((options.sourceEval ?? options.test262Observation)?.agentEntries ?? []).flatMap(entry=>entry.entry?[entry.entry]:[]),
                 ...((options.sourceEval ?? options.test262Observation)?.evalScriptEntries ?? [])
                     .flatMap((entry) => entry.entry ? [entry.entry] : []),
@@ -21023,9 +21027,7 @@ class Emitter {
         if (this.functionSourcePaths.has(path.resolve(sf.fileName))) return true;
         const evalStrict = this.test262EvalEntryModes.get(path.resolve(sf.fileName));
         if (evalStrict !== undefined) return true;
-        return !!(this.options.sourceEval || this.options.test262Observation) &&
-            (this.test262ScriptEntryPaths.has(path.resolve(sf.fileName)) ||
-                (this.isJavaScriptSourceFile(sf) || !!this.options.sourceEval) && !ts.isExternalModule(sf));
+        return ecmaParseGoal(sf) === "script";
     }
 
     private isTest262EvalSourceFile(sf: ts.SourceFile): boolean {
@@ -22435,7 +22437,7 @@ class Emitter {
             }
             if (ts.isSourceFile(current)) {
                 return this.test262EvalEntryModes.get(path.resolve(current.fileName)) === true ||
-                    (ts.isExternalModule(current) && !this.isCommonJsSourceFile(current) && !this.isTest262ScriptSourceFile(current)) ||
+                    (ecmaParseGoal(current) === "module" && !this.isCommonJsSourceFile(current)) ||
                     ecmaDirectivePrologueHasUseStrict(current.statements);
             }
         }

@@ -51,6 +51,7 @@ export interface DynamicImportSourceDepthSpec {
     depth: number;
 }
 export interface FsReadActualListWidthSpec {generator:"fs-read-actual-list-width";width:number;}
+export interface ParseGoalSourceDepthSpec { generator:"parse-goal-source-depth"; depth:number; }
 export interface JSONScalarSourceDepthSpec { generator:"json-scalar-source-depth"; depth:number; }
 export interface ErrorBrandDepthSpec { generator:"error-brand-depth"; depth:number; }
 export interface MapInsertionDepthSpec { generator:"map-insertion-depth"; depth:number; }
@@ -223,6 +224,7 @@ export type GeneratedCaseSpec =
     | ModuleNamespaceExportWidthSpec
     | ModuleRequestWidthSpec
     | DynamicImportSourceDepthSpec
+    | ParseGoalSourceDepthSpec
     | JSONScalarSourceDepthSpec
     | ErrorBrandDepthSpec
     | MapInsertionDepthSpec
@@ -331,7 +333,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth" || spec.generator === "boxed-json-source-depth" || spec.generator === "dynamic-import-source-depth" || spec.generator === "return-projection-depth" || spec.generator === "util-format-source-depth" || spec.generator === "prototype-validation-depth" || spec.generator === "descriptor-projection-depth" || spec.generator === "map-insertion-depth" || spec.generator === "error-brand-depth" || spec.generator === "json-scalar-source-depth") {
+    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth" || spec.generator === "boxed-json-source-depth" || spec.generator === "dynamic-import-source-depth" || spec.generator === "return-projection-depth" || spec.generator === "util-format-source-depth" || spec.generator === "prototype-validation-depth" || spec.generator === "descriptor-projection-depth" || spec.generator === "map-insertion-depth" || spec.generator === "error-brand-depth" || spec.generator === "json-scalar-source-depth" || spec.generator === "parse-goal-source-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
             throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
@@ -1785,6 +1787,10 @@ console.log("raw JSON text width:", valid);
                 `const stressView=Buffer.alloc(4);let stressSeen=0;const stressOptions={get offset(){stressSeen++;return 0},get length(){stressSeen++;return 4},get position(){stressSeen++;return 0}};\n` +
                 `const stressBytes=stressRead(stressFD,stressView,stressOptions,...Array.from({length:${spec.width}},()=>++stressSeen));\n` +
                 `console.log('bytes:',stressBytes,'seen:',stressSeen,'text:',stressView.toString());stressClose(stressFD);stressRemove(stressPath);\n`;
+        case "parse-goal-source-depth":
+            return `// @ts-nocheck\nfunction parseGoalSource0(){return eval('(function(){return this===undefined})()');}\n` +
+                Array.from({length:spec.depth},(_,index)=>`function parseGoalSource${index+1}(){return parseGoalSource${index}();}`).join('\n') +
+                `\nconsole.log('parse-goal-source-depth:',parseGoalSource${spec.depth}());\n`;
         case "json-scalar-source-depth":
             return `// @ts-nocheck\nlet jsonScalarSourceValue=0;for(let index=0;index<7;index++)jsonScalarSourceValue++;\n` +
                 `const jsonScalarSourceState={source:'17;'},jsonScalarSourceOwner0={value:jsonScalarSourceValue};\n` +

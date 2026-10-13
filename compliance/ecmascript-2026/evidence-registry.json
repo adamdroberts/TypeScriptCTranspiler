@@ -3972,5 +3972,69 @@
         "sec-serializejsonproperty#closed-primitive-kind-source-serialization"
       ]
     }
+  ,
+    {
+      "kind": "property",
+      "id": "tests/property/parse-goal-emission.property.test.ts",
+      "targets": [
+        "sec-strict-mode-code#canonical-source-goal-and-strict-context",
+        "sec-performeval#canonical-source-goal-and-strict-context"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "parse_goal_source_depth",
+      "targets": [
+        "sec-strict-mode-code#canonical-source-goal-and-strict-context",
+        "sec-performeval#canonical-source-goal-and-strict-context"
+      ],
+      "stressReview": {
+        "dimension": "source callable forwarding graph depth retaining direct-eval strict context",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One shared generated forwarding graph retains the originating Script or Module strict context through canonical source and invocation worklists, independently of binding marker shape or callable count.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "parse_goal_source",
+      "targets": [
+        "sec-strict-mode-code#canonical-source-goal-and-strict-context",
+        "sec-performeval#canonical-source-goal-and-strict-context"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#Emitter",
+      "targets": [
+        "sec-strict-mode-code#canonical-source-goal-and-strict-context",
+        "sec-performeval#canonical-source-goal-and-strict-context"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#isTest262ScriptSourceFile",
+      "targets": [
+        "sec-strict-mode-code#canonical-source-goal-and-strict-context",
+        "sec-performeval#canonical-source-goal-and-strict-context"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#nodeIsInStrictMode",
+      "targets": [
+        "sec-strict-mode-code#canonical-source-goal-and-strict-context",
+        "sec-performeval#canonical-source-goal-and-strict-context"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/ecmascript-source.ts#ecmaParseGoal",
+      "targets": [
+        "sec-strict-mode-code#canonical-source-goal-and-strict-context",
+        "sec-performeval#canonical-source-goal-and-strict-context"
+      ]
+    }
   ]
 }
