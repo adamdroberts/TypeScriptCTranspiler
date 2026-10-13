@@ -4128,6 +4128,48 @@
       "targets": [
         "sec-evaluatecall#ordinary-native-target-actuals-and-registration-owners"
       ]
-    }
+    },
+{
+  "kind": "property",
+  "id": "tests/property/source-proof-identity.property.test.ts",
+  "targets": [
+    "sec-evaluatecall#finite-host-callable-location-source-projections"
+  ]
+},
+{
+  "kind": "property",
+  "id": "tests/property/source-callable-formals.property.test.ts",
+  "targets": [
+    "sec-evaluatecall#finite-host-callable-location-source-projections"
+  ]
+},
+{
+  "kind": "e2e",
+  "id": "source_proof_identity",
+  "targets": [
+    "sec-evaluatecall#finite-host-callable-location-source-projections"
+  ]
+},
+{
+  "kind": "e2e",
+  "id": "source_callable_formals",
+  "targets": [
+    "sec-evaluatecall#finite-host-callable-location-source-projections"
+  ]
+},
+{
+  "kind": "negativeDiagnostics",
+  "id": "source_proof_computed_request_unresolved",
+  "targets": [
+    "sec-evaluatecall#finite-host-callable-location-source-projections"
+  ]
+},
+{
+  "kind": "implementation",
+  "id": "src/source-value-flow.ts#bind",
+  "targets": [
+    "sec-evaluatecall#finite-host-callable-location-source-projections"
+  ]
+}
   ]
 }

@@ -189,16 +189,7 @@ function callableDefinition(node: ts.Node): node is CallableDefinition {
 function propertyName(node: ts.Node | undefined): string | null {
     if (!node) return null;
     if (ts.isIdentifier(node) || ts.isStringLiteralLike(node) || ts.isNumericLiteral(node)) return node.text;
-    if (ts.isComputedPropertyName(node)) {
-        const choices = staticStringExpressionTexts(node.expression);
-        return choices.length === 1 ? choices[0]! : null;
-    }
     if (ts.isPropertyAccessExpression(node)) return node.name.text;
-    if (ts.isElementAccessExpression(node) && node.argumentExpression) {
-        if (ts.isNumericLiteral(node.argumentExpression)) return String(Number(node.argumentExpression.text));
-        const choices = staticStringExpressionTexts(node.argumentExpression);
-        return choices.length === 1 ? choices[0]! : null;
-    }
     return null;
 }
 
@@ -2436,8 +2427,8 @@ class SourceValueFlow {
             }
             for (const [index, element] of entry.name.elements.entries()) {
                 if (!ts.isBindingElement(element)) continue;
-                const key = ts.isObjectBindingPattern(entry.name) ? propertyName(element.propertyName ?? element.name) : String(index);
                 const computed = ts.isObjectBindingPattern(entry.name) && element.propertyName && ts.isComputedPropertyName(element.propertyName) ? element.propertyName.expression : null;
+                const key = computed ? null : ts.isObjectBindingPattern(entry.name) ? propertyName(element.propertyName ?? element.name) : String(index);
                 const selected = element.dotDotDotToken ? references ? this.newCell() : entry.value : computed ? this.computedProperty(entry.value, this.cell(computed), context ?? entry.name) : key === null ? this.newCell() : this.property(entry.value, key, entry.name);
                 if (!computed && key === null || element.dotDotDotToken && references) this.publish(selected, this.unknown);
                 if (element.initializer) this.copy(this.cell(element.initializer), selected);

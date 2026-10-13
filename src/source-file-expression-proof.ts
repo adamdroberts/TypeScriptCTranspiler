@@ -5,13 +5,16 @@ import {resolvePackageRoot} from './program';
 import {sourceExpressionTexts} from './source-value-flow';
 
 const proofs=new WeakMap<ts.SourceFile,ReadonlyMap<string,readonly string[]|null>>();
+const proofSources=new WeakMap<ts.SourceFile,ts.SourceFile>();
 const active=new Set<ts.SourceFile>();
 const key=(node:ts.Node)=>`${node.kind}:${node.pos}:${node.end}`;
 
-/** Parsed source identity owns one cached value/location/call proof. A fresh
- * binder tree keeps this query independent of any consumer checker's symbols. */
+/** Original parsed source identity owns one cached value/location/call proof.
+ * Derived binder trees retain that identity for the recursion guard while
+ * keeping the proof independent of any consumer checker's symbols. */
 export function sourceFileCallTexts(call:ts.CallExpression):readonly string[]|null {
-    const source=call.getSourceFile();
+    const parsedSource=call.getSourceFile();
+    const source=proofSources.get(parsedSource)??parsedSource;
     if(!source||call.pos<0)return null;
     if(active.has(source))return null;
     let result=proofs.get(source);
@@ -20,6 +23,7 @@ export function sourceFileCallTexts(call:ts.CallExpression):readonly string[]|nu
         try{
             const parsed=createEcmaSourceFile(source.fileName,source.text,ts.ScriptTarget.ESNext,true,
                 (source as ts.SourceFile&{scriptKind?:ts.ScriptKind}).scriptKind??ts.ScriptKind.TS,ecmaParseGoal(source));
+            proofSources.set(parsed,source);
             const calls:ts.CallExpression[]=[],pending:ts.Node[]=[parsed];
             while(pending.length){const node=pending.pop()!;if(ts.isCallExpression(node))calls.push(node);node.forEachChild(child=>{pending.push(child)});}
             const options:ts.CompilerOptions={target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext,
