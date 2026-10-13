@@ -1974,12 +1974,23 @@ typedef enum {
     JP_OBJECT_COMMA_OR_END,
 } jp_frame_state_t;
 
+/* The same parse record tree retains token intervals and original identities.
+ * A String-keyed child map records the last duplicate definition and supports
+ * both array elements and object entries without a shape-specific walker. */
+typedef struct jp_record {
+    tsc_value_t value;
+    void* value_root;
+    size_t start, end;
+    tsc_map_t* children;
+} jp_record_t;
+
 typedef struct {
     jp_frame_kind_t kind;
     jp_frame_state_t state;
     tsc_array_t* array;
     tsc_object_t* object;
     tsc_str_t* key;
+    jp_record_t* record;
 } jp_frame_t;
 
 static jp_frame_t* jp_top_frame(tsc_array_t* frames) {
@@ -1987,18 +1998,22 @@ static jp_frame_t* jp_top_frame(tsc_array_t* frames) {
     return &TSC_ARR(jp_frame_t, frames, frames->len - 1);
 }
 
-static void jp_accept_value(jp_frame_t* frame, tsc_value_t value, tsc_value_t* root) {
+static void jp_accept_value(jp_frame_t* frame, tsc_value_t value, tsc_value_t* root, jp_record_t* record) {
     if (frame->kind == JP_FRAME_ROOT) {
         *root = value;
+        frame->record = record;
         frame->state = JP_ROOT_DONE;
         return;
     }
     if (frame->kind == JP_FRAME_ARRAY) {
+        tsc_str_t* key=tsc_str_from_num((double)frame->array->len);
+        tsc_map_set_raw(frame->record->children,&key,&record);
         tsc_array_push_raw(frame->array, &value);
         frame->state = JP_ARRAY_COMMA_OR_END;
         return;
     }
     if (!frame->key) tsc_panic("JSON.parse object value has no property key");
+    tsc_map_set_raw(frame->record->children,&frame->key,&record);
     bool defined = tsc_object_define_desc(
         frame->object,
         frame->key,
@@ -2019,7 +2034,8 @@ static void jp_accept_value(jp_frame_t* frame, tsc_value_t value, tsc_value_t* r
 static void jp_push_container_frame(
     tsc_array_t* frames,
     jp_frame_kind_t kind,
-    tsc_value_t container
+    tsc_value_t container,
+    jp_record_t* record
 ) {
     jp_frame_t frame = {
         .kind = kind,
@@ -2027,6 +2043,7 @@ static void jp_push_container_frame(
         .array = kind == JP_FRAME_ARRAY ? (tsc_array_t*)value_ptr(container) : NULL,
         .object = kind == JP_FRAME_OBJECT ? (tsc_object_t*)value_ptr(container) : NULL,
         .key = NULL,
+        .record = record,
     };
     tsc_array_push_raw(frames, &frame);
 }
@@ -2040,13 +2057,17 @@ static void jp_consume_value(
     jp_ws(parser);
     if (parser->pos >= parser->len) jp_syntax_error("JSON.parse unexpected end");
     char c = parser->s[parser->pos];
+    jp_record_t* record=TSC_GC_MALLOC(sizeof(*record));
+    memset(record,0,sizeof(*record));record->start=parser->pos;
     if (c == '[') {
         parser->pos++;
         tsc_value_t value = tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 4));
         void* volatile value_gc_root = tsc_value_gc_root(value);
         (void)value_gc_root;
-        jp_accept_value(frame, value, root);
-        jp_push_container_frame(frames, JP_FRAME_ARRAY, value);
+        record->value=value;record->value_root=value_gc_root;
+        record->children=tsc_map_new(sizeof(tsc_str_t*),sizeof(jp_record_t*),TSC_KEY_STR,4);
+        jp_accept_value(frame, value, root, record);
+        jp_push_container_frame(frames, JP_FRAME_ARRAY, value, record);
         return;
     }
     if (c == '{') {
@@ -2054,8 +2075,10 @@ static void jp_consume_value(
         tsc_value_t value = tsc_value_object(tsc_object_new());
         void* volatile value_gc_root = tsc_value_gc_root(value);
         (void)value_gc_root;
-        jp_accept_value(frame, value, root);
-        jp_push_container_frame(frames, JP_FRAME_OBJECT, value);
+        record->value=value;record->value_root=value_gc_root;
+        record->children=tsc_map_new(sizeof(tsc_str_t*),sizeof(jp_record_t*),TSC_KEY_STR,4);
+        jp_accept_value(frame, value, root, record);
+        jp_push_container_frame(frames, JP_FRAME_OBJECT, value, record);
         return;
     }
     tsc_value_t value;
@@ -2065,10 +2088,15 @@ static void jp_consume_value(
     else if (jp_lit(parser, "null")) value = tsc_value_null();
     else if (c == '-' || (c >= '0' && c <= '9')) value = jp_number(parser);
     else jp_syntax_error("JSON.parse expected value");
-    jp_accept_value(frame, value, root);
+    record->value=value;record->value_root=tsc_value_gc_root(value);record->end=parser->pos;
+    jp_accept_value(frame, value, root, record);
 }
 
-tsc_value_t tsc_json_parse(tsc_str_t* text) {
+static tsc_value_t jp_internalize(tsc_str_t* text,tsc_value_t reviver,jp_record_t* snapshot);
+
+tsc_value_t tsc_json_parse_options(tsc_str_t* text,tsc_value_t reviver) {
+    const tsc_str_t* volatile text_root=text;
+    void* volatile reviver_root=tsc_value_gc_root(reviver);
     json_parser_t parser = { text->data, text->len, 0 };
     tsc_array_t* frames = tsc_array_new(sizeof(jp_frame_t), 8);
     jp_frame_t root_frame = {
@@ -2087,7 +2115,11 @@ tsc_value_t tsc_json_parse(tsc_str_t* text) {
         if (frame->kind == JP_FRAME_ROOT) {
             if (frame->state == JP_ROOT_DONE) {
                 if (parser.pos != parser.len) jp_syntax_error("JSON.parse trailing input");
-                return root;
+                tsc_value_t result=tsc_value_is_callable(reviver)?jp_internalize(text,reviver,frame->record):root;
+                /* Keep decoded owners live across every user callback, also
+                 * for native C callers without a managed argument List. */
+                (void)text_root;(void)reviver_root;
+                return result;
             }
             jp_consume_value(&parser, frames, frame, &root);
             continue;
@@ -2098,6 +2130,7 @@ tsc_value_t tsc_json_parse(tsc_str_t* text) {
                 parser.pos < parser.len && parser.s[parser.pos] == ']'
             ) {
                 parser.pos++;
+                frame->record->end=parser.pos;
                 frames->len--;
                 continue;
             }
@@ -2112,6 +2145,7 @@ tsc_value_t tsc_json_parse(tsc_str_t* text) {
             }
             if (parser.pos < parser.len && parser.s[parser.pos] == ']') {
                 parser.pos++;
+                frame->record->end=parser.pos;
                 frames->len--;
                 continue;
             }
@@ -2125,6 +2159,7 @@ tsc_value_t tsc_json_parse(tsc_str_t* text) {
             parser.pos < parser.len && parser.s[parser.pos] == '}'
         ) {
             parser.pos++;
+            frame->record->end=parser.pos;
             frames->len--;
             continue;
         }
@@ -2154,6 +2189,7 @@ tsc_value_t tsc_json_parse(tsc_str_t* text) {
         }
         if (parser.pos < parser.len && parser.s[parser.pos] == '}') {
             parser.pos++;
+            frame->record->end=parser.pos;
             frames->len--;
             continue;
         }
@@ -2163,6 +2199,74 @@ tsc_value_t tsc_json_parse(tsc_str_t* text) {
     }
     tsc_panic("JSON.parse frame worklist terminated without a root value");
     return tsc_value_undefined();
+}
+
+typedef struct jp_internalize_frame {
+    struct jp_internalize_frame* parent;
+    jp_record_t* record;
+    tsc_value_t holder,value,context;
+    void* holder_root;
+    void* value_root;
+    void* context_root;
+    tsc_str_t* key;
+    tsc_array_t* keys;
+    size_t index,length;
+    bool opened,array,unmodified;
+} jp_internalize_frame_t;
+
+static jp_internalize_frame_t* jp_internalize_frame(tsc_value_t holder,tsc_str_t* key,jp_record_t* record,jp_internalize_frame_t* parent) {
+    jp_internalize_frame_t* frame=TSC_GC_MALLOC(sizeof(*frame));
+    memset(frame,0,sizeof(*frame));frame->holder=holder;frame->holder_root=tsc_value_gc_root(holder);
+    frame->key=key;frame->record=record;frame->parent=parent;
+    return frame;
+}
+
+/* InternalizeJSONProperty is a postorder frame worklist. Live reads, captured
+ * lengths/keys and the original parse records stay distinct across callbacks. */
+static tsc_value_t jp_internalize(tsc_str_t* text,tsc_value_t reviver,jp_record_t* snapshot) {
+    tsc_object_t* wrapper=tsc_object_new();tsc_str_t* empty=tsc_str_from_lit("",0);
+    tsc_object_define(wrapper,empty,snapshot->value,true,true,true);
+    jp_internalize_frame_t* frame=jp_internalize_frame(tsc_value_object(wrapper),empty,snapshot,NULL);
+    while(frame) {
+        if(!frame->opened) {
+            frame->value=tsc_value_get_prop(frame->holder,frame->key);frame->value_root=tsc_value_gc_root(frame->value);
+            frame->context=tsc_value_object(tsc_object_new());frame->context_root=tsc_value_gc_root(frame->context);
+            frame->unmodified=frame->record&&tsc_value_object_is(frame->record->value,frame->value);
+            if(frame->unmodified&&!tsc_value_is_object(frame->value)) {
+                jp_record_t* record=frame->record;
+                tsc_str_t* source=tsc_str_from_lit(text->data+record->start,record->end-record->start);
+                (void)tsc_value_define_property_desc(frame->context,tsc_str_from_lit("source",6),tsc_value_string(source),true,true,true,true,true,true,true);
+            }
+            if(tsc_value_is_object(frame->value)) {
+                frame->array=tsc_value_is_array(frame->value);
+                if(frame->array)frame->length=tsc_value_length_of_array_like(frame->value);
+                else {frame->keys=tsc_value_object_keys(frame->value);frame->length=frame->keys->len;}
+            }
+            frame->opened=true;
+        }
+        if(frame->index<frame->length) {
+            size_t index=frame->index++;
+            tsc_str_t* key=frame->array?tsc_str_from_num((double)index):TSC_ARR(tsc_str_t*,frame->keys,index);
+            jp_record_t* child=NULL;
+            if(frame->unmodified&&frame->record->children)
+                (void)tsc_map_get_raw(frame->record->children,&key,&child);
+            frame=jp_internalize_frame(frame->value,key,child,frame);continue;
+        }
+        tsc_array_t* args=tsc_array_new(sizeof(tsc_value_t),3);
+        tsc_array_push_value(args,tsc_value_string(frame->key));
+        tsc_array_push_value(args,frame->value);tsc_array_push_value(args,frame->context);
+        tsc_value_t result=tsc_value_apply_function(reviver,frame->holder,tsc_value_array(args));
+        void* volatile result_root=tsc_value_gc_root(result);
+        if(!frame->parent){(void)result_root;return result;}
+        if(tsc_value_is_undefined(result))(void)tsc_value_delete_prop(frame->holder,frame->key);
+        else (void)tsc_value_define_property_desc(frame->holder,frame->key,result,true,true,true,true,true,true,true);
+        frame=frame->parent;(void)result_root;
+    }
+    tsc_panic("JSON.parse internalization worklist lost its root");
+}
+
+tsc_value_t tsc_json_parse(tsc_str_t* text) {
+    return tsc_json_parse_options(text,tsc_value_undefined());
 }
 
 /* ---------------- Map / Set (hash + insertion-order array) ----------------

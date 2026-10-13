@@ -102,6 +102,11 @@ export interface JsonRawTextWidthSpec {
     width: number;
 }
 
+export interface JsonReviverDepthSpec {
+    generator: "json-reviver-depth";
+    depth: number;
+}
+
 export interface ReflectConstructArgumentWidthSpec {
     generator: "reflect-construct-argument-width";
     width: number;
@@ -185,6 +190,7 @@ export type GeneratedCaseSpec =
     | StringConcatArgumentWidthSpec
     | StringRawTemplateWidthSpec
     | JsonRawTextWidthSpec
+    | JsonReviverDepthSpec
     | ReflectConstructArgumentWidthSpec
     | ArrowFormalBindingTreeDepthSpec
     | ArrayStaticFactoryItemWidthSpec
@@ -266,7 +272,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth") {
+    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
             throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
@@ -1587,6 +1593,21 @@ function classExpressionMethodWidthSource(width: number): string {
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
+        case "json-reviver-depth":
+            return `const text = "[".repeat(${spec.depth}) + "17" + "]".repeat(${spec.depth});
+let calls = 0, sources = 0, valid = true;
+const parsed = JSON.parse(text, function(key: string, value: any, context: any): any {
+    calls++;
+    if (Object.hasOwn(context, "source")) {
+        sources++;
+        valid = valid && value === 17 && context.source === "17";
+    }
+    return value;
+});
+let cursor: any = parsed, observed = 0;
+while (Array.isArray(cursor)) { cursor = cursor[0]; observed++; }
+console.log("JSON reviver depth:", valid && observed === ${spec.depth} && cursor === 17 && calls === ${spec.depth}+1 && sources === 1);
+`;
         case "json-raw-text-width":
             return `const body = "💛".repeat(${spec.width});
 const text = '"' + body + '"';

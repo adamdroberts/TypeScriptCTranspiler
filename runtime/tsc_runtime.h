@@ -1586,6 +1586,7 @@ tsc_array_t* tsc_object_values_dyn(const tsc_object_t* o);
 tsc_array_t* tsc_object_entries_dyn(const tsc_object_t* o);
 
 tsc_value_t tsc_json_parse(tsc_str_t* text);
+tsc_value_t tsc_json_parse_options(tsc_str_t* text,tsc_value_t reviver);
 
 typedef struct tsc_object_entry {
     /* A native entry is a view of this actual pair, including its mutations. */

@@ -43,7 +43,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "json-stringify" | "json-raw" | "json-is-raw" | "error-text" | `agent-member:${string}`;
+    "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | `agent-member:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
@@ -148,7 +148,7 @@ const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
 // Initial intrinsic member identities, installed on their canonical owners.
 // Source lookups and later writes use the ordinary field graph.
 const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operation>> = new Map<string, ReadonlyMap<string, Operation>>([
-    ["JSON", new Map([["stringify", "json-stringify"], ["rawJSON", "json-raw"], ["isRawJSON", "json-is-raw"]])],
+    ["JSON", new Map([["stringify", "json-stringify"], ["parse", "json-parse"], ["rawJSON", "json-raw"], ["isRawJSON", "json-is-raw"]])],
     ["console", new Map([...consoleOperations].map(name=>[name,"host-print" as const]))],
     ["Object", new Map([["getPrototypeOf", "prototype"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
         ["getOwnPropertyDescriptor", "own-descriptor"], ["getOwnPropertyDescriptors", "own-descriptors"]])],
@@ -208,6 +208,7 @@ class SourceValueFlow {
     private readonly errorStrings = new Map<ts.Node,Map<Cell,Cell>>();
     private readonly jsonSerializations = new Map<ts.Node, Map<string, Cell>>();
     private readonly rawJSONResults = new Map<ts.Node, Map<Cell, Cell>>();
+    private readonly jsonParses = new Map<ts.Node, Map<string, Cell>>();
     private readonly normalResults = new Map<Cell, Atom>();
     private readonly exceptionHandlers = new Map<ts.Node, Cell>();
     private readonly exceptionCells = new Set<Cell>();
@@ -2093,6 +2094,53 @@ class SourceValueFlow {
         }
         return choices;
     }
+    private jsonParse(source:Cell,reviver:Cell,context:ts.Node):Cell {
+        let calls=this.jsonParses.get(context);
+        if(!calls){calls=new Map();this.jsonParses.set(context,calls);}
+        const signature=source.id+":"+reviver.id,prior=calls.get(signature);if(prior)return prior;
+        const result=this.newCell();calls.set(signature,result);
+        const text=this.stringHintCell(source,context),parsed=this.newCell(),receiver=this.newCell(),key=this.newCell(),callbackValue=this.newCell(),callbackContext=this.newCell(),callee=this.newCell();
+        const inputs=new Map<Atom,Cell>(),selected=new Set<string>();
+        const cell=(atom:Atom)=>{let input=inputs.get(atom);if(!input){input=this.newCell();inputs.set(atom,input);this.publish(input,atom);}return input;};
+        this.invoke(context,callee,receiver,[{cell:key,spread:false},{cell:callbackValue,spread:false},{cell:callbackContext,spread:false}],result);
+        let parse!:Rule;
+        parse=this.rule([text],()=>{
+            const state=this.primitiveState(text,parse,true);
+            for(const value of state.proof.values){
+                const input=String(value);if(selected.has(input))continue;selected.add(input);
+                try {
+                    const value=JSON.parse(input),composite=value!==null&&typeof value==="object";
+                    const atom=composite?this.opaqueObject:this.primitive(value);
+                    this.publish(parsed,atom);
+                    const holderOwner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};
+                    this.defineField(holderOwner,"",cell(atom));
+                    this.publish(receiver,{tag:"object",owner:holderOwner});this.publish(key,this.primitive(""));
+                    const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};
+                    if(!composite)this.defineField(owner,"source",cell(this.primitive(input.trim())));
+                    this.publish(callbackContext,{tag:"object",owner});this.publish(callbackValue,atom);
+                    // A composite reviver can observe or replace descendants.
+                    // Its unrepresented live snapshot stays conservative while
+                    // activating the actual callable through the shared graph.
+                    if(composite){this.publish(receiver,this.opaqueObject);this.publish(key,this.unknownString);this.publish(callbackValue,this.unknown);this.publish(callbackContext,this.opaqueObject);}
+                }catch{this.publish(parsed,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}
+            }
+            for(const atom of text.values)if(atom.tag==="abrupt"||atom.tag==="pending-source")this.publish(parsed,atom);
+            if(state.proof.primitiveComplete||state.pending&&!state.unresolved)return;
+            this.publish(parsed,this.unknown);this.publish(receiver,this.opaqueObject);this.publish(key,this.unknownString);this.publish(callbackValue,this.unknown);this.publish(callbackContext,this.opaqueObject);
+            const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));
+        });
+        this.rule([reviver,parsed],()=>{
+            for(const atom of parsed.values)if(atom.tag==="abrupt"||atom.tag==="pending-source")this.publish(result,atom);
+            if(![...parsed.values].some(atom=>atom.tag!=="abrupt"&&atom.tag!=="pending-source"))return;
+            for(const atom of reviver.values){
+                if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
+                const kinds=this.primitiveKinds(cell(atom));
+                if(kinds&KIND_FUNCTION||atom.tag==="unknown"||atom.tag==="opaque-object")this.publish(callee,atom);
+                if(!(kinds&KIND_FUNCTION)||atom.tag==="unknown"||atom.tag==="opaque-object")this.copy(parsed,result);
+            }
+        });
+        return result;
+    }
     private rawJSON(source:Cell,context:ts.Node):Cell {
         let calls=this.rawJSONResults.get(context);
         if(!calls){calls=new Map();this.rawJSONResults.set(context,calls);}
@@ -2867,6 +2915,9 @@ class SourceValueFlow {
                             if (handler) this.copy(atom.owner.throws, handler);
                         }
                     } else if (atom.tag === "operation") {
+                        if(atom.operation==="json-parse"){
+                            this.copy(this.jsonParse(argument(0)??omittedArgument,argument(1)??omittedArgument,node),result);continue;
+                        }
                         if(atom.operation==="json-raw"){
                             this.copy(this.rawJSON(argument(0)??omittedArgument,node),result);continue;
                         }

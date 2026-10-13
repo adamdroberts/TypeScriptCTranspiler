@@ -1962,7 +1962,9 @@
         "sec-date.utc#ordinary-static-list-gregorian-number-time",
         "sec-date.now#ordinary-static-list-integral-clock-time",
         "sec-json.rawjson#validated-scalar-text-and-frozen-raw-owner",
-        "sec-json.israwjson#internal-brand-without-proxy-or-property-access"
+        "sec-json.israwjson#internal-brand-without-proxy-or-property-access",
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
       ]
     },
     {
@@ -2369,7 +2371,10 @@
       "id": "stdlib/lib.core.d.ts#JSON",
       "targets": [
         "sec-json.rawjson#validated-scalar-text-and-frozen-raw-owner",
-        "sec-json.israwjson#internal-brand-without-proxy-or-property-access"
+        "sec-json.israwjson#internal-brand-without-proxy-or-property-access",
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
       ]
     },
     {
@@ -2412,6 +2417,120 @@
       "id": "runtime/tsc_internal.h#is_raw_json",
       "targets": [
         "sec-json.israwjson#internal-brand-without-proxy-or-property-access"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/json-reviver.property.test.ts",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/json-parse-source.property.test.ts",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/json-parse-materialization.property.test.ts",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "json_parse_reviver_depth",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
+      ],
+      "stressReview": {
+        "dimension": "JSON parse-record tree and postorder internalization frame depth",
+        "parameter": "depth",
+        "representativeHighDepth": 16384,
+        "rationale": "One representative generated nested input independently verifies scalar source identity, postorder callback coverage and retained values beyond ordinary recursive reviver limits, without making successive depths completion units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "json_parse_reviver",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#json_parse_apply",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_object.c#tsc_json_parse_options",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_object.c#jp_internalize",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#jsonParse",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_object.c#jp_record",
+      "targets": [
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_object.c#jp_accept_value",
+      "targets": [
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_object.c#jp_consume_value",
+      "targets": [
+        "sec-createjsonparserecord#token-interval-and-original-value-record-tree"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_object.c#jp_internalize_frame",
+      "targets": [
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_object_is",
+      "targets": [
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
       ]
     }
   ]

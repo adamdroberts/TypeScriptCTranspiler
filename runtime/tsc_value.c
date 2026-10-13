@@ -9572,7 +9572,8 @@ static tsc_value_t json_parse_apply(void* env, tsc_value_t this_arg, tsc_array_t
     (void)env;
     (void)this_arg;
     tsc_value_t text = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    return tsc_json_parse(tsc_value_to_string(text));
+    tsc_value_t reviver=args->len>1?TSC_ARR(tsc_value_t,args,1):tsc_value_undefined();
+    return tsc_json_parse_options(tsc_value_to_string_coercion(text),reviver);
 }
 
 static tsc_value_t json_stringify_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
