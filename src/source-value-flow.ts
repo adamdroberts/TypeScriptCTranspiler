@@ -43,7 +43,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for" | `agent-member:${string}`;
+    "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for" | "array-join" | `agent-member:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
@@ -77,7 +77,7 @@ type Atom =
     | { readonly tag: "descriptor"; readonly identity: object }
     | { readonly tag: "unknown"; readonly origin?: ts.Node }
     | { readonly tag: "opaque-object" }
-    | { readonly tag: "text-operation"; readonly operation: "numeric" | "template" | "bound-name" | "prefix" | "coerce"; readonly numeric?: SourceNumericOperation; readonly conversion?: string; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
+    | { readonly tag: "text-operation"; readonly operation: "numeric" | "template" | "bound-name" | "prefix" | "coerce" | "array-join"; readonly numeric?: SourceNumericOperation; readonly conversion?: string; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
     | { readonly tag: "promise"; readonly value: Cell; readonly rejection: Cell }
     | { readonly tag: "generator"; readonly owner: FunctionOwner }
     | { readonly tag: "global" } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record" };
@@ -227,6 +227,7 @@ class SourceValueFlow {
     private readonly dynamicSourceTexts = new Map<FunctionNode, string>();
     private readonly callablePrototypes = new Map<DynamicFunctionKind, Cell>();
     private ordinaryObjectPrototype?: Cell;
+    private ordinaryArrayPrototype?: Cell;
     private globalOwner?: ObjectOwner;
     private readonly generated = new Map<DynamicFunctionKind, Cell[]>();
     private readonly global: Atom = { tag: "global" };
@@ -1258,6 +1259,7 @@ class SourceValueFlow {
                 }
                 if (descriptor.normalResult !== "not-callable") fields.prototype = this.callablePrototype("ordinary");
                 if(key==="Object")this.defineField(fields,"prototype",this.objectPrototype());
+                if(key==="Array")this.defineField(fields,"prototype",this.arrayPrototype());
                 if(key==="Symbol") {
                     for (const [name, symbol] of this.wellKnownSymbols) {
                         const value = this.newCell(); this.publish(value, this.primitive(symbol)); this.defineField(fields, name, value);
@@ -1296,6 +1298,27 @@ class SourceValueFlow {
             }
         }
         return this.ordinaryObjectPrototype;
+    }
+    private arrayPrototype():Cell {
+        if(!this.ordinaryArrayPrototype){
+            const value=this.newCell();this.ordinaryArrayPrototype=value;
+            const fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};
+            this.copy(this.opaqueMutation,fields.shape);
+            this.publish(value,{tag:"builtin",name:"Array.prototype",normalResult:"not-callable",fields});
+            const join=this.newCell();this.publish(join,this.operation("array-join"));this.defineField(fields,"join",join);
+        }
+        return this.ordinaryArrayPrototype;
+    }
+    private joinTextInput(value:Cell,separator:boolean):Cell {
+        const normalized=this.newCell();
+        this.rule([value],()=>{
+            for(const atom of value.values){
+                if(atom.tag==="primitive"&&(atom.value===undefined||!separator&&atom.value===null))
+                    this.publish(normalized,this.primitive(separator?",":""));
+                else this.publish(normalized,atom);
+            }
+        });
+        return normalized;
     }
     private property(base: Cell, key: SourcePropertyKey, context?: ts.Node, ownOnly=false): Cell {
         const result = this.newCell();
@@ -1535,7 +1558,7 @@ class SourceValueFlow {
         }
         return owner;
     }
-    private lists(cell: Cell, context?: ts.Node): Array<readonly Cell[] | null> {
+    private lists(cell: Cell, context?: ts.Node, argumentsRead = true): Array<readonly Cell[] | null> {
         // Every actual List projects the owner's canonical length and index
         // locations. Literal/rest initialization and mutations publish into
         // those same cells; the rule worklist closes their dependencies.
@@ -1548,7 +1571,7 @@ class SourceValueFlow {
             const owner = atom.owner;
             const proof = this.primitiveChoiceProof(owner.listLength!);
             const literal=this.literalLists.get(owner);
-            if(literal&&context){
+            if(literal&&context&&argumentsRead){
                 let boundary:ts.Node=literal.node;
                 while(boundary.parent&&(ts.isParenthesizedExpression(boundary.parent)||ts.isAsExpression(boundary.parent)||ts.isTypeAssertionExpression(boundary.parent)||ts.isNonNullExpression(boundary.parent)||ts.isSatisfiesExpression(boundary.parent)))boundary=boundary.parent;
                 if(boundary.parent&&ts.isSpreadElement(boundary.parent))boundary=boundary.parent;
@@ -1558,7 +1581,7 @@ class SourceValueFlow {
                 if(boundary.parent===context){alternatives.push(...this.arguments(literal.parts,literal.node));continue;}
             }
             if (!proof.primitiveComplete && this.primitiveReadiness(owner.listLength!).pending) continue;
-            if (this.opaqueShape(owner,context,true) || !proof.primitiveComplete) {
+            if (this.opaqueShape(owner,context,argumentsRead) || !proof.primitiveComplete) {
                 alternatives.push(null);
                 continue;
             }
@@ -1574,7 +1597,7 @@ class SourceValueFlow {
                     const existing = owner.fields.get(key);
                     const location = existing ?? this.field(owner, key);
                     if (!existing) this.publish(location, this.primitive(undefined));
-                    locations.push(this.captureRead(location,context,true));
+                    locations.push(this.captureRead(location,context,argumentsRead));
                 }
                 alternatives.push(locations);
             }
@@ -1719,6 +1742,7 @@ class SourceValueFlow {
                 }});}else this.copy(this.objectPrototype(),owner.prototype);
             }
             if (ts.isArrayLiteralExpression(node)) {
+                owner.prototype=this.arrayPrototype();
                 const parts = node.elements.map(element => ({ cell: this.cell(ts.isSpreadElement(element) ? element.expression : element), spread: ts.isSpreadElement(element) }));
                 this.literalLists.set(owner,{node,parts});
                 owner.listLength = this.field(owner, "length");
@@ -2026,7 +2050,7 @@ class SourceValueFlow {
                             if (parameter.dotDotDotToken) {
                                 let location = this.restLocations.get(parameter);
                                 if (!location) {
-                                    const restOwner: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell()};
+                                    const restOwner: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.arrayPrototype()};
                                     restOwner.listLength = this.field(restOwner, "length");
                                     location = {value:this.newCell(),owner:restOwner};
                                     this.restLocations.set(parameter,location);
@@ -2057,6 +2081,27 @@ class SourceValueFlow {
                             if (handler) this.copy(atom.owner.throws, handler);
                         }
                     } else if (atom.tag === "operation") {
+                        if(atom.operation==="array-join"){
+                            this.watchList(rule,invocation.receiver);
+                            const lists=argv?this.lists(invocation.receiver,node,false):[null];
+                            for(const list of lists){
+                                const listKey=signature+":"+(list?list.map(value=>value.id).join(","):"opaque");
+                                if(handled(atom,listKey))continue;
+                                if(!list){
+                                    this.publish(result,this.unknownString);
+                                    const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.unknown);
+                                    this.onActive(node,()=>this.opaqueEffect(node));
+                                    continue;
+                                }
+                                // join reads indices during the invocation,
+                                // after separator conversion. Keep ordinary
+                                // getters and writes in those location facts.
+                                const inputs=[this.joinTextInput(argv?.[0]??omittedArgument,true),...list.map((_,index)=>this.joinTextInput(this.property(invocation.receiver,String(index),node),false))];
+                                const converted=this.convertList(inputs,node,"text");
+                                this.publish(result,{tag:"text-operation",operation:"array-join",parts:converted});
+                            }
+                            continue;
+                        }
                         if(atom.operation.startsWith("agent-member:")){
                             const descriptor=test262AgentOperations.get(atom.operation.slice("agent-member:".length))!;
                             if(descriptor.operation==="RECEIVE"&&argv?.[0]){
@@ -2302,6 +2347,7 @@ class SourceValueFlow {
                             } else if (atom.operation === "coerce") {
                                 try {add(NUMERIC_CONVERSIONS.get(atom.conversion!)!(tuple[0]!));} catch {}
                             } else if (atom.operation === "bound-name") add("bound " + (typeof tuple[0] === "string" ? tuple[0] : ""));
+                            else if(atom.operation==="array-join")add(tuple.slice(1).map(String).join(String(tuple[0])));
                             else if (atom.operation === "template") {if (!tuple.some(value => typeof value === "symbol")) add(tuple.map(String).join(""));}
                         }
                     } else {primitiveComplete = false; if (atom.tag === "unknown-string") textComplete = false;}
