@@ -2137,10 +2137,12 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
     - [ ] `validated-scalar-text-and-frozen-raw-owner` (intrinsic, unbounded): JSON.rawJSON: ordered coercion, scalar grammar and immutable raw owner.
   - [ ] `sec-json.stringify` — JSON.stringify ( _value_ [ , _replacer_ [ , _space_ ] ] )
     - [ ] `ordered-root-holder-options-and-owner-serialization` (algorithm, unbounded): Ordered root holder, options and ordinary composite serialization.
+    - [ ] `closed-primitive-kind-source-serialization` (algorithm, unbounded): Unbounded primitive serialization retains pure source kind facts.
   - [ ] `sec-json-serialization-record` — JSON Serialization Record
     - [ ] `retained-holder-options-owner-and-output-graph` (algorithm, unbounded): Retained serialization owner and continuation record.
   - [ ] `sec-serializejsonproperty` — SerializeJSONProperty ( _state_: a JSON Serialization Record, _key_: a String, _holder_: an Object, ): either a normal completion containing either a String or undefined, or a throw completion
     - [ ] `ordered-get-tojson-replacer-and-output-continuations` (algorithm, unbounded): Ordered property Get/toJSON/replacer and normal output continuations.
+    - [ ] `closed-primitive-kind-source-serialization` (algorithm, unbounded): Unbounded primitive serialization retains pure source kind facts.
   - [ ] `sec-quotejsonstring` — QuoteJSONString ( _value_: a String, ): a String: exact disposition and partitions missing.
   - [ ] `sec-unicodeescape` — UnicodeEscape ( _C_: a code unit, ): a String: exact disposition and partitions missing.
   - [ ] `sec-serializejsonobject` — SerializeJSONObject ( _state_: a JSON Serialization Record, _value_: an Object, ): either a normal completion containing a String or a throw completion

@@ -1,3 +1,5 @@
+Preserved pure JSON source facts for unbounded primitive kind domains. Unknown scalar text no longer invents mutation effects, repairing finite eval-spread admission through ordinary assertion code while object hooks and unknown source rejection retain their existing paths.
+
 Corrected the typed DCE fixture to materialize Iterator results before array reads and convert ordinary own keys before String comparison. The project typed checker and independent Node consumer checks verify the input repair; native regression execution remains in progress.
 
 Added Error.isError through the private ErrorData owner witness, shared with native util error classification. Native error constructors inherit Error, and the source graph preserves pure Boolean call facts. Independent Node/native partitions, foreign Realm checks and one shared retained-owner stress verify the feature.

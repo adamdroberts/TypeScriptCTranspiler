@@ -89,7 +89,8 @@
               "src/source-value-flow.ts#OwnPresence",
               "src/source-value-flow.ts#primitiveChoiceProof",
               "runtime/tsc_object.c#tsc_value_json_stringify_options",
-              "src/global-bindings.ts#runtimePrimitiveDescriptors", "src/global-bindings.ts#runtimePrimitivePrototypeMembers",
+              "src/global-bindings.ts#runtimePrimitiveDescriptors",
+              "src/global-bindings.ts#runtimePrimitivePrototypeMembers",
               "src/source-value-flow.ts#boxedPrimitive",
               "src/source-value-flow.ts#primitivePrototype",
               "src/source-value-flow.ts#primitiveMethod",
@@ -101,6 +102,47 @@
             ]
           },
           "rationale": "Composite JSON source serialization now uses one root-holder/option-plan/property continuation graph over ordinary owner locations. Own enumerability is retained on the shared property record; parsed and literal fields, ordinary assignments and descriptor conversion feed that record. Selected Get, toJSON, replacer and primitive output steps retain receiver/key effects and actual throws; normal child output gates later property reads. One text-operation graph assembles object and array output iteratively with UTF-16 quoting, numeric-key order, omission/null substitution, raw JSON, filtered property Lists, spacing and owner ancestry cycle detection. The scalar-only output predecessor is removed. json-composite-source.property independently checks value/option/forwarding, nested getter/hook, early abrupt, descriptor, raw, replacer and opaque-boundary partitions with Node across typed/erased native profiles and both memory modes, plus one deep mixed owner tree. json_composite_source and json_composite_source_depth exercise the CLI. The former opaque ordinary rawJSON-named object assertion is replaced by positive unbranded object evidence. Existing native Serialization Record kernels, CType and declarations suffice. Boxed option and exotic source owners, sparse callable-replacer key domains, correlated activation precision, composite reviver snapshots, complete Realm/module/agent host eligibility and exhaustive ECMAScript 2026 evidence remain open; eligibility flags are unchanged. Boxed primitive source owners now project native primitive descriptors and constructor publications into one brand/payload/prototype graph. Ordinary Object conversion retains object identity and brands primitive values, while String wrappers expose code-unit fields and length. Mutable valueOf, toString and Symbol.toPrimitive reads use existing receiver/getter/call/exception worklists. JSON value, PropertyList and spacing roles share one normalization path: Number/String use actual coercion methods, Boolean/BigInt retain internal payloads, and known wrong-type options are ignored. ToNumber remains distinct from the Number constructor, so a Number wrapper method returning BigInt is abrupt. Construction carries newTarget through the argument worklist, checks represented constructibility before coercion, and reads its actual prototype. Source functions have owned prototype records; the synthetic source-function prototype predecessor is removed. Object.prototype string tagging uses the same mutable Symbol tag read and represented owner brands, repairing a demonstrated custom-newTarget false source value. Actual return projection now replays canonical derived conversion records over projected formal cells, closing a deep numeric-leaf boxing reviver without a function-shape special case. Unknown actual extents retain possible omitted constructor defaults through the shared input projection. boxed-json-source.property compares primitive brand, method override/ignored hook, option/List, actual throw, target and opaque-write partitions against independent Node in typed/erased native profiles and both memory modes, with one deep mixed record tree. boxed_json_source and boxed_json_source_depth exercise the CLI. Existing CType, declarations and native kernels suffice. Exotic native owners, sparse callback domains, fully versioned/correlated activations, complete Realm/module/agent eligibility and exhaustive ECMAScript 2026 evidence remain open; eligibility flags are unchanged."
+        },
+        {
+          "id": "closed-primitive-kind-source-serialization",
+          "title": "Unbounded primitive serialization retains pure source kind facts",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-json.stringify"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/json-scalar-source.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "json_scalar_source_depth"
+            ],
+            "e2e": [
+              "json_scalar_source"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "src/source-value-flow.ts#jsonSerialization",
+              "src/source-value-flow.ts#primitiveKinds"
+            ]
+          },
+          "rationale": "JSON source serialization now uses the shared primitive kind mask to distinguish an unbounded scalar text domain from an owner that can run hooks. Number, String and other closed primitive domains retain unknown serialized text or undefined without adding opaque mutation or unknown exceptions. Exact scalar values retain their existing finite serialization facts; object getters, toJSON, replacers, BigInt behavior and unknown owners stay on the existing ordered conversion and effect paths. This repairs the independently reproduced pinned eval-spread admission failure caused by numeric serialization in the assertion harness. json-scalar-source.property compares generated update/scalar/container/hook-return/reflected partitions and stable unknown-source rejection with independent Node across typed/erased ordinary/native-observation inputs in both memory modes. One shared generated high-depth owner projection verifies the retained unbounded Number domain in the property and CLI; json_scalar_source checks the typed consumer. Existing CType, declarations and native JSON kernels suffice. Complete magnitude correlations, source effects, exotic/Realm behavior, host eligibility and eligible exhaustive ECMAScript 2026 coverage remain open."
         }
       ],
       "rationale": "The shared native Serialization Record and source continuation graph are bound to independent semantic properties, a reviewed deep stress and the pinned JSON.stringify clause query. Full source activation/exotic precision and eligible exhaustive target evidence remain separate obligations."
@@ -217,7 +259,8 @@
               "src/source-value-flow.ts#OwnPresence",
               "src/source-value-flow.ts#primitiveChoiceProof",
               "runtime/tsc_object.c#tsc_value_json_stringify_options",
-              "src/global-bindings.ts#runtimePrimitiveDescriptors", "src/global-bindings.ts#runtimePrimitivePrototypeMembers",
+              "src/global-bindings.ts#runtimePrimitiveDescriptors",
+              "src/global-bindings.ts#runtimePrimitivePrototypeMembers",
               "src/source-value-flow.ts#boxedPrimitive",
               "src/source-value-flow.ts#primitivePrototype",
               "src/source-value-flow.ts#primitiveMethod",
@@ -229,6 +272,47 @@
             ]
           },
           "rationale": "Composite JSON source serialization now uses one root-holder/option-plan/property continuation graph over ordinary owner locations. Own enumerability is retained on the shared property record; parsed and literal fields, ordinary assignments and descriptor conversion feed that record. Selected Get, toJSON, replacer and primitive output steps retain receiver/key effects and actual throws; normal child output gates later property reads. One text-operation graph assembles object and array output iteratively with UTF-16 quoting, numeric-key order, omission/null substitution, raw JSON, filtered property Lists, spacing and owner ancestry cycle detection. The scalar-only output predecessor is removed. json-composite-source.property independently checks value/option/forwarding, nested getter/hook, early abrupt, descriptor, raw, replacer and opaque-boundary partitions with Node across typed/erased native profiles and both memory modes, plus one deep mixed owner tree. json_composite_source and json_composite_source_depth exercise the CLI. The former opaque ordinary rawJSON-named object assertion is replaced by positive unbranded object evidence. Existing native Serialization Record kernels, CType and declarations suffice. Boxed option and exotic source owners, sparse callable-replacer key domains, correlated activation precision, composite reviver snapshots, complete Realm/module/agent host eligibility and exhaustive ECMAScript 2026 evidence remain open; eligibility flags are unchanged. Boxed primitive source owners now project native primitive descriptors and constructor publications into one brand/payload/prototype graph. Ordinary Object conversion retains object identity and brands primitive values, while String wrappers expose code-unit fields and length. Mutable valueOf, toString and Symbol.toPrimitive reads use existing receiver/getter/call/exception worklists. JSON value, PropertyList and spacing roles share one normalization path: Number/String use actual coercion methods, Boolean/BigInt retain internal payloads, and known wrong-type options are ignored. ToNumber remains distinct from the Number constructor, so a Number wrapper method returning BigInt is abrupt. Construction carries newTarget through the argument worklist, checks represented constructibility before coercion, and reads its actual prototype. Source functions have owned prototype records; the synthetic source-function prototype predecessor is removed. Object.prototype string tagging uses the same mutable Symbol tag read and represented owner brands, repairing a demonstrated custom-newTarget false source value. Actual return projection now replays canonical derived conversion records over projected formal cells, closing a deep numeric-leaf boxing reviver without a function-shape special case. Unknown actual extents retain possible omitted constructor defaults through the shared input projection. boxed-json-source.property compares primitive brand, method override/ignored hook, option/List, actual throw, target and opaque-write partitions against independent Node in typed/erased native profiles and both memory modes, with one deep mixed record tree. boxed_json_source and boxed_json_source_depth exercise the CLI. Existing CType, declarations and native kernels suffice. Exotic native owners, sparse callback domains, fully versioned/correlated activations, complete Realm/module/agent eligibility and exhaustive ECMAScript 2026 evidence remain open; eligibility flags are unchanged."
+        },
+        {
+          "id": "closed-primitive-kind-source-serialization",
+          "title": "Unbounded primitive serialization retains pure source kind facts",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-serializejsonproperty"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/json-scalar-source.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "json_scalar_source_depth"
+            ],
+            "e2e": [
+              "json_scalar_source"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "src/source-value-flow.ts#jsonSerialization",
+              "src/source-value-flow.ts#primitiveKinds"
+            ]
+          },
+          "rationale": "JSON source serialization now uses the shared primitive kind mask to distinguish an unbounded scalar text domain from an owner that can run hooks. Number, String and other closed primitive domains retain unknown serialized text or undefined without adding opaque mutation or unknown exceptions. Exact scalar values retain their existing finite serialization facts; object getters, toJSON, replacers, BigInt behavior and unknown owners stay on the existing ordered conversion and effect paths. This repairs the independently reproduced pinned eval-spread admission failure caused by numeric serialization in the assertion harness. json-scalar-source.property compares generated update/scalar/container/hook-return/reflected partitions and stable unknown-source rejection with independent Node across typed/erased ordinary/native-observation inputs in both memory modes. One shared generated high-depth owner projection verifies the retained unbounded Number domain in the property and CLI; json_scalar_source checks the typed consumer. Existing CType, declarations and native JSON kernels suffice. Complete magnitude correlations, source effects, exotic/Realm behavior, host eligibility and eligible exhaustive ECMAScript 2026 coverage remain open."
         }
       ],
       "rationale": "The shared native Serialization Record and source continuation graph are bound to independent semantic properties, a reviewed deep stress and the pinned JSON.stringify clause query. Full source activation/exotic precision and eligible exhaustive target evidence remain separate obligations."

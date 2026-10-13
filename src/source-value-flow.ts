@@ -2839,6 +2839,13 @@ class SourceValueFlow {
                     const kinds=this.primitiveKinds(cell(atom));
                     if(kinds&KIND_FUNCTION){this.publish(output,this.primitive(undefined));if(!(kinds&~KIND_FUNCTION))continue;}
                     if(atom.tag==="primitive"||atom.tag==="text-operation")continue;
+                    // A closed primitive kind domain cannot run object hooks.
+                    // Its JSON text may be unbounded without mutation effects.
+                    if(!(kinds&~(KIND_UNDEFINED|KIND_NULL|KIND_BOOLEAN|KIND_NUMBER|KIND_STRING|KIND_SYMBOL))) {
+                        if(kinds&(KIND_NULL|KIND_BOOLEAN|KIND_NUMBER|KIND_STRING))this.publish(output,this.unknownString);
+                        if(kinds&(KIND_UNDEFINED|KIND_SYMBOL))this.publish(output,this.primitive(undefined));
+                        continue;
+                    }
                     const owner=this.ordinaryOwner(atom);
                     if(owner?.rawJSON){this.copy(owner.rawJSON,output);continue;}
                     if(owner?.boxed?.size&&!owner.unboxed&&![...owner.boxed.keys()].includes("symbol"))continue;

@@ -2816,11 +2816,13 @@
       "kind": "implementation",
       "id": "src/source-value-flow.ts#jsonSerialization",
       "targets": [
-        "sec-json.stringify#ordered-root-holder-options-and-owner-serialization",
         "sec-json-serialization-record#retained-holder-options-owner-and-output-graph",
-        "sec-serializejsonproperty#ordered-get-tojson-replacer-and-output-continuations",
+        "sec-json.stringify#closed-primitive-kind-source-serialization",
+        "sec-json.stringify#ordered-root-holder-options-and-owner-serialization",
+        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist",
         "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
-        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist"
+        "sec-serializejsonproperty#closed-primitive-kind-source-serialization",
+        "sec-serializejsonproperty#ordered-get-tojson-replacer-and-output-continuations"
       ]
     },
     {
@@ -3928,6 +3930,46 @@
       "id": "src/source-value-flow.ts#SourceValueFlow",
       "targets": [
         "sec-error.iserror#private-error-data-brand"
+      ]
+    }
+  ,
+    {
+      "kind": "property",
+      "id": "tests/property/json-scalar-source.property.test.ts",
+      "targets": [
+        "sec-json.stringify#closed-primitive-kind-source-serialization",
+        "sec-serializejsonproperty#closed-primitive-kind-source-serialization"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "json_scalar_source_depth",
+      "targets": [
+        "sec-json.stringify#closed-primitive-kind-source-serialization",
+        "sec-serializejsonproperty#closed-primitive-kind-source-serialization"
+      ],
+      "stressReview": {
+        "dimension": "source owner projection graph depth retaining an unbounded Number domain",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One shared generated owner chain projects a dynamically updated Number through the canonical field and primitive-kind worklists, independently of scalar value extent or fixture shape.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "json_scalar_source",
+      "targets": [
+        "sec-json.stringify#closed-primitive-kind-source-serialization",
+        "sec-serializejsonproperty#closed-primitive-kind-source-serialization"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#primitiveKinds",
+      "targets": [
+        "sec-json.stringify#closed-primitive-kind-source-serialization",
+        "sec-serializejsonproperty#closed-primitive-kind-source-serialization"
       ]
     }
   ]
