@@ -655,7 +655,9 @@ class Emitter {
     private anonymousDefaultClassDeclarations = new WeakSet<ts.ClassDeclaration>();
     /** GetModuleNamespace is represented once per resolved Module Record.
      * Every import and namespace re-export reaches the same lazy singleton. */
-    private moduleNamespacePlans = new WeakMap<ts.SourceFile, ModuleNamespacePlan>();
+    private moduleNamespacePlans = new Map<string, ModuleNamespacePlan>();
+    private pendingModuleNamespacePlans: ModuleNamespacePlan[] = [];
+    private emittingModuleNamespacePlans = false;
     private moduleExportRecords = new Map<string, EmitterModuleExportRecord>();
     private moduleNamespaceDeclarations = new Map<string, ts.NamespaceImport | ts.NamespaceExport>();
     private queuedCallbackAdapterEmitted = false;
@@ -19252,9 +19254,7 @@ class Emitter {
         unsupported(declaration, "module namespace export has no runtime binding representation");
     }
 
-    private emitModuleNamespacePlan(plan: ModuleNamespacePlan): void {
-        if (plan.emitted) return;
-        plan.emitted = true;
+    private populateModuleNamespacePlan(plan: ModuleNamespacePlan): void {
         const moduleInfo = this.graph.modules.get(plan.moduleId);
         if (!moduleInfo) unsupported(plan.source, "module namespace source is outside the AOT module graph");
         const exportNames = exportedModuleNames<string, EmitterModuleExportRecord>(this.moduleExportRecord(moduleInfo),
@@ -19276,7 +19276,11 @@ class Emitter {
             declaration: entry.declaration,
             getter: `${plan.factory}_get_${index}`,
         }));
+    }
 
+    private emitModuleNamespacePlan(plan: ModuleNamespacePlan): void {
+        if (plan.emitted) return;
+        plan.emitted = true;
         for (const entry of plan.exports) {
             const signature = `static tsc_value_t ${entry.getter}(void* env, tsc_value_t receiver)`;
             this.protos.line(`${signature};`);
@@ -19318,7 +19322,7 @@ class Emitter {
     }
 
     private ensureModuleNamespacePlan(info: ModuleInfo): ModuleNamespacePlan {
-        const existing = this.moduleNamespacePlans.get(info.sf);
+        const existing = this.moduleNamespacePlans.get(info.moduleId);
         if (existing) return existing;
         const plan: ModuleNamespacePlan = {
             source: info.sf,
@@ -19327,9 +19331,26 @@ class Emitter {
             exports: [],
             emitted: false,
         };
-        this.moduleNamespacePlans.set(info.sf, plan);
-        this.emitModuleNamespacePlan(plan);
+        this.moduleNamespacePlans.set(info.moduleId, plan);
+        this.populateModuleNamespacePlan(plan);
+        this.pendingModuleNamespacePlans.push(plan);
+        this.emitPendingModuleNamespacePlans();
         return plan;
+    }
+
+    /** Nested namespace reads enqueue their target factories. Export plans
+     * exist before emission, so cycles and member lookup never require a
+     * recursive emitter call or a partially populated namespace. */
+    private emitPendingModuleNamespacePlans(): void {
+        if (this.emittingModuleNamespacePlans) return;
+        this.emittingModuleNamespacePlans = true;
+        try {
+            while (this.pendingModuleNamespacePlans.length) {
+                this.emitModuleNamespacePlan(this.pendingModuleNamespacePlans.pop()!);
+            }
+        } finally {
+            this.emittingModuleNamespacePlans = false;
+        }
     }
 
     private moduleNamespacePlanForIdentifier(id: ts.Identifier): ModuleNamespacePlan | null {

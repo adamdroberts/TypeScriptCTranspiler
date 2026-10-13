@@ -1,3 +1,5 @@
+Namespace factories now emit through one pending Module-plan worklist, with complete exports available before cyclic or nested getter emission. Independent Node/native identity, JSON Reference, live-binding and suspension properties include one deep target graph in both memory modes; full host eligibility and exhaustive target evidence remain open.
+
 Emitter namespace resolution and export-name enumeration now share canonical Module records and iterative worklists with host preflight. Independent Node/native name-set and identity partitions plus one deep re-export graph pass in both memory modes; complete host eligibility and exhaustive target evidence remain open.
 
 Fixed Module preflight collisions between the source name namespace and internal namespace-object bindings. Export resolution now uses an explicit frame worklist, with independent Node/native identity and resolution-phase properties plus a deep preflight graph; full host eligibility and exhaustive target coverage remain open.

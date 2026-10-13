@@ -1729,7 +1729,10 @@
     {
       "kind": "implementation",
       "id": "src/emit/index.ts#ensureModuleNamespacePlan",
-      "targets": ["sec-getmodulenamespace#module-record-namespace-singleton"]
+      "targets": [
+        "sec-getmodulenamespace#module-record-namespace-singleton",
+        "sec-modulenamespacecreate#canonical-export-plan-and-singleton"
+      ]
     },
     {
       "kind": "property",
@@ -3174,6 +3177,38 @@
       "targets": [
         "sec-smr-getexportednames#visited-module-record-name-collection",
         "sec-smr-resolveexport#synthetic-module-export-bindings"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/module-namespace-factory.property.test.ts",
+      "targets": [
+        "sec-getmodulenamespace#module-record-namespace-singleton",
+        "sec-modulenamespacecreate#canonical-export-plan-and-singleton"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "module_namespace_factory",
+      "targets": [
+        "sec-getmodulenamespace#module-record-namespace-singleton",
+        "sec-modulenamespacecreate#canonical-export-plan-and-singleton"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#populateModuleNamespacePlan",
+      "targets": [
+        "sec-getmodulenamespace#module-record-namespace-singleton",
+        "sec-modulenamespacecreate#canonical-export-plan-and-singleton"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitPendingModuleNamespacePlans",
+      "targets": [
+        "sec-getmodulenamespace#module-record-namespace-singleton",
+        "sec-modulenamespacecreate#canonical-export-plan-and-singleton"
       ]
     }
   ]
