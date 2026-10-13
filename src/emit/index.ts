@@ -8,7 +8,8 @@ import { moduleRequestKey } from "../module-request";
 import { definitionEvaluationChildren, moduleHasTopLevelAwait } from "./module-evaluation";
 import {classDefinitionPlan} from './class-definition';
 import ts from "typescript";
-import { ecmaDirectivePrologueHasUseStrict } from "../ecmascript-source";
+import { ecmaDirectivePrologueHasUseStrict, ecmaParseGoal } from "../ecmascript-source";
+import { sourceUnitFormat } from "../program";
 import { runtimeGlobalBindings } from "../global-bindings";
 import { canonicalParameterBindingSymbol, sourceDeclarationIntroducesBinding } from "../source-bindings";
 import { timersPromiseOperations, callbackTimerOperations } from "../timers-promises-operations";
@@ -13063,6 +13064,10 @@ class Emitter {
     private isCommonJsSourceFile(source: ts.SourceFile): boolean {
         const known = this.commonJsSourceFileFacts.get(source);
         if (known !== undefined) return known;
+        if (sourceUnitFormat(source) === "commonjs") {
+            this.commonJsSourceFileFacts.set(source,true);
+            return true;
+        }
         if (!this.commonJsRequireSources) {
             this.commonJsRequireSources = new Set();
             for (const module of this.graph.modules.values()) for (const targetId of module.resolvedRequireSpecifiers.values()) {
@@ -13109,6 +13114,16 @@ class Emitter {
         if (!info || !this.isCommonJsSourceFile(info.sf)) return null;
         return { info, name: ts.isNamespaceImport(declaration) ? null :
             ts.isImportSpecifier(declaration) ? (declaration.propertyName ?? declaration.name).text : "default" };
+    }
+
+    private commonJsImportedValue(imported: { info: ModuleInfo; name: string | null }): { c: string; ty: CType } {
+        const owner = this.commonJsModuleValue(imported.info, false);
+        if (imported.name === null) return owner;
+        if (imported.name === "default" && !this.hasCommonJsEsModuleMarker(imported.info.sf)) {
+            const value = this.freshTemp("_cjs_import_owner");
+            return { c: `({ tsc_value_t ${value} = ${owner.c}; tsc_value_has_own_prop(${value}, ${this.stringLit("default")}) ? tsc_value_get_prop(${value}, ${this.stringLit("default")}) : ${value}; })`, ty: T_VALUE };
+        }
+        return { c: `tsc_value_get_prop(${owner.c}, ${this.stringLit(imported.name)})`, ty: T_VALUE };
     }
 
     private collectCommonJsModuleBinding(source: ts.SourceFile, moduleId: string): CommonJsModuleBindingPlan | null {
@@ -21388,6 +21403,20 @@ class Emitter {
                 else for (const element of clause.namedBindings.elements) if (!element.isTypeOnly) names.push(element.name);
             }
             for (const name of names) {
+                const imported = this.commonJsImportForIdentifier(name);
+                if (imported) {
+                    // Host interop bindings select the evaluated export owner,
+                    // then retain that value in the importing environment.
+                    const value = this.freshTemp("_module_commonjs_binding"), root = this.freshTemp("_module_commonjs_root");
+                    const initialized = this.freshTemp("_module_commonjs_initialized");
+                    this.globalDecls.line(`static tsc_value_t ${value};`);
+                    this.globalDecls.line(`static void* volatile ${root};`);
+                    this.globalDecls.line(`static bool ${initialized};`);
+                    instantiation.line(`${value} = tsc_value_undefined(); ${root} = NULL; ${initialized} = false;`);
+                    evaluation.line(`${value} = ${this.commonJsImportedValue(imported).c}; ${root} = tsc_value_gc_root(${value}); ${initialized} = true;`);
+                    add(name.text,value,root,`&${initialized}`,true,true);
+                    continue;
+                }
                 const nativeOwner = this.importedHostModuleOwner(name);
                 if (nativeOwner) {
                     const value = this.freshTemp("_module_native_binding"), root = this.freshTemp("_module_native_root");
@@ -32413,7 +32442,8 @@ class Emitter {
             if (this.isTest262ScriptGlobalThisExpression(expr)) {
                 return { c: this.isTest262EvalSourceFile(expr.getSourceFile()) ? "tsc_environment_eval_this()" : "tsc_global_object()", ty: T_VALUE };
             }
-            if (!this.currentClass && !fnThis && this.options.test262Observation)
+            if (!this.currentClass && !fnThis && (this.options.test262Observation ||
+                ecmaParseGoal(expr.getSourceFile()) === "module" && !this.nearestEnclosingNewTargetOwner(expr)))
                 return { c: "tsc_value_undefined()", ty: T_VALUE };
             if (!this.currentClass && !fnThis)
                 unsupported(expr, "`this` outside of a class method or function this parameter");
@@ -32441,15 +32471,9 @@ class Emitter {
             if (wrapperBinding) return { c: `tsc_environment_reference_get(${this.stringLit(wrapperBinding)})`, ty: T_VALUE };
             const imported = this.commonJsImportForIdentifier(expr);
             if (imported) {
-                const owner = this.commonJsModuleValue(imported.info, false);
-                if (imported.name === null) return owner;
-                if (imported.name === "default" && !this.hasCommonJsEsModuleMarker(imported.info.sf)) {
-                    // Preserve the transpiler's existing default-property
-                    // interop when the source publishes that own property.
-                    const value = this.freshTemp("_cjs_import_owner");
-                    return { c: `({ tsc_value_t ${value} = ${owner.c}; tsc_value_has_own_prop(${value}, ${this.stringLit("default")}) ? tsc_value_get_prop(${value}, ${this.stringLit("default")}) : ${value}; })`, ty: T_VALUE };
-                }
-                return { c: `tsc_value_get_prop(${owner.c}, ${this.stringLit(imported.name)})`, ty: T_VALUE };
+                if (this.sourceEnvironmentEnabled(expr.getSourceFile()))
+                    return { c: `tsc_environment_reference_get(${this.stringLit(expr.text)})`, ty: T_VALUE };
+                return this.commonJsImportedValue(imported);
             }
             const innerClassName = this.classNameBindingForIdentifier(expr);
             if (innerClassName) {

@@ -1,0 +1,1 @@
+globalThis.extensionGoal=this===undefined;

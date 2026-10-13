@@ -50,6 +50,11 @@ interface SourceUnit {
     readonly goal: EcmaParseGoal;
     readonly fileName: string;
     readonly initialBody: boolean;
+    readonly format: "ecmascript" | "commonjs";
+}
+const sourceUnitFormats = new WeakMap<ts.SourceFile, SourceUnit["format"]>();
+export function sourceUnitFormat(source: ts.SourceFile): SourceUnit["format"] | undefined {
+    return sourceUnitFormats.get(source);
 }
 const programSourceUnits = new WeakMap<ts.Program, ReadonlyMap<string, SourceUnit>>();
 const programUnitFiles = new WeakMap<ts.Program, ReadonlyMap<string, SourceUnit>>();
@@ -107,10 +112,41 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
     ].map((filename) => path.resolve(filename)))];
     const reachableModuleTargets = new Set<string>();
     const discoveredRoots = collectStaticRequireRoots(sourceRoots, compilerOptions, opts.dynamicRequires, reachableModuleTargets);
-    const moduleTargets = new Set([...(opts.moduleRoots ?? []).map(filename => path.resolve(filename)), ...reachableModuleTargets]);
+    const explicitModuleTargets = new Set((opts.moduleRoots ?? []).map(filename => path.resolve(filename)));
+    const moduleTargets = new Set([...explicitModuleTargets, ...reachableModuleTargets]);
     const isolatedScriptRoots = new Set(
         (opts.isolatedScriptRoots ?? []).map((filename) => path.resolve(filename)),
     );
+    // An import request can load a host CommonJS wrapper. Its Script body is
+    // distinct from an ECMAScript Module, even though TypeScript resolves both
+    // through the same import edge. Explicit ECMAScript roots keep their goal.
+    const packageTypes = new Map<string, string | undefined>();
+    const commonJsTargets = new Set<string>();
+    for (const source of moduleTargets) {
+        if (explicitModuleTargets.has(source) || isolatedScriptRoots.has(source)) continue;
+        if (!/\.[cm]?jsx?$/i.test(source)) continue;
+        const text = ts.sys.readFile(source); if (text === undefined) continue;
+        const parsed = createEcmaSourceFile(source,text,compilerOptions.target!,true,scriptKindForFile(source));
+        let commonJs = /\.cjs$/i.test(source);
+        if (!/\.[cm]js$/i.test(source)) {
+            let directory = path.dirname(source), type: string | undefined;
+            const visited: string[] = [];
+            for (;;) {
+                if (packageTypes.has(directory)) { type = packageTypes.get(directory); break; }
+                visited.push(directory);
+                const metadata = ts.sys.readFile(path.join(directory,"package.json"));
+                if (metadata !== undefined) {
+                    try { type = JSON.parse(metadata).type; } catch { /* no declared format */ }
+                    break;
+                }
+                const parent = path.dirname(directory); if (parent === directory) break;
+                directory = parent;
+            }
+            for (const directory of visited) packageTypes.set(directory,type);
+            commonJs = type === "commonjs" || type !== "module" && !ts.isExternalModule(parsed);
+        }
+        if (commonJs) { commonJsTargets.add(source); moduleTargets.delete(source); }
+    }
     const units = new Map<string, SourceUnit>();
     const initializationEntries = new Set((opts.initializationEntries ?? [opts.entry]).map(entry => path.resolve(entry)));
     const materializedUnits = new Map<string, SourceUnit>();
@@ -123,18 +159,19 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
             ? path.join(path.dirname(source), `__tsc2c_source_unit_${createHash("sha256").update(key).digest("hex")}${path.extname(source)}`)
             : source;
         if (fileName !== source && ts.sys.fileExists(fileName)) throw new Error("source unit identity collides with a physical file");
-        const record = { sourcePath: source, goal, fileName, initialBody: goal === "module" || initializationEntries.has(source) };
+        const record: SourceUnit = { sourcePath: source, goal, fileName, initialBody: goal === "module" || initializationEntries.has(source) || commonJsTargets.has(source), format: commonJsTargets.has(source) ? "commonjs" : "ecmascript" };
         units.set(key, record);
         materializedUnits.set(fileName, record);
         return record;
     };
     for (const source of isolatedScriptRoots) unit(source, "script");
+    for (const source of commonJsTargets) unit(source, "script");
     for (const source of moduleTargets) unit(source, "module");
     const moduleRoots = new Set([...moduleTargets].map(source => unit(source, "module").fileName));
     const rootNames = [libCoreDts, ...new Set([
         ...sourceRoots.map(source => isolatedScriptRoots.has(source) ? unit(source, "script").fileName : moduleTargets.has(source) ? unit(source, "module").fileName : source),
         ...discoveredRoots.map(source => moduleTargets.has(source) ? unit(source, "module").fileName : source),
-        ...[...reachableModuleTargets].map(source => unit(source, "module").fileName),
+        ...[...reachableModuleTargets].map(source => unit(source, commonJsTargets.has(source) ? "script" : "module").fileName),
     ])];
     const ignoreCheckJsDirectiveRoots = new Set(
         (opts.ignoreCheckJsDirectiveRoots ?? []).map((filename) => path.resolve(filename)),
@@ -184,6 +221,7 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
             (sourceFile as ts.SourceFile & { externalModuleIndicator?: ts.Node }).externalModuleIndicator ??= sourceFile;
         }
         const sourceUnit = materializedUnits.get(path.resolve(fileName));
+        if (sourceFile && sourceUnit) sourceUnitFormats.set(sourceFile,sourceUnit.format);
         if (sourceFile && sourceUnit && !(sourceFile.flags & ts.NodeFlags.JsonFile))
             (sourceFile as ts.SourceFile & { ecmaParseGoal?: EcmaParseGoal }).ecmaParseGoal = sourceUnit.goal;
         if (sourceFile && ignoreCheckJsDirectiveRoots.has(materializedUnits.get(path.resolve(sourceFile.fileName))?.sourcePath ?? path.resolve(sourceFile.fileName))) {

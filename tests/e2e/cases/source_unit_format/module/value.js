@@ -1,0 +1,1 @@
+globalThis.moduleGoal=this===undefined;

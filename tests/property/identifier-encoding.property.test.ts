@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import { mangleIdent, mangleQualifiedIdent } from "../../src/emit/mangle";
+import { moduleIdOf } from "../../src/resolve";
+import * as path from "node:path";
 
 // Decode framed names independently, using the original UTF-16 lengths to
 // consume each component. This proves reversibility, rather than counting
@@ -53,7 +55,14 @@ test("C identifier encoding is reversible for UTF-16 component Lists", () => {
         expect(names.get(encoded) ?? source).toBe(source);
         names.set(encoded, source);
         if (parts.length === 1) expect(mangleIdent(parts[0]!)).toBe(encoded);
+        const root = path.resolve("/tmp/module-identity-root"), file = path.join(root,...parts,"value.cjs");
+        const module = moduleIdOf(file,root);
+        expect(module.startsWith("m_")).toBe(true);
+        expect(decode(module.slice(2))).toEqual(path.relative(root,file).split(path.sep));
     }
+    const root = path.resolve("/tmp/module-identity-root");
+    const paths = ["value.js","value.cjs","value.mjs","value.ts","a-b/value.js","a_b/value.js","a/b_value.js","../value.js","_up_/value.js"];
+    expect(new Set(paths.map(file=>moduleIdOf(path.resolve(root,file),root))).size).toBe(paths.length);
     // One representative deep qualification List reaches the same encoder
     // and decoder without a namespace-depth cap or recursive traversal.
     const deep = Array.from({ length: 4096 }, (_, index) => "λ_" + index);

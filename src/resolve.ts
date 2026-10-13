@@ -1,6 +1,7 @@
 import ts from "typescript";
 import * as path from "node:path";
 import { sourceUnitFileName } from "./program";
+import { mangleQualifiedIdent } from "./emit/mangle";
 import {
     commonJsRequireSpecifierArgument,
     filterSpecifiersByStaticAffix,
@@ -55,17 +56,8 @@ export interface ModuleGraph {
 
 /** Build a module id from a file path relative to `rootDir`. */
 export function moduleIdOf(fileName: string, rootDir: string): string {
-    let rel = path.relative(rootDir, fileName);
-    if (rel === "" || rel === path.basename(fileName)) {
-        rel = path.basename(fileName, path.extname(fileName));
-    } else {
-        rel = rel.replace(/\.(ts|tsx|js|jsx|mjs|cjs|json)$/i, "");
-    }
-    rel = rel.replace(/\.\./g, "_up_");
-    rel = rel.replace(/[^a-zA-Z0-9_]/g, "_");
-    rel = rel.replace(/^_+/, "");
-    if (!rel) rel = "root";
-    return "m_" + rel;
+    const relative = path.relative(rootDir,fileName);
+    return "m_" + mangleQualifiedIdent(relative.split(path.sep));
 }
 
 /** Is this file a declaration (.d.ts) or our lib shim we should skip? */
