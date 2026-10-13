@@ -11,6 +11,7 @@ const expressions=[
  '["29;"].join()','Array.prototype.join.call(["3","1;"],"")',
  'Reflect.apply(Array.prototype.join,["3","7;"],[""])','Array.prototype.join.bind(["4","1;"],"")()',
  '[{toString(){return "43;";}}].join("")',
+ 'Array.prototype.join.call({0:"17;",length:1},"")','[,"17;"].join("")',
 ];
 test('join source facts use captured Lists and reject unknown values, live mutations and callback escapes',()=>{
  for(const expression of expressions)expect({expression,error:finiteEvalScriptSourceGraph([{path:'main.js',source:`eval(${expression});`}]).error}).toEqual({expression,error:null});
@@ -18,7 +19,6 @@ test('join source facts use captured Lists and reject unknown values, live mutat
   'eval([opaque(),"17;"].join(""));','eval(["17;"].join(opaque()));',
   'const a=[{toString(){a[1]=opaque();return "1";}},"7;"];eval(a.join(""));',
   'const a=["1","7;"];Object.defineProperty(a,"1",{get(){return opaque();}});eval(a.join(""));',
-  'eval(Array.prototype.join.call({0:"17;",length:1},""));','eval([,"17;"].join(""));',
   'const owner={body:"17;"};function run(){return eval(owner.body);}run();opaque(owner,run);',
   'const owner={body:"17;"};function run(){return eval(owner.body);}run();opaque(owner,{run});',
   'globalThis.owner={body:"17;"};function run(){return eval(owner.body);}run();opaque(globalThis);',

@@ -13,7 +13,13 @@ const calls=['start(body)','start.apply(undefined,[body])','Reflect.apply(start,
 test('execution domains and fresh actual Lists preserve finite sources while exposed aliases fail closed',()=>{
  for(const call of calls){
   const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:`globalThis.body=${JSON.stringify(worker)};const start=$262.agent.start;for(let i=0;i<2;i++){opaque();${call};}`}]);
-  expect(graph.error).toBeNull();expect(graph.agentSources).toEqual([worker]);
+  const iterates=call.includes('...');
+  if(iterates)expect(graph.error).toContain('agent.start source is not a finite static string expression');
+  else{expect(graph.error).toBeNull();expect(graph.agentSources).toEqual([worker]);}
+  const reference=`const fs=require('node:fs');const body='original';function start(value){fs.writeSync(1,value+'\\n');}function opaque(){Array.prototype[Symbol.iterator]=function*(){yield 'changed';};}for(let i=0;i<2;i++){opaque();${call};}`;
+  const node=Bun.spawnSync(['node','-e',reference],{stdout:'pipe',stderr:'pipe'});
+  expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  expect(node.stdout.toString()).toBe((iterates?'changed\n':'original\n').repeat(2));
  }
  for(const call of ['const args=[body];mutate(args);Reflect.apply(start,undefined,args);','Reflect.apply(start,undefined,[readSource()]);']){
   const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:`const body=${JSON.stringify(worker)};const start=$262.agent.start;${call}`}]);

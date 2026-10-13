@@ -1,0 +1,6 @@
+generic: 17
+inherited: 19
+string: 23
+apply: 41
+nullable: undefined
+sparse: 29

@@ -1,0 +1,11 @@
+const receiver={0:'1',2:'7;',length:'3.9'};
+console.log('generic:',eval(Array.prototype.join.call(receiver,'')));
+const inherited={__proto__:{0:'1'},2:'9;',length:3};
+console.log('inherited:',eval(Array.prototype.join.call(inherited,'')));
+console.log('string:',eval(Array.prototype.join.call('23;','')));
+console.log('apply:',eval.apply(null,{0:'41;',length:'1.9'} as any));
+console.log('nullable:',eval.apply(null,null));
+Array.prototype[0]='29;';
+const sparse=[,'37;'];
+console.log('sparse:',eval(...sparse));
+delete Array.prototype[0];

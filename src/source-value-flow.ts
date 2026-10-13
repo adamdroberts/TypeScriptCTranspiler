@@ -43,7 +43,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for" | "array-join" | `agent-member:${string}`;
+    "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | `agent-member:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
@@ -54,6 +54,10 @@ const NUMERIC_CONVERSIONS: ReadonlyMap<string, (value: Primitive) => Primitive> 
     ["Number", (value: Primitive) => Number(value)],
     ["BigInt", (value: Primitive) => BigInt(value as string | number | bigint | boolean)],
     ["numeric", (value: Primitive) => typeof value === "bigint" ? value : Number(value)],
+    ["length", (value: Primitive) => {
+        const number=+(value as number);
+        return number>0?Math.min(Math.trunc(number),Number.MAX_SAFE_INTEGER):0;
+    }],
 ]);
 interface PrimitiveChoiceProof {
     readonly values: readonly Primitive[];
@@ -77,7 +81,8 @@ type Atom =
     | { readonly tag: "descriptor"; readonly identity: object }
     | { readonly tag: "unknown"; readonly origin?: ts.Node }
     | { readonly tag: "opaque-object" }
-    | { readonly tag: "text-operation"; readonly operation: "numeric" | "template" | "bound-name" | "prefix" | "coerce" | "array-join"; readonly numeric?: SourceNumericOperation; readonly conversion?: string; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
+    | { readonly tag: "text-operation"; readonly operation: "numeric" | "template" | "bound-name" | "prefix" | "coerce"; readonly numeric?: SourceNumericOperation; readonly conversion?: string; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
+    | { readonly tag: "text-operation"; readonly operation: "array-join"; readonly parts: readonly Cell[]; readonly indexedRange: {readonly length:number;readonly positions:readonly number[]} }
     | { readonly tag: "promise"; readonly value: Cell; readonly rejection: Cell }
     | { readonly tag: "generator"; readonly owner: FunctionOwner }
     | { readonly tag: "global" } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record" };
@@ -112,7 +117,7 @@ class SourceFacts extends Set<Atom> {
 }
 interface Cell { readonly id: number; readonly values: SourceFacts; readonly users: Set<Rule>; }
 interface Rule { readonly inputs: Set<Cell>; readonly run: () => void; queued: boolean; }
-interface ObjectOwner { readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, Cell>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; }
+interface ObjectOwner { readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, Cell>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; closedIndices?:boolean; }
 interface FunctionOwner {
     readonly definition: CallableDefinition; readonly node: FunctionNode | null; readonly kind: DynamicFunctionKind; readonly fields: ObjectOwner;
     readonly returns: Cell; readonly throws: Cell; readonly receiver: Cell; readonly active: Cell; readonly sourceText: string;
@@ -188,7 +193,11 @@ class SourceValueFlow {
     private readonly bindings = new Map<ts.Symbol, Cell>();
     private readonly globals = new Map<string, Cell>();
     private readonly objects = new Map<ts.Node, ObjectOwner>();
-    private readonly literalLists = new WeakMap<ObjectOwner,{node:ts.ArrayLiteralExpression;parts:readonly ListPart[]}>();
+    private readonly literalLists = new WeakMap<ObjectOwner,{node:ts.ArrayLiteralExpression;parts:readonly ListPart[];holes:ReadonlySet<Cell>}>();
+    private readonly arrayLikeLengths = new Map<Cell,Map<ts.Node,Cell>>();
+    private readonly indexedReads = new Map<Cell,Map<ts.Node,Map<string,Cell>>>();
+    private readonly iterationMethods = new Map<Cell,Map<ts.Node|undefined,Cell>>();
+    private readonly arrayLikeObjectInputs = new Map<Cell,Cell>();
     private readonly functions = new Map<CallableDefinition, FunctionOwner>();
     private readonly ownerAtoms = new WeakMap<ObjectOwner | FunctionOwner, Map<Atom["tag"], Atom>>();
     private readonly promiseAtoms = new WeakMap<Cell, WeakMap<Cell, Atom>>();
@@ -287,6 +296,7 @@ class SourceValueFlow {
                 callers.push(origins);this.evaluationOrigins.set(entry.source,callers);
             }
             const completion = this.newCell();
+            if(!file.statements.length)this.publish(completion,this.primitive(undefined));
             const worklist: ts.Node[] = [...file.statements];
             while (worklist.length) {
                 const node = worklist.pop()!;
@@ -1302,10 +1312,13 @@ class SourceValueFlow {
     private arrayPrototype():Cell {
         if(!this.ordinaryArrayPrototype){
             const value=this.newCell();this.ordinaryArrayPrototype=value;
-            const fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};
+            const fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype(),closedIndices:true};
             this.copy(this.opaqueMutation,fields.shape);
             this.publish(value,{tag:"builtin",name:"Array.prototype",normalResult:"not-callable",fields});
             const join=this.newCell();this.publish(join,this.operation("array-join"));this.defineField(fields,"join",join);
+            const length=this.newCell();this.publish(length,this.primitive(0));this.defineField(fields,"length",length);
+            const iterator=this.newCell();this.publish(iterator,this.operation("array-values"));
+            this.defineField(fields,this.wellKnownSymbols.get("iterator")!,iterator);this.defineField(fields,"values",iterator);
         }
         return this.ordinaryArrayPrototype;
     }
@@ -1319,6 +1332,107 @@ class SourceValueFlow {
             }
         });
         return normalized;
+    }
+    private arrayLikeLength(receiver:Cell,context:ts.Node):Cell {
+        let contexts=this.arrayLikeLengths.get(receiver);
+        if(!contexts){contexts=new Map();this.arrayLikeLengths.set(receiver,contexts);}
+        let length=contexts.get(context);
+        if(!length){length=this.coerceCell(this.property(receiver,"length",context),context,"length");contexts.set(context,length);}
+        return length;
+    }
+    private indexedRead(receiver:Cell,index:number,context:ts.Node):Cell {
+        let contexts=this.indexedReads.get(receiver);
+        if(!contexts){contexts=new Map();this.indexedReads.set(receiver,contexts);}
+        let indices=contexts.get(context);
+        if(!indices){indices=new Map();contexts.set(context,indices);}
+        const key=String(index);let value=indices.get(key);
+        if(!value){value=this.property(receiver,key,context);indices.set(key,value);}
+        return value;
+    }
+    private iterationMethod(receiver:Cell,context?:ts.Node):Cell {
+        let contexts=this.iterationMethods.get(receiver);
+        if(!contexts){contexts=new Map();this.iterationMethods.set(receiver,contexts);}
+        let method=contexts.get(context);
+        if(!method){method=this.property(receiver,this.wellKnownSymbols.get("iterator")!,context);contexts.set(context,method);}
+        return method;
+    }
+    private arrayLikeLists(receiver:Cell,context:ts.Node,rule:Rule,completion:Cell,nullable=false):Array<readonly Cell[]|null> {
+        let empty:Array<readonly Cell[]>=[];
+        this.watch(rule,receiver);
+        if(nullable&&[...receiver.values].some(atom=>atom===this.primitive(null)||atom===this.primitive(undefined)))empty=[[]];
+        if([...receiver.values].some(atom=>atom.tag==="primitive"&&(!nullable||atom.value!==null&&atom.value!==undefined)||atom.tag==="text-operation")){
+            this.publish(completion,this.abrupt);
+            const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.opaqueObject);
+        }
+        {
+            let objects=this.arrayLikeObjectInputs.get(receiver);
+            if(!objects){
+                objects=this.newCell();this.arrayLikeObjectInputs.set(receiver,objects);
+                const selected=objects,input=receiver;
+                this.rule([input],()=>{for(const atom of input.values)if(atom.tag!=="primitive"&&atom.tag!=="text-operation"&&atom.tag!=="abrupt")this.publish(selected,atom);});
+            }
+            this.watch(rule,objects);
+            receiver=objects;
+            if(!receiver.values.size)return empty;
+        }
+        const literal=[...receiver.values].map(atom=>atom.tag==="object"?this.literalLists.get(atom.owner):undefined);
+        if(literal.length===1&&literal[0]&&!literal[0].holes.size){
+            let boundary:ts.Node=literal[0].node;
+            while(boundary.parent&&(ts.isParenthesizedExpression(boundary.parent)||ts.isAsExpression(boundary.parent)||ts.isTypeAssertionExpression(boundary.parent)||ts.isNonNullExpression(boundary.parent)||ts.isSatisfiesExpression(boundary.parent)))boundary=boundary.parent;
+            if(boundary.parent===context)return [...empty,...this.arguments(literal[0].parts,literal[0].node)];
+        }
+        const state=this.primitiveState(this.arrayLikeLength(receiver,context),rule,true);
+        if(state.pending&&!state.unresolved)return [...empty];
+        if(!state.proof.primitiveComplete)return [null];
+        if(!state.proof.values.length)this.publish(completion,this.abrupt);
+        const positions=this.indexedPropertyPositions(receiver,context,rule);
+        if(positions===undefined)return [];
+        if(positions===null)return [null];
+        return [...empty,...state.proof.values.map(extent=>{
+            const values:Cell[]=[];
+            for(let index=0;index<(extent as number);index++)values.push(this.indexedRead(receiver,index,context));
+            return values;
+        })];
+    }
+    private indexedPropertyPositions(receiver:Cell,context:ts.Node,rule:Rule):readonly number[]|null|undefined {
+        const positions=new Set<number>(),owners:ObjectOwner[]=[],visited=new Set<ObjectOwner>();
+        const add=(key:SourcePropertyKey|null)=>{
+            if(typeof key!=="string")return;
+            const index=Number(key);
+            if(Number.isSafeInteger(index)&&index>=0&&String(index)===key)positions.add(index);
+        };
+        this.watch(rule,receiver);
+        for(const atom of receiver.values){
+            if(atom.tag==="pending-source")return undefined;
+            if(atom.tag==="abrupt"||atom.tag==="primitive"&&(atom.value===null||atom.value===undefined))continue;
+            if(atom.tag==="primitive"&&typeof atom.value==="string"){
+                for(let index=0;index<atom.value.length;index++)positions.add(index);
+            }else{
+                const owner=this.ordinaryOwner(atom);
+                if(!owner||atom.tag==="builtin"&&!owner.closedIndices)return null;
+                owners.push(owner);
+            }
+        }
+        while(owners.length){
+            const owner=owners.pop()!;if(visited.has(owner))continue;visited.add(owner);
+            this.watch(rule,owner.shape);
+            if(!this.definitionsReady(owner,rule))return undefined;
+            if(this.opaqueShape(owner,context)||owner.accessors.has(null))return null;
+            for(const key of owner.fields.keys())add(key);
+            for(const key of owner.accessors.keys())add(key);
+            if(owner.prototype){
+                this.watch(rule,owner.prototype);
+                if(!owner.prototype.values.size)return undefined;
+                for(const prototype of owner.prototype.values){
+                    if(prototype===this.primitive(null))continue;
+                    if(prototype.tag==="pending-source")return undefined;
+                    const parent=this.ordinaryOwner(prototype);
+                    if(!parent||prototype.tag==="builtin"&&!parent.closedIndices)return null;
+                    owners.push(parent);
+                }
+            }
+        }
+        return [...positions].sort((left,right)=>left-right);
     }
     private property(base: Cell, key: SourcePropertyKey, context?: ts.Node, ownOnly=false): Cell {
         const result = this.newCell();
@@ -1371,6 +1485,13 @@ class SourceValueFlow {
         return owner;
     }
     private read(atom: Atom, base: Cell, key: SourcePropertyKey, result: Cell, handler?: Cell, rule?: Rule, context?: ts.Node, ownOnly=false): void {
+        if(atom.tag==="primitive"&&typeof atom.value==="string"){
+            if(key==="length"){this.publish(result,this.primitive(atom.value.length));return;}
+            if(typeof key==="string"){
+                const index=Number(key);
+                if(Number.isSafeInteger(index)&&index>=0&&String(index)===key&&index<atom.value.length){this.publish(result,this.primitive(atom.value[index]));return;}
+            }
+        }
         if (atom.tag === "primitive" && typeof atom.value === "symbol" && key === "description") {
             this.publish(result, this.primitive(atom.value.description)); return;
         }
@@ -1405,7 +1526,8 @@ class SourceValueFlow {
             if (rule) this.watch(rule,this.presence(owner,key));
             // The native builtin's unrepresented own members are opaque.
             // A closed prototype chain must not turn them into known absence.
-            if (owner === firstOwner && atom.tag === "builtin" && !presence?.values.has(this.primitive(true)) &&
+            const closedIndex=owner.closedIndices&&typeof key==="string"&&Number.isSafeInteger(Number(key))&&Number(key)>=0&&String(Number(key))===key;
+            if (owner === firstOwner && atom.tag === "builtin" && !closedIndex && !presence?.values.has(this.primitive(true)) &&
                 !(typeof key === "string" && (runtimeObjectPrototypeMethods.has(key) || key === "constructor" ||
                     atom.normalResult !== "not-callable" && CALLABLE_FORWARDING_OPERATIONS.has(key)))) {
                 this.publish(result, this.unknown); if (handler) this.publish(handler, this.unknown);
@@ -1563,15 +1685,24 @@ class SourceValueFlow {
         // locations. Literal/rest initialization and mutations publish into
         // those same cells; the rule worklist closes their dependencies.
         const alternatives: Array<readonly Cell[] | null> = [];
+        const method=this.iterationMethod(cell,context);
+        if(!method.values.size)return alternatives;
+        if([...method.values].some(value=>value.tag!=="operation"||value.operation!=="array-values"))return [null];
         for (const atom of cell.values) {
             if (atom.tag !== "object" || !atom.owner.listLength) {
                 alternatives.push(null);
                 continue;
             }
             const owner = atom.owner;
+            const prototypes=[owner],visited=new Set<ObjectOwner>();
+            while(prototypes.length){
+                const current=prototypes.pop()!;if(visited.has(current))continue;visited.add(current);
+                if(current.accessors.has(this.wellKnownSymbols.get("iterator")!)||current.accessors.has(null))return [null];
+                for(const prototype of current.prototype?.values??[]){const parent=this.ordinaryOwner(prototype);if(parent)prototypes.push(parent);}
+            }
             const proof = this.primitiveChoiceProof(owner.listLength!);
             const literal=this.literalLists.get(owner);
-            if(literal&&context&&argumentsRead){
+            if(literal&&context&&argumentsRead&&!literal.holes.size){
                 let boundary:ts.Node=literal.node;
                 while(boundary.parent&&(ts.isParenthesizedExpression(boundary.parent)||ts.isAsExpression(boundary.parent)||ts.isTypeAssertionExpression(boundary.parent)||ts.isNonNullExpression(boundary.parent)||ts.isSatisfiesExpression(boundary.parent)))boundary=boundary.parent;
                 if(boundary.parent&&ts.isSpreadElement(boundary.parent))boundary=boundary.parent;
@@ -1594,10 +1725,8 @@ class SourceValueFlow {
                 const locations: Cell[] = [];
                 for (let index = 0; index < length; index++) {
                     const key = String(index);
-                    const existing = owner.fields.get(key);
-                    const location = existing ?? this.field(owner, key);
-                    if (!existing) this.publish(location, this.primitive(undefined));
-                    locations.push(this.captureRead(location,context,argumentsRead));
+                    const location=context?this.indexedRead(cell,index,context):this.field(owner,key);
+                    locations.push(context?location:this.captureRead(location,context,argumentsRead));
                 }
                 alternatives.push(locations);
             }
@@ -1744,14 +1873,15 @@ class SourceValueFlow {
             if (ts.isArrayLiteralExpression(node)) {
                 owner.prototype=this.arrayPrototype();
                 const parts = node.elements.map(element => ({ cell: this.cell(ts.isSpreadElement(element) ? element.expression : element), spread: ts.isSpreadElement(element) }));
-                this.literalLists.set(owner,{node,parts});
+                const holes=new Set(parts.filter((_,index)=>ts.isOmittedExpression(node.elements[index]!)).map(part=>part.cell));
+                this.literalLists.set(owner,{node,parts,holes});
                 owner.listLength = this.field(owner, "length");
                 this.publish(this.presence(owner,"length"),this.primitive(true));
                 owner.listSources = parts.filter(part => part.spread).map(part => part.cell);
                 const seen = new Set<string>();
                 let rule: Rule;
                 rule = this.rule(parts.map(part => part.cell), () => {
-                    for (const part of parts) if (part.spread) this.watchList(rule, part.cell);
+                    for (const part of parts) if (part.spread) this.watchList(rule, part.cell,node);
                     if (this.cyclicListShape(owner)) {
                         this.publish(owner.listLength!, this.unknown);
                         return;
@@ -1761,7 +1891,7 @@ class SourceValueFlow {
                         const key = list.map(cell => cell.id).join(",");
                         if (seen.has(key)) continue;
                         seen.add(key);
-                        list.forEach((value, index) => this.defineField(owner,String(index),value));
+                        list.forEach((value, index) => {if(!holes.has(value))this.defineField(owner,String(index),value);});
                         this.publish(owner.listLength!, this.primitive(list.length));
                     }
                 });
@@ -1875,7 +2005,7 @@ class SourceValueFlow {
             let evaluations = this.evaluationInvocations.get(rule);
             if (!evaluations) { evaluations = new Map(); this.evaluationInvocations.set(rule,evaluations); }
             evaluations.clear();
-            for (const part of parts) if (part.spread) this.watchList(rule, part.cell);
+            for (const part of parts) if (part.spread) this.watchList(rule, part.cell,node);
             const worklist: Array<{ target: Cell; receiver: Cell; args: readonly Cell[] | null; boundPath: Set<Atom>; direct: boolean; construct: boolean }> = [
                 ...this.arguments(parts,node).map(args => ({ target: callee, receiver: receiver, args, boundPath: new Set<Atom>(),
                     construct, direct }))];
@@ -1930,8 +2060,7 @@ class SourceValueFlow {
                         if (previous.has(signature)) continue; previous.add(signature); routed.set(atom, previous);
                         const target = atom.operation === "reflect-apply" || atom.operation === "construct" ? argv?.[0] : invocation.receiver;
                         const listIndex = atom.operation === "reflect-apply" ? 2 : 1;
-                        if (argv?.[listIndex]) this.watchList(rule, argv[listIndex]!);
-                        const actual = atom.operation === "call" ? [argv?.slice(1) ?? null] : argv?.[listIndex] ? this.lists(argv[listIndex]!,node) : [null];
+                        const actual = atom.operation === "call" ? [argv?.slice(1) ?? null] : argv?.[listIndex] ? this.arrayLikeLists(argv[listIndex]!,node,rule,result,atom.operation==="apply") : atom.operation==="apply"&&argv ? [[]] : [null];
                         if (target) for (const args of actual) worklist.push({ ...invocation, target, direct: false,
                             construct: atom.operation === "construct",
                             receiver: atom.operation === "call" || atom.operation === "apply" ? argv?.[0] ?? this.empty : atom.operation === "reflect-apply" ? argv?.[1] ?? this.empty : constructedReceiver, args });
@@ -2082,23 +2211,29 @@ class SourceValueFlow {
                         }
                     } else if (atom.tag === "operation") {
                         if(atom.operation==="array-join"){
-                            this.watchList(rule,invocation.receiver);
-                            const lists=argv?this.lists(invocation.receiver,node,false):[null];
-                            for(const list of lists){
-                                const listKey=signature+":"+(list?list.map(value=>value.id).join(","):"opaque");
+                            const length=this.arrayLikeLength(invocation.receiver,node);
+                            const state=this.primitiveState(length,rule,true);
+                            if(state.pending&&!state.unresolved)continue;
+                            if(state.proof.primitiveComplete&&!state.proof.values.length){this.publish(result,this.abrupt);continue;}
+                            const positions=argv?this.indexedPropertyPositions(invocation.receiver,node,rule):null;
+                            if(positions===undefined)continue;
+                            if(positions===null||!state.proof.primitiveComplete){
+                                if(handled(atom,signature+":opaque"))continue;
+                                this.publish(result,this.unknownString);
+                                const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.unknown);
+                                this.onActive(node,()=>this.opaqueEffect(node));
+                                continue;
+                            }
+                            for(const extent of state.proof.values){
+                                const size=extent as number,indices=positions.filter(index=>index<size);
+                                const listKey=signature+":"+size+":"+indices.join(",");
                                 if(handled(atom,listKey))continue;
-                                if(!list){
-                                    this.publish(result,this.unknownString);
-                                    const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.unknown);
-                                    this.onActive(node,()=>this.opaqueEffect(node));
-                                    continue;
-                                }
                                 // join reads indices during the invocation,
                                 // after separator conversion. Keep ordinary
                                 // getters and writes in those location facts.
-                                const inputs=[this.joinTextInput(argv?.[0]??omittedArgument,true),...list.map((_,index)=>this.joinTextInput(this.property(invocation.receiver,String(index),node),false))];
+                                const inputs=[this.joinTextInput(argv?.[0]??omittedArgument,true),...indices.map(index=>this.joinTextInput(this.indexedRead(invocation.receiver,index,node),false))];
                                 const converted=this.convertList(inputs,node,"text");
-                                this.publish(result,{tag:"text-operation",operation:"array-join",parts:converted});
+                                this.publish(result,{tag:"text-operation",operation:"array-join",parts:converted,indexedRange:{length:size,positions:indices}});
                             }
                             continue;
                         }
@@ -2282,14 +2417,18 @@ class SourceValueFlow {
             }
         });
     }
-    private watchList(rule: Rule, cell: Cell): void {
+    private watchList(rule: Rule, cell: Cell,context?:ts.Node): void {
+        this.watch(rule,this.iterationMethod(cell,context));
         const pending = [cell], visited = new Set<Cell>();
         while (pending.length) {
             const input = pending.pop()!; if (visited.has(input)) continue; visited.add(input); this.watch(rule, input);
-            for (const atom of input.values) if (atom.tag === "object") {
-                this.watch(rule, atom.owner.shape);
-                if (atom.owner.listLength) pending.push(atom.owner.listLength);
-                for (const field of atom.owner.fields.values()) pending.push(field);
+            for (const atom of input.values) {
+                const owner=this.ordinaryOwner(atom);if(!owner)continue;
+                this.watch(rule, owner.shape);
+                if (owner.listLength) pending.push(owner.listLength);
+                if(owner.prototype)pending.push(owner.prototype);
+                for (const field of owner.fields.values()) pending.push(field);
+                for(const accessor of owner.accessors.values())pending.push(accessor.get,accessor.set);
             }
         }
     }
@@ -2347,7 +2486,21 @@ class SourceValueFlow {
                             } else if (atom.operation === "coerce") {
                                 try {add(NUMERIC_CONVERSIONS.get(atom.conversion!)!(tuple[0]!));} catch {}
                             } else if (atom.operation === "bound-name") add("bound " + (typeof tuple[0] === "string" ? tuple[0] : ""));
-                            else if(atom.operation==="array-join")add(tuple.slice(1).map(String).join(String(tuple[0])));
+                            else if(atom.operation==="array-join"){
+                                const range=atom.indexedRange,separator=String(tuple[0]),pieces:string[]=[];
+                                let previous=0;
+                                try{
+                                    for(const [index,position] of range.positions.entries()){
+                                        pieces.push(separator.repeat(position-previous),String(tuple[index+1]));previous=position;
+                                    }
+                                    pieces.push(separator.repeat(Math.max(0,range.length-1-previous)));
+                                    add(pieces.join(""));
+                                }catch{
+                                    // A host String allocation limit cannot
+                                    // establish a language-level abrupt result.
+                                    primitiveComplete=false;textComplete=false;
+                                }
+                            }
                             else if (atom.operation === "template") {if (!tuple.some(value => typeof value === "symbol")) add(tuple.map(String).join(""));}
                         }
                     } else {primitiveComplete = false; if (atom.tag === "unknown-string") textComplete = false;}
