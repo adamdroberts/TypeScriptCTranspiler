@@ -124,7 +124,13 @@ class SourceFacts extends Set<Atom> {
 }
 interface Cell { readonly id: number; readonly values: SourceFacts; readonly users: Set<Rule>; }
 interface Rule { readonly inputs: Set<Cell>; readonly run: () => void; queued: boolean; }
-interface ObjectOwner { readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, Cell>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; closedIndices?:boolean; }
+interface OwnPresence {
+    readonly facts: Cell;
+    readonly writes: Map<ts.Node,{base:Cell;receiver:Cell;mode:"set"|"define"|"delete"}>;
+    readonly contexts: Map<ts.Node|undefined,Cell>;
+    initial: boolean;
+}
+interface ObjectOwner { readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, OwnPresence>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; closedIndices?:boolean; }
 interface FunctionOwner {
     readonly definition: CallableDefinition; readonly node: FunctionNode | null; readonly kind: DynamicFunctionKind; readonly fields: ObjectOwner;
     readonly returns: Cell; readonly throws: Cell; readonly receiver: Cell; readonly active: Cell; readonly sourceText: string;
@@ -195,6 +201,8 @@ function propertyName(node: ts.Node | undefined): string | null {
  * Property discovery never asks TypeScript to infer a receiver/member type. */
 class SourceValueFlow {
     private readonly cells = new Map<ts.Node, Cell>();
+    private readonly presenceRules = new Set<Rule>();
+    private presenceClosed = false;
     private readonly jsonSerializations = new Map<ts.Node, Map<string, Cell>>();
     private readonly normalResults = new Map<Cell, Atom>();
     private readonly exceptionHandlers = new Map<ts.Node, Cell>();
@@ -840,12 +848,70 @@ class SourceValueFlow {
         }
         return cell;
     }
-    private presence(owner: ObjectOwner, key: SourcePropertyKey): Cell {
-        owner.own ??= new Map();let cell=owner.own.get(key);
-        if (!cell) {cell=this.newCell();owner.own.set(key,cell);}
-        return cell;
+    private ownPresence(owner:ObjectOwner,key:SourcePropertyKey):OwnPresence {
+        owner.own??=new Map();let record=owner.own.get(key);
+        if(!record){record={facts:this.newCell(),writes:new Map(),contexts:new Map(),initial:false};owner.own.set(key,record);}
+        return record;
+    }
+    private presence(owner:ObjectOwner,key:SourcePropertyKey):Cell {return this.ownPresence(owner,key).facts;}
+    /** Relative source-tree order is a dominance proof only within the same
+     * activation and outside repeated or optional evaluation paths. */
+    private writeDominates(write:ts.Node,read:ts.Node,rule:Rule):boolean {
+        const before=this.enclosingActivation(write),after=this.enclosingActivation(read);
+        if(before!==after)return false;
+        if(this.sourceFile(write)!==this.sourceFile(read)){
+            const left=this.scriptOrder.get(this.sourceFile(write)),right=this.scriptOrder.get(this.sourceFile(read));
+            if(left===undefined||right===undefined||left>=right)return false;
+        }else if(write.getEnd()>read.getStart())return false;
+        const readAncestors=new Set<ts.Node>();
+        for(let node:ts.Node|undefined=read;node;node=node.parent)readAncestors.add(node);
+        for(let child=write,parent=write.parent;parent;child=parent,parent=parent.parent){
+            if(ts.isFunctionLike(parent)||ts.isSourceFile(parent))break;
+            if(ts.isIterationStatement(parent,false))return false;
+            if(ts.isConditionalExpression(parent)||ts.isIfStatement(parent)||ts.isTryStatement(parent)||ts.isCatchClause(parent)||ts.isSwitchStatement(parent)){
+                if(!readAncestors.has(child))return false;
+            }
+            if(ts.isBinaryExpression(parent)&&[ts.SyntaxKind.AmpersandAmpersandToken,ts.SyntaxKind.BarBarToken,ts.SyntaxKind.QuestionQuestionToken].includes(parent.operatorToken.kind)&&child===parent.right)return false;
+            if((ts.isCallExpression(parent)||ts.isPropertyAccessExpression(parent)||ts.isElementAccessExpression(parent))&&parent.questionDotToken)return false;
+        }
+        const readGuards=this.guards(read);
+        for(const guard of this.guards(write)){
+            if(readGuards.some(candidate=>candidate.condition===guard.condition&&candidate.truthy===guard.truthy))continue;
+            this.watchText(rule,guard.condition);
+            const proof=this.primitiveChoiceProof(guard.condition);
+            if(!proof.primitiveComplete||!proof.values.length||proof.values.some(value=>!!value!==guard.truthy))return false;
+        }
+        return true;
+    }
+    private propertyPresence(owner:ObjectOwner,key:SourcePropertyKey,context?:ts.Node):Cell {
+        const record=this.ownPresence(owner,key),previous=record.contexts.get(context);if(previous)return previous;
+        const result=this.newCell();record.contexts.set(context,result);
+        let rule!:Rule;
+        rule=this.rule([record.facts],()=>{
+            if(record.initial&&![...record.writes.values()].some(event=>event.mode==="delete")&&!(typeof key==="symbol"&&this.freshSymbols.has(key))){this.publish(result,this.primitive(true));return;}
+            const origins=context?this.executionOrigins(context):null;
+            if(origins)this.watch(rule,origins);
+            const points=context&&this.enclosingActivation(context)?[...(origins?.values??[])].map(atom=>atom.tag==="unknown"?atom.origin:undefined):[context];
+            if(!points.length)return;
+            for(const point of points){
+                let present=record.initial;
+                for(const [write,event]of record.writes){
+                    this.watch(rule,event.base);this.watch(rule,event.receiver);
+                    const singleton=(cell:Cell)=>[...cell.values].every(atom=>atom.tag==="abrupt"||this.ordinaryOwner(atom)===owner)&&[...cell.values].some(atom=>this.ordinaryOwner(atom)===owner);
+                    const reference=context&&this.enclosingActivation(write)===this.enclosingActivation(context)?context:point;
+                    if(event.mode==="delete"){present=false;continue;}
+                    if(reference&&singleton(event.base)&&singleton(event.receiver)&&this.writeDominates(write,reference,rule))present=true;
+                }
+                if([...record.writes.values()].some(event=>event.mode==="delete"))present=false;
+                if(typeof key==="symbol"&&this.freshSymbols.has(key))present=false;
+                if(present)this.publish(result,this.primitive(true));
+                else if(this.presenceClosed){this.publish(result,this.primitive(false));if(record.facts.values.has(this.primitive(true)))this.publish(result,this.primitive(true));}
+            }
+        });
+        this.presenceRules.add(rule);return result;
     }
     private defineField(owner: ObjectOwner, key: SourcePropertyKey, value: Cell): void {
+        this.ownPresence(owner,key).initial=true;
         if (typeof key === "symbol" && this.freshSymbols.has(key)) this.publish(this.presence(owner,key),this.primitive(false));
         this.publish(this.presence(owner,key),this.primitive(true));this.copy(value,this.field(owner,key));
     }
@@ -858,7 +924,7 @@ class SourceValueFlow {
         this.accessorDefinitions.set(accessor.get,context);this.accessorDefinitions.set(accessor.set,context);
         this.copy(value,accessor[kind]);
         if(key===null)this.publish(owner.shape,this.unknown);
-        else this.publish(this.presence(owner,key),this.primitive(true));
+        else {if(ts.isGetAccessorDeclaration(context)||ts.isSetAccessorDeclaration(context))this.ownPresence(owner,key).initial=true;this.publish(this.presence(owner,key),this.primitive(true));}
         if (typeof key === "symbol" && this.freshSymbols.has(key)) this.publish(this.presence(owner,key),this.primitive(false));
     }
     private accessorCallee(source:Cell): Cell {
@@ -906,6 +972,7 @@ class SourceValueFlow {
                 if(key===null){const origins=this.executionOrigins(context);this.copy(origins,owner.shape);for(const field of owner.fields.values())this.copy(origins,field);}
                 else {
                     const presence=this.presence(owner,key);
+                    if(context)this.ownPresence(owner,key).writes.set(context,{base,receiver,mode});
                     if(mode==="delete")this.publish(presence,this.primitive(false));
                     if (!presence.values.size) this.publish(presence,this.primitive(false));
                     this.publish(presence,this.primitive(true));
@@ -1335,6 +1402,19 @@ class SourceValueFlow {
         });
     }
     private defineProperty(base:Cell,key:Cell,descriptor:Cell,context:ts.Node): void {
+        // Every normal DefineProperty completion creates an own location.
+        // Register that edge before descriptor absence reads settle, so the
+        // worklist cannot seal a later read as absent during intake.
+        let locations!:Rule;
+        locations=this.rule([base,key],()=>{
+            const names=this.propertyKeys(key,locations,context);
+            for(const name of names??[])for(const atom of base.values){
+                const owner=this.ordinaryOwner(atom);if(!owner)continue;
+                const record=this.ownPresence(owner,name);
+                record.writes.set(context,{base,receiver:base,mode:"define"});
+                this.publish(record.facts,this.primitive(true));
+            }
+        });
         const getter=this.property(descriptor,"get",context),setter=this.property(descriptor,"set",context),value=this.property(descriptor,"value",context);
         let rule!:Rule;
         rule=this.rule([base,key,getter,setter],()=>{
@@ -1345,7 +1425,8 @@ class SourceValueFlow {
             for(const name of names){
                 if(accessor){for(const atom of base.values){const owner=this.ordinaryOwner(atom);
                     if(owner){this.defineAccessor(owner,name,"get",getter,context);this.defineAccessor(owner,name,"set",setter,context);}
-                    else {this.publish(this.globalMutation,this.unknown);this.opaqueEffect(context);}
+                    else if(atom.tag==="unknown"||atom.tag==="opaque-object") {this.publish(this.globalMutation,this.unknown);this.opaqueEffect(context);}
+                    else if(atom.tag!=="abrupt"&&atom.tag!=="pending-source"){const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.opaqueObject);}
                 }}else if(getter.values.size && setter.values.size)this.writeProperty(base,name,value,true,"define",context);
             }
         });
@@ -1377,7 +1458,8 @@ class SourceValueFlow {
             if(key && keys===undefined)return;
             if(key && keys===null){incomplete();return;}
             for(const atom of base.values){
-                if(atom.tag==="pending-source"){this.publish(result,atom);continue;}
+                if(atom.tag==="pending-source"||atom.tag==="abrupt"){this.publish(result,atom);continue;}
+                if(atom.tag==="primitive"&&(atom.value===null||atom.value===undefined)){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.opaqueObject);continue;}
                 const owner=this.ordinaryOwner(atom);
                 if(!owner){incomplete();if(atom.tag==="unknown"||atom.tag==="opaque-object")this.onActive(context,()=>this.opaqueEffect(context));continue;}
                 this.watch(rule,owner.shape);
@@ -1389,7 +1471,8 @@ class SourceValueFlow {
                 if(!key && atom.tag!=="object")incomplete();
                 for(const name of names){
                     if(name===null){incomplete();continue;}
-                    const presence=this.presence(owner,name);this.watch(rule,presence);
+                    const presence=this.propertyPresence(owner,name,context);this.watch(rule,presence);
+                    if(!presence.values.size)continue;
                     const data=this.field(owner,name);this.watch(rule,data);
                     const accessor=owner.accessors.get(name);
                     const present=presence.values.has(this.primitive(true));
@@ -1647,7 +1730,7 @@ class SourceValueFlow {
                 if (atom.domain === "prototype" && atom.kind !== "ordinary") owner.prototype = this.callablePrototype("ordinary");
                 if (atom.domain === "prototype" && atom.kind === "ordinary") {
                     owner.prototype = this.objectPrototype();
-                    this.publish(this.field(owner, "toString"), this.operation("function-text"));this.publish(this.presence(owner,"toString"),this.primitive(true));
+                    this.publish(this.field(owner, "toString"), this.operation("function-text"));this.ownPresence(owner,"toString").initial=true;this.publish(this.presence(owner,"toString"),this.primitive(true));
                     this.defineField(owner, "constructor", this.globalBinding("Function"));
                 }
                 this.copy(this.opaqueMutation,owner.shape);
@@ -1688,7 +1771,10 @@ class SourceValueFlow {
             return;
         }
         const firstOwner = this.ordinaryOwner(atom), worklist = firstOwner ? [firstOwner] : [];
-        if(atom.tag==="global" && typeof key === "string" && !firstOwner!.accessors.has(key))this.copy(this.globalBinding(key),this.field(firstOwner!,key));
+        if(atom.tag==="global" && typeof key === "string" && !firstOwner!.accessors.has(key)) {
+            const binding=this.globalBinding(key);this.copy(binding,this.field(firstOwner!,key));
+            if(runtimeGlobalBindings.has(key)||binding.values.size)this.ownPresence(firstOwner!,key).initial=true;
+        }
         const visited = new Set<ObjectOwner>();
         while (worklist.length) {
             const owner = worklist.pop()!;
@@ -1704,8 +1790,9 @@ class SourceValueFlow {
                 if(accessor.get.values.has(this.primitive(undefined)))this.publish(result,this.primitive(undefined));
                 this.invoke(context ?? this.accessorDefinitions.get(accessor.get)!,this.accessorCallee(accessor.get),base,[],result);
             }
-            const presence=owner.own?.get(key);
-            if (rule) this.watch(rule,this.presence(owner,key));
+            const presence=this.propertyPresence(owner,key,context);
+            if (rule) this.watch(rule,presence);
+            if(!presence.values.size)continue;
             // The native builtin's unrepresented own members are opaque.
             // A closed prototype chain must not turn them into known absence.
             const closedIndex=owner.closedIndices&&typeof key==="string"&&Number.isSafeInteger(Number(key))&&Number(key)>=0&&String(Number(key))===key;
@@ -1793,7 +1880,7 @@ class SourceValueFlow {
         if (ts.isClassLike(node)) {
             const prototype: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.newCell()};
             const prototypeValue = this.field(owner.fields, "prototype");
-            this.publish(prototypeValue, {tag:"object",owner:prototype});this.publish(this.presence(owner.fields,"prototype"),this.primitive(true));
+            this.publish(prototypeValue, {tag:"object",owner:prototype});this.ownPresence(owner.fields,"prototype").initial=true;this.publish(this.presence(owner.fields,"prototype"),this.primitive(true));
             this.defineField(prototype,"constructor",this.cell(node));
             const heritage = node.heritageClauses?.find(clause => clause.token === ts.SyntaxKind.ExtendsKeyword)?.types[0];
             if (heritage) {
@@ -2331,7 +2418,7 @@ class SourceValueFlow {
                 const holes=new Set(parts.filter((_,index)=>ts.isOmittedExpression(node.elements[index]!)).map(part=>part.cell));
                 this.literalLists.set(owner,{node,parts,holes});
                 owner.listLength = this.field(owner, "length");
-                this.publish(this.presence(owner,"length"),this.primitive(true));
+                this.ownPresence(owner,"length").initial=true;this.publish(this.presence(owner,"length"),this.primitive(true));
                 owner.listSources = parts.filter(part => part.spread).map(part => part.cell);
                 const seen = new Set<string>();
                 let rule: Rule;
@@ -2651,6 +2738,7 @@ class SourceValueFlow {
                                 if (!location) {
                                     const restOwner: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.arrayPrototype()};
                                     restOwner.listLength = this.field(restOwner, "length");
+                                    this.ownPresence(restOwner,"length").initial=true;this.publish(this.presence(restOwner,"length"),this.primitive(true));
                                     location = {value:this.newCell(),owner:restOwner};
                                     this.restLocations.set(parameter,location);
                                     this.publish(location.value, {tag:"object",owner:restOwner});
@@ -3024,6 +3112,16 @@ class SourceValueFlow {
             // impossible branch. Seal them only after the known graph closes,
             // then propagate the same interned top fact through normal edges.
             let changed = false;
+            if(!this.presenceClosed){
+                // Unresolved external bindings are value inputs, rather than
+                // owner absence dependencies. Wake their guarded mutations
+                // before sealing any contextual own-location absence.
+                for(const [node,cell]of this.cells)if(ts.isIdentifier(node)&&!cell.values.size&&!this.bindingSymbol(node)){
+                    this.publish(this.binding(node),this.unknown);changed=true;
+                }
+                if(changed)continue;
+                this.presenceClosed=true;for(const rule of this.presenceRules)this.schedule(rule);continue;
+            }
             for (const cell of this.exceptionCells) if (!cell.values.size) {this.publish(cell, this.abrupt); changed = true;}
             for (const cell of this.accessorSlots) if (!cell.values.size) {this.publish(cell, this.primitive(undefined)); changed = true;}
             if (changed) continue;
