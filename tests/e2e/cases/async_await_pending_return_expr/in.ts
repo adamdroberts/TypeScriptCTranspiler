@@ -1,4 +1,4 @@
-import { setTimeout as delay } from "node:timers/promises";
+import { delay } from "../../helpers/virtual-delay";
 import crypto from "node:crypto";
 import { EventEmitter } from "node:events";
 import fs from "node:fs";
@@ -116,10 +116,8 @@ async function sourceTryCatchParenthesizedReturn(prefix: string): Promise<string
 }
 
 function rejectAfter(ms: number, reason: string): Promise<string> {
-    return new Promise<string>((resolve, reject) => {
-        setTimeout((): void => {
-            reject(reason);
-        }, ms);
+    return delay(ms).then((_value: any): string => {
+        throw reason;
     });
 }
 

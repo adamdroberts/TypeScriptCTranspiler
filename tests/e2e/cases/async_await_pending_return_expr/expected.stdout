@@ -97,8 +97,8 @@ inline-await-return: fn-inline!
 method-inline-await-return: method-inline-class-method-inline!
 arrow-inline-await-return: value-arrow-inline!
 branch-return-await-true: branch-true
-two-await: one:fn-one-two!
 branch-return-await-false: branch-false
+two-await: one:fn-one-two!
 method-branch-return-await-true: method-branch-true
 method-branch-return-await-false: method-branch-false
 arrow-branch-return-await-true: arrow-true
@@ -189,14 +189,14 @@ method-prelude-expression-statement-awaited-local-return: method-prelude-class-a
 arrow-prelude-expression-statement-awaited-local-return: value-awaited-expr-local!
 prelude-local-awaited-local-return: fn-local-awaited-local!
 method-prelude-local-awaited-local-return: method-prelude-class-method-local-awaited-local!
+four-await: one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four!
 arrow-prelude-local-awaited-local-return: value-arrow-local-awaited-local!
 await-expression-statement-return: fn-await-expression-done
 method-await-expression-statement-return: method-await-expression-class-method-await-expression-done
 arrow-await-expression-statement-return: value-arrow-await-expression-done
-prelude-await-expression-statement-return: fn-prelude-await-expression-done
-four-await: one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four!
 prelude-array-awaited-local-return: fn-array-local-2-value
 prelude-array-inline-await-return: fn-array-inline-value-2
+prelude-await-expression-statement-return: fn-prelude-await-expression-done
 method-four-await: method-one:class-method-four-method-one:method-one:class-method-four-method-one-three:method-one:class-method-four-method-one:method-one:class-method-four-method-one-three-four!
 prelude-class-awaited-local-return: fn-class-local-value
 prelude-class-inline-await-return: fn-class-inline-value
@@ -209,7 +209,7 @@ prelude-weak-map-inline-await-return: fn-weak-map-inline-value
 prelude-weak-ref-finalization-awaited-local-return: fn-weak-ref-local!:true:[object WeakRef]:[object FinalizationRegistry]:fn-weak-ref-value
 prelude-builtins-awaited-local-return: true:2020-02-03T04:05:06.007Z:Error: fn-error
 prelude-aggregate-error-awaited-local-return: AggregateError:fn-aggregate:2:fn-first:fn-cause:AggregateError: fn-aggregate:fn-aggregate-value
-prelude-fs-objects-awaited-local-return: true:10:fn-fs.txt:true:[object Stats]:[object Dirent]:fn-fs-value
+prelude-fs-objects-awaited-local-return: true:10:fn-fs.txt:true:[object Object]:[object Object]:fn-fs-value
 prelude-function-awaited-local-return: fn-FUNCTION-VALUE!:function
 prelude-symbol-bigint-awaited-local-return: fn-symbol-local:42:value
 prelude-promise-race-return: same:value

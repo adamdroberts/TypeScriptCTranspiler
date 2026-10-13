@@ -1,4 +1,4 @@
-type PendingDelay={deadline:number;order:number;value:string;resolve:(value:string)=>void};
+type PendingDelay={deadline:number;order:number;value:any;resolve:(value:any)=>void};
 const pending:PendingDelay[]=[];
 let now=0;
 let order=0;
@@ -14,8 +14,8 @@ function advance():void{
     Promise.resolve().then(advance);
 }
 
-export function delay(milliseconds:number,value:string):Promise<string>{
-    return new Promise<string>((resolve)=>{
+export function delay(milliseconds:number,value?:any):Promise<any>{
+    return new Promise<any>((resolve)=>{
         pending.push({deadline:now+milliseconds,order:order++,value,resolve});
         if(!draining){draining=true;Promise.resolve().then(advance);}
     });
