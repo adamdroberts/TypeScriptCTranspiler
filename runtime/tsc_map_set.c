@@ -388,6 +388,8 @@ typedef struct {
     tsc_map_t* map;
     tsc_set_t* set;
     tsc_collection_order_node_t* cursor;
+    tsc_realm_t* realm;
+    bool executing;
 } collection_iterator_t;
 
 typedef struct {
@@ -536,7 +538,7 @@ static collection_iterator_t* collection_cursor(bool is_map, tsc_value_t receive
     tsc_set_t* set = is_map ? NULL : tsc_value_as_set(receiver);
     collection_iterator_t* state = TSC_GC_MALLOC(sizeof(*state));
     *state = (collection_iterator_t){ .is_map = is_map, .kind = kind, .map = map, .set = set,
-        .cursor = is_map ? map->order.head : set->order.head };
+        .cursor = is_map ? map->order.head : set->order.head, .realm = tsc_realm_current() };
     return state;
 }
 
@@ -577,8 +579,28 @@ static tsc_value_t collection_iterator_next(void* env, tsc_value_t receiver, tsc
     if (!state || state->is_map != intrinsic->is_map) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("collection iterator next called on incompatible receiver"));
     }
+    if (state->executing) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("collection iterator is already executing"));
+    // GeneratorValidate runs in the borrowed method's Realm. A live
+    // closure resumes in its creation Realm; completion results are created
+    // after that context has been removed, in the method's Realm.
+    if (!state->map && !state->set) return tsc_iterator_result(tsc_value_undefined(), true);
+    tsc_realm_t* method_realm = tsc_realm_current();
+    state->executing = true;
+    TSC_TRY_FRAME(frame); tsc_try_push(&frame);
+    if (setjmp(frame.jb)) {
+        tsc_value_t error = tsc_current_error_value();
+        void* volatile error_root = tsc_value_gc_root(error);
+        state->map = NULL; state->set = NULL; state->cursor = NULL; state->executing = false;
+        tsc_try_pop(); (void)tsc_realm_swap(method_realm);
+        (void)error_root; tsc_throw_value(error);
+    }
+    (void)tsc_realm_swap(state->realm);
     tsc_value_t key, value;
-    if (!collection_step(state, &key, &value)) return tsc_iterator_result(tsc_value_undefined(), true);
+    if (!collection_step(state, &key, &value)) {
+        state->executing = false;
+        (void)tsc_realm_swap(method_realm); tsc_try_pop();
+        return tsc_iterator_result(tsc_value_undefined(), true);
+    }
     void* volatile key_root = tsc_value_gc_root(key);
     void* volatile value_root = tsc_value_gc_root(value);
     tsc_value_t result = state->kind == COLLECTION_KEYS ? key : value;
@@ -588,8 +610,11 @@ static tsc_value_t collection_iterator_next(void* env, tsc_value_t receiver, tsc
         tsc_array_push_raw(pair, &value);
         result = tsc_value_array(pair);
     }
+    result = tsc_iterator_result(result, false);
+    state->executing = false;
     (void)key_root; (void)value_root;
-    return tsc_iterator_result(result, false);
+    (void)tsc_realm_swap(method_realm); tsc_try_pop();
+    return result;
 }
 
 typedef enum {
