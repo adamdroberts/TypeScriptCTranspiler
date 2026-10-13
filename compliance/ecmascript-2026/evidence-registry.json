@@ -2845,7 +2845,8 @@
         "sec-json-serialization-record#retained-holder-options-owner-and-output-graph",
         "sec-serializejsonproperty#ordered-get-tojson-replacer-and-output-continuations",
         "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
-        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist"
+        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist",
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
       ]
     },
     {
@@ -2941,7 +2942,8 @@
         "sec-json-serialization-record#retained-holder-options-owner-and-output-graph",
         "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
         "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist",
-        "sec-return-statement-runtime-semantics-evaluation#recursive-capture-and-actual-source-return-graph"
+        "sec-return-statement-runtime-semantics-evaluation#recursive-capture-and-actual-source-return-graph",
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
       ]
     },
     {
@@ -4260,6 +4262,48 @@
       "id": "runtime/tsc_node.c#tsc_os_user_info_function",
       "targets": [
         "sec-evaluatecall#ordinary-user-info-actuals-and-option-get"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "source_proof_captured_format",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/property-presence-source.property.test.ts",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#captureRead",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#bindingDefault",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#property",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#computedProperty",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
       ]
     }
   ]
