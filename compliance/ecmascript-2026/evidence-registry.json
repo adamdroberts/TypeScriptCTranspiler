@@ -2599,6 +2599,69 @@
         "sec-json-object#ordinary-realm-namespace-and-canonical-method-owners",
         "sec-json-%symbol.tostringtag%#ordinary-configurable-json-tag-descriptor"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/json-parse-owner.property.test.ts",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "json_parse_source_owner",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "json_parse_source_owner_depth",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root"
+      ],
+      "stressReview": {
+        "dimension": "mixed JSON object/array source owner-tree depth",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One representative generated mixed-container parse traverses the canonical owner graph and closes a deep leaf eval source, independently of fixture families or successive depth counts.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#jsonValue",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#iteratorElements",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#iteratorCloseEffects",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#arrayIterator",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/global-bindings.ts#runtimeIteratorMethods",
+      "targets": [
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root"
+      ]
     }
   ]
 }

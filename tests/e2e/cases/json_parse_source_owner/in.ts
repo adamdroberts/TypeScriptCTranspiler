@@ -1,0 +1,10 @@
+const data: any = JSON.parse('{"rows":[{"body":"149;"}],"__proto__":{"body":"151;"}}');
+console.log("nested:", eval(data.rows[0].body));
+console.log("own proto:", eval(data.__proto__.body));
+const list: any = JSON.parse('["157", ";"]');
+console.log("join:", eval(list.join("")));
+for (const body of JSON.parse('["251;"]')) console.log("iteration:", eval(body));
+let after = "257;";
+const iterable: any = { [Symbol.iterator]() { return { next() { return { done: false, value: 1 }; }, return() { after = "263;"; return {}; } }; } };
+for (const value of iterable) break;
+console.log("close:", eval(after));

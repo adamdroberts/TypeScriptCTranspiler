@@ -14,7 +14,7 @@ import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
 import {declarativeSourceBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding, sourceBindingTarget} from "./source-bindings";
-import {runtimeGlobalBindings, runtimeErrorKinds, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
+import {runtimeGlobalBindings, runtimeErrorKinds, runtimeIteratorMethods, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
     readonly roots?: readonly string[];
@@ -222,6 +222,10 @@ class SourceValueFlow {
     private readonly arrayLikeLengths = new Map<Cell,Map<ts.Node,Cell>>();
     private readonly indexedReads = new Map<Cell,Map<ts.Node,Map<string,Cell>>>();
     private readonly iterationMethods = new Map<Cell,Map<ts.Node|undefined,Cell>>();
+    private readonly iterationRecords = new Map<Cell,Cell>();
+    private readonly arrayIterators = new Map<ts.Node,Map<Cell,Cell>>();
+    private ordinaryIteratorPrototype?:Cell;
+    private ordinaryArrayIteratorPrototype?:Cell;
     private readonly iterationElements = new Map<Cell, Map<ts.Node, Cell>>();
     private readonly argumentValues = new Map<ArgumentSequence, Cell>();
     private readonly argumentSequences = new Map<ts.Node, Map<string, ArgumentSequence>>();
@@ -442,9 +446,12 @@ class SourceValueFlow {
                     }
                 }
                 if (ts.isForInStatement(node) || ts.isForOfStatement(node)) {
-                    const value = this.newCell(); this.publish(value, this.unknown);
                     this.onActive(node, () => {
-                        if (ts.isVariableDeclarationList(node.initializer)) for (const declaration of node.initializer.declarations) this.bind(declaration.name, value);
+                        const iterable=ts.isForOfStatement(node)&&!node.awaitModifier;
+                        const value=iterable?this.iteratorElements(this.cell(node.expression),node):this.newCell();
+                        if(!iterable)this.publish(value,this.unknown);
+                        else this.iteratorCloseEffects(value,node);
+                        if (ts.isVariableDeclarationList(node.initializer)) for (const declaration of node.initializer.declarations) this.bind(declaration.name, value,undefined,node);
                         else this.writeTarget(node.initializer, value, node);
                     });
                 }
@@ -1541,6 +1548,7 @@ class SourceValueFlow {
                 if(runtimeErrorKinds.has(key))this.defineField(fields,"prototype",this.errorPrototype(key));
                 if(key==="Object")this.defineField(fields,"prototype",this.objectPrototype());
                 if(key==="Array")this.defineField(fields,"prototype",this.arrayPrototype());
+                if(key==="Iterator")this.defineField(fields,"prototype",this.iteratorPrototype());
                 if(key==="Symbol") {
                     for (const [name, symbol] of this.wellKnownSymbols) {
                         const value = this.newCell(); this.publish(value, this.primitive(symbol)); this.defineField(fields, name, value);
@@ -2111,6 +2119,31 @@ class SourceValueFlow {
         }
         return choices;
     }
+    /** Materialize parsed JSON into the ordinary location graph. A single
+     * object worklist supplies fields, prototypes and array extents, without
+     * source-depth or container-shape cases. */
+    private jsonValue(value:unknown):Atom {
+        const owners=new Map<object,{atom:Atom;owner:ObjectOwner}>(),pending:object[]=[];
+        const atom=(value:unknown):Atom=>{
+            if(value===null||typeof value!=="object")return this.primitive(value as Primitive);
+            const prior=owners.get(value);if(prior)return prior.atom;
+            const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:Array.isArray(value)?this.arrayPrototype():this.objectPrototype()};
+            this.copy(this.opaqueMutation,owner.shape);
+            const result:Atom={tag:"object",owner};owners.set(value,{atom:result,owner});pending.push(value);return result;
+        };
+        const result=atom(value);
+        while(pending.length) {
+            const value=pending.pop()!,owner=owners.get(value)!.owner;
+            for(const key of Object.keys(value)) {
+                const field=this.newCell();this.publish(field,atom((value as Record<string,unknown>)[key]));this.defineField(owner,key,field);
+            }
+            if(Array.isArray(value)) {
+                owner.listLength=this.field(owner,"length");
+                const length=this.newCell();this.publish(length,this.primitive(value.length));this.defineField(owner,"length",length);
+            }
+        }
+        return result;
+    }
     private jsonParse(source:Cell,reviver:Cell,context:ts.Node):Cell {
         let calls=this.jsonParses.get(context);
         if(!calls){calls=new Map();this.jsonParses.set(context,calls);}
@@ -2127,7 +2160,7 @@ class SourceValueFlow {
                 const input=String(value);if(selected.has(input))continue;selected.add(input);
                 try {
                     const value=JSON.parse(input),composite=value!==null&&typeof value==="object";
-                    const atom=composite?this.opaqueObject:this.primitive(value);
+                    const atom=this.jsonValue(value);
                     this.publish(parsed,atom);
                     const holderOwner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};
                     this.defineField(holderOwner,"",cell(atom));
@@ -2391,17 +2424,71 @@ class SourceValueFlow {
         });
         return result;
     }
+    private iteratorPrototype():Cell {
+        if(!this.ordinaryIteratorPrototype) {
+            const value=this.newCell();this.ordinaryIteratorPrototype=value;
+            const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};
+            this.copy(this.opaqueMutation,owner.shape);this.publish(value,{tag:"object",owner});
+            for(const key of [...runtimeIteratorMethods,this.wellKnownSymbols.get("iterator")!]) {
+                const field=this.newCell();this.publish(field,this.unknown);this.defineField(owner,key,field);
+            }
+            for(const key of ["constructor",this.wellKnownSymbols.get("toStringTag")!]) {
+                const accessor={get:this.newCell(),set:this.newCell()};
+                this.publish(accessor.get,this.unknown);this.publish(accessor.set,this.unknown);
+                this.accessorSlots.add(accessor.get);this.accessorSlots.add(accessor.set);owner.accessors.set(key,accessor);
+                this.ownPresence(owner,key).initial=true;this.publish(this.presence(owner,key),this.primitive(true));
+            }
+        }
+        return this.ordinaryIteratorPrototype;
+    }
+    private arrayIterator(receiver:Cell,context:ts.Node):Cell {
+        let calls=this.arrayIterators.get(context);if(!calls){calls=new Map();this.arrayIterators.set(context,calls);}
+        const prior=calls.get(receiver);if(prior)return prior;
+        const result=this.newCell();calls.set(receiver,result);
+        if(!this.ordinaryArrayIteratorPrototype) {
+            const value=this.newCell();this.ordinaryArrayIteratorPrototype=value;
+            const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.iteratorPrototype()};
+            this.copy(this.opaqueMutation,owner.shape);this.publish(value,{tag:"object",owner});
+            const next=this.newCell();this.publish(next,this.unknown);this.defineField(owner,"next",next);
+            const tag=this.newCell();this.publish(tag,this.primitive("Array Iterator"));this.defineField(owner,this.wellKnownSymbols.get("toStringTag")!,tag);
+        }
+        const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.ordinaryArrayIteratorPrototype};
+        this.copy(this.opaqueMutation,owner.shape);const iterator:Atom={tag:"object",owner};
+        this.rule([receiver],()=>{for(const atom of receiver.values){
+            if(atom===this.primitive(undefined)||atom===this.primitive(null)) {
+                this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));
+            }else this.publish(result,iterator);
+        }});
+        return result;
+    }
+    private iteratorCloseEffects(elements:Cell,context:ts.Node):void {
+        const iterator=this.iterationRecords.get(elements);if(!iterator)return;
+        const methods=this.property(iterator,"return",context),callee=this.newCell(),completion=this.newCell();
+        this.invoke(context,callee,iterator,[],completion);
+        // Loop-body abrupt completion may close a custom iterator. Until
+        // completion-sensitive effects are represented, retain every possible
+        // close getter/call instead of treating element precision as purity.
+        this.rule([methods],()=>{for(const atom of methods.values){
+            if(atom===this.primitive(undefined)||atom===this.primitive(null))continue;
+            this.publish(callee,atom);
+        }});
+        this.rule([completion],()=>{for(const atom of completion.values)if(atom.tag==="primitive"||atom.tag==="non-string"||atom.tag==="unknown-string"||atom.tag==="text-operation"||atom.tag==="unknown") {
+            const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));
+        }});
+    }
     private iteratorElements(receiver: Cell, context: ts.Node): Cell {
         let contexts = this.iterationElements.get(receiver);
         if (!contexts) {contexts = new Map(); this.iterationElements.set(receiver, contexts);}
         const prior = contexts.get(context); if (prior) return prior;
         const result = this.newCell(); contexts.set(context, result);
         const method = this.iterationMethod(receiver, context), custom = this.newCell(), iterator = this.newCell();
+        const closeIterators=this.newCell();this.copy(iterator,closeIterators);this.iterationRecords.set(result,closeIterators);
         const returned = this.newCell();
         let methods!: Rule;
         methods = this.rule([method], () => {
             for (const atom of method.values) {
                 if (atom.tag === "operation" && atom.operation === "array-values") {
+                    this.copy(this.arrayIterator(receiver,context),closeIterators);
                     const keys = this.propertyDomainKeys(receiver, context, methods, "index");
                     if (keys === null) this.publish(result, this.unknown);
                     else if (keys) {
@@ -2932,6 +3019,7 @@ class SourceValueFlow {
                             if (handler) this.copy(atom.owner.throws, handler);
                         }
                     } else if (atom.tag === "operation") {
+                        if(atom.operation==="array-values"){this.copy(this.arrayIterator(invocation.receiver,node),result);continue;}
                         if(atom.operation==="json-parse"){
                             this.copy(this.jsonParse(argument(0)??omittedArgument,argument(1)??omittedArgument,node),result);continue;
                         }

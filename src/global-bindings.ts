@@ -30,6 +30,13 @@ export const runtimeErrorKinds: ReadonlyMap<string,string> = new Map(
         .map(([,name,kind])=>[name!,kind!] as const),
 );
 
+/** Iterator prototype member locations use the native publication tables. */
+export const runtimeIteratorMethods: ReadonlySet<string> = new Set(
+    ["tsc_iterator_helpers.def","tsc_iterator_consumers.def"].flatMap(filename=>
+        [...fs.readFileSync(path.join(resolvePackageRoot(),"runtime",filename),"utf8")
+            .matchAll(/^TSC_ITERATOR_(?:HELPER|CONSUMER)\((\w+), /gm)].map(match=>match[1]!)),
+);
+
 /** The native well-known Symbol table is the canonical identity collection. */
 export const runtimeWellKnownSymbolDescriptions: ReadonlyMap<string, string> = new Map(
     fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_builtin.c"), "utf8")

@@ -112,6 +112,11 @@ export interface JsonNamespaceOwnerDepthSpec {
     depth: number;
 }
 
+export interface JsonParseSourceOwnerDepthSpec {
+    generator: "json-parse-source-owner-depth";
+    depth: number;
+}
+
 export interface ReflectConstructArgumentWidthSpec {
     generator: "reflect-construct-argument-width";
     width: number;
@@ -197,6 +202,7 @@ export type GeneratedCaseSpec =
     | JsonRawTextWidthSpec
     | JsonReviverDepthSpec
     | JsonNamespaceOwnerDepthSpec
+    | JsonParseSourceOwnerDepthSpec
     | ReflectConstructArgumentWidthSpec
     | ArrowFormalBindingTreeDepthSpec
     | ArrayStaticFactoryItemWidthSpec
@@ -278,7 +284,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth") {
+    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
             throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
@@ -1599,6 +1605,14 @@ function classExpressionMethodWidthSource(width: number): string {
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
+        case "json-parse-source-owner-depth": {
+            let text='"241;"';
+            for(let depth=0;depth<spec.depth;depth++)text=depth%2?'['+text+']':'{"child":'+text+'}';
+            const selected="value"+Array.from({length:spec.depth},(_,index)=>(spec.depth-1-index)%2?"[0]":".child").join("");
+            return `const value: any = JSON.parse(${JSON.stringify(text)});
+console.log("JSON parsed source owner depth:", eval(${selected}) === 241);
+`;
+        }
         case "json-namespace-owner-depth":
             return `const owner = JSON, parse = owner.parse;
 let chain: any = { previous: null, owner, parse };
