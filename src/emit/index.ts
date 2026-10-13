@@ -38291,6 +38291,8 @@ class Emitter {
             }
             case "clear":
                 return { c: `(tsc_map_clear(${recv.c}), (void)0)`, ty: T_VOID };
+            case "getOrInsert":
+            case "getOrInsertComputed":
             case "keys":
             case "values":
             case "entries":

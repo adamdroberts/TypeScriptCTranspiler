@@ -373,7 +373,7 @@ tsc_array_t* tsc_set_values(const tsc_set_t* s) {
 typedef enum {
     COLLECTION_GET, COLLECTION_HAS, COLLECTION_DELETE, COLLECTION_CLEAR,
     COLLECTION_WRITE, COLLECTION_KEYS, COLLECTION_VALUES, COLLECTION_ENTRIES,
-    COLLECTION_FOR_EACH, COLLECTION_SIZE,
+    COLLECTION_FOR_EACH, COLLECTION_SIZE, COLLECTION_GET_OR_INSERT, COLLECTION_GET_OR_INSERT_COMPUTED,
 } collection_operation_t;
 
 typedef struct {
@@ -725,6 +725,23 @@ static tsc_value_t set_composition_apply(void* environment, tsc_value_t receiver
     return predicate ? tsc_value_bool(true) : tsc_value_set(result);
 }
 
+static void collection_store(collection_iterator_t* source, tsc_value_t key, tsc_value_t value) {
+    tsc_map_t* map = source->map;
+    tsc_set_t* set = source->set;
+    void* volatile key_root = tsc_value_gc_root(key);
+    void* volatile value_root = tsc_value_gc_root(value);
+    size_t key_width = map ? map->ks : set->es;
+    void* volatile key_storage = TSC_GC_MALLOC(key_width);
+    collection_unbox(key, key_storage, key_width,
+        map ? map->box_key : set->box_value, map ? map->unbox_key : set->unbox_value);
+    if (map) {
+        void* volatile value_storage = TSC_GC_MALLOC(map->vs);
+        collection_unbox(value, value_storage, map->vs, map->box_value, map->unbox_value);
+        tsc_map_set_raw(map, key_storage, value_storage);
+    } else tsc_set_add_raw(set, key_storage);
+    (void)key_root; (void)value_root;
+}
+
 static tsc_value_t collection_method_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
     const collection_method_t* method = env;
     collection_iterator_t* source = collection_cursor(method->is_map, receiver, method->operation);
@@ -748,16 +765,28 @@ static tsc_value_t collection_method_apply(void* env, tsc_value_t receiver, tsc_
         case COLLECTION_WRITE: {
             if (!value_is_box(key) && value_as_num(key) == 0) key = tsc_value_num(0);
             if (!map) value = key;
-            size_t key_width = map ? map->ks : set->es;
-            void* key_storage = TSC_GC_MALLOC(key_width);
-            collection_unbox(key, key_storage, key_width,
-                map ? map->box_key : set->box_value, map ? map->unbox_key : set->unbox_value);
-            if (map) {
-                void* value_storage = TSC_GC_MALLOC(map->vs);
-                collection_unbox(value, value_storage, map->vs, map->box_value, map->unbox_value);
-                tsc_map_set_raw(map, key_storage, value_storage);
-            } else tsc_set_add_raw(set, key_storage);
+            collection_store(source, key, value);
             return receiver;
+        }
+        case COLLECTION_GET_OR_INSERT: case COLLECTION_GET_OR_INSERT_COMPUTED: {
+            bool computed = method->operation == COLLECTION_GET_OR_INSERT_COMPUTED;
+            if (computed && !tsc_value_is_callable(value))
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Map insertion callback is not callable"));
+            if (!value_is_box(key) && value_as_num(key) == 0) key = tsc_value_num(0);
+            size_t index = collection_find(source, key);
+            if (index != TSC_BKT_EMPTY)
+                return collection_box(map->box_value, (char*)map->values + index * map->vs, map->vs);
+            if (computed) {
+                tsc_array_t* volatile actual = tsc_array_new(sizeof(tsc_value_t), 1);
+                tsc_array_push_value(actual, key);
+                value = tsc_value_apply_function(value, tsc_value_undefined(), tsc_value_array(actual));
+                value_root = tsc_value_gc_root(value);
+            }
+            // The common store looks up the live entry again after callbacks.
+            // A callback insertion is overwritten without changing its order.
+            collection_store(source, key, value);
+            (void)value_root;
+            return value;
         }
         case COLLECTION_FOR_EACH: {
             tsc_value_t callback = key;
@@ -899,7 +928,9 @@ static collection_intrinsics_t* collection_intrinsics(bool is_map) {
         tsc_object_define(state->iterator_prototype, tsc_symbol_property_key(tsc_symbol_to_string_tag()),
             tsc_value_string(tsc_str_from_cstr(is_map ? "Map Iterator" : "Set Iterator")), false, false, true);
         static const struct { const char* name; collection_operation_t operation; double length; bool map_only; } methods[] = {
-            { "get", COLLECTION_GET, 1, true }, { "has", COLLECTION_HAS, 1, false },
+            { "get", COLLECTION_GET, 1, true },
+            { "getOrInsert", COLLECTION_GET_OR_INSERT, 2, true },
+            { "getOrInsertComputed", COLLECTION_GET_OR_INSERT_COMPUTED, 2, true }, { "has", COLLECTION_HAS, 1, false },
             { "delete", COLLECTION_DELETE, 1, false }, { "clear", COLLECTION_CLEAR, 0, false },
             { "keys", COLLECTION_KEYS, 0, false }, { "values", COLLECTION_VALUES, 0, false },
             { "entries", COLLECTION_ENTRIES, 0, false }, { "forEach", COLLECTION_FOR_EACH, 1, false },

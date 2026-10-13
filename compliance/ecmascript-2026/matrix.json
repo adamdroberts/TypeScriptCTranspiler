@@ -4482,6 +4482,110 @@
         }
       ],
       "rationale": "Canonical slot/owner records and own-data initialization preserve represented native values independently of record and traversal cardinality. Complete producer/consumer and Realm obligations remain open."
+    },
+    {
+      "clause": "sec-map.prototype.getorinsert",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "ordinary-live-map-insertion",
+          "title": "Live Map insertion retains canonical keys, callable ownership and actual callback completions",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "canonical-collection",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-map.prototype.getorinsert"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/map-insertion.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "map_insertion_depth"
+            ],
+            "e2e": [
+              "map_insertion"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#Map"
+            ],
+            "implementation": [
+              "runtime/tsc_map_set.c#collection_method_apply",
+              "runtime/tsc_map_set.c#collection_store",
+              "runtime/tsc_map_set.c#collection_find",
+              "src/emit/index.ts#emitMapMethod"
+            ]
+          },
+          "rationale": "Map.getOrInsert and getOrInsertComputed now publish as ordinary Realm-owned methods through the canonical collection operation table. Receiver validation, callback callability, zero-key canonicalization and present-value lookup precede the shared store. Computed insertion calls the actual callback once with undefined this and one key argument, then stores into the live map again, preserving callback insert/delete/clear effects, entry order and abrupt identity. The shared writer also serves existing Map/Set writes; no argument-count or source-shape path is added. Named/computed/bound/reflected and mutable property calls use the existing actual-List lowering, with Map declarations exposing the methods. map-insertion.property compares metadata, brands, primitive/object/Symbol domains, present undefined values, callbacks and mutation/abrupt order, ignored actuals, typed mixed storage, borrowed Realm methods and GC-retained identities with independent Node across typed/erased native/host inputs and both memory modes. The property and map_insertion_depth CLI share one deep retained key/value graph; map_insertion checks the typed consumer. Existing CType and runtime APIs suffice. Exact correlated source call facts, typed native ABI limits, complete collection/Realm/host behavior and eligible exhaustive target evidence remain open."
+        }
+      ],
+      "rationale": "The insertion link and value-owner collection plus the shared current-map writer retain arbitrary keys and callback mutations independently of entry count. Complete collection and host claims remain open."
+    },
+    {
+      "clause": "sec-map.prototype.getorinsertcomputed",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "ordinary-live-map-insertion",
+          "title": "Live Map insertion retains canonical keys, callable ownership and actual callback completions",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "canonical-collection",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-map.prototype.getorinsertcomputed"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/map-insertion.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "map_insertion_depth"
+            ],
+            "e2e": [
+              "map_insertion"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#Map"
+            ],
+            "implementation": [
+              "runtime/tsc_map_set.c#collection_method_apply",
+              "runtime/tsc_map_set.c#collection_store",
+              "runtime/tsc_map_set.c#collection_find",
+              "src/emit/index.ts#emitMapMethod"
+            ]
+          },
+          "rationale": "Map.getOrInsert and getOrInsertComputed now publish as ordinary Realm-owned methods through the canonical collection operation table. Receiver validation, callback callability, zero-key canonicalization and present-value lookup precede the shared store. Computed insertion calls the actual callback once with undefined this and one key argument, then stores into the live map again, preserving callback insert/delete/clear effects, entry order and abrupt identity. The shared writer also serves existing Map/Set writes; no argument-count or source-shape path is added. Named/computed/bound/reflected and mutable property calls use the existing actual-List lowering, with Map declarations exposing the methods. map-insertion.property compares metadata, brands, primitive/object/Symbol domains, present undefined values, callbacks and mutation/abrupt order, ignored actuals, typed mixed storage, borrowed Realm methods and GC-retained identities with independent Node across typed/erased native/host inputs and both memory modes. The property and map_insertion_depth CLI share one deep retained key/value graph; map_insertion checks the typed consumer. Existing CType and runtime APIs suffice. Exact correlated source call facts, typed native ABI limits, complete collection/Realm/host behavior and eligible exhaustive target evidence remain open."
+        }
+      ],
+      "rationale": "The insertion link and value-owner collection plus the shared current-map writer retain arbitrary keys and callback mutations independently of entry count. Complete collection and host claims remain open."
     }
   ],
   "groups": [

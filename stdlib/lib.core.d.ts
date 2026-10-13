@@ -511,6 +511,8 @@ interface Map<K, V> extends Iterable<[K, V]> {
     readonly size: number;
     get(key: K): V | undefined;
     set(key: K, value: V): this;
+    getOrInsert(key: K, defaultValue: V, ...ignored: any[]): V;
+    getOrInsertComputed(key: K, callback: (key: K) => V, ...ignored: any[]): V;
     has(key: K): boolean;
     delete(key: K): boolean;
     clear(): void;

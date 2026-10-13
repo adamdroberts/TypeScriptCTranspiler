@@ -3802,6 +3802,77 @@
         "sec-createiterresultobject#own-data-iterator-result-projection",
         "sec-frompropertydescriptor#owned-native-descriptor-slot-projection"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/map-insertion.property.test.ts",
+      "targets": [
+        "sec-map.prototype.getorinsert#ordinary-live-map-insertion",
+        "sec-map.prototype.getorinsertcomputed#ordinary-live-map-insertion"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "map_insertion_depth",
+      "targets": [
+        "sec-map.prototype.getorinsert#ordinary-live-map-insertion",
+        "sec-map.prototype.getorinsertcomputed#ordinary-live-map-insertion"
+      ],
+      "stressReview": {
+        "dimension": "retained Map insertion key/value owner graph depth",
+        "parameter": "depth",
+        "representativeHighDepth": 4096,
+        "rationale": "One shared generated input retains arbitrary object keys and actual computed values through the canonical map owner and insertion graph independently of fixture shape and entry cardinality.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "map_insertion",
+      "targets": [
+        "sec-map.prototype.getorinsert#ordinary-live-map-insertion",
+        "sec-map.prototype.getorinsertcomputed#ordinary-live-map-insertion"
+      ]
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#Map",
+      "targets": [
+        "sec-map.prototype.getorinsert#ordinary-live-map-insertion",
+        "sec-map.prototype.getorinsertcomputed#ordinary-live-map-insertion"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_map_set.c#collection_method_apply",
+      "targets": [
+        "sec-map.prototype.getorinsert#ordinary-live-map-insertion",
+        "sec-map.prototype.getorinsertcomputed#ordinary-live-map-insertion"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_map_set.c#collection_store",
+      "targets": [
+        "sec-map.prototype.getorinsert#ordinary-live-map-insertion",
+        "sec-map.prototype.getorinsertcomputed#ordinary-live-map-insertion"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_map_set.c#collection_find",
+      "targets": [
+        "sec-map.prototype.getorinsert#ordinary-live-map-insertion",
+        "sec-map.prototype.getorinsertcomputed#ordinary-live-map-insertion"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitMapMethod",
+      "targets": [
+        "sec-map.prototype.getorinsert#ordinary-live-map-insertion",
+        "sec-map.prototype.getorinsertcomputed#ordinary-live-map-insertion"
+      ]
     }
   ]
 }

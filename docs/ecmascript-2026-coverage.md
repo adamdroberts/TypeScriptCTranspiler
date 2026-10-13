@@ -1887,8 +1887,10 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-map.prototype.entries` — Map.prototype.entries ( ): exact disposition and partitions missing.
   - [ ] `sec-map.prototype.foreach` — Map.prototype.forEach ( _callback_ [ , _thisArg_ ] ): exact disposition and partitions missing.
   - [ ] `sec-map.prototype.get` — Map.prototype.get ( _key_ ): exact disposition and partitions missing.
-  - [ ] `sec-map.prototype.getorinsert` — Map.prototype.getOrInsert ( _key_, _value_ ): exact disposition and partitions missing.
-  - [ ] `sec-map.prototype.getorinsertcomputed` — Map.prototype.getOrInsertComputed ( _key_, _callback_ ): exact disposition and partitions missing.
+  - [ ] `sec-map.prototype.getorinsert` — Map.prototype.getOrInsert ( _key_, _value_ )
+    - [ ] `ordinary-live-map-insertion` (intrinsic, unbounded): Live Map insertion retains canonical keys, callable ownership and actual callback completions.
+  - [ ] `sec-map.prototype.getorinsertcomputed` — Map.prototype.getOrInsertComputed ( _key_, _callback_ )
+    - [ ] `ordinary-live-map-insertion` (intrinsic, unbounded): Live Map insertion retains canonical keys, callable ownership and actual callback completions.
   - [ ] `sec-map.prototype.has` — Map.prototype.has ( _key_ ): exact disposition and partitions missing.
   - [ ] `sec-map.prototype.keys` — Map.prototype.keys ( ): exact disposition and partitions missing.
   - [ ] `sec-map.prototype.set` — Map.prototype.set ( _key_, _value_ ): exact disposition and partitions missing.
@@ -2829,7 +2831,7 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `top-level-await` — standard, tracking: `todo`; no clause mapping.
 - [ ] `u180e` — standard, tracking: `ready-for-verification`; `sec-unicode-format-control-characters`, `sec-white-space`.
 - [ ] `uint8array-base64` — standard, tracking: `todo`; no clause mapping.
-- [ ] `upsert` — standard, tracking: `todo`; no clause mapping.
+- [ ] `upsert` — standard, tracking: `ready-for-verification`; `sec-map.prototype.getorinsert`, `sec-map.prototype.getorinsertcomputed`, `sec-weakmap.prototype.getorinsert`, `sec-weakmap.prototype.getorinsertcomputed`, `sec-canonicalizekeyedcollectionkey`, `sec-canbeheldweakly`.
 - [ ] `well-formed-json-stringify` — standard, tracking: `todo`; no clause mapping.
 
 ## Completion rule
