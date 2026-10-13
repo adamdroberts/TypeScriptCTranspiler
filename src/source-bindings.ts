@@ -1,5 +1,15 @@
 import ts from "typescript";
 
+/** Type-only declarations have no runtime binding, including declarations
+ * nested in ambient namespaces. */
+export function isAmbientSourceDeclaration(node: ts.Node): boolean {
+    if (node.getSourceFile().isDeclarationFile) return true;
+    for (let current: ts.Node | undefined = node; current && !ts.isSourceFile(current); current = current.parent) {
+        if (ts.canHaveModifiers(current) && ts.getModifiers(current)?.some(modifier => modifier.kind === ts.SyntaxKind.DeclareKeyword)) return true;
+    }
+    return false;
+}
+
 /** A checker symbol may also describe assignments or property definitions.
  * Only grammar declarations introduce a declarative source binding. */
 export function sourceDeclarationIntroducesBinding(node: ts.Declaration): boolean {

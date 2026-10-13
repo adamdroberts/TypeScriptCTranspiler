@@ -12,7 +12,7 @@ import { createHash } from "node:crypto";
 import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
-import {declarativeSourceBindingSymbol, sourceDeclarationIntroducesBinding, sourceBindingTarget} from "./source-bindings";
+import {declarativeSourceBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding, sourceBindingTarget} from "./source-bindings";
 import {runtimeGlobalBindings, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
@@ -192,6 +192,7 @@ class SourceValueFlow {
     private readonly exceptionCells = new Set<Cell>();
     private readonly bindings = new Map<ts.Symbol, Cell>();
     private readonly globals = new Map<string, Cell>();
+    private readonly globalLexicals = new Map<string, Cell>();
     private readonly objects = new Map<ts.Node, ObjectOwner>();
     private readonly literalLists = new WeakMap<ObjectOwner,{node:ts.ArrayLiteralExpression;parts:readonly ListPart[];holes:ReadonlySet<Cell>}>();
     private readonly arrayLikeLengths = new Map<Cell,Map<ts.Node,Cell>>();
@@ -280,7 +281,25 @@ class SourceValueFlow {
         this.checker = program.getTypeChecker();
         for (const [index,filename] of (entries.roots??[]).entries()) {
             const file=program.getSourceFile(sourceUnitFileName(program,path.resolve(filename),"script"));
-            if(file&&ecmaParseGoal(file)==="script")this.scriptOrder.set(file,index);
+            if(file&&ecmaParseGoal(file)==="script"&&(!sources||sources.has(file)))this.scriptOrder.set(file,index);
+        }
+        for (const source of this.scriptOrder.keys()) for (const statement of source.statements) {
+            if (isAmbientSourceDeclaration(statement)) continue;
+            if (ts.isVariableStatement(statement) && statement.declarationList.flags & ts.NodeFlags.BlockScoped) {
+                for (const declaration of statement.declarationList.declarations) {
+                    const pending: ts.BindingName[] = [declaration.name];
+                    while (pending.length) {
+                        const name = pending.pop()!;
+                        if (ts.isIdentifier(name)) {
+                            if (!this.globalLexicals.has(name.text)) this.globalLexicals.set(name.text, this.newCell());
+                        } else for (const element of name.elements) if (!ts.isOmittedExpression(element)) pending.push(element.name);
+                    }
+                }
+            } else if (ts.isClassDeclaration(statement) && statement.name) {
+                if (!this.globalLexicals.has(statement.name.text)) this.globalLexicals.set(statement.name.text, this.newCell());
+                this.copy(this.cell(statement), this.globalLexicals.get(statement.name.text)!);
+            } else if (ts.isFunctionDeclaration(statement) && statement.name)
+                this.copy(this.cell(statement), this.globalBinding(statement.name.text));
         }
         for (const entry of entries.evaluations ?? []) {
             if (entry.entry === null) {
@@ -626,7 +645,14 @@ class SourceValueFlow {
         }
         if (declaration && ts.isExportAssignment(declaration)) return this.cell(declaration.expression);
         if (declaration && callableDefinition(declaration) && !sourceDeclarationIntroducesBinding(declaration)) return this.cell(declaration);
-        if (!symbol || !(symbol.declarations ?? []).some(sourceDeclarationIntroducesBinding)) return this.globalBinding(node.text);
+        if (declaration && isAmbientSourceDeclaration(declaration)) return this.globalLexicals.get(node.text) ?? this.globalBinding(node.text);
+        if (!symbol || !(symbol.declarations ?? []).some(sourceDeclarationIntroducesBinding)) return this.globalLexicals.get(node.text) ?? this.globalBinding(node.text);
+        const sourceGlobal = declaration && this.scriptDeclarationBinding(declaration, node.text);
+        if (sourceGlobal) {
+            if (callableDefinition(declaration!)) this.copy(this.cell(declaration!), sourceGlobal);
+            this.bindings.set(symbol, sourceGlobal);
+            return sourceGlobal;
+        }
         let cell = this.bindings.get(symbol);
         if (!cell) {
             cell = this.newCell(); this.bindings.set(symbol, cell);
@@ -634,6 +660,22 @@ class SourceValueFlow {
             if (declaration && callableDefinition(declaration)) this.copy(this.cell(declaration), cell);
         }
         return cell;
+    }
+    private scriptDeclarationBinding(declaration: ts.Node, name: string): Cell | null {
+        let selected = declaration;
+        while (ts.isBindingElement(selected)) selected = selected.parent.parent;
+        const source = selected.getSourceFile();
+        if (!this.scriptOrder.has(source) || isAmbientSourceDeclaration(selected)) return null;
+        if (ts.isFunctionDeclaration(selected) && selected.parent === source) return this.globalBinding(name);
+        if (ts.isClassDeclaration(selected) && selected.parent === source) return this.globalLexicals.get(name) ?? null;
+        if (!ts.isVariableDeclaration(selected) || !ts.isVariableDeclarationList(selected.parent)) return null;
+        if (selected.parent.flags & ts.NodeFlags.BlockScoped)
+            return selected.parent.parent?.parent === source ? this.globalLexicals.get(name) ?? null : null;
+        for (let owner: ts.Node | undefined = selected.parent; owner; owner = owner.parent) {
+            if (ts.isFunctionLike(owner) || ts.isClassLike(owner) || ts.isModuleBlock(owner) || ts.isModuleDeclaration(owner)) return null;
+            if (ts.isSourceFile(owner)) return this.globalBinding(name);
+        }
+        return null;
     }
     private moduleNamespace(source: ts.SourceFile, symbol: ts.Symbol): Cell {
         const existing = this.moduleNamespaces.get(source); if (existing) return existing.value;
@@ -1315,7 +1357,7 @@ class SourceValueFlow {
     }
     private isAmbientIdentifier(node: ts.Identifier): boolean {
         return !(this.bindingSymbol(node)?.declarations ?? []).some(declaration =>
-            !declaration.getSourceFile().isDeclarationFile && sourceDeclarationIntroducesBinding(declaration));
+            !isAmbientSourceDeclaration(declaration) && sourceDeclarationIntroducesBinding(declaration));
     }
     private callablePrototype(kind: DynamicFunctionKind): Cell {
         let cell = this.callablePrototypes.get(kind);
@@ -1864,7 +1906,7 @@ class SourceValueFlow {
             else this.copy(this.binding(node),result);
             if (this.bindingMayBeUninitialized(node)) this.publish(result,this.primitive(undefined));
             for (const base of this.withBindingObjects(node)) this.copy(this.property(base, node.text, node), result);
-            if (ambient) {
+            if (ambient && !this.globalLexicals.has(node.text)) {
                 if (node.text === "globalThis") this.publish(result, this.global);
                 this.copyRead(this.globalBinding(node.text),result,node);
                 if (node.text !== "globalThis") {
@@ -2666,7 +2708,7 @@ function sourceDomainSolutions(program:ts.Program,entries:SourceValueGraphEntrie
                 ts.forEachChild(node,child=>{nodes.push(child);});
             }
         }
-        const solved=new SourceValueFlow(program,{...entries,functions,evaluations},domain||undefined,sources).solve();
+        const solved=new SourceValueFlow(program,{...entries,roots:[...roots],functions,evaluations},domain||undefined,sources).solve();
         result.constructors.push(...solved.constructors);result.evaluations.push(...solved.evaluations);
     }
     return result;

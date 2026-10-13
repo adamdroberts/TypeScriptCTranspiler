@@ -11,7 +11,7 @@ import ts from "typescript";
 import { ecmaDirectivePrologueHasUseStrict, ecmaParseGoal } from "../ecmascript-source";
 import { sourceUnitFormat } from "../program";
 import { runtimeGlobalBindings } from "../global-bindings";
-import { canonicalParameterBindingSymbol, sourceDeclarationIntroducesBinding } from "../source-bindings";
+import { canonicalParameterBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding } from "../source-bindings";
 import { timersPromiseOperations, callbackTimerOperations } from "../timers-promises-operations";
 import { directLexicalDeclarations, lexicalDeclarationsFromList, type ScopeLexicalDeclaration, type NamedScopeLexicalDeclaration } from "./lexical-declarations";
 import { escapeRegExpString } from "../regexp-escape";
@@ -12350,12 +12350,7 @@ class Emitter {
     /** Type-only ambient declarations do not create source runtime bindings,
      * including declarations nested in ambient namespaces. */
     private isAmbientDeclaration(node: ts.Node): boolean {
-        if (node.getSourceFile().isDeclarationFile) return true;
-        for (let current: ts.Node | undefined = node; current && !ts.isSourceFile(current); current = current.parent) {
-            if (ts.canHaveModifiers(current) &&
-                ts.getModifiers(current)?.some(modifier => modifier.kind === ts.SyntaxKind.DeclareKeyword)) return true;
-        }
-        return false;
+        return isAmbientSourceDeclaration(node);
     }
 
     private isOutOfBandIdentifier(id: ts.Identifier): boolean {

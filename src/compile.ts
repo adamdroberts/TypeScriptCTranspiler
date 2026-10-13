@@ -211,13 +211,14 @@ function permanentLimitDiagnostics(
         test262Observation?: Test262NativeObservationPlan;
         sourceEval?: SourceEvalPlan;
         functionEntries?: readonly FunctionConstructorEntry[];
+        sourceRoots?: readonly string[];
     } = {},
 ): PermanentLimitDiagnostic[] {
     const diagnostics: PermanentLimitDiagnostic[] = [];
     const checker = program.getTypeChecker();
     const finiteEvalCalls = new Map<ts.Node, boolean>();
     const sourceEval = opts.sourceEval ?? opts.test262Observation;
-    if (sourceEval) for (const invocation of sourceEvaluationInvocations(program,{functions: opts.functionEntries, evaluations:[
+    if (sourceEval) for (const invocation of sourceEvaluationInvocations(program,{roots: opts.sourceRoots, functions: opts.functionEntries, evaluations:[
         ...(sourceEval.agentEntries ?? []),
         ...(sourceEval.evalScriptEntries ?? []),
         ...(sourceEval.directEvalEntries ?? []),
@@ -823,7 +824,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         });
     }
     const unsafeEvalRequired = !!opts.unsafeEval && (!sourceEval || !!sourceEval.unresolvedCalls?.length ||
-        sourceConstructorInvocations(built.program, { functions: [...functionEntries.values()], evaluations: [...evalEntries.values()] })
+        sourceConstructorInvocations(built.program, { roots: opts.initializationEntries ?? [opts.entry], functions: [...functionEntries.values()], evaluations: [...evalEntries.values()] })
             .some(invocation => invocation.choices === null));
     usesNodeEmbed = unsafeEvalRequired || nativeAddonManifestHasEntries(nativeAddons);
     const { program, checker, entrySourceFile, libCoreDts } = built;
@@ -855,6 +856,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         test262Observation: opts.test262Observation,
         sourceEval,
         functionEntries: [...functionEntries.values()],
+        sourceRoots: opts.initializationEntries ?? [opts.entry],
     });
     if (permanent.length > 0) {
         for (const d of permanent) {
