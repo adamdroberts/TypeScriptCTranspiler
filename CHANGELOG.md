@@ -327,6 +327,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+- Keep ambient import aliases out of source C-name ownership and select native EventEmitter constructors through their semantic import identity. Add Node/native alias and shadow partitions with a deep source module graph.
+
 - Lower grouped values iteratively and preserve grouped typeof/call References through the shared operation graph. Test: `grouping_reference_depth`.
 
 - Preserve canonical Reference identity through transparent expression wrappers for updates, assignments and retained planning. Test: `transparent_reference`.

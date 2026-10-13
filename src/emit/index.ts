@@ -13738,6 +13738,7 @@ class Emitter {
     }
 
     private declarationCName(decl: ts.Node): string | null {
+        if (this.isAmbientDeclaration(decl)) return null;
         if (ts.isSourceFile(decl)) {
             return this.commonJsModuleExportsCName(decl);
         }
@@ -45583,6 +45584,7 @@ class Emitter {
             return { c: this.coerce(constructed, native, n), ty: native };
         }
         const cls = targetClass ? nativeTypeName(targetClass)
+            : this.isEventEmitterConstructorIdentifier(ctorExpr) ? "EventEmitter"
             : this.isOutOfBandIdentifier(ctorExpr) ? ctorExpr.text : this.identifierName(ctorExpr);
         if (cls === "DispatchQueue") {
             const args = n.arguments ?? [];
