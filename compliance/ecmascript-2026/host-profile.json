@@ -92,6 +92,7 @@
     "src/resolve.ts",
     "src/source-bindings.ts",
     "src/source-value-flow.ts",
+    "src/test262-agent-operations.ts",
     "src/runtime-code-aot.ts",
     "src/tools/check-emitter-method-reachability.ts",
     "stdlib/lib.core.d.ts",

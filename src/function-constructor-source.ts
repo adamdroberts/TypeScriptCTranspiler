@@ -9,6 +9,7 @@ import { sourceConstructorInvocations, type SourceValueGraphEntries } from "./so
  * boundaries do not survive the specified comma join, so this is also the
  * canonical dispatch key, independent of argument or statement cardinality. */
 export interface FunctionConstructorSource {
+    readonly domain?: string;
     readonly kind?: DynamicFunctionKind;
     readonly parameters: string;
     readonly body: string;
@@ -34,7 +35,7 @@ export interface FunctionConstructorEntry extends FunctionConstructorSource {
 }
 
 export function functionConstructorSourceKey(source: FunctionConstructorSource): string {
-    return JSON.stringify([source.kind ?? "ordinary", source.parameters, source.body]);
+    return JSON.stringify([source.kind ?? "ordinary", source.parameters, source.body,...(source.domain?[source.domain]:[])]);
 }
 
 export function functionConstructorDisplaySource(source: FunctionConstructorSource): string {
@@ -83,7 +84,7 @@ export function finiteFunctionConstructorSources(
         let tuples: string[][] = [[]];
         for (const choice of choices) tuples = tuples.flatMap(tuple => choice.map(value => [...tuple, value]));
         for (const tuple of tuples) {
-            const source = { kind, parameters: tuple.slice(0, -1).join(","), body: tuple.at(-1) ?? "" };
+            const source = { kind, parameters: tuple.slice(0, -1).join(","), body: tuple.at(-1) ?? "",...(invocation.domain?{domain:invocation.domain}:{}) };
             sources.set(functionConstructorSourceKey(source), source);
         }
         if (choices.length && choices.at(-1)!.length === 0) {
@@ -91,7 +92,7 @@ export function finiteFunctionConstructorSources(
             for (const choice of choices.slice(0, -1)) parameters = parameters.flatMap(prefix => choice.map(value => [...prefix, value]));
             for (const parameterTuple of parameters) for (const body of manifest) {
                 if (body.parameters !== "" || body.kind && body.kind !== kind) continue;
-                const source = { kind, parameters: parameterTuple.join(","), body: body.body };
+                const source = { kind, parameters: parameterTuple.join(","), body: body.body,...(invocation.domain?{domain:invocation.domain}:{}) };
                 sources.set(functionConstructorSourceKey(source), source);
             }
         }

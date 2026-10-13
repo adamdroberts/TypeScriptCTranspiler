@@ -756,7 +756,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         const entries = kind === "agent" ? opts.test262Observation?.agentEntries : kind === "script" ? opts.test262Observation?.evalScriptEntries :
             kind === "direct" ? opts.test262Observation?.directEvalEntries : opts.test262Observation?.indirectEvalEntries;
         for (const entry of entries ?? []) {
-            const request = evalSourceRequest(kind, entry.source, "strictCaller" in entry ? entry.strictCaller as boolean : false);
+            const request = evalSourceRequest(kind, entry.source, "strictCaller" in entry ? entry.strictCaller as boolean : false, entry.domain);
             const admitted=evalSourceIsValid(request);
             if(!admitted && entry.entry)rejectedEvalRoots.add(path.resolve(entry.entry));
             evalEntries.set(evalSourceKey(request), { ...request, entry: admitted ? entry.entry : null });
@@ -778,7 +778,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     // through the same JS parser/binder and ordinary function lowering.
     for (;;) {
         let addedRoot = false;
-        const graphEntries = { functions: [...functionEntries.values()], evaluations: [...evalEntries.values()] };
+        const graphEntries = { roots:opts.initializationEntries??[opts.entry],functions: [...functionEntries.values()], evaluations: [...evalEntries.values()] };
         const strictContexts = new Map([...evalEntries.values()].flatMap(entry => entry.entry ? [[path.resolve(entry.entry), entry.strict] as const] : []));
         const evaluation = evaluationSourceRequests(built.program, graphEntries, strictContexts);
         unresolvedCalls = evaluation.unresolved.map(invocation => invocation.node);
@@ -800,7 +800,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         if (sourceEval) sourceEval = refreshEvalPlan();
         const sources = finiteFunctionConstructorSources(built.program, [
             { parameters: "", body: "" }, ...runtimeCode.functions,
-        ], { functions: [...functionEntries.values()], evaluations: [...evalEntries.values()] });
+        ], { roots:opts.initializationEntries??[opts.entry],functions: [...functionEntries.values()], evaluations: [...evalEntries.values()] });
         for (const source of sources) {
             const key = functionConstructorSourceKey(source);
             if (functionEntries.has(key)) continue;

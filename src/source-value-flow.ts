@@ -4,9 +4,11 @@ import { callableSourceText } from "./callable-source-text";
 import { normalizeAssignmentTarget, unwrapTransparentExpression as unwrap } from "./emit/binding-tree";
 import { callableNameInput, expectedArgumentCount, functionBodyCompletions, type FunctionBodyCompletions, NAME_EVALUATING_ASSIGNMENTS } from "./function-static-semantics";
 import {consoleOperations} from "./console-operations";
-import { sourceUnitBodyIncluded } from "./program";
+import {test262AgentOperations} from "./test262-agent-operations";
+import { sourceUnitBodyIncluded, sourceUnitFileName } from "./program";
 import { ecmaParseGoal } from "./ecmascript-source";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
 import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
@@ -14,16 +16,20 @@ import {declarativeSourceBindingSymbol, sourceDeclarationIntroducesBinding, sour
 import {runtimeGlobalBindings, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
+    readonly roots?: readonly string[];
     readonly functions?: readonly FunctionConstructorEntry[];
-    readonly evaluations?: readonly { readonly source: string; readonly entry: string | null }[];
+    readonly evaluations?: readonly { readonly source: string; readonly entry: string | null; readonly kind?: string; readonly domain?: string }[];
 }
+export function sourceAgentDomain(source:string):string {return "agent:"+createHash("sha256").update(source).digest("hex");}
 export interface ConstructorInvocation {
+    readonly domain?: string;
     readonly kind: DynamicFunctionKind;
     /** Null means that the actual List cannot be proved finite. The explicit
      * registry remains available; runtime selection still fails closed. */
     readonly choices: readonly (readonly string[])[] | null;
 }
 export interface EvaluationInvocation {
+    readonly domain?: string;
     readonly node: ts.Node;
     readonly operation: "eval" | "eval-script" | "agent-start";
     readonly direct: boolean;
@@ -37,7 +43,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for";
+    "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for" | `agent-member:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
@@ -182,6 +188,7 @@ class SourceValueFlow {
     private readonly bindings = new Map<ts.Symbol, Cell>();
     private readonly globals = new Map<string, Cell>();
     private readonly objects = new Map<ts.Node, ObjectOwner>();
+    private readonly literalLists = new WeakMap<ObjectOwner,{node:ts.ArrayLiteralExpression;parts:readonly ListPart[]}>();
     private readonly functions = new Map<CallableDefinition, FunctionOwner>();
     private readonly ownerAtoms = new WeakMap<ObjectOwner | FunctionOwner, Map<Atom["tag"], Atom>>();
     private readonly promiseAtoms = new WeakMap<Cell, WeakMap<Cell, Atom>>();
@@ -251,7 +258,7 @@ class SourceValueFlow {
     private readonly intrinsicOwners = new Map<Atom, ObjectOwner>();
     private readonly checker: ts.TypeChecker;
     private readonly invalidEvaluations = new Set<string>();
-    constructor(program: ts.Program, entries: SourceValueGraphEntries) {
+    constructor(program: ts.Program, entries: SourceValueGraphEntries, private readonly domain?:string, sources?:ReadonlySet<ts.SourceFile>) {
         this.checker = program.getTypeChecker();
         for (const entry of entries.evaluations ?? []) {
             if (entry.entry === null) {
@@ -285,6 +292,7 @@ class SourceValueFlow {
             values.push(this.cell(statement.expression)); this.generated.set(entry.kind ?? "ordinary", values);
         }
         for (const file of program.getSourceFiles()) {
+            if (sources && !sources.has(file)) continue;
             if (file.isDeclarationFile) continue;
             if (!sourceUnitBodyIncluded(program, file) && !(entries.evaluations ?? []).some(entry => entry.entry && path.resolve(entry.entry) === path.resolve(file.fileName)) &&
                 !(entries.functions ?? []).some(entry => entry.entry && path.resolve(entry.entry) === path.resolve(file.fileName))) continue;
@@ -1265,6 +1273,15 @@ class SourceValueFlow {
         if(atom.tag === "function")return atom.owner.fields;
         if(atom.tag === "bound")return atom.fields;
         if(atom.tag === "builtin")return atom.fields;
+        if(atom.tag === "operation" && (atom.operation==="agent-start"||atom.operation.startsWith("agent-member:"))){
+            let owner=this.intrinsicOwners.get(atom);
+            if(!owner){
+                owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);
+                const name=atom.operation==="agent-start"?"start":atom.operation.slice("agent-member:".length),descriptor=test262AgentOperations.get(name)!;
+                const named=this.newCell(),length=this.newCell();this.publish(named,this.primitive(name));this.publish(length,this.primitive(descriptor.length));this.defineField(owner,"name",named);this.defineField(owner,"length",length);
+            }
+            return owner;
+        }
         if(atom.tag === "intrinsic"){
             let owner=this.intrinsicOwners.get(atom);
             if(!owner){
@@ -1283,7 +1300,13 @@ class SourceValueFlow {
         if(atom.tag !== "host" && atom.tag !== "realm-record" && atom.tag !== "agent")return null;
         const key=atom.tag === "agent" ? "agent" : "host";
         let owner=this.hostOwners.get(key);
-        if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell()};this.hostOwners.set(key,owner);}
+        if(!owner){
+            owner={fields:new Map(),accessors:new Map(),shape:this.newCell()};this.hostOwners.set(key,owner);
+            if(key==="agent")for(const descriptor of test262AgentOperations.values()){
+                if(!(descriptor.roles&(this.domain?2:1)))continue;
+                const value=this.newCell();this.publish(value,this.operation(descriptor.name==="start"?"agent-start":`agent-member:${descriptor.name}`));this.defineField(owner,descriptor.name,value);
+            }
+        }
         return owner;
     }
     private read(atom: Atom, base: Cell, key: SourcePropertyKey, result: Cell, handler?: Cell, rule?: Rule, context?: ts.Node, ownOnly=false): void {
@@ -1359,7 +1382,6 @@ class SourceValueFlow {
             if (key === "evalScript") this.publish(result, this.operation("eval-script"));
             if (key === "global") this.publish(result, this.global);
         }
-        if (atom.tag === "agent" && key === "start") this.publish(result, this.operation("agent-start"));
         if ((["function", "bound", "intrinsic", "operation"].includes(atom.tag) ||
             atom.tag === "builtin" && atom.normalResult !== "not-callable") && typeof key === "string" && CALLABLE_FORWARDING_OPERATIONS.has(key))
             this.publish(result, this.operation(CALLABLE_FORWARDING_OPERATIONS.get(key)!));
@@ -1487,6 +1509,16 @@ class SourceValueFlow {
             }
             const owner = atom.owner;
             const proof = this.primitiveChoiceProof(owner.listLength!);
+            const literal=this.literalLists.get(owner);
+            if(literal&&context){
+                let boundary:ts.Node=literal.node;
+                while(boundary.parent&&(ts.isParenthesizedExpression(boundary.parent)||ts.isAsExpression(boundary.parent)||ts.isTypeAssertionExpression(boundary.parent)||ts.isNonNullExpression(boundary.parent)||ts.isSatisfiesExpression(boundary.parent)))boundary=boundary.parent;
+                if(boundary.parent&&ts.isSpreadElement(boundary.parent))boundary=boundary.parent;
+                // An inline allocation has not exposed its identity before
+                // the actual-List read. Other-iteration opaque effects cannot
+                // mutate its freshly defined own element locations.
+                if(boundary.parent===context){alternatives.push(...this.arguments(literal.parts,literal.node));continue;}
+            }
             if (!proof.primitiveComplete && this.primitiveReadiness(owner.listLength!).pending) continue;
             if (this.opaqueShape(owner,context,true) || !proof.primitiveComplete) {
                 alternatives.push(null);
@@ -1525,10 +1557,10 @@ class SourceValueFlow {
         }
         return false;
     }
-    private arguments(parts: readonly ListPart[]): Array<readonly Cell[] | null> {
+    private arguments(parts: readonly ListPart[],context?:ts.Node): Array<readonly Cell[] | null> {
         let choices: Array<readonly Cell[] | null> = [[]];
         for (const part of parts) {
-            const alternatives = part.spread ? this.lists(part.cell) : [[part.cell]];
+            const alternatives = part.spread ? this.lists(part.cell,context) : [[part.cell]];
             choices = choices.flatMap(prefix => alternatives.map(tail => prefix && tail ? [...prefix, ...tail] : null));
         }
         return choices;
@@ -1648,6 +1680,7 @@ class SourceValueFlow {
             }
             if (ts.isArrayLiteralExpression(node)) {
                 const parts = node.elements.map(element => ({ cell: this.cell(ts.isSpreadElement(element) ? element.expression : element), spread: ts.isSpreadElement(element) }));
+                this.literalLists.set(owner,{node,parts});
                 owner.listLength = this.field(owner, "length");
                 this.publish(this.presence(owner,"length"),this.primitive(true));
                 owner.listSources = parts.filter(part => part.spread).map(part => part.cell);
@@ -1659,7 +1692,7 @@ class SourceValueFlow {
                         this.publish(owner.listLength!, this.unknown);
                         return;
                     }
-                    for (const list of this.arguments(parts)) {
+                    for (const list of this.arguments(parts,node)) {
                         if (!list) continue;
                         const key = list.map(cell => cell.id).join(",");
                         if (seen.has(key)) continue;
@@ -1780,7 +1813,7 @@ class SourceValueFlow {
             evaluations.clear();
             for (const part of parts) if (part.spread) this.watchList(rule, part.cell);
             const worklist: Array<{ target: Cell; receiver: Cell; args: readonly Cell[] | null; boundPath: Set<Atom>; direct: boolean; construct: boolean }> = [
-                ...this.arguments(parts).map(args => ({ target: callee, receiver: receiver, args, boundPath: new Set<Atom>(),
+                ...this.arguments(parts,node).map(args => ({ target: callee, receiver: receiver, args, boundPath: new Set<Atom>(),
                     construct, direct }))];
             const routed = new Map<Atom, Set<string>>();
             while (worklist.length) {
@@ -1809,6 +1842,11 @@ class SourceValueFlow {
                         continue;
                     }
                     const argv = invocation.args;
+                    if (atom.tag === "operation" && invocation.construct) {
+                        this.publish(result,this.abrupt);
+                        const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.opaqueObject);
+                        continue;
+                    }
                     if (atom.tag === "operation" && PROPERTY_MUTATIONS.has(atom.operation)) {
                         const activation = this.enclosingActivation(node);
                         if (activation) {this.watch(rule,activation.active);if(!activation.active.values.size)continue;}
@@ -1971,6 +2009,20 @@ class SourceValueFlow {
                             if (handler) this.copy(atom.owner.throws, handler);
                         }
                     } else if (atom.tag === "operation") {
+                        if(atom.operation.startsWith("agent-member:")){
+                            const descriptor=test262AgentOperations.get(atom.operation.slice("agent-member:".length))!;
+                            if(descriptor.operation==="RECEIVE"&&argv?.[0]){
+                                const buffer=this.newCell(),identifier=this.newCell();this.publish(buffer,this.opaqueObject);this.publish(identifier,this.nonString);
+                                this.invoke(node,argv[0],omittedArgument,[{cell:buffer,spread:false},{cell:identifier,spread:false}],this.newCell());
+                            }
+                            if(descriptor.operation==="REPORT"&&argv?.[0])this.watchText(rule,this.stringHintCell(argv[0],node));
+                            if(descriptor.operation==="SLEEP"&&argv?.[0])this.watchText(rule,this.coerceCell(argv[0],node,"number"));
+                            if(descriptor.operation==="BROADCAST"&&argv?.[1])this.watchText(rule,this.primitiveConversion(argv[1],node,"number"));
+                            if(descriptor.operation==="NOW")this.publish(result,this.nonString);
+                            else if(descriptor.operation==="GET_REPORT"){this.publish(result,this.primitive(null));this.publish(result,this.unknownString);}
+                            else this.publish(result,this.primitive(undefined));
+                            continue;
+                        }
                         if (atom.operation === "symbol-for") {
                             this.normalResults.set(result, this.nonString);
                             if (!argv) {this.publish(result, this.nonString); const handler = this.exceptionHandlers.get(node); if (handler) this.publish(handler, this.unknown); this.onActive(node, () => this.opaqueEffect(node)); continue;}
@@ -2097,6 +2149,7 @@ class SourceValueFlow {
                             const key = result!.id + ":" + atom.operation + ":" + direct + ":" + (source?.id ?? (argv ? "omitted" : "unknown"));
                             evaluations.set(key, { node, operation: atom.operation, direct, source, unknown: !argv });
                             if (noArguments) {this.publish(result!, this.abrupt); continue;}
+                            if (atom.operation === "agent-start") {this.publish(result,this.primitive(undefined));continue;}
                             if (source) {
                                 this.watchText(rule, source);
                                 const proof = this.primitiveChoiceProof(source);
@@ -2256,7 +2309,7 @@ class SourceValueFlow {
         return {
             constructors: [...this.invocations.values()].flatMap(records => [...records.values()]).map(invocation => {
                 const choices = invocation.args?.map(cell => this.choices(cell));
-                return {kind: invocation.kind, choices: choices && choices.every(value => value !== null) ? choices : null};
+                return {kind: invocation.kind, choices: choices && choices.every(value => value !== null) ? choices : null,...(this.domain?{domain:this.domain}:{})};
             }),
             evaluations: [...this.evaluationInvocations.values()].flatMap(records => [...records.values()]).map(invocation => {
                 const { source, operation, unknown } = invocation;
@@ -2268,7 +2321,7 @@ class SourceValueFlow {
                 const choices = unresolved ? null : source
                     ? [...new Set(primitives.filter(value => operation !== "eval" || typeof value === "string").map(String))]
                     : operation !== "eval" ? ["undefined"] : [];
-                return { node: invocation.node, operation, direct: invocation.direct, choices };
+                return { node: invocation.node, operation, direct: invocation.direct, choices,...(this.domain?{domain:this.domain}:{}) };
             }),
         };
     }
@@ -2276,15 +2329,67 @@ class SourceValueFlow {
 
 type SourceValueSolution = ReturnType<SourceValueFlow["solve"]>;
 const sourceValueSolutions = new WeakMap<ts.Program, Map<string, SourceValueSolution>>();
+/** The same monotone solver runs over each execution domain's reachable
+ * source graph. Worker Scripts have fresh globals and cannot mutate the
+ * parent's ordinary owners; imported code is projected into each domain. */
+function sourceDomainSolutions(program:ts.Program,entries:SourceValueGraphEntries):SourceValueSolution {
+    const agents=(entries.evaluations??[]).filter(entry=>entry.kind==="agent"&&entry.entry);
+    if(!agents.length)return new SourceValueFlow(program,entries).solve();
+    const allFiles=new Map(program.getSourceFiles().map(file=>[path.resolve(file.fileName),file]));
+    const generated=new Set([
+        ...(entries.evaluations??[]).flatMap(entry=>entry.entry?[path.resolve(entry.entry)]:[]),
+        ...(entries.functions??[]).flatMap(entry=>entry.entry?[path.resolve(entry.entry)]:[]),
+    ]);
+    const domains=new Map<string,Set<string>>();
+    domains.set("",new Set((entries.roots??program.getRootFileNames().filter(file=>!generated.has(path.resolve(file)))).map(file=>path.resolve(file))));
+    for(const entry of agents){const domain=sourceAgentDomain(entry.source);let roots=domains.get(domain);if(!roots){roots=new Set();domains.set(domain,roots);}roots.add(path.resolve(entry.entry!));}
+    const checker=program.getTypeChecker();
+    const host:ts.ModuleResolutionHost={
+        fileExists:file=>allFiles.has(path.resolve(file))||ts.sys.fileExists(file),
+        readFile:file=>allFiles.get(path.resolve(file))?.text??ts.sys.readFile(file),
+    };
+    const directories=new Set<string>();
+    for(const filename of allFiles.keys()){let directory=path.dirname(filename);while(!directories.has(directory)){directories.add(directory);const parent=path.dirname(directory);if(parent===directory)break;directory=parent;}}
+    host.directoryExists=directory=>directories.has(path.resolve(directory))||ts.sys.directoryExists(directory);
+    const result:SourceValueSolution={constructors:[],evaluations:[]};
+    for(const [domain,roots] of domains){
+        const evaluations=(entries.evaluations??[]).filter(entry=>entry.kind==="agent"
+            ? sourceAgentDomain(entry.source)===domain : (entry.domain??"")===domain);
+        const functions=(entries.functions??[]).filter(entry=>(entry.domain??"")===domain);
+        const sources=new Set<ts.SourceFile>(),pending=[...roots,...evaluations.flatMap(entry=>entry.entry?[entry.entry]:[]),...functions.flatMap(entry=>entry.entry?[entry.entry]:[])];
+        while(pending.length){
+            const file=allFiles.get(path.resolve(pending.pop()!));if(!file||file.isDeclarationFile||sources.has(file))continue;sources.add(file);
+            const nodes:ts.Node[]=[file];
+            while(nodes.length){
+                const node=nodes.pop()!;
+                const specifier=ts.isImportDeclaration(node)||ts.isExportDeclaration(node)?node.moduleSpecifier:
+                    ts.isCallExpression(node)&&(node.expression.kind===ts.SyntaxKind.ImportKeyword||ts.isIdentifier(node.expression)&&node.expression.text==="require")?node.arguments[0]:undefined;
+                if(specifier&&ts.isExpression(specifier)){
+                    const symbol=checker.getSymbolAtLocation(specifier);
+                    for(const declaration of symbol?.declarations??[])if(ts.isSourceFile(declaration))pending.push(declaration.fileName);
+                    for(const name of staticStringExpressionTexts(specifier)??[]){
+                        const resolved=ts.resolveModuleName(name,file.fileName,program.getCompilerOptions(),host).resolvedModule;
+                        if(resolved)pending.push(sourceUnitFileName(program,resolved.resolvedFileName,"module"));
+                    }
+                }
+                ts.forEachChild(node,child=>{nodes.push(child);});
+            }
+        }
+        const solved=new SourceValueFlow(program,{...entries,functions,evaluations},domain||undefined,sources).solve();
+        result.constructors.push(...solved.constructors);result.evaluations.push(...solved.evaluations);
+    }
+    return result;
+}
 function sourceValueSolution(program: ts.Program, entries: SourceValueGraphEntries): SourceValueSolution {
     const key = JSON.stringify([
-        (entries.functions ?? []).map(entry => [entry.kind ?? "ordinary", entry.parameters, entry.body, entry.entry]),
-        (entries.evaluations ?? []).map(entry => [entry.source, entry.entry]),
+        entries.roots,
+        (entries.functions ?? []).map(entry => [entry.kind ?? "ordinary", entry.parameters, entry.body, entry.entry,entry.domain]),
+        (entries.evaluations ?? []).map(entry => [entry.source, entry.entry,entry.kind,entry.domain]),
     ]);
     let solutions = sourceValueSolutions.get(program);
     if (!solutions) {solutions = new Map(); sourceValueSolutions.set(program,solutions);}
     let solution = solutions.get(key);
-    if (!solution) {solution = new SourceValueFlow(program, entries).solve(); solutions.set(key,solution);}
+    if (!solution) {solution = sourceDomainSolutions(program, entries); solutions.set(key,solution);}
     return solution;
 }
 export function sourceConstructorInvocations(program: ts.Program, entries: SourceValueGraphEntries = {}): ConstructorInvocation[] {

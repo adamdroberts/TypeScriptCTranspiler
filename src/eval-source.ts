@@ -6,7 +6,7 @@ import { createEcmaSourceFile, ecmaDirectivePrologueHasUseStrict, ecmaParseGoal 
 import { sourceEvaluationInvocations } from "./source-value-flow";
 import type { SourceValueGraphEntries } from "./source-value-flow";
 
-export interface EvalSourceEntry { readonly source: string; readonly entry: string | null; }
+export interface EvalSourceEntry { readonly source: string; readonly entry: string | null; readonly domain?: string; }
 export interface DirectEvalSourceEntry extends EvalSourceEntry { readonly strictCaller: boolean; readonly strict: boolean; }
 export interface IndirectEvalSourceEntry extends EvalSourceEntry { readonly strict: boolean; }
 export interface SourceEvalPlan {
@@ -17,15 +17,16 @@ export interface SourceEvalPlan {
     readonly indirectEvalEntries?: readonly IndirectEvalSourceEntry[];
 }
 export interface EvalSourceRequest {
+    readonly domain?: string;
     readonly kind: "script" | "direct" | "indirect" | "agent";
     readonly source: string;
     readonly strictCaller: boolean;
     readonly strict: boolean;
 }
-export function evalSourceKey(request: EvalSourceRequest): string { return JSON.stringify(request); }
-export function evalSourceRequest(kind: EvalSourceRequest["kind"], source: string, strictCaller = false): EvalSourceRequest {
+export function evalSourceKey(request: EvalSourceRequest): string { return JSON.stringify(request.kind==="agent"?{...request,domain:undefined}:request); }
+export function evalSourceRequest(kind: EvalSourceRequest["kind"], source: string, strictCaller = false,domain?:string): EvalSourceRequest {
     const parsed = createEcmaSourceFile("eval-source.js", source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS, "script");
-    return {kind, source, strictCaller, strict: strictCaller || ecmaDirectivePrologueHasUseStrict(parsed.statements)};
+    return {kind, source, strictCaller, strict: strictCaller || ecmaDirectivePrologueHasUseStrict(parsed.statements),...(domain?{domain}:{})};
 }
 
 export function sourceFileIsStrict(source: ts.SourceFile): boolean {
@@ -58,7 +59,7 @@ export function evaluationSourceRequests(program: ts.Program, entries: SourceVal
             const file = invocation.node.getSourceFile();
             const strictCaller = invocation.direct && ts.isCallExpression(invocation.node) && directEvalIsStrict(invocation.node, strictContexts.get(file.fileName) ?? sourceFileIsStrict(file));
             const request = evalSourceRequest(invocation.operation === "agent-start" ? "agent" : invocation.operation === "eval-script" ? "script" : invocation.direct ? "direct" : "indirect",
-                source, strictCaller);
+                source, strictCaller,invocation.domain);
             requests.set(evalSourceKey(request), request);
         }
     }

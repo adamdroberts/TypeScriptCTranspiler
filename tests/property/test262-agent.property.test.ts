@@ -80,7 +80,8 @@ test('Test262 agents share canonical source closure, mailbox lifecycle, Realm is
   expect(graph.error).toBeNull();expect(new Set(graph.agentSources)).toEqual(new Set([worker,retained,progress]));
   const fields=finiteEvalScriptSourceGraph([{path:'fields.js',source:'$262.agent.options={source:"$262.agent.leaving();"};const body=$262.agent.options.source;$262.createRealm().agent.start(body);'}]);
   expect(fields.error).toBeNull();expect(fields.agentSources).toEqual(['$262.agent.leaving();']);
-  const unknown=finiteEvalScriptSourceGraph([{path:'main.js',source:'$262.agent.start(globalThis.unknownSource);'}]);expect(unknown.error).toContain('agent.start source is not a finite static string expression');
+  const absent=finiteEvalScriptSourceGraph([{path:'absent.js',source:'$262.agent.start(globalThis.unknownSource);'}]);expect(absent.agentSources).toEqual(['undefined']);
+  const unknown=finiteEvalScriptSourceGraph([{path:'main.js',source:'$262.agent.start(readSource());'}]);expect(unknown.error).toContain('agent.start source is not a finite static string expression');
   const reference=path.join(root,'reference.js');await fs.writeFile(reference,source);
   const trace=path.join(root,'oracle.trace');const node=Bun.spawnSync(['node',path.resolve('tests/property/helpers/test262-agent-node.cjs'),reference],{stdout:'pipe',stderr:'pipe',timeout:120_000,env:{...process.env,TSC2C_AGENT_ORACLE_TRACE:trace}});expect({code:node.exitCode,stderr:node.stderr.toString(),trace:node.exitCode?await fs.readFile(trace,'utf8'):''}).toEqual({code:0,stderr:'',trace:''});
   for(const noGc of [false,true])for(const typed of [false,true]){
