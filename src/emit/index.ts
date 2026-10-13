@@ -21060,6 +21060,7 @@ class Emitter {
     ): decl is ts.VariableDeclaration {
         if (
             !ts.isVariableDeclaration(decl) ||
+            this.isAmbientDeclaration(decl) ||
             !ts.isVariableDeclarationList(decl.parent) ||
             (decl.parent.flags & (
                 ts.NodeFlags.Const |
@@ -21116,6 +21117,7 @@ class Emitter {
         declaration: ts.Node,
     ): declaration is ts.VariableDeclaration {
         if (!ts.isVariableDeclaration(declaration) ||
+            this.isAmbientDeclaration(declaration) ||
             !this.isTest262ScriptSourceFile(declaration.getSourceFile()) ||
             !ts.isVariableDeclarationList(declaration.parent) ||
             (declaration.parent.flags & (
@@ -21162,7 +21164,7 @@ class Emitter {
     ): decl is (ts.VariableDeclaration | ts.ClassDeclaration) & { name: ts.Identifier } {
         if (!this.isTest262ScriptSourceFile(decl.getSourceFile())) return false;
         if (ts.isClassDeclaration(decl)) {
-            return !!decl.name && ts.isSourceFile(decl.parent);
+            return !this.isAmbientDeclaration(decl) && !!decl.name && ts.isSourceFile(decl.parent);
         }
         return this.isTest262ScriptGlobalLexicalVariableDeclaration(decl) &&
             ts.isIdentifier(decl.name);
@@ -21172,6 +21174,7 @@ class Emitter {
         decl: ts.Node,
     ): decl is ts.FunctionDeclaration & { name: ts.Identifier } {
         return ts.isFunctionDeclaration(decl) &&
+            !this.isAmbientDeclaration(decl) &&
             !!decl.name &&
             ts.isSourceFile(decl.parent) &&
             this.isTest262ScriptSourceFile(decl.getSourceFile());
