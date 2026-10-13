@@ -883,40 +883,11 @@ void replace_append(char** out, size_t* pos, size_t* cap, const char* data, size
 
 /* ---------------- JSON helpers ---------------- */
 
-tsc_str_t* tsc_json_escape_string(const tsc_str_t* s) {
-    /* Upper bound: 6x expansion for \uXXXX of every byte. */
-    size_t cap = s->len * 6 + 3;
-    tsc_str_t* out = (tsc_str_t*)TSC_GC_MALLOC(sizeof(tsc_str_t));
-    char* buf = (char*)TSC_GC_MALLOC_ATOMIC(cap);
-    size_t pos = 0;
-    buf[pos++] = '"';
-    for (size_t i = 0; i < s->len; i++) {
-        unsigned char c = (unsigned char)s->data[i];
-        switch (c) {
-            case '"':  buf[pos++] = '\\'; buf[pos++] = '"'; break;
-            case '\\': buf[pos++] = '\\'; buf[pos++] = '\\'; break;
-            case '\n': buf[pos++] = '\\'; buf[pos++] = 'n'; break;
-            case '\r': buf[pos++] = '\\'; buf[pos++] = 'r'; break;
-            case '\t': buf[pos++] = '\\'; buf[pos++] = 't'; break;
-            case '\b': buf[pos++] = '\\'; buf[pos++] = 'b'; break;
-            case '\f': buf[pos++] = '\\'; buf[pos++] = 'f'; break;
-            default:
-                if (c < 0x20) {
-                    pos += (size_t)snprintf(buf + pos, cap - pos, "\\u%04x", c);
-                } else {
-                    buf[pos++] = (char)c;
-                }
-        }
-    }
-    buf[pos++] = '"';
-    buf[pos] = '\0';
-    out->data = buf;
-    out->len = pos;
-    out->hash = 0;
-    out->symbol_key = NULL;
-    out->utf16_len_plus_one = 0;
-    out->utf16_cache = NULL;
-    return out;
+tsc_str_t* tsc_json_escape_string(const tsc_str_t* string) {
+    tsc_jsonbuf_t buffer;
+    tsc_jsonbuf_init(&buffer);
+    tsc_jsonbuf_str(&buffer, string);
+    return tsc_jsonbuf_finish(&buffer);
 }
 
 tsc_str_t* tsc_json_num(double n) {

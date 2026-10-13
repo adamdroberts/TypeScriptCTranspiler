@@ -722,7 +722,6 @@ const tsc_object_prop_t* object_find_chain_prop(const tsc_object_t* o, const tsc
 bool value_set_receiver_own_data(tsc_value_t receiver, tsc_str_t* key, tsc_value_t value);
 bool object_chain_contains(tsc_value_t prototype, const tsc_object_t* needle);
 bool tsc_value_chain_contains(tsc_value_t prototype, tsc_value_t needle);
-bool value_json_omits_object_property(tsc_value_t v);
 void jp_ws(json_parser_t* p);
 bool jp_lit(json_parser_t* p, const char* lit);
 tsc_str_t* jp_string(json_parser_t* p);

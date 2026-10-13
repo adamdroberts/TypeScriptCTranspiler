@@ -139,9 +139,7 @@ tsc_str_t* tsc_str_concat_parts(const struct tsc_array* parts);
 tsc_str_t* tsc_str_raw(tsc_value_t template_value, const struct tsc_array* substitutions);
 
 /* ------------- JSON build buffer -------------
- * Single growable byte buffer with one final allocation. Used to lower
- * JSON.stringify of typed values into a straight-line append walk instead
- * of N+ tsc_str_concat calls.
+ * Single growable byte buffer shared by the iterative JSON serializer.
  */
 typedef struct {
     char* data;
@@ -1057,6 +1055,7 @@ tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v);
 tsc_str_t* tsc_value_typeof(tsc_value_t v);
 tsc_str_t* tsc_value_json_stringify(tsc_value_t v);
 tsc_value_t tsc_value_json_stringify_top(tsc_value_t v);
+tsc_value_t tsc_value_json_stringify_options(tsc_value_t value, tsc_value_t replacer, tsc_value_t space);
 tsc_value_t tsc_structured_clone(tsc_value_t value);
 tsc_value_t tsc_value_date(struct tsc_date* d);
 tsc_value_t tsc_value_regexp(struct tsc_regexp* r);

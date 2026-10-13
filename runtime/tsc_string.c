@@ -1606,46 +1606,36 @@ void tsc_jsonbuf_bool(tsc_jsonbuf_t* b, bool v) {
     else   tsc_jsonbuf_append(b, "false", 5);
 }
 
-void tsc_jsonbuf_str(tsc_jsonbuf_t* b, const tsc_str_t* s) {
-    bool needs_escape = false;
-    for (size_t i = 0; i < s->len; i++) {
-        unsigned char c = (unsigned char)s->data[i];
-        if (c < 0x20 || c == '"' || c == '\\') {
-            needs_escape = true;
-            break;
+void tsc_jsonbuf_str(tsc_jsonbuf_t* buffer, const tsc_str_t* string) {
+    size_t length;
+    const uint16_t* units = tsc_str_utf16_units(string, &length);
+    tsc_jsonbuf_byte(buffer, '"');
+    for (size_t index = 0; index < length; index++) {
+        uint32_t point = units[index];
+        const char* escape = NULL;
+        switch (point) {
+            case '"': escape = "\\\""; break;
+            case '\\': escape = "\\\\"; break;
+            case '\b': escape = "\\b"; break;
+            case '\f': escape = "\\f"; break;
+            case '\n': escape = "\\n"; break;
+            case '\r': escape = "\\r"; break;
+            case '\t': escape = "\\t"; break;
+        }
+        if (escape) {tsc_jsonbuf_append(buffer, escape, 2); continue;}
+        bool pair = is_high_surrogate((uint16_t)point) && index + 1 < length && is_low_surrogate(units[index + 1]);
+        if (point < 0x20 || ((is_high_surrogate((uint16_t)point) || is_low_surrogate((uint16_t)point)) && !pair)) {
+            char escaped[7];
+            snprintf(escaped, sizeof(escaped), "\\u%04x", (unsigned)point);
+            tsc_jsonbuf_append(buffer, escaped, 6);
+        } else {
+            if (pair) {point = surrogate_pair_to_code_point(units[index], units[index + 1]); index++;}
+            char encoded[4];
+            size_t size = write_utf8_code_point(encoded, point);
+            tsc_jsonbuf_append(buffer, encoded, size);
         }
     }
-    if (!needs_escape) {
-        tsc_jsonbuf_reserve(b, s->len + 2);
-        b->data[b->len++] = '"';
-        if (s->len > 0) memcpy(b->data + b->len, s->data, s->len);
-        b->len += s->len;
-        b->data[b->len++] = '"';
-        return;
-    }
-    /* Upper bound: open quote + 6x expansion + close quote. */
-    tsc_jsonbuf_reserve(b, s->len * 6 + 2);
-    b->data[b->len++] = '"';
-    for (size_t i = 0; i < s->len; i++) {
-        unsigned char c = (unsigned char)s->data[i];
-        switch (c) {
-            case '"':  b->data[b->len++] = '\\'; b->data[b->len++] = '"'; break;
-            case '\\': b->data[b->len++] = '\\'; b->data[b->len++] = '\\'; break;
-            case '\n': b->data[b->len++] = '\\'; b->data[b->len++] = 'n'; break;
-            case '\r': b->data[b->len++] = '\\'; b->data[b->len++] = 'r'; break;
-            case '\t': b->data[b->len++] = '\\'; b->data[b->len++] = 't'; break;
-            case '\b': b->data[b->len++] = '\\'; b->data[b->len++] = 'b'; break;
-            case '\f': b->data[b->len++] = '\\'; b->data[b->len++] = 'f'; break;
-            default:
-                if (c < 0x20) {
-                    int n = snprintf(b->data + b->len, b->cap - b->len, "\\u%04x", c);
-                    b->len += (size_t)n;
-                } else {
-                    b->data[b->len++] = (char)c;
-                }
-        }
-    }
-    b->data[b->len++] = '"';
+    tsc_jsonbuf_byte(buffer, '"');
 }
 
 tsc_str_t* tsc_jsonbuf_finish(tsc_jsonbuf_t* b) {

@@ -9579,7 +9579,9 @@ static tsc_value_t json_stringify_apply(void* env, tsc_value_t this_arg, tsc_arr
     (void)env;
     (void)this_arg;
     tsc_value_t value = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    return tsc_value_json_stringify_top(value);
+    tsc_value_t replacer = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
+    tsc_value_t space = args->len > 2 ? TSC_ARR(tsc_value_t, args, 2) : tsc_value_undefined();
+    return tsc_value_json_stringify_options(value, replacer, space);
 }
 
 tsc_value_t tsc_builtin_json(void) {

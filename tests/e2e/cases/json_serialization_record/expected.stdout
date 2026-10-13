@@ -1,0 +1,13 @@
+source:41;
+surrogate:"\ud800"
+replacer:{"value":18}
+list:{"b":2}
+hook:19
+gap:[
+ 1,
+ {
+  "value": 2
+ }
+]
+extra:true
+effects:1

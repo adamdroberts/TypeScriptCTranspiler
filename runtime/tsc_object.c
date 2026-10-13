@@ -1598,111 +1598,203 @@ tsc_array_t* tsc_object_entries_dyn(const tsc_object_t* o) {
         : tsc_array_new(sizeof(tsc_value_t), 1);
 }
 
-static bool value_is_callable_proxy(tsc_value_t v) {
-    if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) return false;
-    if (tsc_proxy_chain_has_revoked(v)) {
-        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'get' on a proxy that has been revoked"));
-    }
-    return tsc_proxy_trap_is_callable(v);
+/* One JSON Serialization Record and linked frame worklist implements
+ * SerializeJSONProperty/Array/Object without native-stack depth limits. */
+typedef struct tsc_json_frame {
+    struct tsc_json_frame* parent;
+    tsc_value_t value;
+    void* value_root;
+    tsc_array_t* keys;
+    size_t index, length, emitted, depth;
+    bool array;
+} tsc_json_frame_t;
+
+typedef struct {
+    tsc_value_t replacer;
+    void* replacer_root;
+    tsc_array_t* properties;
+    tsc_str_t* gap;
+    tsc_jsonbuf_t output;
+    tsc_json_frame_t* frame;
+} tsc_json_state_t;
+
+static tsc_object_t* json_boxed_primitive(tsc_value_t value) {
+    if (!value_is_box(value) || value_tag(value) != TSC_VALUE_TAG_OBJECT) return NULL;
+    tsc_object_t* object = (tsc_object_t*)value_ptr(value);
+    return object && !object->is_proxy && object->has_primitive_value ? object : NULL;
 }
 
-bool value_json_omits_object_property(tsc_value_t v) {
-    return value_is_box(v) && (
-        value_tag(v) == TSC_VALUE_TAG_UNDEFINED ||
-        value_tag(v) == TSC_VALUE_TAG_FUNCTION ||
-        value_tag(v) == TSC_VALUE_TAG_SYMBOL ||
-        value_is_callable_proxy(v)
-    );
+static void json_append_text(tsc_jsonbuf_t* buffer, tsc_str_t* text) {
+    tsc_jsonbuf_append(buffer, text->data, text->len);
 }
 
-tsc_str_t* tsc_value_json_stringify(tsc_value_t v) {
-    if (!value_is_box(v)) return tsc_json_num(value_as_num(v));
-    switch (value_tag(v)) {
-        case TSC_VALUE_TAG_FUNCTION:
-        case TSC_VALUE_TAG_UNDEFINED:
-        case TSC_VALUE_TAG_NULL:
-            return tsc_str_from_lit("null", 4);
-        case TSC_VALUE_TAG_FALSE:
-            return tsc_str_from_lit("false", 5);
-        case TSC_VALUE_TAG_TRUE:
-            return tsc_str_from_lit("true", 4);
-        case TSC_VALUE_TAG_STRING:
-            return tsc_json_escape_string((tsc_str_t*)value_ptr(v));
-        case TSC_VALUE_TAG_BIGINT:
-            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Do not know how to serialize a BigInt"));
-        case TSC_VALUE_TAG_SYMBOL:
-            return tsc_str_from_lit("null", 4);
-        case TSC_VALUE_TAG_ARRAY: {
-            tsc_array_t* a = (tsc_array_t*)value_ptr(v);
-            tsc_str_t* out = tsc_str_from_lit("[", 1);
-            for (size_t i = 0; i < a->len; i++) {
-                if (i > 0) out = tsc_str_concat(out, tsc_str_from_lit(",", 1));
-                out = tsc_str_concat(out, tsc_value_json_stringify(tsc_value_get_index(v, (double)i)));
-            }
-            return tsc_str_concat(out, tsc_str_from_lit("]", 1));
+static tsc_value_t json_call(tsc_value_t function, tsc_value_t receiver,
+                            tsc_str_t* key, tsc_value_t value, bool replacer) {
+    void* volatile function_root = tsc_value_gc_root(function);
+    void* volatile receiver_root = tsc_value_gc_root(receiver);
+    void* volatile value_root = tsc_value_gc_root(value);
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), replacer ? 2 : 1);
+    tsc_array_push_value(args, tsc_value_string(key));
+    if (replacer) tsc_array_push_value(args, value);
+    (void)function_root; (void)receiver_root; (void)value_root;
+    return tsc_value_apply_function(function, receiver, tsc_value_array(args));
+}
+
+static tsc_value_t json_property(tsc_json_state_t* state, tsc_value_t holder, tsc_str_t* key) {
+    void* volatile holder_root = tsc_value_gc_root(holder);
+    tsc_value_t value = tsc_value_get_prop(holder, key);
+    void* volatile value_root = tsc_value_gc_root(value);
+    if (tsc_value_is_object(value) || (value_is_box(value) && value_tag(value) == TSC_VALUE_TAG_BIGINT)) {
+        tsc_value_t method = tsc_value_get_prop(value, tsc_str_from_lit("toJSON", 6));
+        if (tsc_value_is_callable(method)) {
+            value = json_call(method, value, key, tsc_value_undefined(), false);
+            value_root = tsc_value_gc_root(value);
         }
-        case TSC_VALUE_TAG_OBJECT: {
-            tsc_object_t* o = (tsc_object_t*)value_ptr(v);
-            if (o && o->is_proxy && tsc_proxy_chain_has_revoked(v)) {
-                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'get' on a proxy that has been revoked"));
-            }
-            if (o && o->is_proxy && tsc_value_is_array(v)) {
-                size_t len = (size_t)tsc_value_length(v);
-                tsc_str_t* out = tsc_str_from_lit("[", 1);
-                for (size_t i = 0; i < len; i++) {
-                    if (i > 0) out = tsc_str_concat(out, tsc_str_from_lit(",", 1));
-                    out = tsc_str_concat(out, tsc_value_json_stringify(tsc_value_get_index(v, (double)i)));
+    }
+    if (!tsc_value_is_undefined(state->replacer)) {
+        value = json_call(state->replacer, holder, key, value, true);
+        value_root = tsc_value_gc_root(value);
+    }
+    tsc_object_t* box = json_boxed_primitive(value);
+    if (box) {
+        if (box->primitive_kind == TSC_PRIMITIVE_NUMBER) value = tsc_value_num(tsc_value_to_number(value));
+        else if (box->primitive_kind == TSC_PRIMITIVE_STRING) value = tsc_value_string(tsc_value_to_string(value));
+        else if (box->primitive_kind == TSC_PRIMITIVE_BOOLEAN || box->primitive_kind == TSC_PRIMITIVE_BIGINT) value = box->primitive_value;
+    }
+    (void)holder_root; (void)value_root;
+    return value;
+}
+
+static void json_indent(tsc_json_state_t* state, size_t depth) {
+    if (!state->gap->len) return;
+    tsc_jsonbuf_byte(&state->output, '\n');
+    for (size_t index = 0; index < depth; index++) json_append_text(&state->output, state->gap);
+}
+
+static void json_prefix(tsc_json_state_t* state, tsc_str_t* key) {
+    tsc_json_frame_t* parent = state->frame;
+    if (!parent) return;
+    if (parent->emitted++) tsc_jsonbuf_byte(&state->output, ',');
+    json_indent(state, parent->depth + 1);
+    if (!parent->array) {
+        tsc_jsonbuf_str(&state->output, key);
+        tsc_jsonbuf_byte(&state->output, ':');
+        if (state->gap->len) tsc_jsonbuf_byte(&state->output, ' ');
+    }
+}
+
+static bool json_emit(tsc_json_state_t* state, tsc_value_t value, tsc_str_t* key) {
+    void* volatile value_root = tsc_value_gc_root(value);
+    if (tsc_value_is_undefined(value) || (value_is_box(value) && value_tag(value) == TSC_VALUE_TAG_SYMBOL) ||
+        (tsc_value_is_object(value) && tsc_value_is_callable(value))) {
+        if (!state->frame || !state->frame->array) return false;
+        value = tsc_value_null();
+    }
+    if (value_is_box(value) && value_tag(value) == TSC_VALUE_TAG_BIGINT)
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Do not know how to serialize a BigInt"));
+    if (tsc_value_is_object(value)) {
+        bool array = tsc_value_is_array(value);
+        for (tsc_json_frame_t* active = state->frame; active; active = active->parent)
+            if (active->value == value) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Converting circular structure to JSON"));
+        tsc_json_frame_t* frame = (tsc_json_frame_t*)TSC_GC_MALLOC(sizeof(tsc_json_frame_t));
+        memset(frame, 0, sizeof(*frame));
+        frame->parent = state->frame;
+        frame->value = value;
+        frame->value_root = tsc_value_gc_root(value);
+        frame->array = array;
+        frame->depth = frame->parent ? frame->parent->depth + 1 : 0;
+        if (array) frame->length = tsc_value_length_of_array_like(value);
+        else {
+            frame->keys = state->properties ? state->properties : tsc_value_object_keys(value);
+            frame->length = frame->keys->len;
+        }
+        json_prefix(state, key);
+        tsc_jsonbuf_byte(&state->output, array ? '[' : '{');
+        state->frame = frame;
+    } else {
+        json_prefix(state, key);
+        if (!value_is_box(value)) tsc_jsonbuf_num(&state->output, value_as_num(value));
+        else switch (value_tag(value)) {
+            case TSC_VALUE_TAG_NULL: tsc_jsonbuf_append(&state->output, "null", 4); break;
+            case TSC_VALUE_TAG_FALSE: tsc_jsonbuf_bool(&state->output, false); break;
+            case TSC_VALUE_TAG_TRUE: tsc_jsonbuf_bool(&state->output, true); break;
+            case TSC_VALUE_TAG_STRING: tsc_jsonbuf_str(&state->output, (tsc_str_t*)value_ptr(value)); break;
+            default: tsc_panic("invalid JSON serialization value");
+        }
+    }
+    (void)value_root;
+    return true;
+}
+
+tsc_value_t tsc_value_json_stringify_options(tsc_value_t value, tsc_value_t replacer, tsc_value_t space) {
+    void* volatile value_root = tsc_value_gc_root(value);
+    void* volatile replacer_root = tsc_value_gc_root(replacer);
+    void* volatile space_root = tsc_value_gc_root(space);
+    tsc_json_state_t* state = (tsc_json_state_t*)TSC_GC_MALLOC(sizeof(tsc_json_state_t));
+    memset(state, 0, sizeof(*state));
+    state->replacer = tsc_value_undefined();
+    state->gap = tsc_str_from_lit("", 0);
+    if (tsc_value_is_object(replacer)) {
+        if (tsc_value_is_callable(replacer)) {
+            state->replacer = replacer;
+            state->replacer_root = tsc_value_gc_root(replacer);
+        } else if (tsc_value_is_array(replacer)) {
+            state->properties = tsc_array_new(sizeof(tsc_str_t*), 4);
+            size_t length = tsc_value_length_of_array_like(replacer);
+            for (size_t index = 0; index < length; index++) {
+                tsc_value_t item = tsc_value_get_index(replacer, (double)index);
+                void* volatile item_root = tsc_value_gc_root(item);
+                tsc_object_t* box = json_boxed_primitive(item);
+                if (!value_is_box(item) || value_tag(item) == TSC_VALUE_TAG_STRING ||
+                    (box && (box->primitive_kind == TSC_PRIMITIVE_NUMBER || box->primitive_kind == TSC_PRIMITIVE_STRING))) {
+                    tsc_str_t* key = tsc_value_to_string(item);
+                    bool exists = false;
+                    for (size_t offset = 0; offset < state->properties->len; offset++)
+                        if (tsc_str_eq(key, TSC_ARR(tsc_str_t*, state->properties, offset))) {exists = true; break;}
+                    if (!exists) tsc_array_push_raw(state->properties, &key);
                 }
-                return tsc_str_concat(out, tsc_str_from_lit("]", 1));
+                (void)item_root;
             }
-            if (value_is_callable_proxy(v)) return tsc_str_from_lit("null", 4);
-            tsc_str_t* out = tsc_str_from_lit("{", 1);
-            bool first = true;
-            if (o && o->is_proxy) {
-                tsc_array_t* keys = tsc_object_keys_dyn(o);
-                for (size_t i = 0; i < keys->len; i++) {
-                    tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
-                    tsc_value_t prop_value = tsc_object_get(o, key);
-                    if (value_json_omits_object_property(prop_value)) continue;
-                    if (!first) out = tsc_str_concat(out, tsc_str_from_lit(",", 1));
-                    first = false;
-                    out = tsc_str_concat(out, tsc_json_escape_string(key));
-                    out = tsc_str_concat(out, tsc_str_from_lit(":", 1));
-                    out = tsc_str_concat(out, tsc_value_json_stringify(prop_value));
-                }
-                return tsc_str_concat(out, tsc_str_from_lit("}", 1));
-            }
-            for (size_t i = 0; i < o->len; i++) {
-                if (tsc_property_key_symbol(o->props[i].key)) continue;
-                if (!o->props[i].enumerable) continue;
-                tsc_value_t prop_value = tsc_object_get(o, o->props[i].key);
-                if (value_json_omits_object_property(prop_value)) continue;
-                if (!first) out = tsc_str_concat(out, tsc_str_from_lit(",", 1));
-                first = false;
-                out = tsc_str_concat(out, tsc_json_escape_string(o->props[i].key));
-                out = tsc_str_concat(out, tsc_str_from_lit(":", 1));
-                out = tsc_str_concat(out, tsc_value_json_stringify(prop_value));
-            }
-            return tsc_str_concat(out, tsc_str_from_lit("}", 1));
         }
     }
-    return tsc_str_from_lit("null", 4);
-}
-
-tsc_value_t tsc_value_json_stringify_top(tsc_value_t v) {
-    if (value_is_box(v)) {
-        tsc_value_tag_t tag = value_tag(v);
-        if (tag == TSC_VALUE_TAG_FUNCTION ||
-            tag == TSC_VALUE_TAG_UNDEFINED ||
-            tag == TSC_VALUE_TAG_SYMBOL ||
-            (tag == TSC_VALUE_TAG_OBJECT && value_is_callable_proxy(v))) {
-            return tsc_value_undefined();
-        }
+    tsc_object_t* space_box = json_boxed_primitive(space);
+    if (space_box) {
+        if (space_box->primitive_kind == TSC_PRIMITIVE_NUMBER) space = tsc_value_num(tsc_value_to_number(space));
+        else if (space_box->primitive_kind == TSC_PRIMITIVE_STRING) space = tsc_value_string(tsc_value_to_string(space));
     }
-    return tsc_value_string(tsc_value_json_stringify(v));
+    if (!value_is_box(space)) {
+        double count = value_as_num(space);
+        if (count >= 1) state->gap = tsc_str_substring(tsc_str_from_lit("          ", 10), 0, count > 10 ? 10 : floor(count));
+    } else if (value_tag(space) == TSC_VALUE_TAG_STRING) state->gap = tsc_str_substring((tsc_str_t*)value_ptr(space), 0, 10);
+    tsc_object_t* wrapper = tsc_object_new();
+    tsc_str_t* empty = tsc_str_from_lit("", 0);
+    tsc_object_define(wrapper, empty, value, true, true, true);
+    tsc_jsonbuf_init(&state->output);
+    if (!json_emit(state, json_property(state, tsc_value_object(wrapper), empty), empty)) return tsc_value_undefined();
+    while (state->frame) {
+        tsc_json_frame_t* frame = state->frame;
+        if (frame->index == frame->length) {
+            if (frame->emitted) json_indent(state, frame->depth);
+            tsc_jsonbuf_byte(&state->output, frame->array ? ']' : '}');
+            state->frame = frame->parent;
+            continue;
+        }
+        size_t index = frame->index++;
+        tsc_str_t* key = frame->array ? tsc_str_from_num((double)index) : TSC_ARR(tsc_str_t*, frame->keys, index);
+        json_emit(state, json_property(state, frame->value, key), key);
+    }
+    (void)value_root; (void)replacer_root; (void)space_root;
+    return tsc_value_string(tsc_jsonbuf_finish(&state->output));
 }
 
+tsc_value_t tsc_value_json_stringify_top(tsc_value_t value) {
+    return tsc_value_json_stringify_options(value, tsc_value_undefined(), tsc_value_undefined());
+}
 
+tsc_str_t* tsc_value_json_stringify(tsc_value_t value) {
+    tsc_value_t result = tsc_value_json_stringify_top(value);
+    return tsc_value_is_undefined(result) ? tsc_str_from_lit("null", 4) : tsc_value_as_string(result);
+}
 
 void jp_ws(json_parser_t* p) {
     while (p->pos < p->len) {

@@ -43,7 +43,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | `agent-member:${string}`;
+    "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "json-stringify" | `agent-member:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
@@ -142,6 +142,7 @@ const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
 // Initial intrinsic member identities, installed on their canonical owners.
 // Source lookups and later writes use the ordinary field graph.
 const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operation>> = new Map<string, ReadonlyMap<string, Operation>>([
+    ["JSON", new Map([["stringify", "json-stringify"]])],
     ["console", new Map([...consoleOperations].map(name=>[name,"host-print" as const]))],
     ["Object", new Map([["getPrototypeOf", "prototype"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
         ["getOwnPropertyDescriptor", "own-descriptor"], ["getOwnPropertyDescriptors", "own-descriptors"]])],
@@ -194,6 +195,7 @@ function propertyName(node: ts.Node | undefined): string | null {
  * Property discovery never asks TypeScript to infer a receiver/member type. */
 class SourceValueFlow {
     private readonly cells = new Map<ts.Node, Cell>();
+    private readonly jsonSerializations = new Map<ts.Node, Map<string, Cell>>();
     private readonly normalResults = new Map<Cell, Atom>();
     private readonly exceptionHandlers = new Map<ts.Node, Cell>();
     private readonly exceptionCells = new Set<Cell>();
@@ -1944,6 +1946,102 @@ class SourceValueFlow {
         }
         return choices;
     }
+    /** Source projection follows the same root-holder/toJSON/replacer order
+     * as the runtime Serialization Record. Unrepresented composite output
+     * remains opaque; its callbacks and exceptions cannot become pure. */
+    private jsonSerialization(value: Cell, replacer: Cell, space: Cell, context: ts.Node): Cell {
+        let calls = this.jsonSerializations.get(context);
+        if (!calls) {calls = new Map(); this.jsonSerializations.set(context, calls);}
+        const signature = [value.id,replacer.id,space.id].join(":");
+        const prior = calls.get(signature); if (prior) return prior;
+        const result = this.newCell(); calls.set(signature, result);
+        const prepared = this.newCell(), replaced = this.newCell(), key = this.newCell();
+        this.publish(key, this.primitive(""));
+        const wrapperOwner: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};
+        const wrapper = this.newCell(); this.publish(wrapper,{tag:"object",owner:wrapperOwner});
+        this.defineField(wrapperOwner,"",value);
+        const opaque = () => {
+            this.publish(result,this.unknownString); this.publish(result,this.primitive(undefined));
+            const handler=this.exceptionHandlers.get(context); if(handler)this.publish(handler,this.unknown);
+            this.onActive(context,()=>this.opaqueEffect(context));
+        };
+        const inputs = new Map<Atom,Cell>(), indexed = new Map<Cell,Map<SourcePropertyKey,Cell>>();
+        const atomCell = (atom:Atom):Cell => {
+            let input=inputs.get(atom);if(!input){input=this.newCell();inputs.set(atom,input);this.publish(input,atom);}return input;
+        };
+        const itemCell = (input:Cell,key:SourcePropertyKey):Cell => {
+            let keys=indexed.get(input);if(!keys){keys=new Map();indexed.set(input,keys);}
+            let item=keys.get(key);if(!item){item=this.property(input,key,context);keys.set(key,item);}return item;
+        };
+        const selected = new Set<Atom>();
+        this.rule([value],()=>{
+            for(const atom of value.values){
+                if(selected.has(atom))continue; selected.add(atom);
+                const kinds=this.primitiveKinds(atomCell(atom));
+                if(!(kinds&(KIND_OBJECT|KIND_FUNCTION|KIND_BIGINT))){this.publish(prepared,atom);continue;}
+                const owner=this.ordinaryOwner(atom);
+                if(!owner){opaque();continue;}
+                const receiver=this.newCell();this.publish(receiver,atom);
+                const method=this.property(receiver,"toJSON",context),callee=this.newCell();
+                this.invoke(context,callee,receiver,[{cell:key,spread:false}],prepared);
+                this.rule([method],()=>{
+                    for(const candidate of method.values){
+                        if(candidate.tag==="abrupt"||candidate.tag==="pending-source"){this.publish(prepared,candidate);continue;}
+                        const input=atomCell(candidate);
+                        if(this.primitiveKinds(input)&KIND_FUNCTION||candidate.tag==="unknown"||candidate.tag==="opaque-object")this.publish(callee,candidate);
+                        else this.publish(prepared,atom);
+                    }
+                });
+            }
+        });
+        const replacerCallee=this.newCell();
+        this.invoke(context,replacerCallee,wrapper,[{cell:key,spread:false},{cell:prepared,spread:false}],replaced);
+        let options!:Rule;
+        options=this.rule([replacer,space,prepared],()=>{
+            for(const atom of replacer.values){
+                if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(replaced,atom);continue;}
+                const input=atomCell(atom);
+                const kinds=this.primitiveKinds(input);
+                if(kinds&KIND_FUNCTION||atom.tag==="unknown"||atom.tag==="opaque-object")this.publish(replacerCallee,atom);
+                else {
+                    const owner=this.ordinaryOwner(atom);
+                    if(owner?.listLength){
+                        const length=this.arrayLikeLength(input,context),state=this.primitiveState(length,options,true);
+                        if(state.pending&&!state.unresolved)continue;
+                        const keys=this.propertyDomainKeys(input,context,options,"index");
+                        if(keys===undefined)continue;
+                        if(keys===null||!state.proof.primitiveComplete){opaque();continue;}
+                        for(const name of keys){
+                            const item=itemCell(input,name);this.watchText(options,item);
+                            if(this.primitiveKinds(item)&(KIND_OBJECT|KIND_FUNCTION))opaque();
+                        }
+                    } else if(kinds&KIND_OBJECT&&!owner){opaque();continue;}
+                    this.copy(prepared,replaced);
+                }
+            }
+            for(const atom of space.values){
+                if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
+                const input=atomCell(atom);
+                if(this.primitiveKinds(input)&KIND_OBJECT&&!this.ordinaryOwner(atom))opaque();
+            }
+        });
+        let output!:Rule;
+        output=this.rule([replaced],()=>{
+            const state=this.primitiveState(replaced,output,true);
+            for(const value of state.proof.values){
+                try {this.publish(result,this.primitive(JSON.stringify(value)));}
+                catch {this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.opaqueObject);}
+            }
+            if(state.proof.primitiveComplete)return;
+            if(state.pending&&!state.unresolved)return;
+            const kinds=this.primitiveKinds(replaced);
+            if(kinds&(KIND_OBJECT|KIND_BIGINT)){opaque();return;}
+            if(kinds&KIND_FUNCTION)this.publish(result,this.primitive(undefined));
+            if(kinds&(KIND_UNDEFINED|KIND_SYMBOL))this.publish(result,this.primitive(undefined));
+            if(kinds&(KIND_NULL|KIND_BOOLEAN|KIND_NUMBER|KIND_STRING))this.publish(result,this.unknownString);
+        });
+        return result;
+    }
     private argumentSequence(context: ts.Node, parts: readonly ListPart[]): ArgumentSequence {
         let sequences = this.argumentSequences.get(context);
         if (!sequences) {sequences = new Map(); this.argumentSequences.set(context, sequences);}
@@ -2586,6 +2684,10 @@ class SourceValueFlow {
                             if (handler) this.copy(atom.owner.throws, handler);
                         }
                     } else if (atom.tag === "operation") {
+                        if(atom.operation==="json-stringify"){
+                            this.copy(this.jsonSerialization(argument(0)??omittedArgument,argument(1)??omittedArgument,argument(2)??omittedArgument,node),result);
+                            continue;
+                        }
                         if(atom.operation==="array-join"){
                             const length=this.arrayLikeLength(invocation.receiver,node);
                             const state=this.primitiveState(length,rule,true);
