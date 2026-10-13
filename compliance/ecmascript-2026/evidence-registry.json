@@ -3088,7 +3088,9 @@
       "id": "tests/property/module-linking.property.test.ts",
       "targets": [
         "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
-        "sec-smr-resolveexport#synthetic-module-export-bindings"
+        "sec-smr-resolveexport#synthetic-module-export-bindings",
+        "sec-ModuleRequestsEqual#decoded-specifier-and-attribute-collection-identity",
+        "sec-GetImportedModule#retained-request-to-module-record-identity"
       ]
     },
     {
@@ -3140,7 +3142,9 @@
         "sec-smr-resolveexport#synthetic-module-export-bindings",
         "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
         "sec-getexportednames#visited-module-record-name-collection",
-        "sec-smr-getexportednames#visited-module-record-name-collection"
+        "sec-smr-getexportednames#visited-module-record-name-collection",
+        "sec-ModuleRequestsEqual#decoded-specifier-and-attribute-collection-identity",
+        "sec-GetImportedModule#retained-request-to-module-record-identity"
       ]
     },
     {
@@ -3150,7 +3154,9 @@
         "sec-smr-resolveexport#synthetic-module-export-bindings",
         "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
         "sec-getexportednames#visited-module-record-name-collection",
-        "sec-smr-getexportednames#visited-module-record-name-collection"
+        "sec-smr-getexportednames#visited-module-record-name-collection",
+        "sec-ModuleRequestsEqual#decoded-specifier-and-attribute-collection-identity",
+        "sec-GetImportedModule#retained-request-to-module-record-identity"
       ]
     },
     {
@@ -3209,6 +3215,94 @@
       "targets": [
         "sec-getmodulenamespace#module-record-namespace-singleton",
         "sec-modulenamespacecreate#canonical-export-plan-and-singleton"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/module-request-emitter.property.test.ts",
+      "targets": [
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-ModuleRequestsEqual#decoded-specifier-and-attribute-collection-identity",
+        "sec-GetImportedModule#retained-request-to-module-record-identity"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "module_request_width",
+      "targets": [
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-ModuleRequestsEqual#decoded-specifier-and-attribute-collection-identity",
+        "sec-GetImportedModule#retained-request-to-module-record-identity"
+      ],
+      "stressReview": {
+        "dimension": "distinct syntactic ModuleRequest collection width with one shared target Module Record",
+        "parameter": "width",
+        "representativeHighDepth": 257,
+        "rationale": "One generated native self-import graph stresses canonical request lookup and namespace identity without turning successive request counts into completion units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "module_request_identity",
+      "targets": [
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-ModuleRequestsEqual#decoded-specifier-and-attribute-collection-identity",
+        "sec-GetImportedModule#retained-request-to-module-record-identity"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#resolvedModuleInfoForDeclaration",
+      "targets": [
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-ModuleRequestsEqual#decoded-specifier-and-attribute-collection-identity",
+        "sec-GetImportedModule#retained-request-to-module-record-identity"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#resolveAliasSymbol",
+      "targets": [
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-ModuleRequestsEqual#decoded-specifier-and-attribute-collection-identity",
+        "sec-GetImportedModule#retained-request-to-module-record-identity"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/resolve.ts#buildModuleGraph",
+      "targets": [
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-ModuleRequestsEqual#decoded-specifier-and-attribute-collection-identity",
+        "sec-GetImportedModule#retained-request-to-module-record-identity"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/module-request.ts#moduleRequestFromDeclaration",
+      "targets": [
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-ModuleRequestsEqual#decoded-specifier-and-attribute-collection-identity",
+        "sec-GetImportedModule#retained-request-to-module-record-identity"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/module-request.ts#moduleRequestKey",
+      "targets": [
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-ModuleRequestsEqual#decoded-specifier-and-attribute-collection-identity",
+        "sec-GetImportedModule#retained-request-to-module-record-identity"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/module-request.ts#moduleRequestsEqual",
+      "targets": [
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-ModuleRequestsEqual#decoded-specifier-and-attribute-collection-identity",
+        "sec-GetImportedModule#retained-request-to-module-record-identity"
       ]
     }
   ]

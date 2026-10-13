@@ -37,8 +37,6 @@ export interface ModuleInfo {
     dynamicModuleSpecifiers: string[];
     /** Dynamic target specifier to resolved module id. */
     resolvedDynamicSpecifiers: Map<string, string>;
-    /** Literal module specifier to resolved module id for import/export edges. */
-    resolvedSpecifiers: Map<string, string>;
     /** Literal module specifier to resolved module id for CommonJS require edges. */
     resolvedRequireSpecifiers: Map<string, string>;
     /** absolute filename (same as sf.fileName, cached for readability). */
@@ -97,7 +95,6 @@ export function buildModuleGraph(
             resolvedModuleRequests: new Map(),
             dynamicModuleSpecifiers: [],
             resolvedDynamicSpecifiers: new Map(),
-            resolvedSpecifiers: new Map(),
             resolvedRequireSpecifiers: new Map(),
             fileName: sf.fileName,
         });
@@ -160,7 +157,6 @@ export function buildModuleGraph(
                         throw new Error(`${info.sf.fileName}: ${requestError} for ${JSON.stringify(spec)}`);
                     }
                     info.resolvedModuleRequests.set(moduleRequestKey(request), depId);
-                    info.resolvedSpecifiers.set(spec, depId);
                     if (depId !== id && !info.imports.includes(depId)) {
                         info.imports.push(depId);
                     }

@@ -42,6 +42,10 @@ export interface ModuleNamespaceExportWidthSpec {
     generator: "module-namespace-export-width";
     width: number;
 }
+export interface ModuleRequestWidthSpec {
+    generator: "module-request-width";
+    width: number;
+}
 export interface ImportMetaReferenceWidthSpec {
     generator: "import-meta-reference-width";
     width: number;
@@ -205,6 +209,7 @@ export type GeneratedCaseSpec =
     | GroupingReferenceDepthSpec
     | StrictEqualityExpressionDepthSpec
     | ModuleNamespaceExportWidthSpec
+    | ModuleRequestWidthSpec
     | ImportMetaReferenceWidthSpec
     | ModuleStaticSemanticsWidthSpec
     | ModuleStaticSemanticsDepthSpec
@@ -315,7 +320,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "module-namespace-export-width" || spec.generator === "import-meta-reference-width") {
+    if (spec.generator === "module-namespace-export-width" || spec.generator === "module-request-width" || spec.generator === "import-meta-reference-width") {
         const width = spec.width;
         if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
             throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
@@ -1744,6 +1749,15 @@ console.log("raw JSON text width:", valid);
             return strictEqualityExpressionDepthSource(spec.depth);
         case "module-namespace-export-width":
             return moduleNamespaceExportWidthSource(spec.width);
+        case "module-request-width": {
+            const names = Array.from({length:spec.width}, (_, index) => `namespace${index}`);
+            const imports = names.map((name, index) =>
+                `import * as ${name} from ${JSON.stringify("./".repeat(index+1)+"module_request_width")} ` +
+                (index%2 ? 'with {type:"javascript"};' : ';'));
+            return imports.join("\n") + `\nexport const value = 17;\nconst namespaces: any[] = [${names.join(",")}];\n` +
+                `for (const namespace of namespaces) if(namespace !== namespaces[0] || namespace.value !== 17) throw new Error("Module request identity");\n` +
+                `console.log("requests:", true, namespaces[0].value);\n`;
+        }
         case "import-meta-reference-width":
             return importMetaReferenceWidthSource(spec.width);
         case "module-static-semantics-width":

@@ -1,3 +1,5 @@
+Static Module References now preserve complete request/attribute identity through one resolved-request map, including named/default callable ownership. Removed the specifier-only predecessor and added independent host-graph Node/native properties, missing-resolution rejection and generated CLI request stress in both memory modes; exhaustive target evidence remains open.
+
 Namespace factories now emit through one pending Module-plan worklist, with complete exports available before cyclic or nested getter emission. Independent Node/native identity, JSON Reference, live-binding and suspension properties include one deep target graph in both memory modes; full host eligibility and exhaustive target evidence remain open.
 
 Emitter namespace resolution and export-name enumeration now share canonical Module records and iterative worklists with host preflight. Independent Node/native name-set and identity partitions plus one deep re-export graph pass in both memory modes; complete host eligibility and exhaustive target evidence remain open.
