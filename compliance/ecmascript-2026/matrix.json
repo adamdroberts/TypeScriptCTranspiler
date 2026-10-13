@@ -13,6 +13,30 @@
           "partition": "non-402-number-data-decimal-text-and-ignored-options"
         }
       ]
+    },
+    {
+      "obligation": "choice-8a09de518994e95798a97041e5ebb4c3f9f45d6f4511fde5763d1e8441a7885a",
+      "selection": "Use the specified default: return an empty List of import-meta properties.",
+      "rationale": "The pinned host operation specifies this default. The native implementation creates an ordinary null-prototype owner and publishes it unchanged on its Module Record; host property extensions are outside this selected behavior.",
+      "reviewedBy": "tsc2c compliance review",
+      "evidence": [
+        {
+          "clause": "sec-hostgetimportmetaproperties",
+          "partition": "default-empty-property-list"
+        }
+      ]
+    },
+    {
+      "obligation": "choice-724bd2c40dbe454769a4019c703f49c39f035d7bbbc05c06751ac17ee1184fa7",
+      "selection": "Use the specified default: return unused without extraordinary finalization.",
+      "rationale": "The pinned host operation specifies this default. The native implementation creates an ordinary null-prototype owner and publishes it unchanged on its Module Record; host property extensions are outside this selected behavior.",
+      "reviewedBy": "tsc2c compliance review",
+      "evidence": [
+        {
+          "clause": "sec-hostfinalizeimportmeta",
+          "partition": "default-no-extraordinary-finalization"
+        }
+      ]
     }
   ],
   "normativeOptionalEvidence": [],
@@ -2699,6 +2723,104 @@
         }
       ],
       "rationale": "Exact terminal runtime Evaluation evidence only; grouping grammar and early-error clauses remain independent open work."
+    },
+    {
+      "clause": "sec-hostgetimportmetaproperties",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "default-empty-property-list",
+          "title": "Use the specified default: return an empty List of import-meta properties.",
+          "surface": "module",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "graph",
+          "choiceObligation": "choice-8a09de518994e95798a97041e5ebb4c3f9f45d6f4511fde5763d1e8441a7885a",
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "feature",
+                  "equals": "import.meta"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/import-meta-record.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "import_meta_reference_width"
+            ],
+            "e2e": [
+              "import_meta_record"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#ImportMeta"
+            ],
+            "implementation": [
+              "runtime/tsc_module.c#tsc_module_import_meta"
+            ]
+          },
+          "rationale": "One canonical Module Record graph retains each lazily created owner. The selected host default has no property/finalization work; source order, subsequent mutation, cached rejection and graph depth use the same owner path. The typed CLI directly verifies the default empty List and unchanged ordinary object, while an independent Node oracle covers ordinary owner behavior and one retained graph stress."
+        }
+      ],
+      "rationale": "This exact host-hook choice records only the specified default implementation. ImportMeta/NewTarget parent semantics, reviewed standard-feature mapping, eligible host hooks and signed exhaustive target evidence remain separate open obligations."
+    },
+    {
+      "clause": "sec-hostfinalizeimportmeta",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "default-no-extraordinary-finalization",
+          "title": "Use the specified default: return unused without extraordinary finalization.",
+          "surface": "module",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "graph",
+          "choiceObligation": "choice-724bd2c40dbe454769a4019c703f49c39f035d7bbbc05c06751ac17ee1184fa7",
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "feature",
+                  "equals": "import.meta"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/import-meta-record.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "import_meta_reference_width"
+            ],
+            "e2e": [
+              "import_meta_record"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#ImportMeta"
+            ],
+            "implementation": [
+              "runtime/tsc_module.c#tsc_module_import_meta"
+            ]
+          },
+          "rationale": "One canonical Module Record graph retains each lazily created owner. The selected host default has no property/finalization work; source order, subsequent mutation, cached rejection and graph depth use the same owner path. The typed CLI directly verifies the default empty List and unchanged ordinary object, while an independent Node oracle covers ordinary owner behavior and one retained graph stress."
+        }
+      ],
+      "rationale": "This exact host-hook choice records only the specified default implementation. ImportMeta/NewTarget parent semantics, reviewed standard-feature mapping, eligible host hooks and signed exhaustive target evidence remain separate open obligations."
     }
   ],
   "groups": [

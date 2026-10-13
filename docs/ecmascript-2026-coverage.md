@@ -744,8 +744,12 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-tagged-templates-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
   - [ ] `sec-meta-properties` — Meta Properties: exact disposition and partitions missing.
   - [ ] `sec-meta-properties-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
-  - [ ] `sec-hostgetimportmetaproperties` — HostGetImportMetaProperties ( _moduleRecord_: a Module Record, ): a List of Records with fields [[Key]] (a property key) and [[Value]] (an ECMAScript language value): exact disposition and partitions missing.
-  - [ ] `sec-hostfinalizeimportmeta` — HostFinalizeImportMeta ( _importMeta_: an Object, _moduleRecord_: a Module Record, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-hostgetimportmetaproperties` — HostGetImportMetaProperties ( _moduleRecord_: a Module Record, ): a List of Records with fields [[Key]] (a property key) and [[Value]] (an ECMAScript language value)
+    - host-defined selection `choice-8a09de518994e95798a97041e5ebb4c3f9f45d6f4511fde5763d1e8441a7885a`: Use the specified default: return an empty List of import-meta properties..
+    - [ ] `default-empty-property-list` (module, unbounded): Use the specified default: return an empty List of import-meta properties..
+  - [ ] `sec-hostfinalizeimportmeta` — HostFinalizeImportMeta ( _importMeta_: an Object, _moduleRecord_: a Module Record, ): ~unused~
+    - host-defined selection `choice-724bd2c40dbe454769a4019c703f49c39f035d7bbbc05c06751ac17ee1184fa7`: Use the specified default: return unused without extraordinary finalization..
+    - [ ] `default-no-extraordinary-finalization` (module, unbounded): Use the specified default: return unused without extraordinary finalization..
   - [ ] `sec-update-expressions` — Update Expressions: exact disposition and partitions missing.
   - [ ] `sec-update-expressions-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
   - [ ] `sec-postfix-increment-operator` — Postfix Increment Operator: exact disposition and partitions missing.
@@ -2501,7 +2505,7 @@ Each entry is independently extracted from normative marked text, normative host
 - [ ] `choice-6caad900ef9e94b89098e511114a60dec4f31624b7802d6ba8e41a0072b91c99` — implementation-defined, marked-text, source `sec-sortindexedproperties`: exact evidenced selection missing.
 - [ ] `choice-6ec4e12eafa100f803928451b958c0f16ecee037cf68dcd149b11d9058a9dfed` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
 - [ ] `choice-71d669fed37199b9e33cb90fed2352f63bd0bee4168c9fe8c3f1f4c1d071bc6e` — implementation-approximated, marked-text, source `sec-math.atan2`: exact evidenced selection missing.
-- [ ] `choice-724bd2c40dbe454769a4019c703f49c39f035d7bbbc05c06751ac17ee1184fa7` — host-defined, host-hook-declaration, source `sec-hostfinalizeimportmeta`: exact evidenced selection missing.
+- [ ] `choice-724bd2c40dbe454769a4019c703f49c39f035d7bbbc05c06751ac17ee1184fa7` — host-defined, host-hook-declaration, source `sec-hostfinalizeimportmeta`: selected behaviour: Use the specified default: return unused without extraordinary finalization..
 - [ ] `choice-76781d698005dd8a94833a598222e4c814418feed5552cd5c13b5be64b279b02` — implementation-approximated, marked-text, source `sec-math.tan`: exact evidenced selection missing.
 - [ ] `choice-76c4f9e7237f5ac04525a6c5f3918ee50b3943e0a1aecbfe362c5a9305b3345d` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
 - [ ] `choice-76d2e1b61072cbadafa0338d95c90173fa84699fe471c0999e012fff8c4f691c` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
@@ -2518,7 +2522,7 @@ Each entry is independently extracted from normative marked text, normative host
 - [ ] `choice-8507b26b11477f7e650e2d518c8ad42f25527c46c76ba0a426f1fe2f8bc174c9` — implementation-defined, marked-text, source `sec-bigint.prototype.tolocalestring`: exact evidenced selection missing.
 - [ ] `choice-85b880ca94b0d06eff6e62a0fa5d623d7c854ae493335ffb096139554c3efb23` — host-defined, host-layering-point, source `sec-host-defined-fields-summary`: exact evidenced selection missing.
 - [ ] `choice-8809b9fb961956165f74f6edb3d76383a89b8ebbfabf219cd10943b16a34dfb3` — host-defined, marked-text, source `sec-initializehostdefinedrealm`: exact evidenced selection missing.
-- [ ] `choice-8a09de518994e95798a97041e5ebb4c3f9f45d6f4511fde5763d1e8441a7885a` — host-defined, host-hook-declaration, source `sec-hostgetimportmetaproperties`: exact evidenced selection missing.
+- [ ] `choice-8a09de518994e95798a97041e5ebb4c3f9f45d6f4511fde5763d1e8441a7885a` — host-defined, host-hook-declaration, source `sec-hostgetimportmetaproperties`: selected behaviour: Use the specified default: return an empty List of import-meta properties..
 - [ ] `choice-8bfda4b5d650daa6233be4c0a9be8f995dac3079c4d1c128b50879dea7e6691a` — implementation-approximated, marked-text, source `sec-math.atan2`: exact evidenced selection missing.
 - [ ] `choice-8c42b7901c56964506e8b98c9098151116110cd966da5ae5bedd05740bae686b` — host-defined, host-layering-point, source `sec-host-hooks-summary`: exact evidenced selection missing.
 - [ ] `choice-9168ad849a01a4be28c03d13d3697d6b540bbc927db9a59e3dcf6315ae4e9eee` — implementation-approximated, marked-text, source `sec-math.atan2`: exact evidenced selection missing.

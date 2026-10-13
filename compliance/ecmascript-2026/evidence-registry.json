@@ -2276,6 +2276,53 @@
       "targets": [
         "sec-grouping-operator-runtime-semantics-evaluation#preserved-expression-completion-and-reference"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/import-meta-record.property.test.ts",
+      "targets": [
+        "sec-hostgetimportmetaproperties#default-empty-property-list",
+        "sec-hostfinalizeimportmeta#default-no-extraordinary-finalization"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "import_meta_reference_width",
+      "targets": [
+        "sec-hostgetimportmetaproperties#default-empty-property-list",
+        "sec-hostfinalizeimportmeta#default-no-extraordinary-finalization"
+      ],
+      "stressReview": {
+        "dimension": "import-meta reference collection width",
+        "parameter": "width",
+        "representativeHighDepth": 512,
+        "rationale": "One generated native input projects a wide collection onto the same Module Record cache and ordinary owner; the independent property additionally traverses a retained Module graph. Neither input size selects a lowering path.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "import_meta_record",
+      "targets": [
+        "sec-hostgetimportmetaproperties#default-empty-property-list",
+        "sec-hostfinalizeimportmeta#default-no-extraordinary-finalization"
+      ]
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#ImportMeta",
+      "targets": [
+        "sec-hostgetimportmetaproperties#default-empty-property-list",
+        "sec-hostfinalizeimportmeta#default-no-extraordinary-finalization"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_module.c#tsc_module_import_meta",
+      "targets": [
+        "sec-hostgetimportmetaproperties#default-empty-property-list",
+        "sec-hostfinalizeimportmeta#default-no-extraordinary-finalization"
+      ]
     }
   ]
 }

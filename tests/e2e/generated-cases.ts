@@ -42,6 +42,10 @@ export interface ModuleNamespaceExportWidthSpec {
     generator: "module-namespace-export-width";
     width: number;
 }
+export interface ImportMetaReferenceWidthSpec {
+    generator: "import-meta-reference-width";
+    width: number;
+}
 
 export interface ModuleStaticSemanticsWidthSpec {
     generator: "module-static-semantics-width";
@@ -164,6 +168,7 @@ export type GeneratedCaseSpec =
     | GroupingReferenceDepthSpec
     | StrictEqualityExpressionDepthSpec
     | ModuleNamespaceExportWidthSpec
+    | ImportMetaReferenceWidthSpec
     | ModuleStaticSemanticsWidthSpec
     | ModuleStaticSemanticsDepthSpec
     | ClassExpressionMethodWidthSpec
@@ -265,7 +270,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "module-namespace-export-width") {
+    if (spec.generator === "module-namespace-export-width" || spec.generator === "import-meta-reference-width") {
         const width = spec.width;
         if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
             throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
@@ -745,6 +750,20 @@ function moduleNamespaceExportWidthSource(width: number): string {
         "    namespace.live === 211 &&",
         "    namespace === namespace;",
         'console.log("module namespace width:", valid);',
+        "",
+    ].join("\n");
+}
+
+function importMetaReferenceWidthSource(width: number): string {
+    const references = Array.from({length:width}, () => "import.meta");
+    return [
+        "export {};",
+        "const original:any=import.meta;",
+        "const empty=Reflect.ownKeys(original).length===0;",
+        `const references:any[]=[${references.join(",")}];`,
+        "const marker={token:71};original.retained=marker;",
+        "const coherent=references.every(value=>value===original&&value.retained===marker);",
+        "console.log('import-meta default owner:',empty&&coherent&&Object.getPrototypeOf(original)===null&&Object.isExtensible(original));",
         "",
     ].join("\n");
 }
@@ -1605,6 +1624,8 @@ export function generateE2eCaseSource(raw: string, filename: string): string {
             return strictEqualityExpressionDepthSource(spec.depth);
         case "module-namespace-export-width":
             return moduleNamespaceExportWidthSource(spec.width);
+        case "import-meta-reference-width":
+            return importMetaReferenceWidthSource(spec.width);
         case "module-static-semantics-width":
             return moduleStaticSemanticsWidthSource(spec.width);
         case "module-static-semantics-depth":
