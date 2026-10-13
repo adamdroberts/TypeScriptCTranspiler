@@ -2919,7 +2919,151 @@
       "targets": [
         "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
         "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
-        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context",
+        "sec-json.stringify#ordered-root-holder-options-and-owner-serialization",
+        "sec-serializejsonproperty#ordered-get-tojson-replacer-and-output-continuations",
+        "sec-json-serialization-record#retained-holder-options-owner-and-output-graph",
+        "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
+        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/boxed-json-source.property.test.ts",
+      "targets": [
+        "sec-json.stringify#ordered-root-holder-options-and-owner-serialization",
+        "sec-serializejsonproperty#ordered-get-tojson-replacer-and-output-continuations",
+        "sec-json-serialization-record#retained-holder-options-owner-and-output-graph",
+        "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
+        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "boxed_json_source",
+      "targets": [
+        "sec-json.stringify#ordered-root-holder-options-and-owner-serialization",
+        "sec-serializejsonproperty#ordered-get-tojson-replacer-and-output-continuations",
+        "sec-json-serialization-record#retained-holder-options-owner-and-output-graph",
+        "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
+        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "boxed_json_source_depth",
+      "targets": [
+        "sec-json.stringify#ordered-root-holder-options-and-owner-serialization",
+        "sec-serializejsonproperty#ordered-get-tojson-replacer-and-output-continuations",
+        "sec-json-serialization-record#retained-holder-options-owner-and-output-graph",
+        "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
+        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist"
+      ],
+      "stressReview": {
+        "dimension": "mixed boxed numeric-leaf JSON source owner depth",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One deep mixed owner tree with boxed numeric leaves enters the same normalization and derived return worklist, independently of fixture-family totals or successive depth counts.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "src/global-bindings.ts#runtimePrimitiveDescriptors",
+      "targets": [
+        "sec-json.stringify#ordered-root-holder-options-and-owner-serialization",
+        "sec-serializejsonproperty#ordered-get-tojson-replacer-and-output-continuations",
+        "sec-json-serialization-record#retained-holder-options-owner-and-output-graph",
+        "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
+        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#boxedPrimitive",
+      "targets": [
+        "sec-json.stringify#ordered-root-holder-options-and-owner-serialization",
+        "sec-serializejsonproperty#ordered-get-tojson-replacer-and-output-continuations",
+        "sec-json-serialization-record#retained-holder-options-owner-and-output-graph",
+        "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
+        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#primitivePrototype",
+      "targets": [
+        "sec-json.stringify#ordered-root-holder-options-and-owner-serialization",
+        "sec-serializejsonproperty#ordered-get-tojson-replacer-and-output-continuations",
+        "sec-json-serialization-record#retained-holder-options-owner-and-output-graph",
+        "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
+        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#primitiveMethod",
+      "targets": [
+        "sec-json.stringify#ordered-root-holder-options-and-owner-serialization",
+        "sec-serializejsonproperty#ordered-get-tojson-replacer-and-output-continuations",
+        "sec-json-serialization-record#retained-holder-options-owner-and-output-graph",
+        "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
+        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#objectValue",
+      "targets": [
+        "sec-json.stringify#ordered-root-holder-options-and-owner-serialization",
+        "sec-serializejsonproperty#ordered-get-tojson-replacer-and-output-continuations",
+        "sec-json-serialization-record#retained-holder-options-owner-and-output-graph",
+        "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
+        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#objectText",
+      "targets": [
+        "sec-json.stringify#ordered-root-holder-options-and-owner-serialization",
+        "sec-serializejsonproperty#ordered-get-tojson-replacer-and-output-continuations",
+        "sec-json-serialization-record#retained-holder-options-owner-and-output-graph",
+        "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
+        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#jsonPrimitive",
+      "targets": [
+        "sec-json.stringify#ordered-root-holder-options-and-owner-serialization",
+        "sec-serializejsonproperty#ordered-get-tojson-replacer-and-output-continuations",
+        "sec-json-serialization-record#retained-holder-options-owner-and-output-graph",
+        "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
+        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#constructorValidity",
+      "targets": [
+        "sec-json.stringify#ordered-root-holder-options-and-owner-serialization",
+        "sec-serializejsonproperty#ordered-get-tojson-replacer-and-output-continuations",
+        "sec-json-serialization-record#retained-holder-options-owner-and-output-graph",
+        "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
+        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/global-bindings.ts#runtimePrimitivePrototypeMembers",
+      "targets": [
+        "sec-json.stringify#ordered-root-holder-options-and-owner-serialization",
+        "sec-serializejsonproperty#ordered-get-tojson-replacer-and-output-continuations",
+        "sec-json-serialization-record#retained-holder-options-owner-and-output-graph",
+        "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
+        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist"
       ]
     }
   ]

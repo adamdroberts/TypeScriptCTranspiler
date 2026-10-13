@@ -43,6 +43,20 @@ export const runtimeDescriptorFields: readonly {name:string;kind:"boolean"|"valu
         .matchAll(/out\.has_(\w+) = descriptor_field\(desc, "(\w+)", /g)]
         .map(([,slot,name])=>({name:name!,kind:slot==="value"?"value":slot==="getter"||slot==="setter"?"callable":"boolean"}));
 
+/** Primitive owner brands and constructible wrappers come from the native
+ * descriptor collection and its actual constructor publications. */
+const primitiveSource=fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_value.c"),"utf8");
+const primitiveConstructors=new Set([...primitiveSource.matchAll(/tsc_value_t tsc_(\w+)_constructor_value\(void\) \{ return primitive_constructor_value\(&primitive_\w+\); \}/g)].map(match=>match[1]!));
+export const runtimePrimitiveDescriptors:ReadonlyMap<string,{kind:string;constructible:boolean}>=new Map(
+    [...primitiveSource.matchAll(/\{ TSC_PRIMITIVE_(\w+), "(\w+)", \d+, NULL, 0, false, TSC_INTRINSIC_DEFAULT_\w+_PROTOTYPE \}/g)]
+        .map(([,kind,name])=>[name!,{kind:kind!.toLowerCase(),constructible:primitiveConstructors.has(kind!.toLowerCase())}]),
+);
+function primitiveMethodNames(table:string):string[]{const body=new RegExp("static const [^;]+\\b"+table+"\\[\\] = \\{([\\s\\S]*?)\\n\\};").exec(primitiveSource)?.[1];if(!body)throw new Error("missing canonical primitive method table "+table);return [...body.matchAll(/\{ "(\w+)"/g)].map(match=>match[1]!);}
+export const runtimePrimitivePrototypeMembers:ReadonlyMap<string,readonly string[]>=new Map([
+    ["string",[...primitiveMethodNames("string_prototype_methods"),...[...primitiveSource.matchAll(/\(tsc_object_t\*\)value_ptr\(prototype\),\s*tsc_str_from_lit\("(\w+)"/g)].map(match=>match[1]!)]],
+    ["number",primitiveMethodNames("number_format_methods")],
+]);
+
 /** The native well-known Symbol table is the canonical identity collection. */
 export const runtimeWellKnownSymbolDescriptions: ReadonlyMap<string, string> = new Map(
     fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_builtin.c"), "utf8")

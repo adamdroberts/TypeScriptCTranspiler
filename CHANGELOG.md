@@ -1,3 +1,5 @@
+Added primitive brand/payload source owners and shared boxed JSON coercions, with actual construction targets, owned function prototypes and derived return projections. Independent Node/native properties and one deep boxed-leaf owner stress cover both memory modes; exotic source precision and exhaustive target evidence remain open.
+
 Retained original JSON token/owner records and composite reviver source continuations, with live property effects, SameValue contexts and actual formal-return projections. Independent Node/native partitions and a generated deep record input cover both memory modes; unknown runtime sources retain explicit admission, and exhaustive target evidence remains open.
 
 Composite JSON source output now follows a shared owner/property continuation graph with enumerability, nested hook/getter effects, abrupt ordering, filtered Lists, spacing, raw JSON and cycle ancestry. Independent Node/native properties and one generated deep owner stress pass in both memory modes; exotic source precision and exhaustive target evidence remain open.
