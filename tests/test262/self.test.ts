@@ -933,9 +933,9 @@ describe("local evidence worklist", () => {
     test("admits only executable E2E cases and binds negative diagnostics", async () => {
         const manifest = await discoverE2eCaseManifest();
         expect(manifest.some((entry) => entry.name === "_probe_async_string_raw_selector")).toBeFalse();
-        const negative = manifest.find((entry) => entry.name === "async_cfg_fail_closed");
+        const negative = manifest.find((entry) => entry.name === "dynamic_import_nonfinite_diagnostic");
         expect(negative?.expectedExitCode).toBe(3);
-        expect(negative?.expectedStderrContains).toContain("canonical CFG");
+        expect(negative?.expectedStderrContains).toContain("finite AOT specifier proof");
         expect(negative?.unsafeEval).toBeFalse();
         const serial = manifest.find((entry) => entry.name === "dispatch_serial");
         expect(serial?.dispatch).toBeTrue();

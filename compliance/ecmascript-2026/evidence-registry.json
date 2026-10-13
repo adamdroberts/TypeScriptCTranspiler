@@ -2720,7 +2720,11 @@
       "kind": "implementation",
       "id": "src/source-value-flow.ts#proxyReadEffects",
       "targets": [
-        "sec-topropertydescriptor#ordered-presence-get-and-abrupt-descriptor-fields"
+        "sec-topropertydescriptor#ordered-presence-get-and-abrupt-descriptor-fields",
+        "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
+        "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
+        "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
       ]
     },
     {
@@ -3303,6 +3307,153 @@
         "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
         "sec-ModuleRequestsEqual#decoded-specifier-and-attribute-collection-identity",
         "sec-GetImportedModule#retained-request-to-module-record-identity"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/dynamic-import-source-effects.property.test.ts",
+      "targets": [
+        "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
+        "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
+        "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/promise-source-owner.property.test.ts",
+      "targets": [
+        "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
+        "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
+        "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "eval_dynamic_import_source_depth",
+      "targets": [
+        "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
+        "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
+        "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
+      ],
+      "stressReview": {
+        "dimension": "prototype owner depth before ImportCall option getter selection",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One generated native input stresses the canonical owner/property and option continuation graphs without turning successive getter or nesting counts into completion units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "eval_dynamic_import_source",
+      "targets": [
+        "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
+        "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
+        "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#dynamicImportEffects",
+      "targets": [
+        "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
+        "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
+        "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#promisePrototype",
+      "targets": [
+        "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
+        "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
+        "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#promiseReaction",
+      "targets": [
+        "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
+        "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
+        "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#promiseCatch",
+      "targets": [
+        "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
+        "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
+        "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#promiseFinally",
+      "targets": [
+        "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
+        "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
+        "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#promiseFinallyForward",
+      "targets": [
+        "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
+        "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
+        "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#promiseAssimilation",
+      "targets": [
+        "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
+        "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
+        "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#promiseSpeciesReady",
+      "targets": [
+        "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
+        "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
+        "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/global-bindings.ts#runtimePromiseMethods",
+      "targets": [
+        "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
+        "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
+        "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/global-bindings.ts#runtimeObjectConstructorOwnKeys",
+      "targets": [
+        "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
+        "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
+        "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
       ]
     }
   ]

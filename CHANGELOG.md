@@ -1,3 +1,5 @@
+Retained ImportCall option/attribute getter source effects and Promise rejection boundaries through one continuation graph. Promise source owners now project native member metadata and share handler/finalizer/assimilation worklists; independent Node/native properties and a deep option-owner CLI stress cover both memory modes. Correlated capabilities, exotic precision and exhaustive target evidence remain open.
+
 Static Module References now preserve complete request/attribute identity through one resolved-request map, including named/default callable ownership. Removed the specifier-only predecessor and added independent host-graph Node/native properties, missing-resolution rejection and generated CLI request stress in both memory modes; exhaustive target evidence remains open.
 
 Namespace factories now emit through one pending Module-plan worklist, with complete exports available before cyclic or nested getter emission. Independent Node/native identity, JSON Reference, live-binding and suspension properties include one deep target graph in both memory modes; full host eligibility and exhaustive target evidence remain open.

@@ -1145,9 +1145,15 @@
     {
       "tag": "json-modules",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-ParseJSON",
+        "sec-create-default-export-synthetic-module",
+        "sec-parse-json-module",
+        "sec-setsyntheticmoduleexport",
+        "sec-synthetic-module-records"
+      ],
+      "rationale": "The standard JSON Modules tag denotes ParseJSONModule, its shared ParseJSON value interpretation, and the default-export Synthetic Module Record/environment contract. Exact esid metadata and the separate dynamic-import/import-attributes tags remain authoritative for import expression and host option/attribute algorithms. This dependency mapping does not mark terminal partitions supported or establish Module/Realm/agent host eligibility."
     },
     {
       "tag": "json-parse-with-source",

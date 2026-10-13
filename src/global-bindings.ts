@@ -37,6 +37,13 @@ export const runtimeIteratorMethods: ReadonlySet<string> = new Set(
             .matchAll(/^TSC_ITERATOR_(?:HELPER|CONSUMER)\((\w+), /gm)].map(match=>match[1]!)),
 );
 
+/** Promise source members project the native publication collection. */
+export const runtimePromiseMethods:ReadonlyMap<string,{length:number;static:boolean}>=new Map(
+    [...fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_promise.c"),"utf8")
+        .matchAll(/\{ "(\w+)", (\d+), promise_(?:static|prototype)_\w+, (true|false)(?:, \w+)? \}/g)]
+        .map(([,name,length,isStatic])=>[name!,{length:Number(length),static:isStatic==="true"}] as const),
+);
+
 /** The native ToPropertyDescriptor reads are the canonical ordered fields. */
 export const runtimeDescriptorFields: readonly {name:string;kind:"boolean"|"value"|"callable"}[] =
     [...fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_value.c"),"utf8")
@@ -46,6 +53,12 @@ export const runtimeDescriptorFields: readonly {name:string;kind:"boolean"|"valu
 /** Primitive owner brands and constructible wrappers come from the native
  * descriptor collection and its actual constructor publications. */
 const primitiveSource=fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_value.c"),"utf8");
+const objectStaticMethods=/static const tsc_object_static_method_t object_static_methods\[\] = \{([\s\S]*?)\n\};/.exec(primitiveSource)?.[1];
+if(!objectStaticMethods)throw new Error("missing canonical Object constructor method collection");
+export const runtimeObjectConstructorOwnKeys:ReadonlySet<string|symbol>=new Set([
+    "name","length","prototype",...[...objectStaticMethods.matchAll(/\{ "(\w+)"/g)].map(match=>match[1]!),
+    ...[...(/static const tsc_object_integrity_operation_t object_integrity_operations\[\] = \{([\s\S]*?)\n\};/.exec(primitiveSource)?.[1]??"").matchAll(/\{ "(\w+)"/g)].map(match=>match[1]!),
+]);
 const primitiveConstructors=new Set([...primitiveSource.matchAll(/tsc_value_t tsc_(\w+)_constructor_value\(void\) \{ return primitive_constructor_value\(&primitive_\w+\); \}/g)].map(match=>match[1]!));
 export const runtimePrimitiveDescriptors:ReadonlyMap<string,{kind:string;constructible:boolean}>=new Map(
     [...primitiveSource.matchAll(/\{ TSC_PRIMITIVE_(\w+), "(\w+)", \d+, NULL, 0, false, TSC_INTRINSIC_DEFAULT_\w+_PROTOTYPE \}/g)]

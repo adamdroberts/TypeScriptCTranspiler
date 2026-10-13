@@ -46,6 +46,10 @@ export interface ModuleRequestWidthSpec {
     generator: "module-request-width";
     width: number;
 }
+export interface DynamicImportSourceDepthSpec {
+    generator: "dynamic-import-source-depth";
+    depth: number;
+}
 export interface ImportMetaReferenceWidthSpec {
     generator: "import-meta-reference-width";
     width: number;
@@ -210,6 +214,7 @@ export type GeneratedCaseSpec =
     | StrictEqualityExpressionDepthSpec
     | ModuleNamespaceExportWidthSpec
     | ModuleRequestWidthSpec
+    | DynamicImportSourceDepthSpec
     | ImportMetaReferenceWidthSpec
     | ModuleStaticSemanticsWidthSpec
     | ModuleStaticSemanticsDepthSpec
@@ -310,7 +315,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth" || spec.generator === "boxed-json-source-depth") {
+    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth" || spec.generator === "boxed-json-source-depth" || spec.generator === "dynamic-import-source-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
             throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
@@ -1757,6 +1762,13 @@ console.log("raw JSON text width:", valid);
             return imports.join("\n") + `\nexport const value = 17;\nconst namespaces: any[] = [${names.join(",")}];\n` +
                 `for (const namespace of namespaces) if(namespace !== namespaces[0] || namespace.value !== 17) throw new Error("Module request identity");\n` +
                 `console.log("requests:", true, namespaces[0].value);\n`;
+        }
+        case "dynamic-import-source-depth": {
+            const chain=Array.from({length:spec.depth},(_,index)=>
+                `const owner${index}=Object.create(${index?'owner'+(index-1):"{get with(){body='23;';return {}}}"});`);
+            return `export const value=17;\nlet body='17;';\n${chain.join("\n")}\n` +
+                `const pending=import('./eval_dynamic_import_source_depth',owner${spec.depth-1});\n` +
+                `console.log('source:',eval(body));pending.catch(()=>{});\n`;
         }
         case "import-meta-reference-width":
             return importMetaReferenceWidthSource(spec.width);

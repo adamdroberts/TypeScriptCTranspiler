@@ -14,7 +14,7 @@ import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
 import {declarativeSourceBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding, sourceBindingTarget} from "./source-bindings";
-import {runtimeGlobalBindings, runtimeErrorKinds, runtimeIteratorMethods, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
+import {runtimeGlobalBindings, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
     readonly roots?: readonly string[];
@@ -44,7 +44,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}`;
+    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
@@ -226,7 +226,10 @@ class SourceValueFlow {
     private readonly jsonParses = new Map<ts.Node, Map<string, Cell>>();
     private readonly descriptorRecords = new Map<ts.Node,Map<Cell,SourceDescriptorRecord>>();
     private readonly objectCreations = new Map<ts.Node,Map<string,Cell>>();
-    private readonly proxyReads = new Set<string>();
+    private readonly proxyReads = new Map<string,Cell>();
+    private readonly promiseOwners = new WeakMap<Atom,ObjectOwner>();
+    private promisePrototypeValue?:Cell;
+    private readonly promiseReactions = new Map<ts.Node,Map<string,Cell>>();
     private readonly sourceCells = new WeakMap<SourceFacts,Cell>();
     private readonly formalInputs = new Map<Cell,Set<Cell>>();
     private readonly returnProjections = new Map<string,Cell>();
@@ -978,13 +981,13 @@ class SourceValueFlow {
     private defineBooleanField(owner:ObjectOwner,key:string): void {
         this.publish(this.booleanResult,this.primitive(false));this.publish(this.booleanResult,this.primitive(true));this.defineField(owner,key,this.booleanResult);
     }
-    private defineAccessor(owner:ObjectOwner,key:SourcePropertyKey|null,kind:"get"|"set",value:Cell,context:ts.Node): void {
+    private defineAccessor(owner:ObjectOwner,key:SourcePropertyKey|null,kind:"get"|"set",value:Cell,context?:ts.Node): void {
         let accessor=owner.accessors.get(key);
         if(!accessor){accessor={get:this.newCell(),set:this.newCell()};this.accessorSlots.add(accessor.get);this.accessorSlots.add(accessor.set);owner.accessors.set(key,accessor);this.publish(owner.shape,{tag:"descriptor",identity:accessor});}
-        this.accessorDefinitions.set(accessor.get,context);this.accessorDefinitions.set(accessor.set,context);
+        if(context){this.accessorDefinitions.set(accessor.get,context);this.accessorDefinitions.set(accessor.set,context);}
         this.copy(value,accessor[kind]);
         if(key===null)this.publish(owner.shape,this.unknown);
-        else {if(ts.isGetAccessorDeclaration(context)||ts.isSetAccessorDeclaration(context)){const location=this.ownPresence(owner,key);location.initial=true;this.publish(location.enumerable,this.primitive(true));}this.publish(this.presence(owner,key),this.primitive(true));}
+        else {if(context&&(ts.isGetAccessorDeclaration(context)||ts.isSetAccessorDeclaration(context))){const location=this.ownPresence(owner,key);location.initial=true;this.publish(location.enumerable,this.primitive(true));}this.publish(this.presence(owner,key),this.primitive(true));}
         if (typeof key === "symbol" && this.freshSymbols.has(key)) this.publish(this.presence(owner,key),this.primitive(false));
     }
     private accessorCallee(source:Cell): Cell {
@@ -1466,14 +1469,23 @@ class SourceValueFlow {
             else for (const name of names ?? []) this.writeProperty(base,name,value,true,mode,context,receiver);
         });
     }
-    private proxyReadEffects(owner:ObjectOwner,key:SourcePropertyKey,trap:"get"|"has",context?:ts.Node):void {
-        const proxy=owner.proxy;if(!proxy)return;context??=proxy.context;
-        const signature=owner.shape.id+":"+this.keyIdentity(key)+":"+trap+":"+this.cell(context).id;
-        if(this.proxyReads.has(signature))return;this.proxyReads.add(signature);
+    private proxyReadEffects(owner:ObjectOwner,key:SourcePropertyKey|null,trap:"get"|"has"|"ownKeys"|"getOwnPropertyDescriptor",context?:ts.Node):Cell {
+        const proxy=owner.proxy;if(!proxy)return this.empty;context??=proxy.context;
+        const signature=owner.shape.id+":"+(key===null?"":this.keyIdentity(key))+":"+trap+":"+this.cell(context).id;
+        const prior=this.proxyReads.get(signature);if(prior)return prior;
+        const result=this.newCell();this.proxyReads.set(signature,result);
         const method=this.property(proxy.handler,trap,context),callee=this.newCell(),property=this.newCell(),receiver=this.newCell();
-        this.publish(property,this.primitive(key));this.publish(receiver,{tag:"object",owner});
-        this.rule([method],()=>{for(const atom of method.values)if(atom!==this.primitive(undefined)&&atom!==this.primitive(null))this.publish(callee,atom);});
-        this.invoke(context,callee,proxy.handler,[{cell:proxy.target,spread:false},{cell:property,spread:false},...(trap==="get"?[{cell:receiver,spread:false}]:[])],this.newCell());
+        this.publish(property,key===null?this.unknown:this.primitive(key));this.publish(receiver,{tag:"object",owner});
+        this.rule([method],()=>{for(const atom of method.values){
+            if(atom!==this.primitive(undefined)&&atom!==this.primitive(null))this.publish(callee,atom);
+            else if(trap==="ownKeys"||trap==="getOwnPropertyDescriptor")this.publish(result,this.unknown);
+            else if(trap==="get") {
+                if(key!==null)this.copy(this.property(proxy.target,key,context),result);
+                else for(const target of proxy.target.values){const targetOwner=this.ordinaryOwner(target);if(targetOwner)for(const name of targetOwner.own?.keys()??[])if(typeof name==="string")this.copy(this.property(proxy.target,name,context),result);}
+            }
+        }});
+        this.invoke(context,callee,proxy.handler,[{cell:proxy.target,spread:false},...(trap!=="ownKeys"?[{cell:property,spread:false}]:[]),...(trap==="get"?[{cell:receiver,spread:false}]:[])],result);
+        return result;
     }
     private hasProperty(base:Cell,key:SourcePropertyKey,context:ts.Node):Cell {
         const result=this.newCell();let rule!:Rule;
@@ -1697,6 +1709,12 @@ class SourceValueFlow {
                 if(runtimeErrorKinds.has(key))this.defineField(fields,"prototype",this.errorPrototype(key));
                 if(key==="Object")this.defineField(fields,"prototype",this.objectPrototype());
                 if(key==="Array")this.defineField(fields,"prototype",this.arrayPrototype());
+                if(key==="Promise"){
+                    this.defineField(fields,"prototype",this.promisePrototype());
+                    const getter=this.newCell();this.publish(getter,this.operation("promise-species"));
+                    this.defineAccessor(fields,this.wellKnownSymbols.get("species")!,"get",getter);
+                    this.ownPresence(fields,this.wellKnownSymbols.get("species")!).initial=true;
+                }
                 if(key==="Iterator")this.defineField(fields,"prototype",this.iteratorPrototype());
                 if(runtimePrimitiveDescriptors.has(key))this.defineField(fields,"prototype",this.primitivePrototype(key),false);
                 if(key==="Symbol") {
@@ -2070,7 +2088,155 @@ class SourceValueFlow {
         const rule = this.rule([base], () => { for (const atom of base.values) this.read(atom, base, key, result, context && this.exceptionHandlers.get(context), rule, context,ownOnly); });
         return result;
     }
+    private promisePrototype():Cell {
+        if(this.promisePrototypeValue)return this.promisePrototypeValue;
+        const value=this.newCell(),owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};
+        this.promisePrototypeValue=value;this.publish(value,{tag:"object",owner});
+        this.copy(this.opaqueMutation,owner.shape);
+        this.defineField(owner,"constructor",this.globalBinding("Promise"),false);
+        const tag=this.newCell();this.publish(tag,this.primitive("Promise"));this.defineField(owner,this.wellKnownSymbols.get("toStringTag")!,tag,false);
+        for(const [name,descriptor]of runtimePromiseMethods)if(!descriptor.static){
+            const method=this.newCell();this.publish(method,this.operation(`promise-member:${name}`));this.defineField(owner,name,method,false);
+        }
+        return value;
+    }
+
+    private promiseSpeciesReady(receiver:Cell,context:ts.Node):Cell {
+        let calls=this.promiseReactions.get(context);if(!calls){calls=new Map();this.promiseReactions.set(context,calls);}
+        const key="species:"+receiver.id,prior=calls.get(key);if(prior)return prior;
+        const normal=this.newCell(),objects=this.newCell(),constructors=this.newCell();calls.set(key,normal);
+        const reject=()=>{const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));};
+        this.rule([receiver],()=>{for(const atom of receiver.values){if(this.ordinaryOwner(atom)||atom.tag==="unknown"||atom.tag==="opaque-object")this.publish(objects,atom);else if(atom.tag!=="pending-source"&&atom.tag!=="abrupt")reject();}});
+        const constructor=this.property(objects,"constructor",context);
+        this.rule([constructor],()=>{for(const atom of constructor.values){
+            if(atom===this.primitive(undefined))this.publish(normal,this.primitive(true));
+            else if(this.ordinaryOwner(atom)||atom.tag==="unknown"||atom.tag==="opaque-object")this.publish(constructors,atom);
+            else if(atom.tag!=="pending-source"&&atom.tag!=="abrupt")reject();
+        }});
+        const species=this.property(constructors,this.wellKnownSymbols.get("species")!,context),cells=new Map<Atom,Cell>();
+        let rule!:Rule;rule=this.rule([species],()=>{for(const atom of species.values){
+            if(atom===this.primitive(undefined)||atom===this.primitive(null)){this.publish(normal,this.primitive(true));continue;}
+            if(atom.tag==="abrupt"||atom.tag==="pending-source")continue;
+            let cell=cells.get(atom);if(!cell){cell=this.newCell();cells.set(atom,cell);this.publish(cell,atom)}
+            const valid=this.constructorValidity(cell,context);this.watch(rule,valid);
+            if(valid.values.has(this.primitive(false)))reject();
+            if(valid.values.has(this.primitive(true))){
+                this.publish(normal,this.primitive(true));
+                if(atom.tag==="function"||atom.tag==="bound"){
+                    // Custom capabilities are not represented yet. Their
+                    // constructors and resolvers can access captured source
+                    // locations, so those locations retain an opaque effect.
+                    const values:Cell[]=[cell],visited=new Set<Cell>(),pending:ts.Node[]=[],captured=new Set<ts.Symbol>();
+                    while(values.length){const input=values.pop()!;if(visited.has(input))continue;visited.add(input);this.watch(rule,input);for(const value of input.values){if(value.tag==="bound")values.push(value.target);else if(value.tag==="function")pending.push(value.owner.definition);}}
+                    while(pending.length){const node=pending.pop()!;if(ts.isIdentifier(node)){const symbol=this.bindingSymbol(node);if(symbol)captured.add(symbol)}node.forEachChild(child=>{pending.push(child)})}
+                    for(const symbol of captured){const binding=this.bindings.get(symbol);if(binding)this.copy(this.executionOrigins(context),binding)}
+                }else if(atom.tag!=="builtin"||atom.name!=="Promise"){
+                    this.copy(this.executionOrigins(context),this.globalMutation);for(const binding of this.globalLexicals.values())this.copy(this.executionOrigins(context),binding);
+                }
+            }
+        }});return normal;
+    }
+
+    private promiseCatch(receiver:Cell,handler:Cell,context:ts.Node):Cell {
+        let calls=this.promiseReactions.get(context);if(!calls){calls=new Map();this.promiseReactions.set(context,calls);}
+        const key="catch:"+receiver.id+":"+handler.id,prior=calls.get(key);if(prior)return prior;
+        const result=this.newCell(),omitted=this.newCell();calls.set(key,result);this.publish(omitted,this.primitive(undefined));
+        this.invoke(context,this.property(receiver,"then",context),receiver,[{cell:omitted,spread:false},{cell:handler,spread:false}],result);return result;
+    }
+
+    private promiseFinally(receiver:Cell,handler:Cell,context:ts.Node):Cell {
+        let calls=this.promiseReactions.get(context);if(!calls){calls=new Map();this.promiseReactions.set(context,calls);}
+        const key="finally-call:"+receiver.id+":"+handler.id,prior=calls.get(key);if(prior)return prior;
+        const result=this.newCell(),fulfilled=this.newCell(),rejected=this.newCell(),callable=this.newCell(),target=this.newCell();calls.set(key,result);
+        this.publish(target,this.operation("promise-finally-forward"));
+        const wrappers=[false,true].map(rejected=>{
+            const state=this.newCell(),name=this.newCell(),length=this.newCell(),fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};
+            this.publish(state,this.primitive(rejected));this.publish(name,this.primitive(""));this.publish(length,this.primitive(1));this.defineField(fields,"name",name,false);this.defineField(fields,"length",length,false);
+            return {tag:"bound",target,receiver:this.empty,prefix:[callable,state],fields} as const;
+        });
+        const cells=new Map<Atom,Cell>();
+        this.rule([handler],()=>{for(const atom of handler.values){let cell=cells.get(atom);if(!cell){cell=this.newCell();cells.set(atom,cell);this.publish(cell,atom)}const kinds=this.primitiveKinds(cell);if(kinds&KIND_FUNCTION){this.publish(callable,atom);this.publish(fulfilled,wrappers[0]!);this.publish(rejected,wrappers[1]!)}if(kinds&~KIND_FUNCTION){this.publish(fulfilled,atom);this.publish(rejected,atom)}}});
+        const ready=this.promiseSpeciesReady(receiver,context),selected=this.newCell();this.rule([ready],()=>{if(ready.values.has(this.primitive(true)))this.copy(receiver,selected)});
+        this.invoke(context,this.property(selected,"then",context),receiver,[{cell:fulfilled,spread:false},{cell:rejected,spread:false}],result);return result;
+    }
+
+    private promiseAssimilation(returned:Cell,context:ts.Node):{value:Cell;rejection:Cell} {
+        let calls=this.promiseReactions.get(context);if(!calls){calls=new Map();this.promiseReactions.set(context,calls);}
+        const key="assimilation:"+returned.id,prior=calls.get(key);
+        if(prior){const atom=[...prior.values].find((atom):atom is Extract<Atom,{tag:"promise"}>=>atom.tag==="promise")!;return {value:atom.value,rejection:atom.rejection};}
+        const holder=this.newCell(),value=this.newCell(),rejection=this.exceptionCell();calls.set(key,holder);this.publish(holder,{tag:"promise",value,rejection});
+        const callback=ts.setTextRange(ts.factory.createEmptyStatement(),context);(callback as ts.Node&{parent:ts.Node}).parent=context;this.exceptionHandlers.set(callback,rejection);
+        const seen=new Set<Atom>(),cells=new Map<Atom,Cell>(),cell=(atom:Atom)=>{let value=cells.get(atom);if(!value){value=this.newCell();cells.set(atom,value);this.publish(value,atom)}return value;};
+        this.rule([returned],()=>{for(const atom of returned.values){
+            if(atom.tag==="abrupt"||atom.tag==="pending-source")continue;
+            if(atom.tag==="promise"){this.copy(atom.value,value);this.copy(atom.rejection,rejection);continue;}
+            const owner=this.ordinaryOwner(atom);
+            if(!owner){this.publish(value,atom);continue;}
+            if(seen.has(atom))continue;seen.add(atom);
+            const input=cell(atom),then=this.property(input,"then",callback),target=this.newCell();
+            this.rule([then],()=>{for(const method of then.values){
+                if(method.tag==="abrupt"||method.tag==="pending-source")continue;
+                const kinds=this.primitiveKinds(cell(method));
+                if(kinds&~KIND_FUNCTION)this.publish(value,atom);
+                if(kinds&KIND_FUNCTION){this.publish(target,method);this.publish(value,this.unknown);this.publish(rejection,this.unknown);}
+            }});
+            const unknown=this.newCell();this.publish(unknown,this.unknown);this.invoke(callback,target,input,[{cell:unknown,spread:false},{cell:unknown,spread:false}],this.newCell());
+        }});return {value,rejection};
+    }
+
+    private promiseFinallyForward(handler:Cell,previous:Cell,rejected:Cell,context:ts.Node):Cell {
+        let calls=this.promiseReactions.get(context);if(!calls){calls=new Map();this.promiseReactions.set(context,calls);}
+        const key="finally:"+handler.id+":"+previous.id+":"+rejected.id,prior=calls.get(key);if(prior)return prior;
+        const result=this.newCell(),value=this.newCell(),rejection=this.exceptionCell(),returned=this.newCell();calls.set(key,result);
+        const callback=ts.setTextRange(ts.factory.createEmptyStatement(),context);(callback as ts.Node&{parent:ts.Node}).parent=context;this.exceptionHandlers.set(callback,rejection);
+        this.publish(result,{tag:"promise",value,rejection});this.invoke(callback,handler,this.empty,[],returned);
+        const preserve=()=>{if(rejected.values.has(this.primitive(true)))this.copy(previous,rejection);if(rejected.values.has(this.primitive(false)))this.copy(previous,value);};
+        const assimilated=this.promiseAssimilation(returned,callback);this.copy(assimilated.rejection,rejection);
+        this.rule([assimilated.value,rejected],()=>{if([...assimilated.value.values].some(atom=>atom.tag!=="abrupt"&&atom.tag!=="pending-source"))preserve()});return result;
+    }
+
+    private promiseReaction(receiver:Cell,fulfilled:Cell,rejected:Cell,context:ts.Node):Cell {
+        let calls=this.promiseReactions.get(context);if(!calls){calls=new Map();this.promiseReactions.set(context,calls);}
+        const key=receiver.id+":"+fulfilled.id+":"+rejected.id;const prior=calls.get(key);if(prior)return prior;
+        const result=this.newCell(),value=this.newCell(),rejection=this.exceptionCell();calls.set(key,result);
+        const callbackContext=ts.setTextRange(ts.factory.createEmptyStatement(),context);(callbackContext as ts.Node&{parent:ts.Node}).parent=context;
+        this.exceptionHandlers.set(callbackContext,rejection);
+        const seen=new Set<Atom>(),atomCells=new Map<Atom,Cell>(),cell=(atom:Atom)=>{let value=atomCells.get(atom);if(!value){value=this.newCell();atomCells.set(atom,value);this.publish(value,atom)}return value};
+        this.rule([receiver],()=>{for(const promise of receiver.values){
+            if(promise.tag!=="promise"){
+                if(promise.tag==="pending-source")this.publish(result,promise);
+                else {this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}
+                continue;
+            }
+            if(seen.has(promise))continue;seen.add(promise);
+            const instance=this.newCell();this.publish(instance,promise);
+            const ready=this.promiseSpeciesReady(instance,context);
+            this.rule([ready],()=>{if(ready.values.has(this.primitive(true)))this.publish(result,{tag:"promise",value,rejection})});
+            for(const route of [{input:promise.value,handler:fulfilled,rejected:false},{input:promise.rejection,handler:rejected,rejected:true}]){
+                const callee=this.newCell(),returned=this.newCell();
+                this.rule([route.input,route.handler,ready],()=>{
+                    if(!ready.values.has(this.primitive(true)))return;
+                    if(![...route.input.values].some(atom=>atom.tag!=="abrupt"&&atom.tag!=="pending-source"))return;
+                    for(const handler of route.handler.values){
+                        const kinds=this.primitiveKinds(cell(handler));
+                        if(kinds&KIND_FUNCTION)this.publish(callee,handler);
+                        if(kinds&~KIND_FUNCTION)this.copy(route.input,route.rejected?rejection:value);
+                    }
+                });
+                this.invoke(callbackContext,callee,this.empty,[{cell:route.input,spread:false}],returned);
+                const assimilated=this.promiseAssimilation(returned,callbackContext);this.copy(assimilated.value,value);this.copy(assimilated.rejection,rejection);
+            }
+        }});
+        return result;
+    }
+
     private ordinaryOwner(atom: Atom): ObjectOwner | null {
+        if(atom.tag==="promise") {
+            let owner=this.promiseOwners.get(atom);
+            if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.promisePrototype(),ordinary:true};this.promiseOwners.set(atom,owner);}
+            return owner;
+        }
+
         if(atom.tag==="global"){
             if(!this.globalOwner){this.globalOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};this.copy(this.globalMutation,this.globalOwner.shape);}
             return this.globalOwner;
@@ -2174,7 +2340,8 @@ class SourceValueFlow {
             // The native builtin's unrepresented own members are opaque.
             // A closed prototype chain must not turn them into known absence.
             const closedIndex=owner.closedIndices&&typeof key==="string"&&Number.isSafeInteger(Number(key))&&Number(key)>=0&&String(Number(key))===key;
-            if (owner === firstOwner && atom.tag === "builtin" && !closedIndex && !presence?.values.has(this.primitive(true)) &&
+            const representedAbsence=atom.tag==="builtin"&&atom.name==="Object"&&key===this.wellKnownSymbols.get("species")&&!runtimeObjectConstructorOwnKeys.has(key);
+            if (owner === firstOwner && atom.tag === "builtin" && !representedAbsence && !closedIndex && !presence?.values.has(this.primitive(true)) &&
                 !(typeof key === "string" && (runtimeObjectPrototypeMethods.has(key) || key === "constructor" ||
                     atom.normalResult !== "not-callable" && CALLABLE_FORWARDING_OPERATIONS.has(key)))) {
                 this.publish(result, this.unknown); if (handler) this.publish(handler, this.unknown);
@@ -3122,6 +3289,8 @@ class SourceValueFlow {
                     if (handler && atom.tag !== "primitive" && atom.tag !== "non-string") this.publish(handler, this.unknown);
                 }
             } });
+        } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+            this.dynamicImportEffects(node,result);
         } else if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
             // Owned construction locations are retained until the callee's
             // native/exotic result facts have joined the same owner graph.
@@ -3139,6 +3308,106 @@ class SourceValueFlow {
             this.invoke(node,superOwner?.base ?? this.cell(target),receiver,parts,result,ts.isNewExpression(node) || !!superOwner,
                 ts.isCallExpression(node) && !node.questionDotToken && ts.isIdentifier(target) && target.text === "eval");
         }
+    }
+    /** ImportCall operand evaluation is synchronous; conversion and option
+     * reads reject its Promise. Retain those immediate effects through the
+     * ordinary owner/property/call graph and an ordered key continuation. */
+    private dynamicImportEffects(node:ts.CallExpression,result:Cell):void {
+        const specifier=node.arguments[0]?this.cell(node.arguments[0]):this.empty;
+        const options=node.arguments[1]?this.cell(node.arguments[1]):this.newCell();
+        if(!node.arguments[1])this.publish(options,this.primitive(undefined));
+        const context=ts.setTextRange(ts.factory.createEmptyStatement(),node);
+        (context as ts.Node & {parent:ts.Node}).parent=node;
+        const rejection=this.exceptionCell(),value=this.newCell();this.publish(value,this.unknown);
+        const atoms=new Map<Atom,Cell>(),atomCell=(atom:Atom)=>{let cell=atoms.get(atom);if(!cell){cell=this.newCell();atoms.set(atom,cell);this.publish(cell,atom)}return cell};
+        this.exceptionHandlers.set(context,rejection);
+        const normal=(cell:Cell)=>[...cell.values].some(atom=>atom.tag!=="abrupt"&&atom.tag!=="pending-source");
+        const reject=()=>this.publish(rejection,this.nativeException(context));
+        let started=false;
+        this.onActive(node,()=>{
+            let operands!:Rule;
+            operands=this.rule([specifier,options],()=>{
+                if(specifier.values.has(this.abrupt)||options.values.has(this.abrupt))this.publish(result,this.abrupt);
+                if(started||!normal(specifier)||!normal(options))return;started=true;
+                this.publish(result,{tag:"promise",value,rejection});
+                const converted=this.newCell();let conversion!:Rule;
+                conversion=this.rule([specifier],()=>{
+                    const strings=this.stringHintTexts(specifier,conversion,context);
+                    if(strings===null)this.publish(converted,this.unknown);
+                    else for(const text of strings??[])this.publish(converted,this.primitive(text));
+                });
+                const selected=this.newCell();
+                this.rule([converted,options],()=>{
+                    if(!normal(converted))return;
+                    for(const atom of options.values){
+                        if(atom===this.primitive(undefined))continue;
+                        if(this.ordinaryOwner(atom)||atom.tag==="unknown"||atom.tag==="opaque-object"||atom.tag==="promise"||atom.tag==="generator")this.publish(selected,atom);
+                        else if(atom.tag!=="abrupt"&&atom.tag!=="pending-source")reject();
+                    }
+                });
+                const attributes=this.property(selected,"with",context),opened=new Set<ObjectOwner>();let intake!:Rule;
+                intake=this.rule([attributes],()=>{for(const atom of attributes.values){
+                    if(atom===this.primitive(undefined)||atom.tag==="abrupt"||atom.tag==="pending-source")continue;
+                    const owner=this.ordinaryOwner(atom);
+                    if(!owner){
+                        if(atom.tag==="unknown"||atom.tag==="opaque-object"||atom.tag==="promise"||atom.tag==="generator"){this.opaqueEffect(context);this.publish(rejection,this.unknown);}
+                        else reject();
+                        continue;
+                    }
+                    this.watch(intake,owner.shape);if(!this.definitionsReady(owner,intake))continue;
+                    if(owner.proxy&&!opened.has(owner)){
+                        opened.add(owner);
+                        const keys=this.proxyReadEffects(owner,null,"ownKeys",context),selected=new Set<SourcePropertyKey>();let traps!:Rule;
+                        let opaqueKeys=false;
+                        traps=this.rule([keys],()=>{
+                            for(const list of this.arguments([{cell:keys,spread:true}],context)){
+                                if(list===null){
+                                    if(!opaqueKeys){opaqueKeys=true;this.proxyReadEffects(owner,null,"getOwnPropertyDescriptor",context);this.proxyReadEffects(owner,null,"get",context);}continue;
+                                }
+                                for(const cell of list){const state=this.primitiveState(cell,traps,true);for(const name of state.proof.values){
+                                    if(typeof name!=="string"||selected.has(name))continue;selected.add(name);
+                                    const descriptor=this.proxyReadEffects(owner,name,"getOwnPropertyDescriptor",context),input=this.newCell();
+                                    this.rule([descriptor],()=>{for(const atom of descriptor.values)if(atom!==this.primitive(undefined))this.publish(input,atom)});
+                                    const converted=this.propertyDescriptor(input,context),enumerable=converted.fields.get("enumerable")!.value;let attribute!:Rule;
+                                    attribute=this.rule([converted.normal,enumerable],()=>{if(!normal(converted.normal))return;const proof=this.primitiveState(enumerable,attribute,true);if(proof.proof.values.some(Boolean)||proof.unresolved)this.proxyReadEffects(owner,name,"get",context)});
+                                }}
+                            }
+                        });
+                    }
+                    if(this.opaqueShape(owner,context)||owner.proxy){this.opaqueEffect(context);this.publish(rejection,this.unknown);}
+                    if(opened.has(owner))continue;opened.add(owner);
+                    const receiver=this.newCell();this.publish(receiver,atom);
+                    const names=[...owner.own?.keys()??[]].filter((key):key is string=>typeof key==="string");
+                    names.sort((a,b)=>{const index=(name:string)=>{const number=Number(name);return String(number)===name&&Number.isInteger(number)&&number>=0&&number<0xffffffff?number:null};const ai=index(a),bi=index(b);return ai!==null&&bi!==null?ai-bi:ai!==null?-1:bi!==null?1:0});
+                    const active=this.newCell();this.publish(active,this.primitive(true));
+                    const pending:{index:number;active:Cell}[]=[{index:0,active}];
+                    while(pending.length){
+                        const step=pending.pop()!;if(step.index===names.length)continue;
+                        const key=names[step.index]!,presence=this.propertyPresence(owner,key,context),enumerable=this.ownPresence(owner,key).enumerable,next=this.newCell();
+                        let selectedValue:Cell|undefined,read!:Rule;
+                        read=this.rule([step.active,presence,enumerable],()=>{
+                            if(!normal(step.active))return;
+                            if(presence.values.has(this.primitive(false)))this.publish(next,this.primitive(true));
+                            if(!presence.values.has(this.primitive(true)))return;
+                            const state=this.primitiveState(enumerable,read,true);if(state.pending&&!state.unresolved)return;
+                            if(!state.proof.primitiveComplete){this.opaqueEffect(context);this.publish(rejection,this.unknown);return;}
+                            if(state.proof.values.some(choice=>!choice))this.publish(next,this.primitive(true));
+                            if(!state.proof.values.some(Boolean)||selectedValue)return;
+                            selectedValue=this.property(receiver,key,context,true);
+                            this.rule([selectedValue],()=>{for(const value of selectedValue!.values){
+                                if(value.tag==="abrupt"||value.tag==="pending-source")continue;
+                                const kinds=this.primitiveKinds(atomCell(value));
+                                // EnumerableOwnProperties obtains every value
+                                // before ImportCall validates their String types.
+                                this.publish(next,this.primitive(true));
+                                if(kinds&~KIND_STRING)reject();
+                            }});
+                        });
+                        pending.push({index:step.index+1,active:next});
+                    }
+                }});
+            });
+        });
     }
     private invoke(node: ts.Node, callee: Cell, receiver: Cell, parts: readonly {cell:Cell;spread:boolean}[], result: Cell, construct = false, direct = false): void {
         const signature=callee.id+":"+receiver.id+":"+parts.map(part=>part.cell.id+":"+part.spread).join(",")+":"+construct+":"+direct;
@@ -3231,6 +3500,18 @@ class SourceValueFlow {
                         worklist.push({ ...invocation, target: atom.target, args: argv && atom.prefix ? [...atom.prefix, ...argv] : null, direct: false,
                             sequence: invocation.sequence && atom.prefix ? this.transformArguments(invocation.sequence, {prefix: atom.prefix}) : null,
                             receiver: invocation.construct ? invocation.receiver : atom.receiver, boundPath }); continue;
+                    }
+                    if(atom.tag==="operation"&&atom.operation==="promise-species"){this.copy(invocation.receiver,result);continue;}
+                    if(atom.tag==="operation"&&atom.operation==="promise-finally-forward") {
+                        this.copy(this.promiseFinallyForward(argument(0)??omittedArgument,argument(2)??omittedArgument,argument(1)??omittedArgument,node),result);continue;
+                    }
+                    if(atom.tag==="operation"&&atom.operation.startsWith("promise-member:")) {
+                        if(invocation.construct){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));continue;}
+                        const member=atom.operation.slice("promise-member:".length);
+                        if(member==="catch")this.copy(this.promiseCatch(invocation.receiver,argument(0)??omittedArgument,node),result);
+                        else if(member==="then")this.copy(this.promiseReaction(invocation.receiver,argument(0)??omittedArgument,argument(1)??omittedArgument,node),result);
+                        else if(member==="finally")this.copy(this.promiseFinally(invocation.receiver,argument(0)??omittedArgument,node),result);
+                        continue;
                     }
                     if (atom.tag === "operation" && ["call", "apply", "reflect-apply", "construct"].includes(atom.operation)) {
                         const previous = routed.get(atom) ?? new Set<string>();
