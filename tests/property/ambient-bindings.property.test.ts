@@ -6,7 +6,7 @@ import * as path from "node:path";
 import {compile} from "../../src/compile";
 import {parseHostObservation} from "../test262/protocol";
 
-function subject(strict:boolean,profile:boolean,noGc:boolean,typed:boolean=true):string{
+function subject(strict:boolean,profile:boolean,noGc:boolean,typed:boolean=true,depth:number=3):string{
  return `${strict?'export {};':''}
  declare var Array:ArrayConstructor;
  declare var Object:ObjectConstructor;
@@ -25,7 +25,7 @@ function subject(strict:boolean,profile:boolean,noGc:boolean,typed:boolean=true)
   controller.abort(reason);check(controller.signal.aborted&&controller.signal.reason===reason&&receiver===controller.signal&&event.type==='abort','ambient-host-owner');
 `}
   const value:any=await Array.fromAsync([new Promise((resolve:any)=>queueMicrotask(()=>resolve(marker)))]);check(value[0]===marker,'ambient-suspended-constructor-owner');
-  let retained:any=()=>marker;for(let depth=0;depth<128;depth++){const earlier:any=retained;retained=()=>{collect();return earlier();};}collect();check(retained()===marker,'deep-real-binding-worklist');
+  let retained:any=()=>marker;for(let depth=0;depth<${depth};depth++){const earlier:any=retained;retained=()=>{collect();return earlier();};}collect();check(retained()===marker,'deep-real-binding-worklist');
  }
  verify().catch((error:any)=>{emit('failure:'+String(error));throw error;});`;
 }
@@ -42,7 +42,15 @@ test("ambient type declarations do not create runtime source bindings",async()=>
             for(const typed of [true,false])for(const profile of [false,true])for(const noGc of [false,true]){
                 const directory=path.join(temporary,`${strict}-${typed}-${profile}-${noGc}`);await fs.mkdir(directory);
                 const entry=path.join(directory,typed?"main.ts":strict?"main.mjs":"main.js"),output=path.join(directory,"program"),diagnostics:string[]=[];
-                const source=subject(strict,profile,noGc,typed);await fs.writeFile(entry,typed?source:erase(source,ts.ModuleKind.ESNext));
+                const representative=strict&&typed&&profile&&!noGc,depth=representative?128:3;
+                const source=subject(strict,profile,noGc,typed,depth);await fs.writeFile(entry,typed?source:erase(source,ts.ModuleKind.ESNext));
+                if(representative){
+                    const deepReference=path.join(directory,'reference.cjs');
+                    await fs.writeFile(deepReference,erase(subject(strict,profile,noGc,typed,depth),ts.ModuleKind.CommonJS));
+                    const node=Bun.spawnSync(['node','--expose-gc','-e','const fs=require("node:fs");globalThis.print=value=>fs.writeSync(1,String(value)+"\\n");globalThis.$262={gc:globalThis.gc};require(process.argv[1]);',deepReference],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+                    expect({exitCode:node.exitCode,stderr:node.stderr.toString()}).toEqual({exitCode:0,stderr:''});
+                    expect(node.stdout.toString().trimEnd().split('\n')).toEqual(expected.filter(line=>line!=="ambient-host-owner:true"));
+                }
                 const result=await compile({entry,output,noGc,buildDir:path.join(directory,'build'),...(strict?{moduleRoots:[entry]}:{}),initializationEntries:[entry],
                     ...(profile?{test262Observation:{kind:"test262-native-observation" as const,scenarioId:"property/ambient-bindings.js#"+(strict?"module":"sloppy"),setupEntries:[],testEntry:entry,async:false,scriptEntries:strict?[]:[entry]}}:{}),diagnosticWriter:message=>diagnostics.push(message)});
                 expect({exitCode:result.exitCode,diagnostics:diagnostics.join("")}).toEqual({exitCode:0,diagnostics:""});

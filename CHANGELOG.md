@@ -1,3 +1,5 @@
+Closed recursive captured return-source projections through one identity-aware memo graph, retaining empty substitutions without cloning. Independent Node/native semantic properties and a deep typed CLI input preserve actual returns and opaque effects; ambient semantic profiles retain one independently checked GC stress.
+
 Unified native util export ownership for text codecs, format and types through one descriptor collection and ordinary call/argument-List path. Renamed constructor imports now execute; default/namespace identity and mutation, typed/erased Node/native properties and a deep reexport graph provide scoped evidence. The emitter-local util call selectors and varargs formatting predecessor are removed.
 
 Retained ImportCall option/attribute getter source effects and Promise rejection boundaries through one continuation graph. Promise source owners now project native member metadata and share handler/finalizer/assimilation worklists; independent Node/native properties and a deep option-owner CLI stress cover both memory modes. Correlated capabilities, exotic precision and exhaustive target evidence remain open.

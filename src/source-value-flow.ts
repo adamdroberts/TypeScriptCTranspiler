@@ -499,9 +499,14 @@ class SourceValueFlow {
      * invocations. Local writes and derived facts stay conservative; the
      * ordinary invocation graph still owns all effects and exceptions. */
     private projectReturn(root:Cell,inputs:ReadonlyMap<Cell,Cell>):Cell {
+        if(!inputs.size)return root;
         const key=root.id+":"+[...inputs].map(([formal,input])=>formal.id+"="+input.id).join(","),prior=this.returnProjections.get(key);if(prior)return prior;
         const projected=new Map<Cell,Cell>(),atoms=new Map<Atom,Atom>(),pending:Cell[]=[];
-        const project=(source:Cell):Cell=>{let cell=projected.get(source);if(!cell){cell=this.newCell();projected.set(source,cell);pending.push(source);}return cell;};
+        // A projection may flow back into the source through a captured
+        // location or recursive call. Its own targets are already projected;
+        // registering that identity closes the copy graph instead of cloning
+        // the same substitution through itself indefinitely.
+        const project=(source:Cell):Cell=>{let cell=projected.get(source);if(!cell){cell=this.newCell();projected.set(source,cell);projected.set(cell,cell);pending.push(source);}return cell;};
         const result=project(root);this.returnProjections.set(key,result);
         const extend=()=>{while(pending.length){const source=pending.pop()!,target=projected.get(source)!;let read!:Rule;
             read=this.rule([source],()=>{

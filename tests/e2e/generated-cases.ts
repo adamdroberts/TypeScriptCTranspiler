@@ -50,6 +50,7 @@ export interface DynamicImportSourceDepthSpec {
     generator: "dynamic-import-source-depth";
     depth: number;
 }
+export interface ReturnProjectionDepthSpec { generator:"return-projection-depth"; depth:number; }
 export interface ImportMetaReferenceWidthSpec {
     generator: "import-meta-reference-width";
     width: number;
@@ -215,6 +216,7 @@ export type GeneratedCaseSpec =
     | ModuleNamespaceExportWidthSpec
     | ModuleRequestWidthSpec
     | DynamicImportSourceDepthSpec
+    | ReturnProjectionDepthSpec
     | ImportMetaReferenceWidthSpec
     | ModuleStaticSemanticsWidthSpec
     | ModuleStaticSemanticsDepthSpec
@@ -315,7 +317,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth" || spec.generator === "boxed-json-source-depth" || spec.generator === "dynamic-import-source-depth") {
+    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth" || spec.generator === "boxed-json-source-depth" || spec.generator === "dynamic-import-source-depth" || spec.generator === "return-projection-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
             throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
@@ -1763,6 +1765,10 @@ console.log("raw JSON text width:", valid);
                 `for (const namespace of namespaces) if(namespace !== namespaces[0] || namespace.value !== 17) throw new Error("Module request identity");\n` +
                 `console.log("requests:", true, namespaces[0].value);\n`;
         }
+        case "return-projection-depth":
+            return `export {};\nconst marker:any={source:'23;'};let read:any=(ignored:any)=>marker.source;\n` +
+                `for(let index=0;index<${spec.depth};index++){const previous=read;read=(ignored:any)=>previous(ignored)}\n` +
+                `console.log('source:',eval(read(17)));\n`;
         case "dynamic-import-source-depth": {
             const chain=Array.from({length:spec.depth},(_,index)=>
                 `const owner${index}=Object.create(${index?'owner'+(index-1):"{get with(){body='23;';return {}}}"});`);

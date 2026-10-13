@@ -2935,7 +2935,8 @@
         "sec-serializejsonproperty#ordered-get-tojson-replacer-and-output-continuations",
         "sec-json-serialization-record#retained-holder-options-owner-and-output-graph",
         "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
-        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist"
+        "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist",
+        "sec-return-statement-runtime-semantics-evaluation#recursive-capture-and-actual-source-return-graph"
       ]
     },
     {
@@ -3455,6 +3456,34 @@
         "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
         "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/return-projection-cycle.property.test.ts",
+      "targets": [
+        "sec-return-statement-runtime-semantics-evaluation#recursive-capture-and-actual-source-return-graph"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/ambient-bindings.property.test.ts",
+      "targets": [
+        "sec-return-statement-runtime-semantics-evaluation#recursive-capture-and-actual-source-return-graph"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "return_projection_depth",
+      "targets": [
+        "sec-return-statement-runtime-semantics-evaluation#recursive-capture-and-actual-source-return-graph"
+      ],
+      "stressReview": {
+        "dimension": "retained recursive capture depth",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One native generated input exercises the same source projection memo and retained closure graph independently of source shape and capture depth.",
+        "reviewedBy": "tsc2c compliance review"
+      }
     }
   ]
 }
