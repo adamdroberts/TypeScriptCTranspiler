@@ -1868,7 +1868,11 @@ class SourceValueFlow {
                     }
                     if (atom.tag === "pending-source") {this.publish(result!,atom);continue;}
                     if (atom.tag === "unknown" || atom.tag === "opaque-object") {
-                        this.publish(result!, invocation.construct ? this.opaqueObject : this.unknown);
+                        // A return value belongs to the invocation that
+                        // produced it, just as an opaque write does. Shared
+                        // formals must retain that provenance when forwarding.
+                        if(invocation.construct)this.publish(result!,this.opaqueObject);
+                        else this.copy(this.executionOrigins(node),result!);
                         const handler = this.exceptionHandlers.get(node);
                         if (handler) this.publish(handler, this.unknown);
                         // Provenance distinguishes captured reads. After an
@@ -2044,7 +2048,11 @@ class SourceValueFlow {
                                     for (const value of atom.owner.returns.values)
                                         if (value.tag !== "primitive" && value.tag !== "non-string" && value.tag !== "text-operation" && value.tag !== "abrupt") this.publish(result!,value);
                                 });
-                            } else this.copy(atom.owner.returns, result!);
+                            // Shared return facts can include a later call's
+                            // opaque value. Capture with the same ordering
+                            // proof used for location reads; dynamic callers
+                            // keep the complete conservative union.
+                            } else this.copyRead(atom.owner.returns, result!,node);
                             const handler = this.exceptionHandlers.get(node);
                             if (handler) this.copy(atom.owner.throws, handler);
                         }
