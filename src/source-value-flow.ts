@@ -43,7 +43,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "json-stringify" | "error-text" | `agent-member:${string}`;
+    "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "json-stringify" | "json-raw" | "json-is-raw" | "error-text" | `agent-member:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
@@ -130,7 +130,7 @@ interface OwnPresence {
     readonly contexts: Map<ts.Node|undefined,Cell>;
     initial: boolean;
 }
-interface ObjectOwner { readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, OwnPresence>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; closedIndices?:boolean; }
+interface ObjectOwner { readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, OwnPresence>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; closedIndices?:boolean; rawJSON?:Cell; }
 interface FunctionOwner {
     readonly definition: CallableDefinition; readonly node: FunctionNode | null; readonly kind: DynamicFunctionKind; readonly fields: ObjectOwner;
     readonly returns: Cell; readonly throws: Cell; readonly receiver: Cell; readonly active: Cell; readonly sourceText: string;
@@ -148,7 +148,7 @@ const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
 // Initial intrinsic member identities, installed on their canonical owners.
 // Source lookups and later writes use the ordinary field graph.
 const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operation>> = new Map<string, ReadonlyMap<string, Operation>>([
-    ["JSON", new Map([["stringify", "json-stringify"]])],
+    ["JSON", new Map([["stringify", "json-stringify"], ["rawJSON", "json-raw"], ["isRawJSON", "json-is-raw"]])],
     ["console", new Map([...consoleOperations].map(name=>[name,"host-print" as const]))],
     ["Object", new Map([["getPrototypeOf", "prototype"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
         ["getOwnPropertyDescriptor", "own-descriptor"], ["getOwnPropertyDescriptors", "own-descriptors"]])],
@@ -207,6 +207,7 @@ class SourceValueFlow {
     private readonly nativeExceptions = new Map<ts.Node,Atom>();
     private readonly errorStrings = new Map<ts.Node,Map<Cell,Cell>>();
     private readonly jsonSerializations = new Map<ts.Node, Map<string, Cell>>();
+    private readonly rawJSONResults = new Map<ts.Node, Map<Cell, Cell>>();
     private readonly normalResults = new Map<Cell, Atom>();
     private readonly exceptionHandlers = new Map<ts.Node, Cell>();
     private readonly exceptionCells = new Set<Cell>();
@@ -2092,6 +2093,34 @@ class SourceValueFlow {
         }
         return choices;
     }
+    private rawJSON(source:Cell,context:ts.Node):Cell {
+        let calls=this.rawJSONResults.get(context);
+        if(!calls){calls=new Map();this.rawJSONResults.set(context,calls);}
+        const prior=calls.get(source);if(prior)return prior;
+        const result=this.newCell(),text=this.stringHintCell(source,context),valid=this.newCell();
+        calls.set(source,result);
+        const prototype=this.newCell();this.publish(prototype,this.primitive(null));
+        const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype,rawJSON:valid};
+        this.defineField(owner,"rawJSON",valid);
+        const atom:Atom={tag:"object",owner};
+        const invalid=()=>{this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));};
+        let rule!:Rule;
+        rule=this.rule([text],()=>{
+            const state=this.primitiveState(text,rule,true);
+            for(const value of state.proof.values){
+                const input=String(value);
+                try {
+                    if(!/^[a-z0-9"-]/.test(input)||!/[a-z0-9"]/.test(input.slice(-1)))throw null;
+                    JSON.parse(input);
+                    this.publish(valid,this.primitive(input));this.publish(result,atom);
+                }catch{invalid();}
+            }
+            for(const value of text.values)if(value.tag==="abrupt"||value.tag==="pending-source")this.publish(result,value);
+            if(state.proof.primitiveComplete||state.pending&&!state.unresolved)return;
+            this.publish(valid,this.unknownString);this.publish(result,atom);invalid();
+        });
+        return result;
+    }
     /** Source projection follows the same root-holder/toJSON/replacer order
      * as the runtime Serialization Record. Unrepresented composite output
      * remains opaque; its callbacks and exceptions cannot become pure. */
@@ -2171,16 +2200,23 @@ class SourceValueFlow {
                 if(this.primitiveKinds(input)&KIND_OBJECT&&!this.ordinaryOwner(atom))opaque();
             }
         });
+        const outputValues=this.newCell();
+        this.rule([replaced],()=>{
+            for(const atom of replaced.values){
+                const raw=this.ordinaryOwner(atom)?.rawJSON;
+                if(raw)this.copy(raw,result);else this.publish(outputValues,atom);
+            }
+        });
         let output!:Rule;
-        output=this.rule([replaced],()=>{
-            const state=this.primitiveState(replaced,output,true);
+        output=this.rule([outputValues],()=>{
+            const state=this.primitiveState(outputValues,output,true);
             for(const value of state.proof.values){
                 try {this.publish(result,this.primitive(JSON.stringify(value)));}
                 catch {this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context!));}
             }
             if(state.proof.primitiveComplete)return;
             if(state.pending&&!state.unresolved)return;
-            const kinds=this.primitiveKinds(replaced);
+            const kinds=this.primitiveKinds(outputValues);
             if(kinds&(KIND_OBJECT|KIND_BIGINT)){opaque();return;}
             if(kinds&KIND_FUNCTION)this.publish(result,this.primitive(undefined));
             if(kinds&(KIND_UNDEFINED|KIND_SYMBOL))this.publish(result,this.primitive(undefined));
@@ -2831,6 +2867,19 @@ class SourceValueFlow {
                             if (handler) this.copy(atom.owner.throws, handler);
                         }
                     } else if (atom.tag === "operation") {
+                        if(atom.operation==="json-raw"){
+                            this.copy(this.rawJSON(argument(0)??omittedArgument,node),result);continue;
+                        }
+                        if(atom.operation==="json-is-raw"){
+                            const input=argument(0)??omittedArgument;this.watch(rule,input);
+                            for(const value of input.values){
+                                if(value.tag==="abrupt"||value.tag==="pending-source"){this.publish(result,value);continue;}
+                                const owner=this.ordinaryOwner(value);
+                                this.publish(result,this.primitive(!!owner?.rawJSON));
+                                if(!owner&&(value.tag==="unknown"||value.tag==="opaque-object"||value.tag==="non-string"))this.publish(result,this.primitive(true));
+                            }
+                            continue;
+                        }
                         if(atom.operation==="error-text"){this.copy(this.errorText(invocation.receiver,node),result);continue;}
                         if(atom.operation==="json-stringify"){
                             this.copy(this.jsonSerialization(argument(0)??omittedArgument,argument(1)??omittedArgument,argument(2)??omittedArgument,node),result);

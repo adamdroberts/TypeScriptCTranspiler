@@ -1480,6 +1480,8 @@ declare const Math: Math;
 interface JSON {
     stringify(value?: any, replacer?: any, space?: any, ...ignored: any[]): any;
     parse(text?: any, reviver?: any, ...ignored: any[]): any;
+    rawJSON(text?: any, ...ignored: any[]): { readonly rawJSON: string };
+    isRawJSON(value?: any, ...ignored: any[]): boolean;
 }
 declare var JSON: JSON;
 

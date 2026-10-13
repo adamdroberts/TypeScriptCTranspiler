@@ -1693,6 +1693,12 @@ static bool json_emit(tsc_json_state_t* state, tsc_value_t value, tsc_str_t* key
     if (value_is_box(value) && value_tag(value) == TSC_VALUE_TAG_BIGINT)
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Do not know how to serialize a BigInt"));
     if (tsc_value_is_object(value)) {
+        tsc_object_t* owner=value_is_box(value)&&value_tag(value)==TSC_VALUE_TAG_OBJECT?value_ptr(value):NULL;
+        if(owner&&owner->is_raw_json) {
+            tsc_str_t* text=tsc_value_as_string(tsc_value_get_prop(value,tsc_str_from_lit("rawJSON",7)));
+            json_prefix(state,key);json_append_text(&state->output,text);
+            return true;
+        }
         bool array = tsc_value_is_array(value);
         for (tsc_json_frame_t* active = state->frame; active; active = active->parent)
             if (active->value == value) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Converting circular structure to JSON"));

@@ -9584,6 +9584,33 @@ static tsc_value_t json_stringify_apply(void* env, tsc_value_t this_arg, tsc_arr
     return tsc_value_json_stringify_options(value, replacer, space);
 }
 
+static tsc_value_t json_raw_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env; (void)this_arg;
+    tsc_value_t input=args&&args->len?TSC_ARR(tsc_value_t,args,0):tsc_value_undefined();
+    tsc_str_t* volatile text=tsc_value_to_string_coercion(input);
+    /* These endpoint rules reject containers and surrounding whitespace before
+     * ParseJSON. The shared parser remains authoritative for scalar grammar. */
+    unsigned char first=text->len?(unsigned char)text->data[0]:0;
+    unsigned char last=text->len?(unsigned char)text->data[text->len-1]:0;
+    bool start=(first>='a'&&first<='z')||(first>='0'&&first<='9')||first=='"'||first=='-';
+    bool end=(last>='a'&&last<='z')||(last>='0'&&last<='9')||last=='"';
+    if(!text->len||!start||!end)
+        tsc_throw_error(TSC_ERROR_SYNTAX,tsc_str_from_cstr("Invalid raw JSON text"));
+    (void)tsc_json_parse(text);
+    tsc_object_t* volatile object=tsc_object_new_with_prototype(tsc_value_null());
+    object->is_raw_json=true;
+    tsc_object_define(object,tsc_str_from_lit("rawJSON",7),tsc_value_string(text),true,true,true);
+    (void)tsc_object_freeze(object);
+    return tsc_value_object(object);
+}
+
+static tsc_value_t json_is_raw_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env; (void)this_arg;
+    tsc_value_t value=args&&args->len?TSC_ARR(tsc_value_t,args,0):tsc_value_undefined();
+    tsc_object_t* object=value_is_box(value)&&value_tag(value)==TSC_VALUE_TAG_OBJECT?value_ptr(value):NULL;
+    return tsc_value_bool(object&&object->is_raw_json);
+}
+
 tsc_value_t tsc_builtin_json(void) {
     tsc_namespace_intrinsics_state_t* state = namespace_intrinsics_for_current_realm();
     tsc_object_t* json = state->json;
@@ -9593,6 +9620,8 @@ tsc_value_t tsc_builtin_json(void) {
             tsc_object_t* built = tsc_object_new();
             intrinsic_define_method(built, "parse", 5, 2.0, json_parse_apply, NULL);
             intrinsic_define_method(built, "stringify", 9, 3.0, json_stringify_apply, NULL);
+            intrinsic_define_method(built, "rawJSON", 7, 1.0, json_raw_apply, NULL);
+            intrinsic_define_method(built, "isRawJSON", 9, 1.0, json_is_raw_apply, NULL);
             state->json = built;
             json = built;
         }

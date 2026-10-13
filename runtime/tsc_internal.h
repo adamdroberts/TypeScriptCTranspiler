@@ -337,6 +337,7 @@ struct tsc_object {
     bool is_map;
     bool is_set;
     bool is_error;
+    bool is_raw_json;
     bool is_arguments;
     bool is_array_iterator;
     bool is_collection_iterator;

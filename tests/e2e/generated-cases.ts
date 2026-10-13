@@ -97,6 +97,11 @@ export interface StringRawTemplateWidthSpec {
     width: number;
 }
 
+export interface JsonRawTextWidthSpec {
+    generator: "json-raw-text-width";
+    width: number;
+}
+
 export interface ReflectConstructArgumentWidthSpec {
     generator: "reflect-construct-argument-width";
     width: number;
@@ -179,6 +184,7 @@ export type GeneratedCaseSpec =
     | StringUtf16ExoticWidthSpec
     | StringConcatArgumentWidthSpec
     | StringRawTemplateWidthSpec
+    | JsonRawTextWidthSpec
     | ReflectConstructArgumentWidthSpec
     | ArrowFormalBindingTreeDepthSpec
     | ArrayStaticFactoryItemWidthSpec
@@ -240,7 +246,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "dispatch-capture-worklist-width") {
+    if (spec.generator === "dispatch-capture-worklist-width" || spec.generator === "json-raw-text-width") {
         const width = spec.width;
         if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
             throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
@@ -1581,6 +1587,19 @@ function classExpressionMethodWidthSource(width: number): string {
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseGeneratedCaseSpec(raw, filename);
     switch (spec.generator) {
+        case "json-raw-text-width":
+            return `const body = "💛".repeat(${spec.width});
+const text = '"' + body + '"';
+const args: any[] = [text];
+let evaluated = 0;
+for (let index = 0; index < ${spec.width}; index++) args.push(++evaluated);
+const raw = Reflect.apply(JSON.rawJSON, null, args);
+const brandArgs: any[] = [raw, ...args];
+const valid = evaluated === ${spec.width} && raw.rawJSON === text &&
+    JSON.stringify(raw) === text && Reflect.apply(JSON.isRawJSON, null, brandArgs) &&
+    Object.isFrozen(raw) && Object.getPrototypeOf(raw) === null;
+console.log("raw JSON text width:", valid);
+`;
         case "regexp-pattern-depth":
             return `const openings: string[] = [];
                 let captures = 0;

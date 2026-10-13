@@ -1960,7 +1960,9 @@
         "sec-number.prototype.valueof#ordinary-receiver-number-data-and-argument-list",
         "sec-number.prototype.tolocalestring#non-402-number-data-decimal-text-and-ignored-options",
         "sec-date.utc#ordinary-static-list-gregorian-number-time",
-        "sec-date.now#ordinary-static-list-integral-clock-time"
+        "sec-date.now#ordinary-static-list-integral-clock-time",
+        "sec-json.rawjson#validated-scalar-text-and-frozen-raw-owner",
+        "sec-json.israwjson#internal-brand-without-proxy-or-property-access"
       ]
     },
     {
@@ -2322,6 +2324,94 @@
       "targets": [
         "sec-hostgetimportmetaproperties#default-empty-property-list",
         "sec-hostfinalizeimportmeta#default-no-extraordinary-finalization"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/json-raw.property.test.ts",
+      "targets": [
+        "sec-json.rawjson#validated-scalar-text-and-frozen-raw-owner",
+        "sec-json.israwjson#internal-brand-without-proxy-or-property-access"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/json-raw-source.property.test.ts",
+      "targets": [
+        "sec-json.rawjson#validated-scalar-text-and-frozen-raw-owner"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "json_raw_text_width",
+      "targets": [
+        "sec-json.rawjson#validated-scalar-text-and-frozen-raw-owner",
+        "sec-json.israwjson#internal-brand-without-proxy-or-property-access"
+      ],
+      "stressReview": {
+        "dimension": "UTF-16 raw scalar text and ordinary actual argument-List width",
+        "parameter": "width",
+        "representativeHighDepth": 16384,
+        "rationale": "One representative generated input exercises the existing scalar parser and ordinary List lowering with retained frozen text, without treating successive lengths as completion units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "json_raw",
+      "targets": [
+        "sec-json.rawjson#validated-scalar-text-and-frozen-raw-owner",
+        "sec-json.israwjson#internal-brand-without-proxy-or-property-access"
+      ]
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#JSON",
+      "targets": [
+        "sec-json.rawjson#validated-scalar-text-and-frozen-raw-owner",
+        "sec-json.israwjson#internal-brand-without-proxy-or-property-access"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#json_raw_apply",
+      "targets": [
+        "sec-json.rawjson#validated-scalar-text-and-frozen-raw-owner"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_object.c#tsc_json_parse",
+      "targets": [
+        "sec-json.rawjson#validated-scalar-text-and-frozen-raw-owner"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_object.c#json_emit",
+      "targets": [
+        "sec-json.rawjson#validated-scalar-text-and-frozen-raw-owner"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#rawJSON",
+      "targets": [
+        "sec-json.rawjson#validated-scalar-text-and-frozen-raw-owner"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#json_is_raw_apply",
+      "targets": [
+        "sec-json.israwjson#internal-brand-without-proxy-or-property-access"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_internal.h#is_raw_json",
+      "targets": [
+        "sec-json.israwjson#internal-brand-without-proxy-or-property-access"
       ]
     }
   ]
