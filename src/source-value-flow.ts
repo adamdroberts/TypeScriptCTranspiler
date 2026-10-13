@@ -69,6 +69,10 @@ interface ListPart { readonly cell: Cell; readonly spread: boolean; }
 const KIND_UNDEFINED=1,KIND_NULL=2,KIND_BOOLEAN=4,KIND_NUMBER=8,KIND_BIGINT=16,KIND_STRING=32,KIND_SYMBOL=64,KIND_OBJECT=128,KIND_FUNCTION=256;
 const KIND_PRIMITIVE=KIND_UNDEFINED|KIND_NULL|KIND_BOOLEAN|KIND_NUMBER|KIND_BIGINT|KIND_STRING|KIND_SYMBOL;
 const KIND_NUMERIC=KIND_NUMBER|KIND_BIGINT,KIND_ALL=KIND_PRIMITIVE|KIND_OBJECT|KIND_FUNCTION;
+type ArgumentSequence = { readonly id: number; readonly context: ts.Node; readonly positions: Map<number, Cell> } & (
+    { readonly kind: "parts"; readonly parts: readonly ListPart[] } |
+    { readonly kind: "slice"; readonly source: ArgumentSequence; readonly offset: number } |
+    { readonly kind: "prepend"; readonly source: ArgumentSequence; readonly prefix: readonly Cell[] });
 type Atom =
     | { readonly tag: "builtin"; readonly name: string; readonly normalResult: NonNullable<RuntimeGlobalBinding["normalResult"]>; readonly fields: ObjectOwner }
     | { readonly tag: "intrinsic"; readonly domain: Domain; readonly kind: DynamicFunctionKind }
@@ -202,6 +206,10 @@ class SourceValueFlow {
     private readonly arrayLikeLengths = new Map<Cell,Map<ts.Node,Cell>>();
     private readonly indexedReads = new Map<Cell,Map<ts.Node,Map<string,Cell>>>();
     private readonly iterationMethods = new Map<Cell,Map<ts.Node|undefined,Cell>>();
+    private readonly iterationElements = new Map<Cell, Map<ts.Node, Cell>>();
+    private readonly argumentValues = new Map<ArgumentSequence, Cell>();
+    private readonly argumentSequences = new Map<ts.Node, Map<string, ArgumentSequence>>();
+    private nextArgumentSequence = 0;
     private readonly arrayLikeObjectInputs = new Map<Cell,Cell>();
     private readonly functions = new Map<CallableDefinition, FunctionOwner>();
     private readonly ownerAtoms = new WeakMap<ObjectOwner | FunctionOwner, Map<Atom["tag"], Atom>>();
@@ -1105,7 +1113,7 @@ class SourceValueFlow {
         const {proof, pending, unresolved} = this.primitiveState(key, rule);
         if (proof.primitiveComplete) return [...new Set(proof.values.map(value => typeof value === "symbol" ? value : String(value)))];
         if (pending && !unresolved) return undefined;
-        if (context && !this.numericKeyDomain(key)) {
+        if (context && !this.computedKeyDomain(key)) {
             const handler = this.exceptionHandlers.get(context);
             if (handler) this.publish(handler, this.unknown);
             this.onActive(context, () => this.opaqueEffect(context));
@@ -1198,15 +1206,16 @@ class SourceValueFlow {
         let rule!: Rule;
         rule = this.rule([base, key], () => {
             const names = this.propertyKeys(key, rule, context);
-            if (names === null && this.numericKeyDomain(key)) {
-                const keys = this.propertyDomainKeys(base, context, rule, "numeric");
+            const domain = names === null ? this.computedKeyDomain(key) : null;
+            if (names === null && domain) {
+                const keys = domain.numeric ? this.propertyDomainKeys(base, context, rule, "numeric") : [];
                 if (keys === undefined) return;
                 if (keys === null) this.publish(result, this.unknown);
                 else {
                     // The numeric domain has unbounded cardinality. Known
                     // owner locations plus absence cover every possible key.
                     this.publish(result, this.primitive(undefined));
-                    for (const name of keys) if (!selected.has(name)) {
+                    for (const name of [...keys, ...domain.keys]) if (!selected.has(name)) {
                         selected.add(name);
                         this.copy(this.property(base, name, context), result);
                     }
@@ -1221,13 +1230,22 @@ class SourceValueFlow {
         });
         return result;
     }
-    private numericKeyDomain(key: Cell): boolean {
-        return key.values.size > 0 && [...key.values].every(atom =>
-            atom.tag === "abrupt" ||
-            atom.tag === "primitive" && (typeof atom.value === "number" || typeof atom.value === "bigint") ||
-            atom.tag === "non-string" && !!atom.kinds && !(atom.kinds & ~KIND_NUMERIC) ||
-            atom.tag === "text-operation" && (atom.operation === "coerce" ||
-                atom.operation === "numeric" && atom.numeric!.result !== "boolean" && atom.numeric!.conversion !== "default"));
+    private computedKeyDomain(key: Cell): {numeric: boolean; keys: readonly SourcePropertyKey[]} | null {
+        if (!key.values.size) return null;
+        let numeric = false;
+        const keys = new Set<SourcePropertyKey>();
+        for (const atom of key.values) {
+            if (atom.tag === "abrupt") continue;
+            if (atom.tag === "primitive") {
+                keys.add(typeof atom.value === "symbol" ? atom.value : String(atom.value));
+                continue;
+            }
+            if (atom.tag === "non-string" && !!atom.kinds && !(atom.kinds & ~KIND_NUMERIC) ||
+                atom.tag === "text-operation" && (atom.operation === "coerce" ||
+                    atom.operation === "numeric" && atom.numeric!.result !== "boolean" && atom.numeric!.conversion !== "default")) numeric = true;
+            else return null;
+        }
+        return {numeric, keys: [...keys]};
     }
     /** Normal-value categories are independent of concrete value extent.
      * Operand effects and Reference failures remain on their own graph edges. */
@@ -1926,6 +1944,162 @@ class SourceValueFlow {
         }
         return choices;
     }
+    private argumentSequence(context: ts.Node, parts: readonly ListPart[]): ArgumentSequence {
+        let sequences = this.argumentSequences.get(context);
+        if (!sequences) {sequences = new Map(); this.argumentSequences.set(context, sequences);}
+        const key = "parts:" + parts.map(part => part.cell.id + ":" + part.spread).join(",");
+        let sequence = sequences.get(key);
+        if (!sequence) {
+            sequence = {id: this.nextArgumentSequence++, context, positions: new Map(), kind: "parts", parts};
+            sequences.set(key, sequence);
+        }
+        return sequence;
+    }
+    private transformArguments(source: ArgumentSequence, transform: {offset: number} | {prefix: readonly Cell[]}): ArgumentSequence {
+        const sequences = this.argumentSequences.get(source.context)!;
+        const key = source.id + ("offset" in transform ? ":slice:" + transform.offset : ":prefix:" + transform.prefix.map(cell => cell.id).join(","));
+        let sequence = sequences.get(key);
+        if (!sequence) {
+            const common = {id: this.nextArgumentSequence++, context: source.context, positions: new Map<number, Cell>(), source};
+            sequence = "offset" in transform ? {...common, kind: "slice", offset: transform.offset} : {...common, kind: "prepend", prefix: transform.prefix};
+            sequences.set(key, sequence);
+        }
+        return sequence;
+    }
+    /** All possible argument values also activate every spread protocol.
+     * Slice projections may retain earlier values conservatively for escape
+     * effects; positional projection below retains the actual offset. */
+    private allArgumentValues(sequence: ArgumentSequence): Cell {
+        const prior = this.argumentValues.get(sequence); if (prior) return prior;
+        const result = this.newCell(); this.argumentValues.set(sequence, result);
+        const pending = [sequence], visited = new Set<ArgumentSequence>();
+        while (pending.length) {
+            const current = pending.pop()!;
+            if (visited.has(current)) continue; visited.add(current);
+            if (current.kind !== "parts") {
+                if (current.kind === "prepend") for (const value of current.prefix) this.copy(value, result);
+                pending.push(current.source);
+                continue;
+            }
+            let rule!: Rule;
+            rule = this.rule(current.parts.map(part => part.cell), () => {
+                for (const part of current.parts) {
+                    if (!part.spread) {this.copy(part.cell, result); continue;}
+                    this.watchList(rule, part.cell, current.context);
+                    for (const values of this.lists(part.cell, current.context)) {
+                        if (values) for (const value of values) this.copy(value, result);
+                        else this.copy(this.iteratorElements(part.cell, current.context), result);
+                    }
+                }
+            });
+        }
+        return result;
+    }
+    private argumentPosition(sequence: ArgumentSequence, index: number): Cell {
+        const prior = sequence.positions.get(index); if (prior) return prior;
+        const result = this.newCell(); sequence.positions.set(index, result);
+        // Persistent forwarding transformations are traversed iteratively.
+        // No depth or argument-extent limit enters this projection.
+        while (sequence.kind !== "parts") {
+            if (sequence.kind === "slice") index += sequence.offset;
+            else if (index < sequence.prefix.length) {this.copy(sequence.prefix[index]!, result); return result;}
+            else index -= sequence.prefix.length;
+            sequence = sequence.source;
+            const cached = sequence.positions.get(index);
+            if (cached) {this.copy(cached, result); return result;}
+            sequence.positions.set(index, result);
+        }
+        const parts = sequence.parts;
+        let rule!: Rule;
+        rule = this.rule(parts.map(part => part.cell), () => {
+            // ArgumentListEvaluation consumes every spread, including those
+            // after the requested position. Their calls and effects belong
+            // to the same invocation even when an earlier value was captured.
+            for (const part of parts) if (part.spread) {
+                this.watchList(rule, part.cell, sequence.context);
+                this.watch(rule, this.iteratorElements(part.cell, sequence.context));
+            }
+            const pending: Array<{part: number; offset: number | null}> = [{part: 0, offset: index}];
+            const visited = new Set<string>();
+            while (pending.length) {
+                const state = pending.pop()!, key = state.part + ":" + state.offset;
+                if (visited.has(key)) continue; visited.add(key);
+                const part = parts[state.part];
+                if (!part) {this.publish(result, this.primitive(undefined)); continue;}
+                const alternatives = part.spread ? this.lists(part.cell, sequence.context) : [[part.cell]];
+                if (part.spread) this.watchList(rule, part.cell, sequence.context);
+                for (const list of alternatives) {
+                    if (list === null) {
+                        const elements = this.iteratorElements(part.cell, sequence.context);
+                        this.watch(rule, elements); this.copy(elements, result);
+                        // Unknown extent can contain this position or end
+                        // before it. Continue through the remaining sequence
+                        // with a symbolic offset, without enumerating lengths.
+                        pending.push({part: state.part + 1, offset: null});
+                    } else if (state.offset === null) {
+                        for (const value of list) this.copy(value, result);
+                        pending.push({part: state.part + 1, offset: null});
+                    } else if (state.offset < list.length) this.copy(list[state.offset]!, result);
+                    else pending.push({part: state.part + 1, offset: state.offset - list.length});
+                }
+            }
+        });
+        return result;
+    }
+    private iteratorElements(receiver: Cell, context: ts.Node): Cell {
+        let contexts = this.iterationElements.get(receiver);
+        if (!contexts) {contexts = new Map(); this.iterationElements.set(receiver, contexts);}
+        const prior = contexts.get(context); if (prior) return prior;
+        const result = this.newCell(); contexts.set(context, result);
+        const method = this.iterationMethod(receiver, context), custom = this.newCell(), iterator = this.newCell();
+        const returned = this.newCell();
+        let methods!: Rule;
+        methods = this.rule([method], () => {
+            for (const atom of method.values) {
+                if (atom.tag === "operation" && atom.operation === "array-values") {
+                    const keys = this.propertyDomainKeys(receiver, context, methods, "index");
+                    if (keys === null) this.publish(result, this.unknown);
+                    else if (keys) {
+                        this.publish(result, this.primitive(undefined));
+                        for (const key of keys) this.copy(this.indexedRead(receiver, Number(key), context), result);
+                    }
+                } else this.publish(custom, atom);
+            }
+        });
+        this.invoke(context, custom, receiver, [], iterator);
+        const next = this.property(iterator, "next", context);
+        this.invoke(context, next, iterator, [], returned);
+        const records = new Map<Atom, {done: Cell; value: Cell}>();
+        let steps!: Rule;
+        steps = this.rule([returned], () => {
+            for (const atom of returned.values) {
+                if (atom.tag === "abrupt") continue;
+                const owner = this.ordinaryOwner(atom);
+                if (!owner) {
+                    if (atom.tag === "unknown" || atom.tag === "opaque-object" || atom.tag === "pending-source") this.publish(result, atom);
+                    continue;
+                }
+                let record = records.get(atom);
+                if (!record) {
+                    const input = this.newCell(); this.publish(input, atom);
+                    record = {done: this.property(input, "done", context), value: this.newCell()}; records.set(atom, record);
+                    const selected = record;
+                    let valueRead: Cell | undefined;
+                    let values!: Rule;
+                    values = this.rule([selected.done], () => {
+                        const state = this.primitiveState(selected.done, values, true);
+                        if (state.pending && !state.unresolved) return;
+                        if (!state.proof.primitiveComplete || state.proof.values.some(value => !value)) {
+                            valueRead ??= this.property(input, "value", context);
+                            this.copy(valueRead, selected.value);
+                        }
+                    });
+                }
+                this.watch(steps, record.value); this.copy(record.value, result);
+            }
+        });
+        return result;
+    }
     private cell(raw: ts.Node): Cell {
         const node = ts.isExpression(raw) ? unwrap(raw) : raw;
         let result = this.cells.get(node);
@@ -2167,6 +2341,7 @@ class SourceValueFlow {
         const existing=calls.get(signature);
         if(existing){this.copy(existing,result);return;}
         calls.set(signature,result);
+        const sequence = this.argumentSequence(node, parts);
         const constructedReceiver=this.newCell();
         this.publish(constructedReceiver,{tag:"object",owner:this.owner(node)});
         const boundValues = new Map<string, Atom>();
@@ -2196,15 +2371,16 @@ class SourceValueFlow {
                     evaluations.set("unreachable",{node,operation:"eval",direct,source:null,unknown:false});
                 return;
             }
+            this.allArgumentValues(sequence);
             for (const part of parts) if (part.spread) this.watchList(rule, part.cell,node);
-            const worklist: Array<{ target: Cell; receiver: Cell; args: readonly Cell[] | null; boundPath: Set<Atom>; direct: boolean; construct: boolean }> = [
+            const worklist: Array<{ target: Cell; receiver: Cell; args: readonly Cell[] | null; sequence: ArgumentSequence | null; boundPath: Set<Atom>; direct: boolean; construct: boolean }> = [
                 ...this.arguments(parts,node).map(args => ({ target: callee, receiver: receiver, args, boundPath: new Set<Atom>(),
-                    construct, direct }))];
+                    sequence, construct, direct }))];
             const routed = new Map<Atom, Set<string>>();
             while (worklist.length) {
                 const invocation = worklist.pop()!; this.watch(rule, invocation.target);
                 for (const atom of invocation.target.values) {
-                    const signature = invocation.construct + ":" + invocation.receiver.id + ":" + (invocation.args?.map(cell => cell.id).join(",") ?? "unknown");
+                    const signature = invocation.construct + ":" + invocation.receiver.id + ":" + (invocation.args?.map(cell => cell.id).join(",") ?? "sequence:" + invocation.sequence?.id);
                     if (atom.tag === "abrupt") {this.publish(result!, atom); continue;}
                     if (atom.tag === "primitive" || atom.tag === "non-string" || atom.tag === "unknown-string" || atom.tag === "text-operation") {
                         this.publish(result,this.abrupt);
@@ -2226,11 +2402,13 @@ class SourceValueFlow {
                         if (!handled(this.unknown,signature)) this.onActive(node,()=>{
                             this.opaqueEffect(node);
                             this.writeProperty(invocation.receiver,null,this.empty,false,"set",node);
-                            for(const argument of invocation.args ?? [])this.writeProperty(argument,null,this.empty,false,"set",node);
+                            const argumentsEscaping = invocation.args ?? (invocation.sequence ? [this.allArgumentValues(invocation.sequence)] : []);
+                            for (const argument of argumentsEscaping) this.writeProperty(argument,null,this.empty,false,"set",node);
                         });
                         continue;
                     }
                     const argv = invocation.args;
+                    const argument = (index: number): Cell | undefined => argv ? argv[index] : invocation.sequence ? this.argumentPosition(invocation.sequence, index) : undefined;
                     if (atom.tag === "operation" && invocation.construct) {
                         this.publish(result,this.abrupt);
                         const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.opaqueObject);
@@ -2244,17 +2422,20 @@ class SourceValueFlow {
                         if (invocation.boundPath.has(atom)) continue;
                         const boundPath = new Set(invocation.boundPath); boundPath.add(atom);
                         worklist.push({ ...invocation, target: atom.target, args: argv && atom.prefix ? [...atom.prefix, ...argv] : null, direct: false,
+                            sequence: invocation.sequence && atom.prefix ? this.transformArguments(invocation.sequence, {prefix: atom.prefix}) : null,
                             receiver: invocation.construct ? invocation.receiver : atom.receiver, boundPath }); continue;
                     }
                     if (atom.tag === "operation" && ["call", "apply", "reflect-apply", "construct"].includes(atom.operation)) {
                         const previous = routed.get(atom) ?? new Set<string>();
                         if (previous.has(signature)) continue; previous.add(signature); routed.set(atom, previous);
-                        const target = atom.operation === "reflect-apply" || atom.operation === "construct" ? argv?.[0] : invocation.receiver;
+                        const target = atom.operation === "reflect-apply" || atom.operation === "construct" ? argument(0) : invocation.receiver;
                         const listIndex = atom.operation === "reflect-apply" ? 2 : 1;
-                        const actual = atom.operation === "call" ? [argv?.slice(1) ?? null] : argv?.[listIndex] ? this.arrayLikeLists(argv[listIndex]!,node,rule,result,atom.operation==="apply") : atom.operation==="apply"&&argv ? [[]] : [null];
+                        const list = argument(listIndex);
+                        const actual = atom.operation === "call" ? [argv?.slice(1) ?? null] : list ? this.arrayLikeLists(list,node,rule,result,atom.operation==="apply") : atom.operation==="apply"&&argv ? [[]] : [null];
                         if (target) for (const args of actual) worklist.push({ ...invocation, target, direct: false,
                             construct: atom.operation === "construct",
-                            receiver: atom.operation === "call" || atom.operation === "apply" ? argv?.[0] ?? this.empty : atom.operation === "reflect-apply" ? argv?.[1] ?? this.empty : constructedReceiver, args });
+                            receiver: atom.operation === "call" || atom.operation === "apply" ? argument(0) ?? this.empty : atom.operation === "reflect-apply" ? argument(1) ?? this.empty : constructedReceiver,
+                            sequence: atom.operation === "call" && invocation.sequence ? this.transformArguments(invocation.sequence, {offset: 1}) : null, args });
                         continue;
                     }
                     const constructorArguments = atom.tag === "intrinsic" && atom.domain === "constructor" ? convertArguments(argv) : undefined;
@@ -2378,10 +2559,14 @@ class SourceValueFlow {
                                 }
                                 const rest = location.value, restOwner = location.owner;
                                 if (argv) this.publish(restOwner.listLength!, this.primitive(Math.max(0, argv.length - index)));
-                                else this.publish(restOwner.listLength!, this.unknown);
+                                else {this.publish(restOwner.listLength!, this.unknown); this.publish(restOwner.shape, this.unknown);}
                                 for(const [offset,value] of (argv?.slice(index) ?? []).entries())this.copy(value,this.field(restOwner,String(offset)));
                                 this.bind(parameter.name, rest);
-                            } else if (argv?.[index]) this.bind(parameter.name, argv[index]!);
+                            } else {
+                                const value = argument(index);
+                                if (value) this.bind(parameter.name, value);
+                                else this.bind(parameter.name, omittedArgument);
+                            }
                             if (parameter.initializer) this.bind(parameter.name, this.cell(parameter.initializer));
                         }
                         if (atom.owner.kind.includes("generator")) this.publish(result!, { tag: "generator", owner: atom.owner });
@@ -2538,6 +2723,7 @@ class SourceValueFlow {
                                 });
                                 this.rule([invocation.receiver], () => {
                                     for (const target of invocation.receiver.values) {
+                                        if (target.tag === "abrupt") continue;
                                         if(target.tag==="unknown"||target.tag==="opaque-object")this.onActive(node,()=>this.opaqueEffect(node));
                                         const owner = this.ordinaryOwner(target);
                                         if (owner?.prototype) this.copy(owner.prototype, fields.prototype!);
@@ -2563,10 +2749,11 @@ class SourceValueFlow {
                         }
                         if (atom.operation === "realm") this.publish(result!, this.realm);
                         if (atom.operation === "eval" || atom.operation === "eval-script" || atom.operation === "agent-start") {
-                            const source = argv?.[0] ? atom.operation === "eval" ? argv[0] : this.stringHintCell(argv[0], node) : null;
+                            const first = argument(0);
+                            const source = first ? atom.operation === "eval" ? first : this.stringHintCell(first, node) : null;
                             const direct = atom.operation === "eval" && invocation.direct;
                             const key = result!.id + ":" + atom.operation + ":" + direct + ":" + (source?.id ?? (argv ? "omitted" : "unknown"));
-                            evaluations.set(key, { node, operation: atom.operation, direct, source, unknown: !argv });
+                            evaluations.set(key, { node, operation: atom.operation, direct, source, unknown: !argv && !invocation.sequence });
                             if (noArguments) {this.publish(result!, this.abrupt); continue;}
                             if (atom.operation === "agent-start") {this.publish(result,this.primitive(undefined));continue;}
                             if (source) {

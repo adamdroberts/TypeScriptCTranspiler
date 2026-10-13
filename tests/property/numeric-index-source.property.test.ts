@@ -45,6 +45,10 @@ test("numeric key domains project represented locations and preserve unknown eff
         expect({ source, error: graph.error }).toEqual({ source, error: null });
         expect(graph.directEvalSources.map(entry => entry.source).sort()).toEqual([...partition.values].sort());
     }
+    const saved = finiteEvalScriptSourceGraph([{ path: "main.js", source:
+        'const owner={0:"17;",1:"19;",undefined:"23;",label:"29;"};let index=0;for(let step=0;step<3;step++){var key=index++;if(step===2)key="label";eval(owner[key]);}' }]);
+    expect(saved.error).toBeNull();
+    expect(new Set(saved.directEvalSources.map(entry => entry.source))).toEqual(new Set(["17;","19;","23;","29;"]));
     for (const source of [
         'const a=["17;"];let i=0;opaque(a);eval(a[i++]);',
         'const a={get 0(){return opaque();}};let i=0;eval(a[i++]);',

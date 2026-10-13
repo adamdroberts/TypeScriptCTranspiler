@@ -19,7 +19,6 @@ test('indexed ranges clamp lengths, preserve sparse positions and reject opaque 
   'eval(Array.prototype.join.call({length:opaque()},""));',
   'const a={0:"1",length:2,get 1(){return opaque();}};eval(Array.prototype.join.call(a,""));',
   'eval(Array.prototype.join.call({length:4294967297},","));',
-  'eval(...{0:"17;",length:1});',
   'Array.prototype[Symbol.iterator]=function*(){yield opaque();};eval(...["17;"]);',
   'const a=["17;"];Object.defineProperty(a,Symbol.iterator,{get(){a[0]=opaque();return Array.prototype.values;}});eval(...a);',
   'const a=["17;"];Object.defineProperty(a,"0",{get(){return opaque();}});eval(...a);',
@@ -30,7 +29,7 @@ test('indexed ranges clamp lengths, preserve sparse positions and reject opaque 
   expect({expression,error:graph.error}).toEqual({expression,error:null});
   if(expected)expect(graph.indirectEvalSources.some(entry=>entry.source===expected)).toBe(true);
  }
- for(const source of ['eval(Reflect.apply(eval,null,"17;"));','eval(eval.apply(null,1));']){
+ for(const source of ['eval(...{0:"17;",length:1});','eval(Reflect.apply(eval,null,"17;"));','eval(eval.apply(null,1));']){
   const graph=finiteEvalScriptSourceGraph([{path:'main.js',source}]);expect(graph.error).toBeNull();expect(graph.directEvalSources).toEqual([]);expect(graph.indirectEvalSources).toEqual([]);
  }
 });
