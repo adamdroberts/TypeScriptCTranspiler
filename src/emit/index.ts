@@ -5,6 +5,7 @@ import { bufferStaticResults } from "../buffer-statics";
 import type { SourceEvalPlan, EvalSourceEntry, DirectEvalSourceEntry, IndirectEvalSourceEntry } from "../eval-source";
 import { classPrivateNames, classPrivateNamesInScope, externalPrivateNames, resolveClassPrivateName } from "./private-names";
 import { moduleRequestKey } from "../module-request";
+import { exportedModuleNames, moduleNamespaceBinding, resolveModuleExport, type ModuleExportRecord } from "../module-export-resolution";
 import { definitionEvaluationChildren, moduleHasTopLevelAwait } from "./module-evaluation";
 import {classDefinitionPlan} from './class-definition';
 import ts from "typescript";
@@ -529,6 +530,11 @@ interface ModuleNamespacePlan {
     emitted: boolean;
 }
 
+interface EmitterModuleExportRecord extends ModuleExportRecord<string> {
+    readonly info: ModuleInfo;
+    readonly bindings: ReadonlyMap<string, ts.Node>;
+}
+
 export interface EmitProgramOptions {
     nativeAddons?: NativeAddonManifest;
     dynamicRequires?: DynamicRequireManifest;
@@ -650,6 +656,8 @@ class Emitter {
     /** GetModuleNamespace is represented once per resolved Module Record.
      * Every import and namespace re-export reaches the same lazy singleton. */
     private moduleNamespacePlans = new WeakMap<ts.SourceFile, ModuleNamespacePlan>();
+    private moduleExportRecords = new Map<string, EmitterModuleExportRecord>();
+    private moduleNamespaceDeclarations = new Map<string, ts.NamespaceImport | ts.NamespaceExport>();
     private queuedCallbackAdapterEmitted = false;
     private dispatchTaskAdapters = new Map<string, string>();
     private usesDispatch = false;
@@ -13633,7 +13641,7 @@ class Emitter {
     /** Resolve the actual import/export edge before consulting the checker
      * alias target: JSON defaults and namespaces share a checker SourceFile
      * symbol, but represent different ECMAScript References. */
-    private moduleImportBindingForSymbol(symbol: ts.Symbol | undefined, resolveSet = new Set<string>()): ts.Node | null {
+    private moduleImportBindingForSymbol(symbol: ts.Symbol | undefined): ts.Node | null {
         for (const declaration of symbol?.declarations ?? []) {
             let importDeclaration: ts.ImportDeclaration | ts.JSDocImportTag;
             let exportName = "default";
@@ -13652,7 +13660,7 @@ class Emitter {
             const info = this.resolvedModuleInfoForSpecifier(specifier.text, declaration.getSourceFile().fileName);
             if (!info) continue;
             if (ts.isNamespaceImport(declaration)) return declaration;
-            const target = this.resolveModuleNamespaceExport(info, exportName, resolveSet);
+            const target = this.resolveModuleNamespaceExport(info, exportName);
             if (target === "ambiguous") unsupported(declaration, "ambiguous module import binding");
             return target;
         }
@@ -19087,167 +19095,117 @@ class Emitter {
         return null;
     }
 
-    private moduleNamespaceExportDeclaration(symbol: ts.Symbol): ts.Node | null {
-        let current = symbol;
-        const seen = new Set<ts.Symbol>();
-        while ((current.flags & ts.SymbolFlags.Alias) !== 0 && !seen.has(current)) {
-            seen.add(current);
-            try {
-                current = this.checker.getAliasedSymbol(current);
-            } catch {
-                break;
-            }
-        }
-        const declarations = [
-            current.valueDeclaration,
-            ...(current.declarations ?? []),
-        ].filter((declaration): declaration is ts.Declaration => !!declaration);
-        return declarations.find((declaration) =>
-            ts.isSourceFile(declaration) ||
-            ts.isExportAssignment(declaration) ||
-            ts.isVariableDeclaration(declaration) ||
-            ts.isBindingElement(declaration) ||
-            ts.isFunctionDeclaration(declaration) ||
-            ts.isClassDeclaration(declaration) ||
-            ts.isEnumDeclaration(declaration),
-        ) ?? declarations[0] ?? null;
-    }
-
-    private moduleSymbol(source: ts.SourceFile): ts.Symbol | null {
-        return this.checker.getSymbolAtLocation(source) ??
-            (source as ts.SourceFile & { symbol?: ts.Symbol }).symbol ??
-            null;
-    }
-
-    private moduleExplicitRuntimeExportNames(source: ts.SourceFile): Set<string> {
-        if (this.isJsonSourceFile(source)) return new Set(["default"]);
-        const names = new Set<string>();
-        const hasModifier = (node: ts.Node, kind: ts.SyntaxKind): boolean =>
-            !!(ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined)
-                ?.some((modifier) => modifier.kind === kind);
-        const addBindingName = (name: ts.BindingName): void => {
-            if (ts.isIdentifier(name)) {
-                names.add(name.text);
-                return;
-            }
-            for (const element of name.elements) {
-                if (!ts.isOmittedExpression(element)) addBindingName(element.name);
-            }
-        };
-        for (const statement of source.statements) {
-            if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
-                names.add("default");
-                continue;
-            }
-            if (ts.isExportDeclaration(statement)) {
-                if (statement.isTypeOnly || !statement.exportClause) continue;
-                if (ts.isNamespaceExport(statement.exportClause)) {
-                    names.add(statement.exportClause.name.text);
-                    continue;
-                }
-                for (const element of statement.exportClause.elements) {
-                    if (!element.isTypeOnly) names.add(element.name.text);
-                }
-                continue;
-            }
-            if (!hasModifier(statement, ts.SyntaxKind.ExportKeyword)) continue;
-            if (hasModifier(statement, ts.SyntaxKind.DefaultKeyword)) {
-                names.add("default");
-                continue;
-            }
-            if (ts.isVariableStatement(statement)) {
-                for (const declaration of statement.declarationList.declarations) {
-                    addBindingName(declaration.name);
-                }
-                continue;
-            }
-            if (
-                (ts.isFunctionDeclaration(statement) ||
-                    ts.isClassDeclaration(statement) ||
-                    ts.isEnumDeclaration(statement)) &&
-                statement.name
-            ) {
-                names.add(statement.name.text);
-            }
-        }
-        return names;
-    }
-
-    /** ResolveExport traverses the AOT Module Record graph with a visited
-     * (module, export name) set. Import and named/star re-export edges preserve
-     * namespace References; the checker supplies only local declaration
-     * identity. Namespace resolution equality is the target Module Record. */
-    private resolveModuleNamespaceExport(
-        info: ModuleInfo,
-        exportName: string,
-        resolveSet = new Set<string>(),
-    ): ts.Node | null | "ambiguous" {
+    /** Project syntax into the same normalized record used by host preflight.
+     * Import aliases are edges, and the checker is consulted only for local
+     * storage declarations. Record identity is the AOT Module id. */
+    private moduleExportRecord(info: ModuleInfo): EmitterModuleExportRecord {
+        const existing = this.moduleExportRecords.get(info.moduleId);
+        if (existing) return existing;
+        const localExports = new Map<string, string>();
+        const indirectExports = new Map<string, { moduleRequest: string; importName: string | typeof moduleNamespaceBinding }>();
+        const starExports: string[] = [];
+        const bindings = new Map<string, ts.Node>();
+        const record = { path: info.moduleId, info, localExports, indirectExports, starExports, bindings };
+        this.moduleExportRecords.set(info.moduleId, record);
         if (this.isJsonSourceFile(info.sf)) {
-            return exportName === "default" ? info.sf : null;
+            localExports.set("default", "*default*");
+            bindings.set("*default*", info.sf);
+            return record;
         }
-        const resolutionKey = `${info.moduleId}\0${exportName}`;
-        if (resolveSet.has(resolutionKey)) return null;
-        const nextResolveSet = new Set(resolveSet);
-        nextResolveSet.add(resolutionKey);
-
-        if (this.moduleExplicitRuntimeExportNames(info.sf).has(exportName)) {
-            for (const statement of info.sf.statements) {
-                if (!ts.isExportDeclaration(statement) || statement.isTypeOnly || !statement.exportClause) continue;
-                if (ts.isNamespaceExport(statement.exportClause)) {
-                    if (statement.exportClause.name.text === exportName) return statement.exportClause;
-                    continue;
-                }
-                const element = statement.exportClause.elements.find(element => !element.isTypeOnly && element.name.text === exportName);
-                if (!element) continue;
-                if (statement.moduleSpecifier && ts.isStringLiteralLike(statement.moduleSpecifier)) {
-                    const target = this.resolvedModuleInfoForSpecifier(statement.moduleSpecifier.text, info.sf.fileName);
-                    if (!target) unsupported(statement, "namespace re-export target is outside the AOT module graph");
-                    return this.resolveModuleNamespaceExport(target, (element.propertyName ?? element.name).text, nextResolveSet);
-                }
-                const local = this.checker.getExportSpecifierLocalTargetSymbol(element);
-                return this.moduleImportBindingForSymbol(local, nextResolveSet) ??
-                    (local ? this.moduleNamespaceExportDeclaration(local) : null);
-            }
-            const moduleSymbol = this.moduleSymbol(info.sf);
-            const symbol = moduleSymbol
-                ? this.checker.getExportsOfModule(moduleSymbol)
-                    .find((candidate) => candidate.getName() === exportName)
-                : undefined;
-            return symbol ? this.moduleNamespaceExportDeclaration(symbol) : null;
-        }
-        if (exportName === "default") return null;
-
-        let resolved: ts.Node | null = null;
+        const imports = new Map<string, { moduleRequest: string; importName: string | typeof moduleNamespaceBinding }>();
+        const retainNamespace = (request: string, declaration: ts.NamespaceImport | ts.NamespaceExport): void => {
+            const target = this.resolvedModuleInfoForSpecifier(request, info.sf.fileName);
+            if (target) this.moduleNamespaceDeclarations.set(target.moduleId, declaration);
+        };
+        const hasModifier = (node: ts.Node, kind: ts.SyntaxKind): boolean =>
+            !!(ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined)?.some(modifier => modifier.kind === kind);
         for (const statement of info.sf.statements) {
-            if (
-                !ts.isExportDeclaration(statement) ||
-                statement.isTypeOnly ||
-                statement.exportClause ||
-                !statement.moduleSpecifier ||
-                !ts.isStringLiteralLike(statement.moduleSpecifier)
-            ) {
-                continue;
+            if (!ts.isImportDeclaration(statement) || !ts.isStringLiteralLike(statement.moduleSpecifier)) continue;
+            const clause = statement.importClause;
+            if (!clause || clause.isTypeOnly) continue;
+            const moduleRequest = statement.moduleSpecifier.text;
+            if (clause.name) imports.set(clause.name.text, { moduleRequest, importName: "default" });
+            if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
+                imports.set(clause.namedBindings.name.text, { moduleRequest, importName: moduleNamespaceBinding });
+                retainNamespace(moduleRequest, clause.namedBindings);
+            } else if (clause.namedBindings) {
+                for (const element of clause.namedBindings.elements) {
+                    if (!element.isTypeOnly) imports.set(element.name.text, { moduleRequest, importName: (element.propertyName ?? element.name).text });
+                }
             }
-            const target = this.resolvedModuleInfoForSpecifier(
-                statement.moduleSpecifier.text,
-                info.sf.fileName,
-            );
-            if (!target) unsupported(statement, "namespace star export target is outside the AOT module graph");
-            const candidate = this.resolveModuleNamespaceExport(
-                target,
-                exportName,
-                new Set(nextResolveSet),
-            );
-            if (candidate === "ambiguous") return "ambiguous";
-            if (!candidate) continue;
-            if (resolved && resolved !== candidate) {
-                const previousNamespace = this.moduleNamespaceTargetInfo(resolved);
-                const candidateNamespace = this.moduleNamespaceTargetInfo(candidate);
-                if (!previousNamespace || previousNamespace.sf !== candidateNamespace?.sf) return "ambiguous";
-            }
-            resolved = candidate;
         }
-        return resolved;
+        const exportLocal = (exportName: string, localName: string): void => {
+            const imported = imports.get(localName);
+            if (imported) indirectExports.set(exportName, imported);
+            else localExports.set(exportName, localName);
+        };
+        for (const statement of info.sf.statements) {
+            if (this.isAmbientDeclaration(statement)) continue;
+            if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
+                localExports.set("default", "*default*");
+                bindings.set("*default*", statement);
+            } else if (ts.isExportDeclaration(statement) && !statement.isTypeOnly) {
+                const request = statement.moduleSpecifier && ts.isStringLiteralLike(statement.moduleSpecifier) ? statement.moduleSpecifier.text : null;
+                if (!statement.exportClause) {
+                    if (request !== null) starExports.push(request);
+                } else if (ts.isNamespaceExport(statement.exportClause)) {
+                    if (request !== null) {
+                        indirectExports.set(statement.exportClause.name.text, { moduleRequest: request, importName: moduleNamespaceBinding });
+                        retainNamespace(request, statement.exportClause);
+                    }
+                } else {
+                    for (const element of statement.exportClause.elements) {
+                        if (element.isTypeOnly) continue;
+                        const localName = (element.propertyName ?? element.name).text;
+                        if (request !== null) indirectExports.set(element.name.text, { moduleRequest: request, importName: localName });
+                        else {
+                            exportLocal(element.name.text, localName);
+                            const symbol = this.checker.getExportSpecifierLocalTargetSymbol(element);
+                            const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+                            if (!imports.has(localName) && declaration) bindings.set(localName, declaration);
+                        }
+                    }
+                }
+            } else if (ts.isVariableStatement(statement)) {
+                const pending: (ts.VariableDeclaration | ts.BindingElement)[] = [...statement.declarationList.declarations];
+                while (pending.length) {
+                    const declaration = pending.pop()!;
+                    if (ts.isIdentifier(declaration.name)) {
+                        bindings.set(declaration.name.text, declaration);
+                        if (hasModifier(statement, ts.SyntaxKind.ExportKeyword)) exportLocal(declaration.name.text, declaration.name.text);
+                    } else {
+                        for (const element of declaration.name.elements) if (!ts.isOmittedExpression(element)) pending.push(element);
+                    }
+                }
+            } else if (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isEnumDeclaration(statement)) {
+                if (statement.name) bindings.set(statement.name.text, statement);
+                if (hasModifier(statement, ts.SyntaxKind.ExportKeyword)) {
+                    if (hasModifier(statement, ts.SyntaxKind.DefaultKeyword)) {
+                        const name = statement.name?.text ?? "*default*";
+                        localExports.set("default", name);
+                        bindings.set(name, statement);
+                    } else if (statement.name) exportLocal(statement.name.text, statement.name.text);
+                }
+            }
+        }
+        return record;
+    }
+
+    private importedModuleExportRecord(record: EmitterModuleExportRecord, request: string): EmitterModuleExportRecord | null {
+        const target = this.resolvedModuleInfoForSpecifier(request, record.info.sf.fileName);
+        if (!target) unsupported(record.info.sf, "Module export target is outside the AOT module graph");
+        return this.moduleExportRecord(target);
+    }
+
+    private resolveModuleNamespaceExport(info: ModuleInfo, exportName: string): ts.Node | null | "ambiguous" {
+        const resolved = resolveModuleExport<string, EmitterModuleExportRecord>(this.moduleExportRecord(info), exportName,
+            (record, request) => this.importedModuleExportRecord(record, request));
+        if (!resolved || resolved === "ambiguous") return resolved;
+        const declaration = resolved.bindingName === moduleNamespaceBinding
+            ? this.moduleNamespaceDeclarations.get(resolved.modulePath)
+            : this.moduleExportRecords.get(resolved.modulePath)?.bindings.get(resolved.bindingName);
+        if (!declaration) unsupported(info.sf, "Module binding requires a canonical retained cell");
+        return declaration;
     }
 
     private moduleNamespaceExportRead(declaration: ts.Node): EmitResult {
@@ -19299,13 +19257,8 @@ class Emitter {
         plan.emitted = true;
         const moduleInfo = this.graph.modules.get(plan.moduleId);
         if (!moduleInfo) unsupported(plan.source, "module namespace source is outside the AOT module graph");
-        const exportNames = this.isJsonSourceFile(plan.source)
-            ? ["default"]
-            : (() => {
-                const moduleSymbol = this.moduleSymbol(plan.source);
-                if (!moduleSymbol) unsupported(plan.source, "could not resolve Module Record exports for namespace creation");
-                return this.checker.getExportsOfModule(moduleSymbol).map((symbol) => symbol.getName());
-            })();
+        const exportNames = exportedModuleNames<string, EmitterModuleExportRecord>(this.moduleExportRecord(moduleInfo),
+            (record, request) => this.importedModuleExportRecord(record, request));
         const exported = exportNames
             .map((name) => {
                 const declaration = this.resolveModuleNamespaceExport(moduleInfo, name);

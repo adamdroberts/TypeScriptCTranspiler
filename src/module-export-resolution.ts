@@ -9,6 +9,28 @@ export interface ModuleExportRecord<Request> {
 }
 export type ModuleExportResolution = {readonly modulePath:string;readonly bindingName:string|typeof moduleNamespaceBinding}|"ambiguous"|null;
 
+/** GetExportedNames visits each Module Record once. Default exports are only
+ * included for the root; namespace and indirect names remain explicit. */
+export function exportedModuleNames<Request, Module extends ModuleExportRecord<Request>>(
+    record: Module,
+    getImportedModule: (record:Module, request:Request)=>Module|null,
+): string[] {
+    const worklist=[record],visited=new Set<string>(),names=new Set<string>();
+    while(worklist.length){
+        const current=worklist.pop()!;
+        if(visited.has(current.path))continue;
+        visited.add(current.path);
+        for(const name of [...current.localExports.keys(),...current.indirectExports.keys()]){
+            if(name!=="default"||current===record)names.add(name);
+        }
+        for(const request of current.starExports){
+            const imported=getImportedModule(current,request);
+            if(imported)worklist.push(imported);
+        }
+    }
+    return [...names];
+}
+
 /** One continuation-frame worklist implements local/indirect/star export
  * lookup and binding-identity ambiguity without native-stack depth limits. */
 export function resolveModuleExport<Request, Module extends ModuleExportRecord<Request>>(

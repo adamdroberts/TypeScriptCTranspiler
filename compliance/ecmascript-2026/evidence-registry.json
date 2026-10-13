@@ -1611,7 +1611,7 @@
         "sec-module-namespace-exotic-objects-ownpropertykeys#sorted-exports-then-tostringtag",
         "sec-modulenamespacecreate#canonical-export-plan-and-singleton",
         "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
-        "sec-smr-resolveexport#source-text-module-export-graph",
+        "sec-smr-resolveexport#synthetic-module-export-bindings",
         "sec-getmodulenamespace#module-record-namespace-singleton",
         "sec-module-namespace-objects#observable-module-namespace-contract"
       ]
@@ -1634,9 +1634,11 @@
         "sec-module-namespace-exotic-objects-ownpropertykeys#sorted-exports-then-tostringtag",
         "sec-modulenamespacecreate#canonical-export-plan-and-singleton",
         "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
-        "sec-smr-resolveexport#source-text-module-export-graph",
+        "sec-smr-resolveexport#synthetic-module-export-bindings",
         "sec-getmodulenamespace#module-record-namespace-singleton",
-        "sec-module-namespace-objects#observable-module-namespace-contract"
+        "sec-module-namespace-objects#observable-module-namespace-contract",
+        "sec-smr-getexportednames#visited-module-record-name-collection",
+        "sec-getexportednames#visited-module-record-name-collection"
       ],
       "stressReview": {
         "dimension": "resolved Module Record export-list width",
@@ -1719,7 +1721,9 @@
       "id": "src/emit/index.ts#resolveModuleNamespaceExport",
       "targets": [
         "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
-        "sec-smr-resolveexport#source-text-module-export-graph"
+        "sec-smr-resolveexport#synthetic-module-export-bindings",
+        "sec-getexportednames#visited-module-record-name-collection",
+        "sec-smr-getexportednames#visited-module-record-name-collection"
       ]
     },
     {
@@ -3071,7 +3075,9 @@
       "id": "tests/property/module-namespace-marker.property.test.ts",
       "targets": [
         "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
-        "sec-smr-resolveexport#source-text-module-export-graph"
+        "sec-smr-resolveexport#synthetic-module-export-bindings",
+        "sec-getexportednames#visited-module-record-name-collection",
+        "sec-smr-getexportednames#visited-module-record-name-collection"
       ]
     },
     {
@@ -3079,7 +3085,7 @@
       "id": "tests/property/module-linking.property.test.ts",
       "targets": [
         "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
-        "sec-smr-resolveexport#source-text-module-export-graph"
+        "sec-smr-resolveexport#synthetic-module-export-bindings"
       ]
     },
     {
@@ -3087,7 +3093,9 @@
       "id": "module_namespace_binding_name",
       "targets": [
         "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
-        "sec-smr-resolveexport#source-text-module-export-graph"
+        "sec-smr-resolveexport#synthetic-module-export-bindings",
+        "sec-getexportednames#visited-module-record-name-collection",
+        "sec-smr-getexportednames#visited-module-record-name-collection"
       ]
     },
     {
@@ -3095,7 +3103,7 @@
       "id": "src/module-export-resolution.ts#moduleNamespaceBinding",
       "targets": [
         "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
-        "sec-smr-resolveexport#source-text-module-export-graph"
+        "sec-smr-resolveexport#synthetic-module-export-bindings"
       ]
     },
     {
@@ -3103,7 +3111,7 @@
       "id": "src/module-export-resolution.ts#ModuleExportRecord",
       "targets": [
         "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
-        "sec-smr-resolveexport#source-text-module-export-graph"
+        "sec-smr-resolveexport#synthetic-module-export-bindings"
       ]
     },
     {
@@ -3111,7 +3119,7 @@
       "id": "src/module-export-resolution.ts#resolveModuleExport",
       "targets": [
         "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
-        "sec-smr-resolveexport#source-text-module-export-graph"
+        "sec-smr-resolveexport#synthetic-module-export-bindings"
       ]
     },
     {
@@ -3119,7 +3127,53 @@
       "id": "src/module-export-resolution.ts#ModuleExportResolution",
       "targets": [
         "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
-        "sec-smr-resolveexport#source-text-module-export-graph"
+        "sec-smr-resolveexport#synthetic-module-export-bindings"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#moduleExportRecord",
+      "targets": [
+        "sec-smr-resolveexport#synthetic-module-export-bindings",
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-getexportednames#visited-module-record-name-collection",
+        "sec-smr-getexportednames#visited-module-record-name-collection"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#importedModuleExportRecord",
+      "targets": [
+        "sec-smr-resolveexport#synthetic-module-export-bindings",
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-getexportednames#visited-module-record-name-collection",
+        "sec-smr-getexportednames#visited-module-record-name-collection"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/module-export-resolution.ts#exportedModuleNames",
+      "targets": [
+        "sec-smr-resolveexport#synthetic-module-export-bindings",
+        "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
+        "sec-getexportednames#visited-module-record-name-collection",
+        "sec-smr-getexportednames#visited-module-record-name-collection"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/json-module.property.test.ts",
+      "targets": [
+        "sec-smr-getexportednames#visited-module-record-name-collection",
+        "sec-smr-resolveexport#synthetic-module-export-bindings"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/json-module-environment.property.test.ts",
+      "targets": [
+        "sec-smr-getexportednames#visited-module-record-name-collection",
+        "sec-smr-resolveexport#synthetic-module-export-bindings"
       ]
     }
   ]

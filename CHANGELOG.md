@@ -1,3 +1,5 @@
+Emitter namespace resolution and export-name enumeration now share canonical Module records and iterative worklists with host preflight. Independent Node/native name-set and identity partitions plus one deep re-export graph pass in both memory modes; complete host eligibility and exhaustive target evidence remain open.
+
 Fixed Module preflight collisions between the source name namespace and internal namespace-object bindings. Export resolution now uses an explicit frame worklist, with independent Node/native identity and resolution-phase properties plus a deep preflight graph; full host eligibility and exhaustive target coverage remain open.
 
 Added primitive brand/payload source owners and shared boxed JSON coercions, with actual construction targets, owned function prototypes and derived return projections. Independent Node/native properties and one deep boxed-leaf owner stress cover both memory modes; exotic source precision and exhaustive target evidence remain open.
