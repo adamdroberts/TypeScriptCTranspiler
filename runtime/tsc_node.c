@@ -8026,18 +8026,11 @@ void tsc_console_error_n(size_t n, ...) {
     va_end(ap);
 }
 
-tsc_str_t* tsc_util_format_n(size_t n, ...) {
-    if (n == 0) {
-        return tsc_str_from_lit("", 0);
-    }
-
-    tsc_value_t* args = (tsc_value_t*)calloc(n, sizeof(tsc_value_t));
-    va_list ap;
-    va_start(ap, n);
-    for (size_t i = 0; i < n; i++) {
-        args[i] = va_arg(ap, tsc_value_t);
-    }
-    va_end(ap);
+tsc_str_t* tsc_util_format_values(tsc_array_t* arguments) {
+    tsc_array_t* volatile actuals = arguments;
+    size_t n = actuals ? actuals->len : 0;
+    if (n == 0) return tsc_str_from_lit("", 0);
+    tsc_value_t* args = (tsc_value_t*)actuals->data;
 
     tsc_jsonbuf_t b;
     tsc_jsonbuf_init(&b);
@@ -8115,7 +8108,6 @@ tsc_str_t* tsc_util_format_n(size_t n, ...) {
         tsc_jsonbuf_append(&b, s->data, s->len);
     }
 
-    free(args);
     return tsc_jsonbuf_finish(&b);
 }
 

@@ -652,6 +652,8 @@ typedef struct tsc_text_decoder {
 
 tsc_value_t tsc_text_encoder_constructor_value(void);
 tsc_value_t tsc_text_decoder_constructor_value(void);
+tsc_value_t tsc_util_module_value(bool namespace_object);
+tsc_value_t tsc_util_export_value(tsc_str_t* name);
 tsc_value_t tsc_text_encoder_prototype_value(void);
 tsc_value_t tsc_text_decoder_prototype_value(void);
 tsc_text_encoder_t* tsc_text_encoder_new(void);
@@ -1729,7 +1731,7 @@ tsc_value_t tsc_eval_intrinsic_value(void);
 tsc_value_t tsc_test262_direct_eval_call(tsc_value_t callee, tsc_value_t receiver, tsc_value_t args, bool strict_caller);
 void tsc_test262_write_normal(const char* scenario_id, bool async_test);
 void tsc_test262_write_throw(const char* scenario_id, const char* origin, tsc_value_t error);
-tsc_str_t* tsc_util_format_n(size_t n, ...);
+tsc_str_t* tsc_util_format_values(tsc_array_t* arguments);
 bool tsc_instanceof(const char* type_chain, const char* class_name);
 
 /* ------------- process ------------- */

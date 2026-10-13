@@ -11,7 +11,7 @@ import {classDefinitionPlan} from './class-definition';
 import ts from "typescript";
 import { ecmaDirectivePrologueHasUseStrict, ecmaParseGoal } from "../ecmascript-source";
 import { sourceUnitFormat } from "../program";
-import { runtimeGlobalBindings } from "../global-bindings";
+import { runtimeGlobalBindings, runtimeUtilExports } from "../global-bindings";
 import { canonicalParameterBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding } from "../source-bindings";
 import { timersPromiseOperations, callbackTimerOperations } from "../timers-promises-operations";
 import { directLexicalDeclarations, lexicalDeclarationsFromList, type ScopeLexicalDeclaration, type NamedScopeLexicalDeclaration } from "./lexical-declarations";
@@ -19752,12 +19752,6 @@ class Emitter {
             this.isDefaultImportFrom(id, ["os", "node:os"]);
     }
 
-    private isUtilModuleIdentifier(id: ts.Identifier): boolean {
-        return id.text === "util" ||
-            this.isNamespaceImportFrom(id, ["util", "node:util"]) ||
-            this.isDefaultImportFrom(id, ["util", "node:util"]);
-    }
-
     private isQueryStringModuleIdentifier(id: ts.Identifier): boolean {
         return id.text === "querystring" ||
             this.isNamespaceImportFrom(id, ["querystring", "node:querystring"]) ||
@@ -19922,21 +19916,6 @@ class Emitter {
     private isFsFileHandleExpression(expr: ts.Expression): boolean {
         const type = this.checker.getTypeAtLocation(expr);
         return type.getSymbol()?.getName() === "FSFileHandle" || type.aliasSymbol?.getName() === "FSFileHandle";
-    }
-
-    private isUtilTypesReceiver(expr: ts.Expression): boolean {
-        if (ts.isIdentifier(expr) && this.isNamedImportFrom(expr, ["util", "node:util"], "types")) {
-            return true;
-        }
-        if (
-            ts.isPropertyAccessExpression(expr) &&
-            expr.name.text === "types" &&
-            ts.isIdentifier(expr.expression) &&
-            this.isUtilModuleIdentifier(expr.expression)
-        ) {
-            return true;
-        }
-        return false;
     }
 
     private symbolForBindingName(name: ts.BindingName): ts.Symbol | undefined {
@@ -34460,6 +34439,7 @@ class Emitter {
             return null;
         }
         const modules = [
+            { names: ["util", "node:util"], value: "tsc_util_module_value", export: "tsc_util_export_value", members: runtimeUtilExports },
             { names: ["timers", "node:timers"], value: "tsc_callback_timers_module_value", export: "tsc_callback_timers_export_value", members: callbackTimerOperations },
             { names: ["timers/promises", "node:timers/promises"], value: "tsc_timers_promises_module_value", export: "tsc_timers_promises_export_value", members: new Set([...timersPromiseOperations.keys()].map(name => name.split(".")[0]!)) },
             { names: ["url", "node:url"], value: "tsc_url_module_value", export: "tsc_url_module_export_value", members: new Set(["URL", "URLSearchParams", "fileURLToPath", "pathToFileURL"]) },
@@ -35277,11 +35257,6 @@ class Emitter {
             .find((exported) => this.isNamedImportFrom(calleeId, ["path/win32", "node:path/win32"], exported));
         if (pathWin32Named) {
             return this.emitPathCall(call, pathWin32Named, true);
-        }
-        const utilNamed = ["format"]
-            .find((exported) => this.isNamedImportFrom(calleeId, ["util", "node:util"], exported));
-        if (utilNamed) {
-            return this.emitUtilCall(call, utilNamed);
         }
         const dnsNamed = ["lookup", "resolve", "resolve4", "resolve6", "reverse", "resolveCname", "resolveAny", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["dns", "node:dns"], exported));
@@ -37241,10 +37216,6 @@ class Emitter {
             return this.emitFsPromisesCall(call, memberName);
         }
 
-        if (this.isUtilTypesReceiver(recvExpr)) {
-            return this.emitUtilTypesCall(call, memberName);
-        }
-
         if (ts.isIdentifier(recvExpr) && this.isFsModuleIdentifier(recvExpr)) {
             return this.emitFsCall(call, memberName);
         }
@@ -37331,10 +37302,6 @@ class Emitter {
 
         if (ts.isIdentifier(recvExpr) && this.isOsModuleIdentifier(recvExpr)) {
             return this.emitOsCall(call, memberName);
-        }
-
-        if (ts.isIdentifier(recvExpr) && this.isUtilModuleIdentifier(recvExpr)) {
-            return this.emitUtilCall(call, memberName);
         }
 
         if (ts.isIdentifier(recvExpr) && this.isQueryStringModuleIdentifier(recvExpr)) {
@@ -44497,69 +44464,6 @@ class Emitter {
             }
         }
         return result;
-    }
-
-    private emitUtilCall(call: ts.CallExpression, name: string): EmitResult {
-        const args = call.arguments;
-        switch (name) {
-            case "format": {
-                const specs = Array.from(args, (a) => {
-                    const r = this.emitExpr(a);
-                    return { value: r, target: T_VALUE, node: a };
-                });
-                return this.emitSequencedCall("tsc_util_format_n", T_STRING, specs, [args.length.toString()]);
-            }
-        }
-        unsupported(call, `util.${name}`);
-    }
-
-    private emitUtilTypesCall(call: ts.CallExpression, name: string): EmitResult {
-        const args = call.arguments;
-        if (args.length < 1) unsupported(call, `util.types.${name} expects 1 argument`);
-        const argNode = args[0]!;
-        const argVal = this.emitExpr(argNode);
-
-        let fnName = "";
-        switch (name) {
-            case "isDate":
-                fnName = "tsc_util_types_is_date";
-                break;
-            case "isRegExp":
-                fnName = "tsc_util_types_is_regexp";
-                break;
-            case "isNativeError":
-                fnName = "tsc_util_types_is_native_error";
-                break;
-            case "isPromise":
-                fnName = "tsc_util_types_is_promise";
-                break;
-            case "isMap":
-                fnName = "tsc_util_types_is_map";
-                break;
-            case "isSet":
-                fnName = "tsc_util_types_is_set";
-                break;
-            case "isTypedArray":
-                fnName = "tsc_util_types_is_typed_array";
-                break;
-            case "isAnyArrayBuffer":
-                fnName = "tsc_util_types_is_any_array_buffer";
-                break;
-            case "isArrayBufferView":
-                fnName = "tsc_util_types_is_array_buffer_view";
-                break;
-            default:
-                unsupported(call, `util.types.${name}`);
-        }
-
-        return this.emitSequencedExpr(
-            T_BOOLEAN,
-            [
-                { value: argVal, target: T_VALUE, node: argNode },
-                ...this.ignoredArgumentSpecs(args, 1),
-            ],
-            ([valC]) => `${fnName}(${valC})`
-        );
     }
 
     private objectProperties(tsType: ts.Type): ts.Symbol[] {

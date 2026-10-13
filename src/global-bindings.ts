@@ -2,6 +2,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import {resolvePackageRoot} from "./program";
 
+/** Host import publication uses the same collection as the native module. */
+export const runtimeUtilExports: ReadonlySet<string> = new Set(
+    [...fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_util_exports.def"), "utf8")
+        .matchAll(/^TSC_UTIL_EXPORT\((\w+), \w+\)$/gm)].map(match => match[1]!),
+);
+if (!runtimeUtilExports.size) throw new Error("missing native util export collection");
+
 /** Names/attributes are projected from the native Realm initializer's table.
  * Ambient declarations describe types, not the current value of a binding. */
 export interface RuntimeGlobalBinding {
