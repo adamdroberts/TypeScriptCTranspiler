@@ -236,6 +236,9 @@ class SourceValueFlow {
     private readonly unknownString: Atom = {tag:"unknown-string"};
     private readonly opaqueMutation = this.newCell();
     private readonly opaqueEffects = new Map<ts.Node, Atom>();
+    private readonly originCells = new WeakMap<ts.Node, Cell>();
+    private readonly unconstrainedOrigins = this.newCell();
+    private readonly scriptOrder = new Map<ts.SourceFile, number>();
     private readonly dynamicContexts = new WeakMap<ts.Node, boolean>();
     private readonly sourceFiles = new WeakMap<ts.Node, ts.SourceFile>();
     private readonly sourceStarts = new WeakMap<ts.Node, number>();
@@ -260,6 +263,10 @@ class SourceValueFlow {
     private readonly invalidEvaluations = new Set<string>();
     constructor(program: ts.Program, entries: SourceValueGraphEntries, private readonly domain?:string, sources?:ReadonlySet<ts.SourceFile>) {
         this.checker = program.getTypeChecker();
+        for (const [index,filename] of (entries.roots??[]).entries()) {
+            const file=program.getSourceFile(sourceUnitFileName(program,path.resolve(filename),"script"));
+            if(file&&ecmaParseGoal(file)==="script")this.scriptOrder.set(file,index);
+        }
         for (const entry of entries.evaluations ?? []) {
             if (entry.entry === null) {
                 this.invalidEvaluations.add(entry.source);
@@ -491,11 +498,28 @@ class SourceValueFlow {
         this.primitiveChanges.add(into);
         for (const user of into.users) this.schedule(user);
     }
+    /** Activation origins use the same monotone Cell graph as values. A
+     * recursive call shares its caller's origins rather than growing a path. */
+    private executionOrigins(context?:ts.Node):Cell {
+        if(context){
+            const activation=this.enclosingActivation(context);
+            if(activation)return activation.active;
+            if(!this.dynamicContext(context)){
+                let cell=this.originCells.get(context);
+                if(!cell){
+                    cell=this.newCell();this.originCells.set(context,cell);
+                    let effect=this.opaqueEffects.get(context);
+                    if(!effect){effect={tag:"unknown",origin:context};this.opaqueEffects.set(context,effect);}
+                    this.publish(cell,effect);
+                }
+                return cell;
+            }
+        }
+        this.publish(this.unconstrainedOrigins,this.unknown);
+        return this.unconstrainedOrigins;
+    }
     private opaqueEffect(context?: ts.Node): void {
-        if (!context || this.dynamicContext(context)) {this.publish(this.opaqueMutation, this.unknown); return;}
-        let effect = this.opaqueEffects.get(context);
-        if (!effect) {effect = {tag: "unknown", origin: context}; this.opaqueEffects.set(context, effect);}
-        this.publish(this.opaqueMutation, effect);
+        this.copy(this.executionOrigins(context),this.opaqueMutation);
     }
     private dynamicContext(node: ts.Node): boolean {
         const pending: ts.Node[] = [];
@@ -518,10 +542,13 @@ class SourceValueFlow {
     private effectVisible(atom: Atom, context?: ts.Node, argumentsRead = false): boolean {
         if (atom.tag !== "unknown" || !atom.origin || !context) return true;
         const effect = atom.origin;
-        if (this.sourceFile(effect) !== this.sourceFile(context)) return true;
         // Source order proves capture only in an acyclic top-level activation.
         // A later spelling in a function or loop may run before this read.
         if (this.dynamicContext(effect) || this.dynamicContext(context)) return true;
+        if (this.sourceFile(effect) !== this.sourceFile(context)) {
+            const before=this.scriptOrder.get(this.sourceFile(context)),after=this.scriptOrder.get(this.sourceFile(effect));
+            return before===undefined||after===undefined||after<=before;
+        }
         let start = this.sourceStarts.get(effect);
         if (start === undefined) {start = effect.getStart(this.sourceFile(effect)); this.sourceStarts.set(effect,start);}
         if (context.getEnd() <= start) return false;
@@ -769,14 +796,14 @@ class SourceValueFlow {
                             const inherited=this.ordinaryOwner(prototype);
                             if(inherited)pending.push(inherited);
                             else if(prototype===this.primitive(null))store=true;
-                            else if(prototype.tag!=="pending-source"){this.publish(owner.shape,this.unknown);if(handler)this.publish(handler,this.unknown);store=true;}
+                            else if(prototype.tag!=="pending-source"){this.copy(this.executionOrigins(context),owner.shape);if(handler)this.publish(handler,this.unknown);store=true;}
                         }
                     }
                 }
                 if(!store)continue;
                 const destinations=mode==="set"?[...receiver.values].map(value=>this.ordinaryOwner(value)).filter((value):value is ObjectOwner=>!!value):[owner];
                 for(const owner of destinations){
-                if(key===null){this.publish(owner.shape,this.unknown);for(const field of owner.fields.values())this.publish(field,this.unknown);}
+                if(key===null){const origins=this.executionOrigins(context);this.copy(origins,owner.shape);for(const field of owner.fields.values())this.copy(origins,field);}
                 else {
                     const presence=this.presence(owner,key);
                     if(mode==="delete")this.publish(presence,this.primitive(false));
@@ -795,10 +822,10 @@ class SourceValueFlow {
                 }
             }
             if(atom.tag==="global"){
-                if(key===null)this.publish(this.globalMutation,this.unknown);
+                if(key===null)this.copy(this.executionOrigins(context),this.globalMutation);
                 else if (typeof key === "string" && !this.immutableGlobalBinding(key)) this.copy(value,this.globalBinding(key));
             }
-            if(unknownGlobal&&(atom.tag==="unknown"||atom.tag==="opaque-object")){this.publish(this.globalMutation,this.unknown);if(handler)this.publish(handler,this.unknown);}
+            if(unknownGlobal&&(atom.tag==="unknown"||atom.tag==="opaque-object")){this.copy(this.executionOrigins(context),this.globalMutation);if(handler)this.publish(handler,this.unknown);}
         }});
     }
     /** One hint-driven ToPrimitive worklist uses the keyed property and call
@@ -1629,12 +1656,14 @@ class SourceValueFlow {
         else if (node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword || node.kind === ts.SyntaxKind.NullKeyword)
             this.publish(result, this.primitive(node.kind === ts.SyntaxKind.NullKeyword ? null : node.kind === ts.SyntaxKind.TrueKeyword));
         else if (ts.isIdentifier(node)) {
-            this.copy(this.binding(node), result);
+            const ambient=this.isAmbientIdentifier(node);
+            if(ambient)this.copyRead(this.binding(node),result,node);
+            else this.copy(this.binding(node),result);
             if (this.bindingMayBeUninitialized(node)) this.publish(result,this.primitive(undefined));
             for (const base of this.withBindingObjects(node)) this.copy(this.property(base, node.text, node), result);
-            if (this.isAmbientIdentifier(node)) {
+            if (ambient) {
                 if (node.text === "globalThis") this.publish(result, this.global);
-                this.copy(this.globalBinding(node.text),result);
+                this.copyRead(this.globalBinding(node.text),result,node);
                 if (node.text !== "globalThis") {
                     this.publish(this.globalReceiver,this.global);
                     const owner=this.ordinaryOwner(this.global)!;
@@ -1836,8 +1865,8 @@ class SourceValueFlow {
                         // share one signature, independent of origin count.
                         if (!handled(this.unknown,signature)) this.onActive(node,()=>{
                             this.opaqueEffect(node);
-                            this.writeProperty(invocation.receiver,null,this.empty,false);
-                            for(const argument of invocation.args ?? [])this.writeProperty(argument,null,this.empty,false);
+                            this.writeProperty(invocation.receiver,null,this.empty,false,"set",node);
+                            for(const argument of invocation.args ?? [])this.writeProperty(argument,null,this.empty,false,"set",node);
                         });
                         continue;
                     }
@@ -1968,7 +1997,7 @@ class SourceValueFlow {
                             this.publish(result!,this.abrupt);
                             continue;
                         }
-                        this.onActive(node,()=>this.publish(atom.owner.active,this.primitive(true)));
+                        this.onActive(node,()=>this.copy(this.executionOrigins(node),atom.owner.active));
                         if (invocation.construct) {
                             const instance = this.owner(node);
                             instance.prototype ??= this.newCell();
