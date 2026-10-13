@@ -1,4 +1,6 @@
 import ts from "typescript";
+import {buildModuleGraph,moduleLoadFailures} from "./resolve";
+import {retainModuleParseFailure,inertModuleSource} from "./module-source-record";
 import * as path from "node:path";
 import * as url from "node:url";
 import { createHash } from "node:crypto";
@@ -24,6 +26,7 @@ import {
 export interface BuildProgramOpts {
     entry: string;
     packageRoot: string;
+    retainModuleFailures?: boolean;
     /** Additional independent source records compiled in the same program. */
     additionalRoots?: readonly string[];
     /** Source records that must be parsed/bound with the ECMAScript Module goal. */
@@ -195,7 +198,7 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
             sourceFile &&
             !sourceFile.isDeclarationFile &&
             /\.[cm]?[jt]sx?$/i.test(sourceFile.fileName) &&
-            (/\.[cm]?jsx?$/i.test(sourceFile.fileName) || ecmaImportAttributesParserShadow(sourceFile.text) !== sourceFile.text)
+            (opts.retainModuleFailures || /\.[cm]?jsx?$/i.test(sourceFile.fileName) || ecmaImportAttributesParserShadow(sourceFile.text) !== sourceFile.text)
         ) {
             const original = sourceFile;
             sourceFile = createEcmaSourceFile(
@@ -234,10 +237,14 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
                 end: 0,
             };
         }
+        if(sourceFile&&opts.retainModuleFailures&&!sourceFile.isDeclarationFile){
+            const original=sourceFile;sourceFile=retainModuleParseFailure(sourceFile);
+            const format=sourceUnitFormats.get(original);if(format)sourceUnitFormats.set(sourceFile,format);
+        }
         return sourceFile;
     };
 
-    const program = ts.createProgram({
+    let program = ts.createProgram({
         rootNames,
         options: compilerOptions,
         host: compilerHost,
@@ -245,6 +252,21 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
     programSourceUnits.set(program, units);
     programUnitFiles.set(program, materializedUnits);
 
+    if(opts.retainModuleFailures){
+        const graph=buildModuleGraph(program,libCoreDts,opts.entry,{dynamicRequires:opts.dynamicRequires,initializationEntries:opts.initializationEntries,staticRequestsOnly:true});
+        const inertSources=new Map<string,ts.SourceFile>();
+        for(const id of moduleLoadFailures(graph).keys()){
+            const info=graph.modules.get(id)!,inert=inertModuleSource(info.sf);
+            const format=sourceUnitFormats.get(info.sf);if(format)sourceUnitFormats.set(inert,format);
+            inertSources.set(path.resolve(info.fileName),inert);
+        }
+        if(inertSources.size){
+            const getSourceFile=compilerHost.getSourceFile.bind(compilerHost);
+            compilerHost.getSourceFile=(fileName,...args)=>inertSources.get(path.resolve(fileName))??getSourceFile(fileName,...args);
+            program=ts.createProgram({rootNames,options:compilerOptions,host:compilerHost});
+            programSourceUnits.set(program,units);programUnitFiles.set(program,materializedUnits);
+        }
+    }
     const checker = program.getTypeChecker();
     const entrySourceFile = program.getSourceFile(opts.entry);
     if (!entrySourceFile) {

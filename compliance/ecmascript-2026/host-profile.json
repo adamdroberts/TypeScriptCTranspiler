@@ -87,6 +87,7 @@
     "src/link/cc.ts",
     "src/module-request.ts",
     "src/module-export-resolution.ts",
+    "src/module-source-record.ts",
     "src/module-static-semantics.ts",
     "src/module-specifiers.ts",
     "src/native-addons.ts",

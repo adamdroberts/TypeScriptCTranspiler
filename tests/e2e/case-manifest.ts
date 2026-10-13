@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { generateE2eCaseSource, parseGeneratedCaseSpec } from "./generated-cases";
+import { generateE2eCaseSource, generateE2eCaseFiles, parseGeneratedCaseSpec } from "./generated-cases";
 import {
     projectRoot,
     requireTrackedRegularProjectFile,
@@ -15,6 +15,7 @@ export interface E2eCaseManifestEntry {
     name: string;
     entry: string;
     generatedSource?: string;
+    generatedFiles?: Readonly<Record<string,string>>;
     generatedSourceKind?: "typescript" | "javascript";
     generator?: string;
     generatorParameters?: Readonly<Record<string, number>>;
@@ -107,6 +108,12 @@ export async function discoverE2eCaseManifest(
         const generatedSource = generatedRaw === undefined
             ? undefined
             : generateE2eCaseSource(generatedRaw, generatedCasePath);
+        const generatedFiles=generatedRaw===undefined?undefined:generateE2eCaseFiles(generatedRaw,generatedCasePath);
+        for(const [file,source]of Object.entries(generatedFiles??{})){
+            if(path.basename(file)!==file||file==='.'||file==='..')throw new Error(`unsafe generated resource ${file}`);
+            inputs.push({path:`generated/${file}`,sha256:sha256Text(source)});
+        }
+        inputs.sort((a,b)=>a.path.localeCompare(b.path));
         const generatedSourceKind = generatedSpec === undefined
             ? undefined
             : generatedSpec.generator === "arrow-formal-binding-tree-depth"
@@ -146,6 +153,7 @@ export async function discoverE2eCaseManifest(
             name,
             entry,
             generatedSource,
+            generatedFiles,
             generatedSourceKind,
             generator,
             generatorParameters,

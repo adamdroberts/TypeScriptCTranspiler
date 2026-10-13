@@ -1,0 +1,1 @@
+const state:any=globalThis;state.loadFailureEffect=false;async function main():Promise<void>{try{await import('./parent.mjs');console.log('missing')}catch(error){console.log('deferred:',error instanceof SyntaxError,!state.loadFailureEffect)}console.log('healthy:',(await import('./side.mjs')).value,state.loadFailureEffect)}main();

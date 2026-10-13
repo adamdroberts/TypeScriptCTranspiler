@@ -15,6 +15,7 @@ interface Case {
     name: string;
     entry: string;
     generatedSource?: string;
+    generatedFiles?: Readonly<Record<string,string>>;
     generatedSourceKind?: "typescript" | "javascript";
     expected?: string;
     expectedStderrContains?: string;
@@ -97,6 +98,7 @@ async function discoverCases(): Promise<Case[]> {
                 name: d,
                 entry,
                 generatedSource: manifest.generatedSource,
+                generatedFiles: manifest.generatedFiles,
                 generatedSourceKind: manifest.generatedSourceKind,
                 expectedExitCode: manifest.expectedExitCode,
                 expectedStderrContains,
@@ -127,6 +129,7 @@ async function discoverCases(): Promise<Case[]> {
             name: d,
             entry,
             generatedSource: manifest.generatedSource,
+            generatedFiles: manifest.generatedFiles,
             generatedSourceKind: manifest.generatedSourceKind,
             expected,
             expectedStderrContains,
@@ -223,12 +226,15 @@ async function main(): Promise<void> {
     for (const c of cases) {
         const bin = path.join(tmpRoot, c.name);
         const buildDir = path.join(tmpRoot, c.name + "-build");
+        const sourceDirectory=Object.keys(c.generatedFiles??{}).length?path.join(tmpRoot,c.name+'-sources'):tmpRoot;
         const entry = c.generatedSource === undefined
             ? c.entry
-            : path.join(tmpRoot, c.name + (c.generatedSourceKind === "javascript" ? ".js" : ".ts"));
+            : path.join(sourceDirectory, c.name + (c.generatedSourceKind === "javascript" ? ".js" : ".ts"));
         let retainArtifacts = true;
         try {
             if (c.generatedSource !== undefined) {
+                await fs.mkdir(sourceDirectory,{recursive:true});
+                for(const [file,source]of Object.entries(c.generatedFiles??{}))await fs.writeFile(path.join(sourceDirectory,file),source);
                 await fs.writeFile(entry, c.generatedSource);
             }
             process.stdout.write(`e2e: ${c.name} … `);

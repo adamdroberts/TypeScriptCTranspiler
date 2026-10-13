@@ -747,6 +747,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-import-calls` — Import Calls: exact disposition and partitions missing.
   - [ ] `sec-import-call-runtime-semantics-evaluation` — Runtime Semantics: Evaluation
     - [ ] `ordered-immediate-source-effects-and-promise-rejection` (algorithm, unbounded): ImportCall retains operand conversion, option enumeration and Promise rejection source effects.
+    - [ ] `deferred-source-load-failures-before-evaluation` (algorithm, unbounded): Deferred source loading failures reject before graph evaluation.
   - [ ] `sec-evaluate-import-call` — EvaluateImportCall ( _specifierExpression_: a Parse Node, optional _optionsExpression_: a Parse Node, ): either a normal completion containing a Promise or an abrupt completion: exact disposition and partitions missing.
   - [ ] `sec-ContinueDynamicImport` — ContinueDynamicImport ( _promiseCapability_: a PromiseCapability Record, _moduleCompletion_: either a normal completion containing a Module Record or a throw completion, ): ~unused~: exact disposition and partitions missing.
   - [ ] `sec-tagged-templates` — Tagged Templates: exact disposition and partitions missing.
@@ -1031,7 +1032,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-async-module-execution-rejected` — AsyncModuleExecutionRejected ( _module_: a Cyclic Module Record, _error_: an ECMAScript language value, ): ~unused~: exact disposition and partitions missing.
   - [ ] `sec-example-cyclic-module-record-graphs` — Example Cyclic Module Record Graphs: exact disposition and partitions missing.
   - [ ] `sec-source-text-module-records` — Source Text Module Records: exact disposition and partitions missing.
-  - [ ] `sec-parsemodule` — ParseModule ( _sourceText_: ECMAScript source text, _realm_: a Realm Record, _hostDefined_: anything, ): a Source Text Module Record or a non-empty List of SyntaxError objects: exact disposition and partitions missing.
+  - [ ] `sec-parsemodule` — ParseModule ( _sourceText_: ECMAScript source text, _realm_: a Realm Record, _hostDefined_: anything, ): a Source Text Module Record or a non-empty List of SyntaxError objects
+    - [ ] `deferred-source-load-failures-before-evaluation` (algorithm, unbounded): Deferred source loading failures reject before graph evaluation.
   - [ ] `sec-source-text-module-record-module-record-methods` — Implementation of Module Record Abstract Methods: exact disposition and partitions missing.
   - [ ] `sec-getexportednames` — GetExportedNames ( optional _exportStarSet_: a List of Source Text Module Records, ): a List of Strings
     - [ ] `visited-module-record-name-collection` (module, unbounded): GetExportedNames visits Module records and excludes default across star edges.
@@ -1055,7 +1057,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-GetImportedModule` — GetImportedModule ( _referrer_: a Cyclic Module Record, _request_: a ModuleRequest Record, ): a Module Record
     - [ ] `retained-request-to-module-record-identity` (module, unbounded): Imported Module lookup selects the retained request and actual Module record.
   - [ ] `sec-HostLoadImportedModule` — HostLoadImportedModule ( _referrer_: a Script Record, a Cyclic Module Record, or a Realm Record, _moduleRequest_: a ModuleRequest Record, _hostDefined_: anything, _payload_: a GraphLoadingState Record or a PromiseCapability Record, ): ~unused~: exact disposition and partitions missing.
-  - [ ] `sec-FinishLoadingImportedModule` — FinishLoadingImportedModule ( _referrer_: a Script Record, a Cyclic Module Record, or a Realm Record, _moduleRequest_: a ModuleRequest Record, _payload_: a GraphLoadingState Record or a PromiseCapability Record, _result_: either a normal completion containing a Module Record or a throw completion, ): ~unused~: exact disposition and partitions missing.
+  - [ ] `sec-FinishLoadingImportedModule` — FinishLoadingImportedModule ( _referrer_: a Script Record, a Cyclic Module Record, or a Realm Record, _moduleRequest_: a ModuleRequest Record, _payload_: a GraphLoadingState Record or a PromiseCapability Record, _result_: either a normal completion containing a Module Record or a throw completion, ): ~unused~
+    - [ ] `deferred-source-load-failures-before-evaluation` (algorithm, unbounded): Deferred source loading failures reject before graph evaluation.
   - [ ] `sec-AllImportAttributesSupported` — AllImportAttributesSupported ( _attributes_: a List of ImportAttribute Records, ): a Boolean: exact disposition and partitions missing.
   - [ ] `sec-hostgetsupportedimportattributes` — HostGetSupportedImportAttributes ( ): a List of Strings: exact disposition and partitions missing.
   - [ ] `sec-getmodulenamespace` — GetModuleNamespace ( _module_: an instance of a concrete subclass of Module Record, ): a Module Namespace Object

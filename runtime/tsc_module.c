@@ -179,6 +179,22 @@ tsc_promise_t* tsc_module_evaluate(tsc_module_graph_t* graph, size_t index) {
     if (index >= graph->count) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("module is outside its retained graph"));
     tsc_module_record_t* root = &graph->records[index];
     if (root->status == MODULE_ASYNC || root->status == MODULE_EVALUATED) root = root->cycle_root;
+    /* Finish source loading for the complete static graph before any body.
+     * Parse failures are host load completions, rather than cached evaluation failures. */
+    if(root->status==MODULE_LINKED){
+        bool* visited=TSC_GC_MALLOC(graph->count*sizeof(bool));memset(visited,0,graph->count*sizeof(bool));
+        tsc_array_t* pending=tsc_array_new(sizeof(size_t),1);tsc_array_push_raw(pending,&index);
+        while(pending->len){
+            size_t next=TSC_ARR(size_t,pending,--pending->len);if(visited[next])continue;visited[next]=true;
+            tsc_module_record_t* current=&graph->records[next];
+            if(current->definition->load_error){
+                tsc_value_t error=tsc_value_error(tsc_error_new_named(tsc_str_from_lit("SyntaxError",11),tsc_str_from_cstr(current->definition->load_error)));
+                void* volatile error_root=tsc_value_gc_root(error);root->error_source=current;
+                tsc_promise_t* rejected=tsc_promise_reject(error);(void)error_root;return rejected;
+            }
+            for(size_t edge=current->definition->request_count;edge;--edge){size_t dependency=current->definition->requests[edge-1];tsc_array_push_raw(pending,&dependency);}
+        }
+    }
     if (root->top_level) return root->top_level;
     root->top_level = tsc_promise_pending();
     if (root->status == MODULE_EVALUATED) {

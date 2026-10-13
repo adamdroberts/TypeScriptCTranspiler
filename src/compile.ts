@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import { buildProgram, resolvePackageRoot } from "./program";
 import { ecmaParseGoal } from "./ecmascript-source";
-import { buildModuleGraph } from "./resolve";
+import { buildModuleGraph,moduleLoadFailures } from "./resolve";
 import {
     emitProgram,
     type Test262NativeObservationPlan,
@@ -743,6 +743,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     const programOptions = {
         entry: opts.entry,
         packageRoot: pkg,
+        retainModuleFailures:true,
         additionalRoots: opts.additionalRoots,
         moduleRoots: opts.moduleRoots,
         isolatedScriptRoots: opts.isolatedScriptRoots,
@@ -871,16 +872,23 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         return { exitCode: 3, buildDir, mainC: "" };
     }
 
-    const pre = ts.getPreEmitDiagnostics(program);
+    const graph = buildModuleGraph(program, libCoreDts, entrySourceFile.fileName, {
+        dynamicRequires,
+        initializationEntries: opts.initializationEntries,
+    });
+    const loadFailures=moduleLoadFailures(graph);
+    for(const id of graph.initializationModuleIds){const failure=loadFailures.get(id);if(!failure)continue;
+        const location=failure.source.getLineAndCharacterOfPosition(Math.max(0,failure.node.getStart(failure.source)));
+        writeDiagnostic(`${failure.source.fileName}:${location.line+1}:${location.character+1}: ${failure.message}\n`);
+        return {exitCode:2,buildDir,mainC:""};
+    }
+    const failedFiles=new Set([...loadFailures.keys()].map(id=>graph.modules.get(id)!.fileName));
+    const pre = ts.getPreEmitDiagnostics(program).filter(diagnostic=>!diagnostic.file||!failedFiles.has(diagnostic.file.fileName));
     if (pre.length > 0) {
         writeDiagnostic(formatTsDiagnostics(pre));
         return { exitCode: 2, buildDir, mainC: "" };
     }
 
-    const graph = buildModuleGraph(program, libCoreDts, entrySourceFile.fileName, {
-        dynamicRequires,
-        initializationEntries: opts.initializationEntries,
-    });
     if (opts.verbose) {
         console.error(
             `[tsc2c] modules: ${[...graph.modules.keys()].join(", ")}`,

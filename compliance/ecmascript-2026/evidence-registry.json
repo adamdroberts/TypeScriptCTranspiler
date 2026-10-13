@@ -3287,7 +3287,10 @@
       "targets": [
         "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
         "sec-ModuleRequestsEqual#decoded-specifier-and-attribute-collection-identity",
-        "sec-GetImportedModule#retained-request-to-module-record-identity"
+        "sec-GetImportedModule#retained-request-to-module-record-identity",
+        "sec-parsemodule#deferred-source-load-failures-before-evaluation",
+        "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation"
       ]
     },
     {
@@ -4304,6 +4307,103 @@
       "id": "src/source-value-flow.ts#computedProperty",
       "targets": [
         "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/module-load-failure.property.test.ts",
+      "targets": [
+        "sec-parsemodule#deferred-source-load-failures-before-evaluation",
+        "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "module_load_failure_depth",
+      "targets": [
+        "sec-parsemodule#deferred-source-load-failures-before-evaluation",
+        "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation"
+      ],
+      "stressReview": {
+        "dimension": "static ModuleRequest dependency depth before a deferred parse failure",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One shared generated request graph verifies load-before-body traversal independently of dependency depth and declaration shape.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "module_load_failure",
+      "targets": [
+        "sec-parsemodule#deferred-source-load-failures-before-evaluation",
+        "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/module-source-record.ts#retainModuleParseFailure",
+      "targets": [
+        "sec-parsemodule#deferred-source-load-failures-before-evaluation",
+        "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/module-source-record.ts#moduleSourceOriginal",
+      "targets": [
+        "sec-parsemodule#deferred-source-load-failures-before-evaluation",
+        "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/program.ts#buildProgram",
+      "targets": [
+        "sec-parsemodule#deferred-source-load-failures-before-evaluation",
+        "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/resolve.ts#moduleLoadFailures",
+      "targets": [
+        "sec-parsemodule#deferred-source-load-failures-before-evaluation",
+        "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/compile.ts#compile",
+      "targets": [
+        "sec-parsemodule#deferred-source-load-failures-before-evaluation",
+        "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_module.c#tsc_module_evaluate",
+      "targets": [
+        "sec-parsemodule#deferred-source-load-failures-before-evaluation",
+        "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitModule",
+      "targets": [
+        "sec-parsemodule#deferred-source-load-failures-before-evaluation",
+        "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation"
       ]
     }
   ]

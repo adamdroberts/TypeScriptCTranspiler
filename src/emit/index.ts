@@ -12837,7 +12837,7 @@ class Emitter {
             const info = this.graph.modules.get(modId)!;
             const count = info.moduleRequests.filter(request => info.resolvedModuleRequests.has(moduleRequestKey(request))).length;
             const execute = this.isCommonJsSourceFile(info.sf) ? `mod_graph_execute_${modId}` : `mod_evaluate_${modId}`;
-            out.line(`    { ${execute}, ${count ? `mod_requests_${modId}` : "NULL"}, ${count}, ${this.modAsyncInits.has(modId)} },`);
+            out.line(`    { ${execute}, ${count ? `mod_requests_${modId}` : "NULL"}, ${count}, ${this.modAsyncInits.has(modId)}, ${info.sourceFailure ? `"${escapeCString(info.sourceFailure.message)}"` : "NULL"} },`);
         }
         out.line("};");
         out.line("static tsc_module_graph_t* mod_runtime_graph(void) {");
@@ -13227,6 +13227,16 @@ class Emitter {
         const initBuf = new CBuf();
         initBuf.indent = 1;
         this.modInits.set(modId, initBuf);
+        if(this.graph.modules.get(modId)!.sourceFailure){
+            if(this.isJsonSourceFile(sf)){
+                const binding=this.collectJsonModuleBinding(sf,modId)!;
+                this.agentStorage.declare("tsc_value_t",binding.cName);
+                this.agentStorage.declare("void* volatile",binding.gcRoot);
+                instantiationBuf.line(`${binding.cName}=tsc_value_undefined();`);
+                instantiationBuf.line(`${binding.gcRoot}=NULL;`);
+            }
+            return;
+        }
         if (this.isJsonSourceFile(sf)) {
             const syntax = validateJsonSyntax(sf.text);
             if (syntax) unsupported(sf, `invalid JSON module: ${syntax.message}`);

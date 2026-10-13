@@ -4081,6 +4081,53 @@
             ]
           },
           "rationale": "ImportCall source effects now use one operand/conversion/options/own-key continuation graph. Ordinary and inherited with getters, String-only enumerable attribute reads, normal/abrupt ordering, numeric key order and captured own names retain receiver, call and write effects; attribute String validation follows complete enumeration. Conversion and getter failures belong to the returned Promise rather than the caller lexical catch. Proxy ownKeys/descriptor/get traps enter the same memoized invocation graph; exact exotic domains remain conservative. This closes a reproduced false admission where an import-options getter replaced a finite eval body with a runtime argument and native execution rejected the actual source accepted by Node. Promise values now retain ordinary source owners and one mutable prototype whose member names project the native publication collection. Then/catch/finally use memoized handler/result/rejection worklists, generic then lookup, finalizer forwarding and shared thenable assimilation; missing Promise member facts no longer become originless calls that contaminate later option records. Species getter ordering is retained, while custom capability constructors/resolvers preserve opaque captured source effects. The native Object constructor publication collection supplies its reviewed species absence boundary. dynamic-import-source-effects.property compares getter/descriptor/key/rejection, opaque-write and one deep option-owner graph with independent Node across typed/erased native profiles and both memory modes. promise-source-owner.property checks handler results, mutable methods, borrowed finalizers, returned Promise rejection and thenable getter effects against Node, with explicit species/captured-effect boundaries. eval_dynamic_import_source and eval_dynamic_import_source_depth exercise the CLI. Existing CType, declarations and native kernels suffice. Exact Promise activation timing, fully correlated capabilities, exotic enumeration precision, finite AOT dynamic specifier limits, complete Module/Realm/agent eligibility and exhaustive ECMAScript 2026 evidence remain open."
+        },
+        {
+          "id": "deferred-source-load-failures-before-evaluation",
+          "title": "Deferred source loading failures reject before graph evaluation",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-import-call-runtime-semantics-evaluation"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/module-load-failure.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "module_load_failure_depth"
+            ],
+            "e2e": [
+              "module_load_failure"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "src/module-source-record.ts#retainModuleParseFailure",
+              "src/module-source-record.ts#moduleSourceOriginal",
+              "src/program.ts#buildProgram",
+              "src/resolve.ts#moduleLoadFailures",
+              "src/resolve.ts#buildModuleGraph",
+              "src/compile.ts#compile",
+              "runtime/tsc_module.c#tsc_module_evaluate",
+              "src/emit/index.ts#emitModule"
+            ]
+          },
+          "rationale": "Module source parsing now retains an archived original source and one inert failed view in the canonical source-unit collection. Static ModuleRequest edges settle before body discovery; one reverse worklist identifies ancestors that cannot load, and the checker/source analysis omit their non-evaluable bodies. Startup roots retain eager syntax diagnostics. Native Module definitions carry source-load failure metadata, and one visited request worklist completes loading before any dependency body executes. Parse failures reject each load through an actual SyntaxError completion without entering the successful Module/evaluation cache; ordinary evaluation failure caching remains on its existing path. module-load-failure.property compares independent Node grammar/control/private/strict/declaration and JSON errors, eager/deferred role, cycles, side-effect suppression, repeated-load identity and healthy loading in both memory modes. One shared generated static graph supplies the property and module_load_failure_depth CLI stress; module_load_failure verifies the typed consumer. Generated resource bytes enter the E2E input manifest and materialize in an isolated source directory. Existing CType and language declarations suffice; the runtime definition and host implementation manifest include the shared failure path. The retained pinned dynamic-import catch test now executes normally. Complete deferred link/resolution errors, finite iterator-derived import specifier admission, all host module formats/Realm behavior and eligible exhaustive ECMAScript 2026 conformance remain open; host capability flags are unchanged."
         }
       ],
       "rationale": "One reactive owner/call/continuation representation retains immediate import and Promise source effects independently of key-list size or owner depth."
@@ -4936,6 +4983,114 @@
         }
       ],
       "rationale": "One canonical source-unit goal and ordered initialization collection supplies native strictness and Script/eval ownership independently of source-record or function graph cardinality. Scoped evidence does not establish complete host or language conformance."
+    },
+    {
+      "clause": "sec-parsemodule",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "deferred-source-load-failures-before-evaluation",
+          "title": "Deferred source loading failures reject before graph evaluation",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-parsemodule"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/module-load-failure.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "module_load_failure_depth"
+            ],
+            "e2e": [
+              "module_load_failure"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "src/module-source-record.ts#retainModuleParseFailure",
+              "src/module-source-record.ts#moduleSourceOriginal",
+              "src/program.ts#buildProgram",
+              "src/resolve.ts#moduleLoadFailures",
+              "src/resolve.ts#buildModuleGraph",
+              "src/compile.ts#compile",
+              "runtime/tsc_module.c#tsc_module_evaluate",
+              "src/emit/index.ts#emitModule"
+            ]
+          },
+          "rationale": "Module source parsing now retains an archived original source and one inert failed view in the canonical source-unit collection. Static ModuleRequest edges settle before body discovery; one reverse worklist identifies ancestors that cannot load, and the checker/source analysis omit their non-evaluable bodies. Startup roots retain eager syntax diagnostics. Native Module definitions carry source-load failure metadata, and one visited request worklist completes loading before any dependency body executes. Parse failures reject each load through an actual SyntaxError completion without entering the successful Module/evaluation cache; ordinary evaluation failure caching remains on its existing path. module-load-failure.property compares independent Node grammar/control/private/strict/declaration and JSON errors, eager/deferred role, cycles, side-effect suppression, repeated-load identity and healthy loading in both memory modes. One shared generated static graph supplies the property and module_load_failure_depth CLI stress; module_load_failure verifies the typed consumer. Generated resource bytes enter the E2E input manifest and materialize in an isolated source directory. Existing CType and language declarations suffice; the runtime definition and host implementation manifest include the shared failure path. The retained pinned dynamic-import catch test now executes normally. Complete deferred link/resolution errors, finite iterator-derived import specifier admission, all host module formats/Realm behavior and eligible exhaustive ECMAScript 2026 conformance remain open; host capability flags are unchanged."
+        }
+      ],
+      "rationale": "Local failure-completion evidence remains distinct from full Module and host eligibility."
+    },
+    {
+      "clause": "sec-FinishLoadingImportedModule",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "deferred-source-load-failures-before-evaluation",
+          "title": "Deferred source loading failures reject before graph evaluation",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-FinishLoadingImportedModule"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/module-load-failure.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "module_load_failure_depth"
+            ],
+            "e2e": [
+              "module_load_failure"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "src/module-source-record.ts#retainModuleParseFailure",
+              "src/module-source-record.ts#moduleSourceOriginal",
+              "src/program.ts#buildProgram",
+              "src/resolve.ts#moduleLoadFailures",
+              "src/resolve.ts#buildModuleGraph",
+              "src/compile.ts#compile",
+              "runtime/tsc_module.c#tsc_module_evaluate",
+              "src/emit/index.ts#emitModule"
+            ]
+          },
+          "rationale": "Module source parsing now retains an archived original source and one inert failed view in the canonical source-unit collection. Static ModuleRequest edges settle before body discovery; one reverse worklist identifies ancestors that cannot load, and the checker/source analysis omit their non-evaluable bodies. Startup roots retain eager syntax diagnostics. Native Module definitions carry source-load failure metadata, and one visited request worklist completes loading before any dependency body executes. Parse failures reject each load through an actual SyntaxError completion without entering the successful Module/evaluation cache; ordinary evaluation failure caching remains on its existing path. module-load-failure.property compares independent Node grammar/control/private/strict/declaration and JSON errors, eager/deferred role, cycles, side-effect suppression, repeated-load identity and healthy loading in both memory modes. One shared generated static graph supplies the property and module_load_failure_depth CLI stress; module_load_failure verifies the typed consumer. Generated resource bytes enter the E2E input manifest and materialize in an isolated source directory. Existing CType and language declarations suffice; the runtime definition and host implementation manifest include the shared failure path. The retained pinned dynamic-import catch test now executes normally. Complete deferred link/resolution errors, finite iterator-derived import specifier admission, all host module formats/Realm behavior and eligible exhaustive ECMAScript 2026 conformance remain open; host capability flags are unchanged."
+        }
+      ],
+      "rationale": "Local failure-completion evidence remains distinct from full Module and host eligibility."
     }
   ],
   "groups": [

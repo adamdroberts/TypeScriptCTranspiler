@@ -1,4 +1,5 @@
 import ts from "typescript";
+import {sourceModuleFailure,moduleSourceOriginal,type ModuleSourceFailure} from "./module-source-record";
 import * as path from "node:path";
 import { sourceUnitFileName } from "./program";
 import { mangleQualifiedIdent } from "./emit/mangle";
@@ -26,6 +27,7 @@ import {
 
 export interface ModuleInfo {
     sf: ts.SourceFile;
+    sourceFailure?: ModuleSourceFailure;
     moduleId: string;
     /** moduleIds this module imports from (direct deps). */
     imports: string[];
@@ -71,6 +73,7 @@ export function buildModuleGraph(
     entry: string,
     options_: {
         dynamicRequires?: DynamicRequireManifest;
+        staticRequestsOnly?: boolean;
         /** Ordered independent Script/Module roots evaluated in one program. */
         initializationEntries?: readonly string[];
     } = {},
@@ -89,6 +92,7 @@ export function buildModuleGraph(
         }
         modules.set(id, {
             sf,
+            sourceFailure:sourceModuleFailure(sf),
             moduleId: id,
             imports: [],
             moduleRequests: [],
@@ -101,83 +105,49 @@ export function buildModuleGraph(
         fileToModuleId.set(sf.fileName, id);
     }
 
-    // Resolve imports per module using TS's resolver.
+    // Static requests settle before body discovery: a failed load cannot
+    // evaluate a body, discover its calls, or lower its declarations.
     const options = program.getCompilerOptions();
-    for (const [id, info] of modules) {
-        const moduleAliases = commonJsModuleAliases(info.sf);
-        const requireAliases = commonJsRequireAliases(info.sf, moduleAliases);
-        const requests = new Map<string, ModuleRequest>();
-        const dynamicSpecifiers = new Set<string>();
-        for (const stmt of info.sf.statements) {
-            const importRequests: ModuleRequest[] = [];
-            const requireSpecs: string[] = [];
-            if (ts.isImportDeclaration(stmt) || ts.isExportDeclaration(stmt)) {
-                if (isTypeOnlyModuleEdge(stmt)) continue;
-                const parsed = moduleRequestFromDeclaration(stmt);
-                if (parsed?.error) {
-                    throw new Error(`${info.sf.fileName}: ${parsed.error}`);
-                }
-                if (parsed?.request) {
-                    const key = moduleRequestKey(parsed.request);
-                    const request = requests.get(key) ?? parsed.request;
-                    requests.set(key, request);
-                    importRequests.push(request);
-                }
-            }
-            for (const call of dynamicImportCalls(stmt)) {
-                const parsed = dynamicImportSpecifiersFromCall(call);
-                if (parsed?.error) throw new Error(`${info.sf.fileName}: ${parsed.error}`);
-                for (const specifier of parsed?.specifiers ?? []) {
-                    dynamicSpecifiers.add(specifier);
-                    const resolved = ts.resolveModuleName(
-                        specifier,
-                        info.sf.fileName,
-                        options,
-                        ts.sys,
-                    ).resolvedModule;
-                    const depId = resolved ? fileToModuleId.get(sourceUnitFileName(program, resolved.resolvedFileName, "module")) : undefined;
-                    if (!resolved || !depId) continue;
-                    info.resolvedDynamicSpecifiers.set(specifier, depId);
-                }
-            }
-            requireSpecs.push(...staticRequireSpecifiers(stmt, requireAliases, moduleAliases, options_.dynamicRequires, info.sf.fileName));
-            for (const request of importRequests) {
-                const spec = request.specifier;
-                const resolved = ts.resolveModuleName(
-                    spec,
-                    info.sf.fileName,
-                    options,
-                    ts.sys,
-                );
-                const mod = resolved.resolvedModule;
-                const depId = mod ? fileToModuleId.get(sourceUnitFileName(program, mod.resolvedFileName, "module")) : undefined;
-                if (mod && depId) {
-                    const requestError = staticModuleRequestResolutionError(request, mod.resolvedFileName);
-                    if (requestError) {
-                        throw new Error(`${info.sf.fileName}: ${requestError} for ${JSON.stringify(spec)}`);
-                    }
-                    info.resolvedModuleRequests.set(moduleRequestKey(request), depId);
-                    if (depId !== id && !info.imports.includes(depId)) {
-                        info.imports.push(depId);
-                    }
-                }
-            }
-            for (const spec of requireSpecs) {
-                const resolvedFile = resolveCommonJsRequireModuleName(
-                    spec,
-                    info.sf.fileName,
-                    options,
-                );
-                const depId = resolvedFile ? fileToModuleId.get(resolvedFile) : undefined;
-                if (depId) {
-                    info.resolvedRequireSpecifiers.set(spec, depId);
-                    if (depId !== id && !info.imports.includes(depId)) {
-                        info.imports.push(depId);
-                    }
-                }
-            }
+    for(const [id,info]of modules){
+        if(info.sourceFailure)continue;
+        const requests=new Map<string,ModuleRequest>();
+        for(const statement of moduleSourceOriginal(info.sf).statements){
+            if(!ts.isImportDeclaration(statement)&&!ts.isExportDeclaration(statement)||isTypeOnlyModuleEdge(statement))continue;
+            const parsed=moduleRequestFromDeclaration(statement);
+            if(parsed?.error)throw new Error(`${info.fileName}: ${parsed.error}`);
+            if(!parsed?.request)continue;
+            const key=moduleRequestKey(parsed.request),request=requests.get(key)??parsed.request;requests.set(key,request);
+            const resolved=ts.resolveModuleName(request.specifier,info.fileName,options,ts.sys).resolvedModule;
+            const dependency=resolved?fileToModuleId.get(sourceUnitFileName(program,resolved.resolvedFileName,"module")):undefined;
+            if(!resolved||!dependency)continue;
+            const error=staticModuleRequestResolutionError(request,resolved.resolvedFileName);
+            if(error)throw new Error(`${info.fileName}: ${error} for ${JSON.stringify(request.specifier)}`);
+            info.resolvedModuleRequests.set(key,dependency);
+            if(dependency!==id&&!info.imports.includes(dependency))info.imports.push(dependency);
         }
         info.moduleRequests.push(...requests.values());
+    }
+    const provisional:ModuleGraph={modules,fileToModuleId,emitOrder:[],topoOrder:[],entryModuleId:"",initializationModuleIds:[]};
+    const failed=moduleLoadFailures(provisional);
+    for(const [id,info]of modules){
+        if(options_.staticRequestsOnly||failed.has(id))continue;
+        const moduleAliases=commonJsModuleAliases(info.sf),requireAliases=commonJsRequireAliases(info.sf,moduleAliases),dynamicSpecifiers=new Set<string>();
+        for(const statement of info.sf.statements){
+            for(const call of dynamicImportCalls(statement)){
+                const parsed=dynamicImportSpecifiersFromCall(call);
+                if(parsed?.error)throw new Error(`${info.fileName}: ${parsed.error}`);
+                for(const specifier of parsed?.specifiers??[]){
+                    dynamicSpecifiers.add(specifier);
+                    const resolved=ts.resolveModuleName(specifier,info.fileName,options,ts.sys).resolvedModule;
+                    const dependency=resolved?fileToModuleId.get(sourceUnitFileName(program,resolved.resolvedFileName,"module")):undefined;
+                    if(dependency)info.resolvedDynamicSpecifiers.set(specifier,dependency);
+                }
+            }
+            for(const specifier of staticRequireSpecifiers(statement,requireAliases,moduleAliases,options_.dynamicRequires,info.fileName)){
+                const resolved=resolveCommonJsRequireModuleName(specifier,info.fileName,options),dependency=resolved?fileToModuleId.get(resolved):undefined;
+                if(dependency){info.resolvedRequireSpecifiers.set(specifier,dependency);if(dependency!==id&&!info.imports.includes(dependency))info.imports.push(dependency);}
+            }
+        }
         info.dynamicModuleSpecifiers.push(...dynamicSpecifiers);
     }
 
@@ -728,4 +698,20 @@ function commonJsFactoryWrapperInvocationForFunction(fn: ts.FunctionExpression |
         cur = parent;
     }
     return null;
+}
+
+/** Loading traverses the complete static request graph before evaluation.
+ * A failed record prevents every parent body and preserves its source origin. */
+export function moduleLoadFailures(graph:ModuleGraph):ReadonlyMap<string,ModuleSourceFailure>{
+    const result=new Map<string,ModuleSourceFailure>(),parents=new Map<string,Set<string>>(),pending:string[]=[];
+    for(const [id,info]of graph.modules){
+        if(info.sourceFailure){result.set(id,info.sourceFailure);pending.push(id);}
+        for(const dependency of info.resolvedModuleRequests.values()){
+            let owners=parents.get(dependency);if(!owners){owners=new Set();parents.set(dependency,owners);}owners.add(id);
+        }
+    }
+    while(pending.length){const id=pending.pop()!,failure=result.get(id)!;
+        for(const parent of parents.get(id)??[])if(!result.has(parent)){result.set(parent,failure);pending.push(parent);}
+    }
+    return result;
 }
