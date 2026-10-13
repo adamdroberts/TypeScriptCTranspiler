@@ -586,14 +586,6 @@ struct tsc_map* tsc_value_map_group_by(tsc_value_t items, tsc_value_t callback,
 
 /* Ordinary generator owners project one retained graph through the three
  * protocol operations. No yielded-value queue or eager body execution exists. */
-static tsc_value_t generator_result(tsc_value_t value, bool done) {
-    void* volatile value_root = tsc_value_gc_root(value);
-    tsc_object_t* result = tsc_object_new();
-    tsc_object_set(result, tsc_str_from_lit("value", 5), value);
-    tsc_object_set(result, tsc_str_from_lit("done", 4), tsc_value_bool(done));
-    (void)value_root;
-    return tsc_value_object(result);
-}
 
 static void async_generator_drain(tsc_generator_t* generator);
 static tsc_value_t async_generator_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
@@ -609,7 +601,7 @@ static void async_generator_complete_step(tsc_generator_t* generator,
     if (kind == TSC_COMPLETION_THROW) tsc_promise_reject_in_place(request->capability, value);
     else {
         tsc_realm_t* previous = tsc_realm_swap(generator->caller_realm);
-        tsc_value_t result = generator_result(value, done);
+        tsc_value_t result = tsc_iterator_result(value, done);
         (void)tsc_realm_swap(previous);
         tsc_promise_resolve_into(request->capability, result);
     }
@@ -638,7 +630,7 @@ void tsc_generator_suspend(tsc_generator_t* generator, tsc_value_t value) {
     if (generator->asynchronous) {
         generator->state = TSC_GENERATOR_SUSPENDED_YIELD;
         async_generator_complete_step(generator, TSC_COMPLETION_NORMAL, value, false);
-    } else tsc_generator_suspend_result(generator, generator_result(value, false));
+    } else tsc_generator_suspend_result(generator, tsc_iterator_result(value, false));
 }
 void tsc_generator_complete(tsc_generator_t* generator, tsc_completion_kind_t kind, tsc_value_t value) {
     tsc_completion_record_set(&generator->result, kind, value, -1);
@@ -665,7 +657,7 @@ static tsc_value_t generator_resume(void* env, tsc_value_t receiver, tsc_array_t
     }
     if (generator->state == TSC_GENERATOR_COMPLETED) {
         if (kind == TSC_COMPLETION_THROW) tsc_throw_value(value);
-        return generator_result(kind == TSC_COMPLETION_RETURN ? value : tsc_value_undefined(), true);
+        return tsc_iterator_result(kind == TSC_COMPLETION_RETURN ? value : tsc_value_undefined(), true);
     }
     tsc_completion_record_set(&generator->request, kind, value, -1);
     tsc_completion_record_clear(&generator->result);
@@ -696,7 +688,7 @@ static tsc_value_t generator_resume(void* env, tsc_value_t receiver, tsc_array_t
         tsc_throw_value(error);
     }
     tsc_value_t result = generator->state == TSC_GENERATOR_SUSPENDED_YIELD
-        ? generator->result.value : generator_result(generator->result.value, true);
+        ? generator->result.value : tsc_iterator_result(generator->result.value, true);
     void* volatile result_root = tsc_value_gc_root(result);
     if (generator->state == TSC_GENERATOR_COMPLETED) tsc_completion_record_clear(&generator->result);
     (void)tsc_realm_swap(previous);

@@ -1,0 +1,7 @@
+/* Ordered FromPropertyDescriptor field collection. */
+TSC_DESCRIPTOR_FIELD(VALUE, value, 5)
+TSC_DESCRIPTOR_FIELD(WRITABLE, writable, 8)
+TSC_DESCRIPTOR_FIELD(GET, get, 3)
+TSC_DESCRIPTOR_FIELD(SET, set, 3)
+TSC_DESCRIPTOR_FIELD(ENUMERABLE, enumerable, 10)
+TSC_DESCRIPTOR_FIELD(CONFIGURABLE, configurable, 12)

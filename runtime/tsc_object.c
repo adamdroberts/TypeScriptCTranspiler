@@ -423,7 +423,6 @@ static tsc_value_t property_key_value(const tsc_str_t* key) {
 }
 
 static bool descriptor_has_prop(const tsc_object_t* desc, const char* name, size_t len, tsc_value_t* out);
-static bool descriptor_value_has_prop(tsc_value_t desc, const char* name, size_t len, tsc_value_t* out);
 
 static void validate_proxy_get_result(const tsc_object_t* proxy, const tsc_str_t* key, tsc_value_t result) {
     if (!proxy || !value_is_box(proxy->proxy_target)) return;
@@ -642,12 +641,6 @@ static bool descriptor_has_prop(const tsc_object_t* desc, const char* name, size
     return true;
 }
 
-static bool descriptor_value_has_prop(tsc_value_t desc, const char* name, size_t len, tsc_value_t* out) {
-    const tsc_str_t* key = tsc_str_from_lit(name, len);
-    if (!tsc_value_has_prop(desc, key)) return false;
-    if (out) *out = tsc_value_get_prop(desc, key);
-    return true;
-}
 
 static bool proxy_descriptor_result_is_object(tsc_value_t result) {
     return value_is_box(result) && (
@@ -799,16 +792,18 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
             return tsc_value_define_property_desc(o->proxy_target, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
         }
         tsc_proxy_require_callable_trap(trap, "Proxy defineProperty trap must be callable");
-        tsc_object_t* desc = tsc_object_new();
-        if (has_value) tsc_object_set(desc, tsc_str_from_lit("value", 5), value);
-        if (has_writable) tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(writable));
-        if (has_enumerable) tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(enumerable));
-        if (has_configurable) tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(configurable));
+        tsc_descriptor_record_t record = {.present = 0};
+        if (has_value) {record.present |= TSC_DESCRIPTOR_BIT(VALUE); record.values[TSC_DESCRIPTOR_VALUE] = value;}
+        if (has_writable) {record.present |= TSC_DESCRIPTOR_BIT(WRITABLE); record.values[TSC_DESCRIPTOR_WRITABLE] = tsc_value_bool(writable);}
+        if (has_enumerable) {record.present |= TSC_DESCRIPTOR_BIT(ENUMERABLE); record.values[TSC_DESCRIPTOR_ENUMERABLE] = tsc_value_bool(enumerable);}
+        if (has_configurable) {record.present |= TSC_DESCRIPTOR_BIT(CONFIGURABLE); record.values[TSC_DESCRIPTOR_CONFIGURABLE] = tsc_value_bool(configurable);}
+        tsc_value_t descriptor = tsc_descriptor_record_object(&record);
+        void* volatile descriptor_root = tsc_value_gc_root(descriptor); (void)descriptor_root;
 
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
         tsc_array_push_value(args, property_key_value(key));
-        tsc_array_push_value(args, tsc_value_object(desc));
+        tsc_array_push_value(args, descriptor);
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
         bool success = tsc_value_is_truthy(res);
         validate_proxy_define_property_result(o, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable, false, tsc_value_undefined(), false, tsc_value_undefined(), false, success);
@@ -933,18 +928,22 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
             return tsc_value_define_accessor_desc(o->proxy_target, key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
         }
         tsc_proxy_require_callable_trap(trap, "Proxy defineProperty trap must be callable");
-        tsc_object_t* desc = tsc_object_new();
         tsc_value_t getter_value = has_getter ? value_accessor_getter_identity(getter, getter_env) : tsc_value_undefined();
+        void* volatile getter_root = tsc_value_gc_root(getter_value); (void)getter_root;
         tsc_value_t setter_value = has_setter ? value_accessor_setter_identity(setter, setter_env) : tsc_value_undefined();
-        if (has_getter) tsc_object_set(desc, tsc_str_from_lit("get", 3), getter_value);
-        if (has_setter) tsc_object_set(desc, tsc_str_from_lit("set", 3), setter_value);
-        if (has_enumerable) tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(enumerable));
-        if (has_configurable) tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(configurable));
+        void* volatile setter_root = tsc_value_gc_root(setter_value); (void)setter_root;
+        tsc_descriptor_record_t record = {.present = 0};
+        if (has_getter) {record.present |= TSC_DESCRIPTOR_BIT(GET); record.values[TSC_DESCRIPTOR_GET] = getter_value;}
+        if (has_setter) {record.present |= TSC_DESCRIPTOR_BIT(SET); record.values[TSC_DESCRIPTOR_SET] = setter_value;}
+        if (has_enumerable) {record.present |= TSC_DESCRIPTOR_BIT(ENUMERABLE); record.values[TSC_DESCRIPTOR_ENUMERABLE] = tsc_value_bool(enumerable);}
+        if (has_configurable) {record.present |= TSC_DESCRIPTOR_BIT(CONFIGURABLE); record.values[TSC_DESCRIPTOR_CONFIGURABLE] = tsc_value_bool(configurable);}
+        tsc_value_t descriptor = tsc_descriptor_record_object(&record);
+        void* volatile descriptor_root = tsc_value_gc_root(descriptor); (void)descriptor_root;
 
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
         tsc_array_push_value(args, o->proxy_target);
         tsc_array_push_value(args, property_key_value(key));
-        tsc_array_push_value(args, tsc_value_object(desc));
+        tsc_array_push_value(args, descriptor);
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
         bool success = tsc_value_is_truthy(res);
         validate_proxy_define_property_result(o, key, tsc_value_undefined(), false, false, false, enumerable, has_enumerable, configurable, has_configurable, true, getter_value, has_getter, setter_value, has_setter, success);

@@ -199,7 +199,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-isaccessordescriptor` — IsAccessorDescriptor ( _Desc_: a Property Descriptor, ): a Boolean: exact disposition and partitions missing.
   - [ ] `sec-isdatadescriptor` — IsDataDescriptor ( _Desc_: a Property Descriptor, ): a Boolean: exact disposition and partitions missing.
   - [ ] `sec-isgenericdescriptor` — IsGenericDescriptor ( _Desc_: a Property Descriptor, ): a Boolean: exact disposition and partitions missing.
-  - [ ] `sec-frompropertydescriptor` — FromPropertyDescriptor ( _Desc_: a Property Descriptor or undefined, ): an Object or undefined: exact disposition and partitions missing.
+  - [ ] `sec-frompropertydescriptor` — FromPropertyDescriptor ( _Desc_: a Property Descriptor or undefined, ): an Object or undefined
+    - [ ] `owned-native-descriptor-slot-projection` (algorithm, unbounded): Owned native record slots preserve presence and data-property creation.
   - [ ] `sec-topropertydescriptor` — ToPropertyDescriptor ( _Obj_: an ECMAScript language value, ): either a normal completion containing a Property Descriptor or a throw completion
     - [ ] `ordered-presence-get-and-abrupt-descriptor-fields` (algorithm, unbounded): Ordered HasProperty/Get descriptor conversion and source effects through inherited owners.
   - [ ] `sec-completepropertydescriptor` — CompletePropertyDescriptor ( _Desc_: a Property Descriptor, ): ~unused~: exact disposition and partitions missing.
@@ -319,7 +320,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-ifabruptcloseiterator` — IfAbruptCloseIterator ( _value_, _iteratorRecord_ ): exact disposition and partitions missing.
   - [ ] `sec-asynciteratorclose` — AsyncIteratorClose ( _iteratorRecord_: an Iterator Record, _completion_: a Completion Record, ): a Completion Record: exact disposition and partitions missing.
   - [ ] `sec-ifabruptcloseasynciterator` — IfAbruptCloseAsyncIterator ( _value_, _iteratorRecord_ ): exact disposition and partitions missing.
-  - [ ] `sec-createiterresultobject` — CreateIteratorResultObject ( _value_: an ECMAScript language value, _done_: a Boolean, ): an Object that conforms to the IteratorResult interface: exact disposition and partitions missing.
+  - [ ] `sec-createiterresultobject` — CreateIteratorResultObject ( _value_: an ECMAScript language value, _done_: a Boolean, ): an Object that conforms to the IteratorResult interface
+    - [ ] `own-data-iterator-result-projection` (algorithm, unbounded): Owned native record slots preserve presence and data-property creation.
   - [ ] `sec-createlistiteratorRecord` — CreateListIteratorRecord ( _list_: a List of ECMAScript language values, ): an Iterator Record: exact disposition and partitions missing.
   - [ ] `sec-iteratortolist` — IteratorToList ( _iteratorRecord_: an Iterator Record, ): either a normal completion containing a List of ECMAScript language values or a throw completion: exact disposition and partitions missing.
 - [ ] **Syntax-Directed Operations** (`sec-syntax-directed-operations`) — tracking: `in-progress`, scope: `required`

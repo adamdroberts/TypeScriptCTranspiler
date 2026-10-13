@@ -4380,6 +4380,108 @@
         }
       ],
       "rationale": "Canonical primitive/ordinary owners and exception construction cover arbitrary retained values through one predicate and owner graph; the full mutation and exotic operation contracts remain open."
+    },
+    {
+      "clause": "sec-createiterresultobject",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "own-data-iterator-result-projection",
+          "title": "Owned native record slots preserve presence and data-property creation",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "canonical-collection",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-createiterresultobject"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/descriptor-projection.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "descriptor_projection_depth"
+            ],
+            "e2e": [
+              "descriptor_projection"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "runtime/tsc_value.c#tsc_descriptor_record_object",
+              "runtime/tsc_value.c#tsc_descriptor_own_field",
+              "runtime/tsc_value.c#lookup_accessor",
+              "runtime/tsc_value.c#tsc_iterator_result",
+              "runtime/tsc_internal.h#tsc_descriptor_record_t"
+            ]
+          },
+          "rationale": "FromPropertyDescriptor now projects one presence-bearing native slot record through one ordered field collection and CreateDataProperty semantics. Ordinary, virtual Array/String/function, Module namespace and partial Proxy records share the rooted builder. Repeated field-assignment predecessors are deleted, and legacy lookup reads own normalized slots through one rooted prototype worklist rather than inherited descriptor fields. Shared iterator-result creation also uses own value/done data properties; private generator, async-from-sync, timer/event and filesystem result builders are removed. descriptor-projection.property compares complete/partial slot presence, order/attributes, virtual owners, prototype getter/setter isolation, lookup shadowing/symbols/abrupt order, iterator/generator results and explicit-GC retention against independent Node in typed/erased native/host and both memory profiles. One shared generated deep lookup/record-owner graph checks the property and CLI. descriptor_projection checks a typed consumer. Existing CType and public declarations suffice. Private descriptor application/lazy intrinsic publication under prototype mutation, other native record constructors, complete exotic/Realm semantics and eligible exhaustive target evidence remain open."
+        }
+      ],
+      "rationale": "Canonical slot/owner records and own-data initialization preserve represented native values independently of record and traversal cardinality. Complete producer/consumer and Realm obligations remain open."
+    },
+    {
+      "clause": "sec-frompropertydescriptor",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "owned-native-descriptor-slot-projection",
+          "title": "Owned native record slots preserve presence and data-property creation",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "canonical-collection",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-frompropertydescriptor"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/descriptor-projection.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "descriptor_projection_depth"
+            ],
+            "e2e": [
+              "descriptor_projection"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "runtime/tsc_value.c#tsc_descriptor_record_object",
+              "runtime/tsc_value.c#tsc_descriptor_own_field",
+              "runtime/tsc_value.c#lookup_accessor",
+              "runtime/tsc_value.c#tsc_iterator_result",
+              "runtime/tsc_internal.h#tsc_descriptor_record_t"
+            ]
+          },
+          "rationale": "FromPropertyDescriptor now projects one presence-bearing native slot record through one ordered field collection and CreateDataProperty semantics. Ordinary, virtual Array/String/function, Module namespace and partial Proxy records share the rooted builder. Repeated field-assignment predecessors are deleted, and legacy lookup reads own normalized slots through one rooted prototype worklist rather than inherited descriptor fields. Shared iterator-result creation also uses own value/done data properties; private generator, async-from-sync, timer/event and filesystem result builders are removed. descriptor-projection.property compares complete/partial slot presence, order/attributes, virtual owners, prototype getter/setter isolation, lookup shadowing/symbols/abrupt order, iterator/generator results and explicit-GC retention against independent Node in typed/erased native/host and both memory profiles. One shared generated deep lookup/record-owner graph checks the property and CLI. descriptor_projection checks a typed consumer. Existing CType and public declarations suffice. Private descriptor application/lazy intrinsic publication under prototype mutation, other native record constructors, complete exotic/Realm semantics and eligible exhaustive target evidence remain open."
+        }
+      ],
+      "rationale": "Canonical slot/owner records and own-data initialization preserve represented native values independently of record and traversal cardinality. Complete producer/consumer and Realm obligations remain open."
     }
   ],
   "groups": [

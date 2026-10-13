@@ -51,6 +51,7 @@ export interface DynamicImportSourceDepthSpec {
     depth: number;
 }
 export interface FsReadActualListWidthSpec {generator:"fs-read-actual-list-width";width:number;}
+export interface DescriptorProjectionDepthSpec { generator:"descriptor-projection-depth"; depth:number; }
 export interface PrototypeValidationDepthSpec { generator:"prototype-validation-depth"; depth:number; }
 export interface UtilFormatSourceDepthSpec { generator:"util-format-source-depth"; depth:number; }
 export interface ReturnProjectionDepthSpec { generator:"return-projection-depth"; depth:number; }
@@ -219,6 +220,7 @@ export type GeneratedCaseSpec =
     | ModuleNamespaceExportWidthSpec
     | ModuleRequestWidthSpec
     | DynamicImportSourceDepthSpec
+    | DescriptorProjectionDepthSpec
     | PrototypeValidationDepthSpec
     | UtilFormatSourceDepthSpec
     | ReturnProjectionDepthSpec
@@ -323,7 +325,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth" || spec.generator === "boxed-json-source-depth" || spec.generator === "dynamic-import-source-depth" || spec.generator === "return-projection-depth" || spec.generator === "util-format-source-depth" || spec.generator === "prototype-validation-depth") {
+    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth" || spec.generator === "boxed-json-source-depth" || spec.generator === "dynamic-import-source-depth" || spec.generator === "return-projection-depth" || spec.generator === "util-format-source-depth" || spec.generator === "prototype-validation-depth" || spec.generator === "descriptor-projection-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
             throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
@@ -1777,6 +1779,14 @@ console.log("raw JSON text width:", valid);
                 `const stressView=Buffer.alloc(4);let stressSeen=0;const stressOptions={get offset(){stressSeen++;return 0},get length(){stressSeen++;return 4},get position(){stressSeen++;return 0}};\n` +
                 `const stressBytes=stressRead(stressFD,stressView,stressOptions,...Array.from({length:${spec.width}},()=>++stressSeen));\n` +
                 `console.log('bytes:',stressBytes,'seen:',stressSeen,'text:',stressView.toString());stressClose(stressFD);stressRemove(stressPath);\n`;
+        case "descriptor-projection-depth":
+            return `// @ts-nocheck\nlet descriptorProjectionGraph=Object.create(null);const descriptorProjectionGetter=()=>17;Object.defineProperty(descriptorProjectionGraph,'field',{get:descriptorProjectionGetter});\n` +
+                `for(let index=0;index<${spec.depth};index++)descriptorProjectionGraph=Object.create(descriptorProjectionGraph);\n` +
+                `console.log('descriptor-lookup-depth:',Object.prototype.__lookupGetter__.call(descriptorProjectionGraph,'field')===descriptorProjectionGetter);\n` +
+                `let descriptorProjectionRecords=null;\n` +
+                `for(let index=0;index<${spec.depth};index++){const step=[{marker:index}].values().next();const descriptor=Object.getOwnPropertyDescriptor(step,'value');descriptorProjectionRecords={step,descriptor,next:descriptorProjectionRecords}}\n` +
+                `while(descriptorProjectionRecords!==null){const owner=descriptorProjectionRecords;if(owner.step.value!==owner.descriptor.value||owner.step.done||typeof owner.step.value.marker!=='number')throw new Error('retained record owner');descriptorProjectionRecords=owner.next}\n` +
+                `console.log('descriptor-record-depth:',true);\n`;
         case "prototype-validation-depth":
             return `// @ts-nocheck\nlet prototypeValidationGraph=null;\n` +
                 `for(let index=0;index<${spec.depth};index++){try{Reflect.setPrototypeOf({},index)}catch(error){prototypeValidationGraph={error,next:prototypeValidationGraph}}}\n` +

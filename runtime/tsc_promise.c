@@ -573,14 +573,6 @@ typedef struct {
     bool close_on_rejection;
 } tsc_async_from_sync_result_env_t;
 
-static tsc_value_t async_from_sync_result_object(tsc_value_t value, bool done) {
-    void* volatile value_root = tsc_value_gc_root(value);
-    tsc_object_t* result = tsc_object_new();
-    tsc_object_set(result, tsc_str_from_lit("value", 5), value);
-    tsc_object_set(result, tsc_str_from_lit("done", 4), tsc_value_bool(done));
-    (void)value_root;
-    return tsc_value_object(result);
-}
 
 /* IteratorClose itself does not consult or update [[Done]]. The shared sync
  * consumer helper does, so adapt a record view without completing the wrapper. */
@@ -599,7 +591,7 @@ static void async_from_sync_result_callback(void* env) {
         tsc_promise_reject_in_place(state->result, error);
     } else if (tsc_promise_is_fulfilled(state->source)) {
         tsc_promise_resolve_into(state->result,
-            async_from_sync_result_object(tsc_promise_value(state->source), state->done));
+            tsc_iterator_result(tsc_promise_value(state->source), state->done));
     }
 }
 
@@ -651,7 +643,7 @@ static tsc_value_t async_from_sync_apply(void* env, tsc_value_t receiver, tsc_ar
             tsc_str_from_cstr(kind == TSC_COMPLETION_RETURN ? "return" : "throw"));
         if (tsc_value_is_nullish(method)) {
             if (kind == TSC_COMPLETION_RETURN) {
-                tsc_promise_resolve_into(output, async_from_sync_result_object(promise_argument(args, 0), true));
+                tsc_promise_resolve_into(output, tsc_iterator_result(promise_argument(args, 0), true));
                 tsc_try_pop();
                 return tsc_value_promise(output);
             }
@@ -1382,12 +1374,6 @@ static void timers_promises_schedule(tsc_timers_promises_record_t* state) {
     if (!referenced && state->operation->queue == TSC_TIMERS_QUEUE_DELAYED) tsc_unref_timeout(state->timer_id);
 }
 
-static tsc_value_t timers_promises_interval_result(tsc_value_t value, bool done) {
-    tsc_object_t* result = tsc_object_new();
-    tsc_object_set(result, tsc_str_from_lit("value", 5), value);
-    tsc_object_set(result, tsc_str_from_lit("done", 4), tsc_value_bool(done));
-    return tsc_value_object(result);
-}
 
 static void timers_promises_interval_remove_first(tsc_array_t* values) {
     if (!values || values->len == 0) return;
@@ -1430,7 +1416,7 @@ static void timers_promises_interval_tick(void* env) {
     if (state->pending->len > 0) {
         tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
         timers_promises_interval_remove_first(state->pending);
-        tsc_promise_fulfill_in_place(promise, timers_promises_interval_result(timers_promises_argument(state, state->operation->payload_argument), false));
+        tsc_promise_fulfill_in_place(promise, tsc_iterator_result(timers_promises_argument(state, state->operation->payload_argument), false));
         return;
     }
     tsc_value_t value = timers_promises_argument(state, state->operation->payload_argument);
@@ -1441,21 +1427,21 @@ static tsc_value_t timers_promises_interval_next(void* env, tsc_value_t this_arg
     (void)this_arg;
     (void)args;
     tsc_timers_promises_record_t* state = (tsc_timers_promises_record_t*)env;
-    if (!state) return tsc_value_promise(tsc_promise_resolve(timers_promises_interval_result(tsc_value_undefined(), true)));
+    if (!state) return tsc_value_promise(tsc_promise_resolve(tsc_iterator_result(tsc_value_undefined(), true)));
     if (state->queued->len > 0) {
         tsc_value_t value = TSC_ARR(tsc_value_t, state->queued, 0);
         timers_promises_interval_remove_first(state->queued);
-        return tsc_value_promise(tsc_promise_resolve(timers_promises_interval_result(value, false)));
+        return tsc_value_promise(tsc_promise_resolve(tsc_iterator_result(value, false)));
     }
     if (state->aborted) {
         if (!state->abort_delivered) {
             state->abort_delivered = true;
             return tsc_value_promise(tsc_promise_reject(timers_promises_interval_abort_reason(state)));
         }
-        return tsc_value_promise(tsc_promise_resolve(timers_promises_interval_result(tsc_value_undefined(), true)));
+        return tsc_value_promise(tsc_promise_resolve(tsc_iterator_result(tsc_value_undefined(), true)));
     }
     if (state->closed) {
-        return tsc_value_promise(tsc_promise_resolve(timers_promises_interval_result(tsc_value_undefined(), true)));
+        return tsc_value_promise(tsc_promise_resolve(tsc_iterator_result(tsc_value_undefined(), true)));
     }
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_array_push_raw(state->pending, &promise);
@@ -1481,7 +1467,7 @@ static tsc_value_t timers_promises_interval_next(void* env, tsc_value_t this_arg
 static tsc_value_t timers_promises_interval_return(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     tsc_timers_promises_record_t* state = (tsc_timers_promises_record_t*)env;
-    if (!state) return tsc_value_promise(tsc_promise_resolve(timers_promises_interval_result(tsc_value_undefined(), true)));
+    if (!state) return tsc_value_promise(tsc_promise_resolve(tsc_iterator_result(tsc_value_undefined(), true)));
     if (!state->closed) {
         state->closed = true;
         if (state->timer_id > 0.0) tsc_clear_timeout(state->timer_id);
@@ -1490,10 +1476,10 @@ static tsc_value_t timers_promises_interval_return(void* env, tsc_value_t this_a
     while (state->pending->len > 0) {
         tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
         timers_promises_interval_remove_first(state->pending);
-        tsc_promise_fulfill_in_place(promise, timers_promises_interval_result(tsc_value_undefined(), true));
+        tsc_promise_fulfill_in_place(promise, tsc_iterator_result(tsc_value_undefined(), true));
     }
     tsc_value_t value = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    return tsc_value_promise(tsc_promise_resolve(timers_promises_interval_result(value, true)));
+    return tsc_value_promise(tsc_promise_resolve(tsc_iterator_result(value, true)));
 }
 
 static tsc_value_t timers_promises_interval_async_iterator(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -1559,12 +1545,6 @@ typedef struct {
     bool paused_by_iterator;
 } tsc_event_async_iterator_t;
 
-static tsc_value_t event_async_iterator_result(tsc_value_t value, bool done) {
-    tsc_object_t* result = tsc_object_new();
-    tsc_object_set(result, tsc_str_from_lit("value", 5), value);
-    tsc_object_set(result, tsc_str_from_lit("done", 4), tsc_value_bool(done));
-    return tsc_value_object(result);
-}
 
 static void event_async_iterator_remove_first(tsc_array_t* values) {
     if (!values || values->len == 0) return;
@@ -1578,7 +1558,7 @@ static void event_async_iterator_resolve_pending(tsc_event_async_iterator_t* sta
     if (!state || state->pending->len == 0) return;
     tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
     event_async_iterator_remove_first(state->pending);
-    tsc_promise_fulfill_in_place(promise, event_async_iterator_result(tsc_value_array(event_args_copy_as_values(args)), false));
+    tsc_promise_fulfill_in_place(promise, tsc_iterator_result(tsc_value_array(event_args_copy_as_values(args)), false));
 }
 
 static void event_async_iterator_resume_if_needed(tsc_event_async_iterator_t* state) {
@@ -1688,7 +1668,7 @@ static tsc_value_t event_async_iterator_abort(void* env, tsc_value_t this_arg, t
     while (state->pending->len > 0) {
         tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
         event_async_iterator_remove_first(state->pending);
-        tsc_promise_fulfill_in_place(promise, event_async_iterator_result(tsc_value_undefined(), true));
+        tsc_promise_fulfill_in_place(promise, tsc_iterator_result(tsc_value_undefined(), true));
     }
     return tsc_value_undefined();
 }
@@ -1715,7 +1695,7 @@ static void event_async_iterator_error(void* env, tsc_event_emitter_t* emitter, 
     while (state->pending->len > 0) {
         tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
         event_async_iterator_remove_first(state->pending);
-        tsc_promise_fulfill_in_place(promise, event_async_iterator_result(tsc_value_undefined(), true));
+        tsc_promise_fulfill_in_place(promise, tsc_iterator_result(tsc_value_undefined(), true));
     }
 }
 
@@ -1751,7 +1731,7 @@ static void event_async_iterator_close_internal(tsc_event_async_iterator_t* stat
     while (state->pending->len > 0) {
         tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
         event_async_iterator_remove_first(state->pending);
-        tsc_promise_fulfill_in_place(promise, event_async_iterator_result(tsc_value_undefined(), true));
+        tsc_promise_fulfill_in_place(promise, tsc_iterator_result(tsc_value_undefined(), true));
     }
     if (clear_queued && !state->aborted) state->queued->len = 0;
 }
@@ -1771,35 +1751,35 @@ static tsc_value_t event_async_iterator_next(void* env, tsc_value_t this_arg, ts
     (void)args;
     tsc_event_async_iterator_t* state = (tsc_event_async_iterator_t*)env;
     if (!state) {
-        return tsc_value_promise(tsc_promise_resolve(event_async_iterator_result(tsc_value_undefined(), true)));
+        return tsc_value_promise(tsc_promise_resolve(tsc_iterator_result(tsc_value_undefined(), true)));
     }
     if (state->queued->len > 0) {
         tsc_array_t* values = TSC_ARR(tsc_array_t*, state->queued, 0);
         event_async_iterator_remove_first(state->queued);
         event_async_iterator_maybe_resume(state);
-        return tsc_value_promise(tsc_promise_resolve(event_async_iterator_result(tsc_value_array(values), false)));
+        return tsc_value_promise(tsc_promise_resolve(tsc_iterator_result(tsc_value_array(values), false)));
     }
     if (state->errored) {
         if (!state->error_delivered) {
             state->error_delivered = true;
             return tsc_value_promise(tsc_promise_reject(state->error_reason));
         }
-        return tsc_value_promise(tsc_promise_resolve(event_async_iterator_result(tsc_value_undefined(), true)));
+        return tsc_value_promise(tsc_promise_resolve(tsc_iterator_result(tsc_value_undefined(), true)));
     }
     if (state->aborted) {
         if (!state->abort_delivered) {
             state->abort_delivered = true;
             return tsc_value_promise(tsc_promise_reject(event_async_iterator_abort_reason(state)));
         }
-        return tsc_value_promise(tsc_promise_resolve(event_async_iterator_result(tsc_value_undefined(), true)));
+        return tsc_value_promise(tsc_promise_resolve(tsc_iterator_result(tsc_value_undefined(), true)));
     }
     if (state->closed) {
-        return tsc_value_promise(tsc_promise_resolve(event_async_iterator_result(tsc_value_undefined(), true)));
+        return tsc_value_promise(tsc_promise_resolve(tsc_iterator_result(tsc_value_undefined(), true)));
     }
     if (state->queued->len > 0) {
         tsc_array_t* values = TSC_ARR(tsc_array_t*, state->queued, 0);
         event_async_iterator_remove_first(state->queued);
-        return tsc_value_promise(tsc_promise_resolve(event_async_iterator_result(tsc_value_array(values), false)));
+        return tsc_value_promise(tsc_promise_resolve(tsc_iterator_result(tsc_value_array(values), false)));
     }
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_array_push_raw(state->pending, &promise);
@@ -1811,7 +1791,7 @@ static tsc_value_t event_async_iterator_return(void* env, tsc_value_t this_arg, 
     tsc_event_async_iterator_t* state = (tsc_event_async_iterator_t*)env;
     event_async_iterator_close(state);
     tsc_value_t value = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    return tsc_value_promise(tsc_promise_resolve(event_async_iterator_result(value, true)));
+    return tsc_value_promise(tsc_promise_resolve(tsc_iterator_result(value, true)));
 }
 
 static tsc_value_t event_async_iterator_async_iterator(void* env, tsc_value_t this_arg, tsc_array_t* args) {

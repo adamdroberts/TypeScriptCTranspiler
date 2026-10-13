@@ -685,6 +685,19 @@ tsc_value_t value_descriptor_from_string_index(const tsc_str_t* src, size_t idx)
 tsc_value_t value_descriptor_from_string_length(const tsc_str_t* src);
 tsc_value_t value_descriptor_from_string_key(const tsc_str_t* src, const tsc_str_t* key);
 tsc_value_t value_descriptor_from_function_key(const tsc_function_identity_t* fn, const tsc_str_t* key);
+typedef enum {
+#define TSC_DESCRIPTOR_FIELD(id, name, length) TSC_DESCRIPTOR_##id,
+#include "tsc_descriptor_fields.def"
+#undef TSC_DESCRIPTOR_FIELD
+    TSC_DESCRIPTOR_FIELD_COUNT
+} tsc_descriptor_field_t;
+#define TSC_DESCRIPTOR_BIT(id) (UINT32_C(1) << TSC_DESCRIPTOR_##id)
+typedef struct {
+    uint32_t present;
+    tsc_value_t values[TSC_DESCRIPTOR_FIELD_COUNT];
+} tsc_descriptor_record_t;
+tsc_value_t tsc_descriptor_record_object(const tsc_descriptor_record_t* record);
+bool tsc_descriptor_own_field(tsc_value_t descriptor, tsc_descriptor_field_t field, tsc_value_t* value);
 tsc_value_t value_descriptor_from_prop(const tsc_object_prop_t* prop);
 void object_order_ordinary_keys(tsc_array_t* keys);
 tsc_value_t object_prop_data_value(const tsc_object_t* owner, const tsc_object_prop_t* prop);

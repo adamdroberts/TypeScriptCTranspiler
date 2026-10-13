@@ -1843,8 +1843,8 @@ tsc_value_t tsc_iterator_result(tsc_value_t value, bool done) {
     void* volatile value_gc_root = tsc_value_gc_root(value);
     (void)value_gc_root;
     tsc_object_t* volatile result = tsc_object_new();
-    tsc_object_set(result, tsc_str_from_lit("value", 5), value);
-    tsc_object_set(result, tsc_str_from_lit("done", 4), tsc_value_bool(done));
+    tsc_object_define(result, tsc_str_from_lit("value", 5), value, true, true, true);
+    tsc_object_define(result, tsc_str_from_lit("done", 4), tsc_value_bool(done), true, true, true);
     return tsc_value_object(result);
 }
 
@@ -5090,39 +5090,30 @@ bool tsc_value_object_define_computed_setter(
     return tsc_value_object_define_setter(v, computed_accessor_key(key), setter);
 }
 
-static tsc_value_t lookup_accessor(tsc_value_t v, tsc_str_t* key, const char* field, size_t field_len, const char* nullish_message) {
-    if (tsc_value_is_nullish(v)) {
-        tsc_throw_str(tsc_str_from_cstr(nullish_message));
-    }
-    tsc_value_t cur = v;
-    while (!tsc_value_is_nullish(cur) && !tsc_value_is_undefined(cur)) {
-        tsc_value_t desc = tsc_value_get_own_property_descriptor(cur, key);
-        if (!tsc_value_is_undefined(desc)) {
-            return tsc_value_get_prop(desc, tsc_str_from_lit(field, field_len));
+static tsc_value_t lookup_accessor(tsc_value_t v, tsc_str_t* key, tsc_descriptor_field_t field) {
+    tsc_value_t current = tsc_value_to_object(v);
+    void* volatile current_root = tsc_value_gc_root(current);
+    while (!tsc_value_is_nullish(current)) {
+        tsc_value_t descriptor = tsc_value_get_own_property_descriptor(current, key);
+        if (!tsc_value_is_undefined(descriptor)) {
+            tsc_value_t value = tsc_value_undefined();
+            (void)tsc_descriptor_own_field(descriptor, field, &value);
+            (void)current_root;
+            return value;
         }
-        cur = tsc_value_get_prototype_of(cur);
+        current = tsc_value_get_prototype_of(current);
+        current_root = tsc_value_gc_root(current);
     }
+    (void)current_root;
     return tsc_value_undefined();
 }
 
 tsc_value_t tsc_value_object_lookup_getter(tsc_value_t v, tsc_str_t* key) {
-    return lookup_accessor(
-        v,
-        key,
-        "get",
-        3,
-        "Object.prototype.__lookupGetter__ receiver is null or undefined"
-    );
+    return lookup_accessor(v, key, TSC_DESCRIPTOR_GET);
 }
 
 tsc_value_t tsc_value_object_lookup_setter(tsc_value_t v, tsc_str_t* key) {
-    return lookup_accessor(
-        v,
-        key,
-        "set",
-        3,
-        "Object.prototype.__lookupSetter__ receiver is null or undefined"
-    );
+    return lookup_accessor(v, key, TSC_DESCRIPTOR_SET);
 }
 
 bool tsc_reflect_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
@@ -5985,26 +5976,53 @@ static tsc_array_t* value_string_iterator_values(const tsc_str_t* src) {
 }
 
 
+static const struct { const char* name; size_t length; } descriptor_fields[] = {
+#define TSC_DESCRIPTOR_FIELD(id, name, length) [TSC_DESCRIPTOR_##id] = {#name, length},
+#include "tsc_descriptor_fields.def"
+#undef TSC_DESCRIPTOR_FIELD
+};
+
+tsc_value_t tsc_descriptor_record_object(const tsc_descriptor_record_t* record) {
+    if (!record) return tsc_value_undefined();
+    void* volatile roots[TSC_DESCRIPTOR_FIELD_COUNT];
+    for (size_t field = 0; field < TSC_DESCRIPTOR_FIELD_COUNT; ++field)
+        roots[field] = record->present & (UINT32_C(1) << field) ? tsc_value_gc_root(record->values[field]) : NULL;
+    tsc_object_t* volatile object = tsc_object_new();
+    for (size_t field = 0; field < TSC_DESCRIPTOR_FIELD_COUNT; ++field) {
+        if (!(record->present & (UINT32_C(1) << field))) continue;
+        const tsc_str_t* key = tsc_str_from_lit(descriptor_fields[field].name, descriptor_fields[field].length);
+        tsc_object_define(object, (tsc_str_t*)key, record->values[field], true, true, true);
+    }
+    (void)roots;
+    return tsc_value_object(object);
+}
+
+bool tsc_descriptor_own_field(tsc_value_t descriptor, tsc_descriptor_field_t field, tsc_value_t* value) {
+    void* volatile root = tsc_value_gc_root(descriptor); (void)root;
+    tsc_str_t* key = tsc_str_from_lit(descriptor_fields[field].name, descriptor_fields[field].length);
+    if (!tsc_value_has_own_prop(descriptor, key)) return false;
+    if (value) *value = tsc_value_get_prop(descriptor, key);
+    return true;
+}
+
+static tsc_value_t descriptor_data_object(tsc_value_t value, bool writable, bool enumerable, bool configurable) {
+    const tsc_descriptor_record_t record = {
+        .present = TSC_DESCRIPTOR_BIT(VALUE) | TSC_DESCRIPTOR_BIT(WRITABLE) | TSC_DESCRIPTOR_BIT(ENUMERABLE) | TSC_DESCRIPTOR_BIT(CONFIGURABLE),
+        .values = {[TSC_DESCRIPTOR_VALUE] = value, [TSC_DESCRIPTOR_WRITABLE] = tsc_value_bool(writable),
+            [TSC_DESCRIPTOR_ENUMERABLE] = tsc_value_bool(enumerable), [TSC_DESCRIPTOR_CONFIGURABLE] = tsc_value_bool(configurable)}
+    };
+    return tsc_descriptor_record_object(&record);
+}
+
 tsc_value_t value_descriptor_from_array_index(const tsc_array_t* src, size_t idx) {
-    tsc_object_t* desc = tsc_object_new();
     tsc_value_t value = src->box_element
         ? src->box_element((const char*)src->data + idx * src->es)
         : TSC_ARR(tsc_value_t, src, idx);
-    void* volatile value_root = tsc_value_gc_root(value); (void)value_root;
-    tsc_object_set(desc, tsc_str_from_lit("value", 5), value);
-    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(true));
-    tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(true));
-    tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(true));
-    return tsc_value_object(desc);
+    return descriptor_data_object(value, true, true, true);
 }
 
 tsc_value_t value_descriptor_from_array_length(const tsc_array_t* src) {
-    tsc_object_t* desc = tsc_object_new();
-    tsc_object_set(desc, tsc_str_from_lit("value", 5), tsc_value_num((double)(src ? src->len : 0)));
-    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(src ? (src->length_writable) : true));
-    tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(false));
-    tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(false));
-    return tsc_value_object(desc);
+    return descriptor_data_object(tsc_value_num((double)(src ? src->len : 0)), src ? src->length_writable : true, false, false);
 }
 
 tsc_value_t value_descriptor_from_array_key(const tsc_array_t* src, const tsc_str_t* key) {
@@ -6021,21 +6039,11 @@ tsc_value_t value_descriptor_from_array_key(const tsc_array_t* src, const tsc_st
 }
 
 tsc_value_t value_descriptor_from_string_index(const tsc_str_t* src, size_t idx) {
-    tsc_object_t* desc = tsc_object_new();
-    tsc_object_set(desc, tsc_str_from_lit("value", 5), tsc_value_string(tsc_str_char_at(src, (double)idx)));
-    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(false));
-    tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(true));
-    tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(false));
-    return tsc_value_object(desc);
+    return descriptor_data_object(tsc_value_string(tsc_str_char_at(src, (double)idx)), false, true, false);
 }
 
 tsc_value_t value_descriptor_from_string_length(const tsc_str_t* src) {
-    tsc_object_t* desc = tsc_object_new();
-    tsc_object_set(desc, tsc_str_from_lit("value", 5), tsc_value_num((double)tsc_str_utf16_length(src)));
-    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(false));
-    tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(false));
-    tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(false));
-    return tsc_value_object(desc);
+    return descriptor_data_object(tsc_value_num((double)tsc_str_utf16_length(src)), false, false, false);
 }
 
 tsc_value_t value_descriptor_from_string_key(const tsc_str_t* src, const tsc_str_t* key) {
@@ -6049,16 +6057,11 @@ tsc_value_t value_descriptor_from_string_key(const tsc_str_t* src, const tsc_str
 }
 
 tsc_value_t value_descriptor_from_function_prototype(const tsc_function_identity_t* fn) {
-    tsc_object_t* desc = tsc_object_new();
     tsc_function_identity_t* mutable_fn = (tsc_function_identity_t*)fn;
     tsc_value_t fn_value = mutable_fn
         ? value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)mutable_fn)
         : tsc_value_undefined();
-    tsc_object_set(desc, tsc_str_from_lit("value", 5), tsc_function_own_prototype(mutable_fn, fn_value));
-    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(fn ? (fn->func_prototype_writable) : false));
-    tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(false));
-    tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(false));
-    return tsc_value_object(desc);
+    return descriptor_data_object(tsc_function_own_prototype(mutable_fn, fn_value), fn ? fn->func_prototype_writable : false, false, false);
 }
 
 tsc_value_t value_descriptor_from_function_key(const tsc_function_identity_t* fn, const tsc_str_t* key) {
@@ -6166,32 +6169,24 @@ tsc_array_t* tsc_reflect_own_keys(tsc_value_t v) {
 }
 
 tsc_value_t value_descriptor_from_prop(const tsc_object_prop_t* prop) {
-    tsc_object_t* desc = tsc_object_new();
-    if (prop->accessor) {
-        tsc_object_set(desc, tsc_str_from_lit("get", 3), prop->getter ? prop->getter_value : tsc_value_undefined());
-        tsc_object_set(desc, tsc_str_from_lit("set", 3), prop->setter ? prop->setter_value : tsc_value_undefined());
-    } else {
-        tsc_object_set(desc, tsc_str_from_lit("value", 5), prop->value);
-        tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(prop->writable));
-    }
-    tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(prop->enumerable));
-    tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(prop->configurable));
-    return tsc_value_object(desc);
+    if (!prop->accessor) return descriptor_data_object(prop->value, prop->writable, prop->enumerable, prop->configurable);
+    const tsc_descriptor_record_t record = {
+        .present = TSC_DESCRIPTOR_BIT(GET) | TSC_DESCRIPTOR_BIT(SET) | TSC_DESCRIPTOR_BIT(ENUMERABLE) | TSC_DESCRIPTOR_BIT(CONFIGURABLE),
+        .values = {[TSC_DESCRIPTOR_GET] = prop->getter ? prop->getter_value : tsc_value_undefined(),
+            [TSC_DESCRIPTOR_SET] = prop->setter ? prop->setter_value : tsc_value_undefined(),
+            [TSC_DESCRIPTOR_ENUMERABLE] = tsc_value_bool(prop->enumerable), [TSC_DESCRIPTOR_CONFIGURABLE] = tsc_value_bool(prop->configurable)}
+    };
+    return tsc_descriptor_record_object(&record);
 }
 
 static tsc_value_t value_descriptor_from_module_namespace_prop(
     const tsc_object_t* object,
     const tsc_object_prop_t* prop
 ) {
-    tsc_object_t* desc = tsc_object_new();
     tsc_value_t value = prop->getter
         ? prop->getter(prop->getter_env, tsc_value_object((tsc_object_t*)object))
-        : tsc_value_undefined();
-    tsc_object_set(desc, tsc_str_from_lit("value", 5), value);
-    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(true));
-    tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(true));
-    tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(false));
-    return tsc_value_object(desc);
+        : prop->value;
+    return descriptor_data_object(value, true, true, false);
 }
 
 static void proxy_own_descriptor_error(void) {

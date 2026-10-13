@@ -10140,12 +10140,6 @@ static tsc_value_t tsc_fs_file_handle_read_file_builtin(void* env, tsc_value_t t
     ));
 }
 
-static tsc_value_t tsc_fs_file_handle_read_lines_result(tsc_value_t value, bool done) {
-    tsc_object_t* result = tsc_object_new();
-    tsc_object_set(result, tsc_str_from_lit("value", 5), value);
-    tsc_object_set(result, tsc_str_from_lit("done", 4), tsc_value_bool(done));
-    return tsc_value_object(result);
-}
 
 static void tsc_fs_file_handle_read_lines_remove_first(tsc_array_t* values) {
     if (!values || values->len == 0) return;
@@ -10205,7 +10199,7 @@ static void tsc_fs_file_handle_read_lines_drain(tsc_fs_file_handle_read_lines_t*
             tsc_fs_file_handle_read_lines_remove_first(state->pending);
             tsc_promise_fulfill_in_place(
                 promise,
-                tsc_fs_file_handle_read_lines_result(tsc_value_undefined(), true)
+                tsc_iterator_result(tsc_value_undefined(), true)
             );
         }
         return;
@@ -10218,7 +10212,7 @@ static void tsc_fs_file_handle_read_lines_drain(tsc_fs_file_handle_read_lines_t*
         if (tsc_fs_file_handle_read_lines_next_value(state, &line)) {
             tsc_promise_fulfill_in_place(
                 promise,
-                tsc_fs_file_handle_read_lines_result(tsc_value_string(line), false)
+                tsc_iterator_result(tsc_value_string(line), false)
             );
             continue;
         }
@@ -10227,14 +10221,14 @@ static void tsc_fs_file_handle_read_lines_drain(tsc_fs_file_handle_read_lines_t*
         tsc_fs_file_handle_read_lines_emit_close(state);
         tsc_promise_fulfill_in_place(
             promise,
-            tsc_fs_file_handle_read_lines_result(tsc_value_undefined(), true)
+            tsc_iterator_result(tsc_value_undefined(), true)
         );
         while (state->pending->len > 0) {
             promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
             tsc_fs_file_handle_read_lines_remove_first(state->pending);
             tsc_promise_fulfill_in_place(
                 promise,
-                tsc_fs_file_handle_read_lines_result(tsc_value_undefined(), true)
+                tsc_iterator_result(tsc_value_undefined(), true)
             );
         }
     }
@@ -10272,7 +10266,7 @@ static tsc_value_t tsc_fs_file_handle_read_lines_next(void* env, tsc_value_t thi
     tsc_fs_file_handle_read_lines_t* state = (tsc_fs_file_handle_read_lines_t*)env;
     if (!state || state->closed || state->done) {
         return tsc_value_promise(tsc_promise_resolve(
-            tsc_fs_file_handle_read_lines_result(tsc_value_undefined(), true)
+            tsc_iterator_result(tsc_value_undefined(), true)
         ));
     }
     if (state->failed) {
@@ -10281,7 +10275,7 @@ static tsc_value_t tsc_fs_file_handle_read_lines_next(void* env, tsc_value_t thi
             return tsc_value_promise(tsc_promise_reject(state->failure));
         }
         return tsc_value_promise(tsc_promise_resolve(
-            tsc_fs_file_handle_read_lines_result(tsc_value_undefined(), true)
+            tsc_iterator_result(tsc_value_undefined(), true)
         ));
     }
     if (!state->loaded) {
@@ -10292,14 +10286,14 @@ static tsc_value_t tsc_fs_file_handle_read_lines_next(void* env, tsc_value_t thi
     tsc_str_t* line = NULL;
     if (tsc_fs_file_handle_read_lines_next_value(state, &line)) {
         return tsc_value_promise(tsc_promise_resolve(
-            tsc_fs_file_handle_read_lines_result(tsc_value_string(line), false)
+            tsc_iterator_result(tsc_value_string(line), false)
         ));
     }
     state->done = true;
     tsc_fs_file_handle_read_lines_auto_close(state);
     tsc_fs_file_handle_read_lines_emit_close(state);
     return tsc_value_promise(tsc_promise_resolve(
-        tsc_fs_file_handle_read_lines_result(tsc_value_undefined(), true)
+        tsc_iterator_result(tsc_value_undefined(), true)
     ));
 }
 
@@ -10309,7 +10303,7 @@ static tsc_value_t tsc_fs_file_handle_read_lines_return(void* env, tsc_value_t t
     tsc_value_t value = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
     if (!state) {
         return tsc_value_promise(tsc_promise_resolve(
-            tsc_fs_file_handle_read_lines_result(value, true)
+            tsc_iterator_result(value, true)
         ));
     }
     state->closed = true;
@@ -10321,11 +10315,11 @@ static tsc_value_t tsc_fs_file_handle_read_lines_return(void* env, tsc_value_t t
         tsc_fs_file_handle_read_lines_remove_first(state->pending);
         tsc_promise_fulfill_in_place(
             promise,
-            tsc_fs_file_handle_read_lines_result(tsc_value_undefined(), true)
+            tsc_iterator_result(tsc_value_undefined(), true)
         );
     }
     return tsc_value_promise(tsc_promise_resolve(
-        tsc_fs_file_handle_read_lines_result(value, true)
+        tsc_iterator_result(value, true)
     ));
 }
 
@@ -14503,8 +14497,6 @@ typedef struct tsc_fs_dir {
 #endif
 } tsc_fs_dir_t;
 
-static tsc_value_t tsc_fs_dir_iterator_result(tsc_value_t value, bool done);
-
 static tsc_array_t* tsc_fs_dir_pending_new(size_t buffer_size) {
     size_t initial_cap = buffer_size < 32 ? buffer_size : 32;
     if (initial_cap == 0) initial_cap = 1;
@@ -14799,7 +14791,7 @@ static void tsc_fs_dir_uv_finish_close(tsc_fs_dir_t* state, bool success) {
         if (waiter.iterator) {
             tsc_promise_fulfill_in_place(
                 waiter.promise,
-                tsc_fs_dir_iterator_result(tsc_value_undefined(), true)
+                tsc_iterator_result(tsc_value_undefined(), true)
             );
         } else {
             tsc_promise_reject_in_place(waiter.promise, tsc_fs_dir_uv_error("fs.Dir is closed"));
@@ -14887,7 +14879,7 @@ static void tsc_fs_dir_uv_pump(tsc_fs_dir_t* state) {
             if (waiter.iterator) {
                 tsc_promise_fulfill_in_place(
                     waiter.promise,
-                    tsc_fs_dir_iterator_result(tsc_value_undefined(), true)
+                    tsc_iterator_result(tsc_value_undefined(), true)
                 );
             } else {
                 tsc_promise_reject_in_place(waiter.promise, tsc_fs_dir_uv_error("fs.Dir is closed"));
@@ -14902,7 +14894,7 @@ static void tsc_fs_dir_uv_pump(tsc_fs_dir_t* state) {
             if (waiter.iterator) {
                 tsc_promise_fulfill_in_place(
                     waiter.promise,
-                    tsc_fs_dir_iterator_result(tsc_value_undefined(), true)
+                    tsc_iterator_result(tsc_value_undefined(), true)
                 );
             } else {
                 tsc_promise_reject_in_place(waiter.promise, tsc_fs_dir_uv_error("fs.Dir is closed"));
@@ -14923,7 +14915,7 @@ static void tsc_fs_dir_uv_pump(tsc_fs_dir_t* state) {
             if (waiter.promise) {
                 tsc_promise_fulfill_in_place(
                     waiter.promise,
-                    waiter.iterator ? tsc_fs_dir_iterator_result(value, false) : value
+                    waiter.iterator ? tsc_iterator_result(value, false) : value
                 );
             }
             continue;
@@ -14937,7 +14929,7 @@ static void tsc_fs_dir_uv_pump(tsc_fs_dir_t* state) {
                     close_after = true;
                     tsc_promise_fulfill_in_place(
                         waiter.promise,
-                        tsc_fs_dir_iterator_result(tsc_value_undefined(), true)
+                        tsc_iterator_result(tsc_value_undefined(), true)
                     );
                 } else {
                     tsc_promise_fulfill_in_place(waiter.promise, tsc_value_null());
@@ -15131,12 +15123,7 @@ static tsc_value_t tsc_fs_dir_read_entry(tsc_fs_dir_t* state) {
     return tsc_value_null();
 }
 
-static tsc_value_t tsc_fs_dir_iterator_result(tsc_value_t value, bool done) {
-    tsc_object_t* result = tsc_object_new();
-    tsc_object_set(result, tsc_str_from_lit("value", 5), value);
-    tsc_object_set(result, tsc_str_from_lit("done", 4), tsc_value_bool(done));
-    return tsc_value_object(result);
-}
+
 
 #ifdef TSC_HAS_LIBUV
 static tsc_value_t tsc_fs_dir_uv_wait(tsc_fs_dir_t* state, bool iterator) {
@@ -15145,7 +15132,7 @@ static tsc_value_t tsc_fs_dir_uv_wait(tsc_fs_dir_t* state, bool iterator) {
         if (iterator) {
             tsc_promise_fulfill_in_place(
                 promise,
-                tsc_fs_dir_iterator_result(tsc_value_undefined(), true)
+                tsc_iterator_result(tsc_value_undefined(), true)
             );
         } else {
             tsc_promise_reject_in_place(promise, tsc_fs_dir_uv_error("fs.Dir is closed"));
@@ -15222,7 +15209,7 @@ static tsc_value_t tsc_fs_dir_next_builtin(void* env, tsc_value_t this_arg, tsc_
 #endif
     if (!state || state->closed || state->exhausted || !state->dir) {
         return tsc_value_promise(tsc_promise_resolve(
-            tsc_fs_dir_iterator_result(tsc_value_undefined(), true)
+            tsc_iterator_result(tsc_value_undefined(), true)
         ));
     }
     TSC_TRY_FRAME(frame);
@@ -15233,11 +15220,11 @@ static tsc_value_t tsc_fs_dir_next_builtin(void* env, tsc_value_t this_arg, tsc_
         if (value == tsc_value_null()) {
             tsc_fs_dir_close_internal(state);
             return tsc_value_promise(tsc_promise_resolve(
-                tsc_fs_dir_iterator_result(tsc_value_undefined(), true)
+                tsc_iterator_result(tsc_value_undefined(), true)
             ));
         }
         return tsc_value_promise(tsc_promise_resolve(
-            tsc_fs_dir_iterator_result(value, false)
+            tsc_iterator_result(value, false)
         ));
     }
     return tsc_value_promise(tsc_promise_reject(tsc_current_error_value()));
@@ -15250,12 +15237,12 @@ static tsc_value_t tsc_fs_dir_return_builtin(void* env, tsc_value_t this_arg, ts
     if (state && state->uv_backend) {
         tsc_fs_dir_uv_close_start(state);
         tsc_value_t value = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-        return tsc_value_promise(tsc_promise_resolve(tsc_fs_dir_iterator_result(value, true)));
+        return tsc_value_promise(tsc_promise_resolve(tsc_iterator_result(value, true)));
     }
 #endif
     tsc_fs_dir_close_internal((tsc_fs_dir_t*)env);
     tsc_value_t value = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    return tsc_value_promise(tsc_promise_resolve(tsc_fs_dir_iterator_result(value, true)));
+    return tsc_value_promise(tsc_promise_resolve(tsc_iterator_result(value, true)));
 }
 
 static tsc_value_t tsc_fs_dir_async_iterator_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {

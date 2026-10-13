@@ -3731,6 +3731,77 @@
       "targets": [
         "sec-reflect.setprototypeof#ordinary-prototype-domain-and-exception-owners"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/descriptor-projection.property.test.ts",
+      "targets": [
+        "sec-createiterresultobject#own-data-iterator-result-projection",
+        "sec-frompropertydescriptor#owned-native-descriptor-slot-projection"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "descriptor_projection_depth",
+      "targets": [
+        "sec-createiterresultobject#own-data-iterator-result-projection",
+        "sec-frompropertydescriptor#owned-native-descriptor-slot-projection"
+      ],
+      "stressReview": {
+        "dimension": "retained prototype lookup and native record owner depth",
+        "parameter": "depth",
+        "representativeHighDepth": 4096,
+        "rationale": "One shared generated native input exercises the rooted prototype worklist and retained descriptor/iterator owner graph independently of fixture shape and record cardinality.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "descriptor_projection",
+      "targets": [
+        "sec-createiterresultobject#own-data-iterator-result-projection",
+        "sec-frompropertydescriptor#owned-native-descriptor-slot-projection"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_descriptor_record_object",
+      "targets": [
+        "sec-createiterresultobject#own-data-iterator-result-projection",
+        "sec-frompropertydescriptor#owned-native-descriptor-slot-projection"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_descriptor_own_field",
+      "targets": [
+        "sec-createiterresultobject#own-data-iterator-result-projection",
+        "sec-frompropertydescriptor#owned-native-descriptor-slot-projection"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#lookup_accessor",
+      "targets": [
+        "sec-createiterresultobject#own-data-iterator-result-projection",
+        "sec-frompropertydescriptor#owned-native-descriptor-slot-projection"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_iterator_result",
+      "targets": [
+        "sec-createiterresultobject#own-data-iterator-result-projection",
+        "sec-frompropertydescriptor#owned-native-descriptor-slot-projection"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_internal.h#tsc_descriptor_record_t",
+      "targets": [
+        "sec-createiterresultobject#own-data-iterator-result-projection",
+        "sec-frompropertydescriptor#owned-native-descriptor-slot-projection"
+      ]
     }
   ]
 }
