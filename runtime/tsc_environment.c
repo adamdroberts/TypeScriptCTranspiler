@@ -124,6 +124,29 @@ static tsc_environment_t* environment_variable_record(void) {
     return variable;
 }
 
+tsc_reference_t* tsc_environment_annex_b_function_instantiation(tsc_str_t* key, bool deletable) {
+    tsc_environment_t* variable = environment_variable_record();
+    /* The hypothetical var declaration must not cross a lexical binding.
+     * With-object records are independent and do not own this var target. */
+    for (tsc_environment_t* scope = current_environment; scope; scope = scope->parent) {
+        tsc_environment_binding_t* binding = environment_own_binding(scope, key);
+        if (binding && binding->lexical) return NULL;
+        if (scope == variable) break;
+    }
+    tsc_reference_t reference;
+    if (variable) {
+        if (!environment_own_binding(variable, key))
+            (void)environment_create_binding(variable, key, false, false, deletable);
+        reference = (tsc_reference_t){ .name = key, .base = variable, .kind = TSC_REFERENCE_DECLARATIVE, .strict = false };
+    } else {
+        if (!tsc_global_annex_b_function_instantiation(key, deletable)) return NULL;
+        reference = tsc_global_reference_capture(key, false);
+    }
+    tsc_reference_t* captured = TSC_GC_MALLOC(sizeof(*captured));
+    *captured = reference;
+    return captured;
+}
+
 void tsc_environment_variable_enter(tsc_environment_scope_t* scope) {
     scope->previous = current_environment;
     tsc_environment_t* captured = tsc_environment_new(current_environment, false);

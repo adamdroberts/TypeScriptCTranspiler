@@ -900,7 +900,7 @@ typedef struct {
 
 tsc_value_t tsc_global_object(void);
 void tsc_global_declaration_instantiation(tsc_global_declaration_t* declarations, size_t length);
-bool tsc_global_annex_b_function_instantiation(tsc_str_t* key);
+bool tsc_global_annex_b_function_instantiation(tsc_str_t* key, bool deletable);
 tsc_value_t tsc_global_lexical_initialize(tsc_str_t* key, tsc_value_t value);
 void tsc_environment_declaration_instantiation(tsc_global_declaration_t* declarations, size_t length);
 tsc_value_t tsc_environment_binding_initialize(tsc_str_t* key, tsc_value_t value);
@@ -955,6 +955,7 @@ typedef struct {
     bool strict;
 } tsc_reference_t;
 tsc_reference_t tsc_environment_reference_capture(tsc_str_t* key, bool strict);
+tsc_reference_t* tsc_environment_annex_b_function_instantiation(tsc_str_t* key, bool deletable);
 tsc_value_t tsc_environment_reference_get_captured(const tsc_reference_t* reference);
 tsc_value_t tsc_environment_reference_set_captured(const tsc_reference_t* reference, tsc_value_t value);
 bool tsc_environment_reference_delete_captured(const tsc_reference_t* reference);

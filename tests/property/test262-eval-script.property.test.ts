@@ -453,7 +453,7 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
         ...compiledEntries.map(({ entry, source }) => fs.writeFile(entry, source, "utf8")),
         ...directEntries.map(({ entry, source }) => fs.writeFile(entry, source, "utf8")),
         ...indirectEntries.map(({ entry, source }) => fs.writeFile(entry, source, "utf8")),
-        fs.writeFile(nestedEvalMain, 'function nested() { return eval("1"); } nested();', "utf8"),
+        fs.writeFile(nestedEvalMain, 'function nested() { return eval("runtime source outside graph " + Math.random()); } nested();', "utf8"),
         fs.writeFile(main, `
             var executions = 0;
             var completionTrailingDeclaration;
@@ -564,10 +564,10 @@ test("finite AOT evalScript records parse and evaluate on every call", async () 
             try { globalThis.eval(${JSON.stringify(invalidIndirectSource)}); }
             catch (error) { indirectSyntax = error instanceof SyntaxError; }
             if (!indirectSyntax) throw new Error("indirect eval ParseScript failure differed");
-            var indirectUnknown = false;
+            var admittedSyntax = false;
             try { (0, eval)("runtime source outside graph"); }
-            catch (error) { indirectUnknown = error instanceof TypeError; }
-            if (!indirectUnknown) throw new Error("unproved indirect eval source did not fail closed");
+            catch (error) { admittedSyntax = error instanceof SyntaxError; }
+            if (!admittedSyntax) throw new Error("admitted indirect eval ParseScript failure differed");
 
             eval(${JSON.stringify(directDeclarationSource)});
             var directVarDescriptor = Object.getOwnPropertyDescriptor(globalThis, "directEvalVar");

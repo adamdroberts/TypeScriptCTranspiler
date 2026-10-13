@@ -760,7 +760,7 @@ class Emitter {
         new WeakMap<ts.SourceFile, ReadonlySet<ts.FunctionDeclaration>>();
     private test262ScriptGlobalDeclarationsCache =
         new WeakMap<ts.SourceFile, Test262ScriptGlobalDeclarationPlan>();
-    private test262AnnexBFunctionEnabled =
+    private test262AnnexBFunctionReferences =
         new WeakMap<ts.FunctionDeclaration, string>();
 
     private freshTemp(prefix = "_t"): string {
@@ -21958,9 +21958,6 @@ class Emitter {
             buf.line(`tsc_environment_t* volatile ${environment} = tsc_environment_new(tsc_environment_current(), ${sloppyEval ? "false" : "true"});`);
             buf.line(`(void)tsc_environment_swap(${environment});`);
         }
-        if (sloppyEval && declarations.annexBFunctions.length > 0) {
-            unsupported(declarations.annexBFunctions[0]!, "finite eval Annex B functions require the shared eval variable environment");
-        }
         const length = declarations.lexicals.length + declarations.functions.length + declarations.vars.length;
         if (length > 0) {
             const plan = this.freshTemp("_global_declarations");
@@ -22014,11 +22011,11 @@ class Emitter {
                     "Annex B global block function requires the canonical closure-capable function lowering",
                 );
             }
-            const enabled = this.freshTemp("_annex_b_function_enabled");
-            this.test262AnnexBFunctionEnabled.set(declaration, enabled);
+            const reference = this.freshTemp("_annex_b_outer_reference");
+            this.test262AnnexBFunctionReferences.set(declaration, reference);
             buf.line(
-                `bool ${enabled} = tsc_global_annex_b_function_instantiation(` +
-                `${this.test262GlobalBindingKey(declaration.name!.text)});`,
+                `tsc_reference_t* ${reference} = tsc_environment_annex_b_function_instantiation(` +
+                `${this.test262GlobalBindingKey(declaration.name!.text)}, ${evalSource ? "true" : "false"});`,
             );
         }
     }
@@ -22027,8 +22024,8 @@ class Emitter {
         buf: CBuf,
         declaration: ts.FunctionDeclaration,
     ): boolean {
-        const enabled = this.test262AnnexBFunctionEnabled.get(declaration);
-        if (!enabled || !declaration.name) return false;
+        const reference = this.test262AnnexBFunctionReferences.get(declaration);
+        if (!reference || !declaration.name) return false;
         const lexical = this.localLexicalReferenceForIdentifier(declaration.name);
         const value = lexical
             ? this.coerce(
@@ -22041,12 +22038,10 @@ class Emitter {
                 const closure = this.emitFunctionDeclarationReferenceClosure(declaration, type);
                 return this.coerce(closure, T_VALUE, declaration.name);
             })();
-        buf.open(`if (${enabled})`);
-        const annexKeyTmp = this.freshTemp("_store_key");
-        buf.line(`tsc_str_t* ${annexKeyTmp} = ${this.test262GlobalBindingKey(declaration.name.text)};`);
+        buf.open(`if (${reference})`);
         buf.line(
-            `tsc_environment_reference_set(${annexKeyTmp}, ` +
-            `${value}, false);`,
+            `tsc_environment_reference_set_captured(${reference}, ` +
+            `${value});`,
         );
         buf.close();
         return true;

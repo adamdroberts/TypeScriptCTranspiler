@@ -3309,12 +3309,12 @@ void tsc_global_declaration_instantiation(
     }
 }
 
-bool tsc_global_annex_b_function_instantiation(tsc_str_t* key) {
+bool tsc_global_annex_b_function_instantiation(tsc_str_t* key, bool deletable) {
     /* The web-compat insertion suppresses this binding rather than throwing
      * when an existing declarative binding wins or the ordinary global object
      * cannot accept the candidate var binding. */
     if (global_lexical_find(key) || !global_can_declare_var(key)) return false;
-    global_create_var(key, false);
+    global_create_var(key, deletable);
     return true;
 }
 
