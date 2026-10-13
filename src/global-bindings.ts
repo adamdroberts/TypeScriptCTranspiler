@@ -23,6 +23,13 @@ export const runtimeObjectPrototypeMethods: ReadonlyMap<string, NonNullable<Runt
         }),
 );
 
+/** Native Error constructor identities come from the Realm binding table. */
+export const runtimeErrorKinds: ReadonlyMap<string,string> = new Map(
+    [...fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_global_bindings.def"), "utf8")
+        .matchAll(/^TSC_GLOBAL_INTRINSIC\((\w+), tsc_error_constructor_value\(TSC_ERROR_(\w+)\), OBJECT\)$/gm)]
+        .map(([,name,kind])=>[name!,kind!] as const),
+);
+
 /** The native well-known Symbol table is the canonical identity collection. */
 export const runtimeWellKnownSymbolDescriptions: ReadonlyMap<string, string> = new Map(
     fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_builtin.c"), "utf8")

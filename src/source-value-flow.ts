@@ -13,7 +13,7 @@ import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
 import {declarativeSourceBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding, sourceBindingTarget} from "./source-bindings";
-import {runtimeGlobalBindings, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
+import {runtimeGlobalBindings, runtimeErrorKinds, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
     readonly roots?: readonly string[];
@@ -43,7 +43,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "json-stringify" | `agent-member:${string}`;
+    "define-property" | "define-properties" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "json-stringify" | "error-text" | `agent-member:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
@@ -88,7 +88,7 @@ type Atom =
     | { readonly tag: "descriptor"; readonly identity: object }
     | { readonly tag: "unknown"; readonly origin?: ts.Node }
     | { readonly tag: "opaque-object" }
-    | { readonly tag: "text-operation"; readonly operation: "numeric" | "template" | "bound-name" | "prefix" | "coerce"; readonly numeric?: SourceNumericOperation; readonly conversion?: string; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
+    | { readonly tag: "text-operation"; readonly operation: "numeric" | "template" | "bound-name" | "prefix" | "coerce" | "error-text"; readonly numeric?: SourceNumericOperation; readonly conversion?: string; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
     | { readonly tag: "text-operation"; readonly operation: "array-join"; readonly parts: readonly Cell[]; readonly indexedRange: {readonly length:number;readonly positions:readonly number[]} }
     | { readonly tag: "promise"; readonly value: Cell; readonly rejection: Cell }
     | { readonly tag: "generator"; readonly owner: FunctionOwner }
@@ -203,6 +203,9 @@ class SourceValueFlow {
     private readonly cells = new Map<ts.Node, Cell>();
     private readonly presenceRules = new Set<Rule>();
     private presenceClosed = false;
+    private readonly errorPrototypes = new Map<string,Cell>();
+    private readonly nativeExceptions = new Map<ts.Node,Atom>();
+    private readonly errorStrings = new Map<ts.Node,Map<Cell,Cell>>();
     private readonly jsonSerializations = new Map<ts.Node, Map<string, Cell>>();
     private readonly normalResults = new Map<Cell, Atom>();
     private readonly exceptionHandlers = new Map<ts.Node, Cell>();
@@ -418,7 +421,7 @@ class SourceValueFlow {
                             typeof left !== "string" && typeof right !== "string" && (typeof left === "bigint") !== (typeof right === "bigint")));
                         const symbolConversion = !propertyKey && states.some(state => state.proof.values.some(value => typeof value === "symbol"));
                         if (states.some(state => !state.proof.primitiveComplete) || mixedBigInt || symbolConversion ||
-                            !propertyKey && !plus) this.publish(handler, this.opaqueObject);
+                            !propertyKey && !plus) this.publish(handler, this.nativeException(node));
                     });
                 }
                 if (ts.isVariableDeclaration(node) && node.initializer) this.onActive(node, () => this.bind(node.name, this.cell(node.initializer!)));
@@ -935,7 +938,7 @@ class SourceValueFlow {
     }
     private writeProperty(base: Cell, key: SourcePropertyKey | null, value: Cell, unknownGlobal = true, mode: "set"|"define"|"delete" = "set", context?: ts.Node, receiver = base): void {
         const handler=context?this.exceptionHandlers.get(context):undefined;
-        if(handler)this.publish(handler,this.opaqueObject);
+        if(handler)this.publish(handler,this.nativeException(context!));
         const signature=base.id+":"+this.keyIdentity(key)+":"+value.id+":"+unknownGlobal+":"+mode+":"+(context?this.cell(context).id:"none")+":"+receiver.id;
         if(this.propertyWrites.has(signature))return;
         this.propertyWrites.add(signature);
@@ -1047,7 +1050,7 @@ class SourceValueFlow {
                     if (index === methods.length) {
                         this.publish(result, this.abrupt);
                         const handler = this.exceptionHandlers.get(context);
-                        if (handler) this.publish(handler, this.opaqueObject);
+                        if (handler) this.publish(handler, this.nativeException(context!));
                         return;
                     }
                     const method = this.property(receiver, methods[index]!, context), callee = this.newCell(), returned = this.newCell();
@@ -1074,7 +1077,7 @@ class SourceValueFlow {
                 const invalid = (): void => {
                     this.publish(result, this.abrupt);
                     const handler = this.exceptionHandlers.get(context);
-                    if (handler) this.publish(handler, this.opaqueObject);
+                    if (handler) this.publish(handler, this.nativeException(context!));
                 };
                 this.rule([hook], () => {
                     for (const value of hook.values) {
@@ -1120,9 +1123,9 @@ class SourceValueFlow {
             if (state.pending) return;
             if (state.unresolved) {if (handler) this.publish(handler, this.unknown); this.onActive(context, () => this.opaqueEffect(context));}
             if (!handler) return;
-            if (!state.proof.primitiveComplete && !this.primitiveNumericConversionSafe(input, conversion)) this.publish(handler, this.opaqueObject);
+            if (!state.proof.primitiveComplete && !this.primitiveNumericConversionSafe(input, conversion)) this.publish(handler, this.nativeException(context!));
             for (const value of state.proof.values) {
-                try {NUMERIC_CONVERSIONS.get(conversion)!(value);} catch {this.publish(handler, this.opaqueObject);}
+                try {NUMERIC_CONVERSIONS.get(conversion)!(value);} catch {this.publish(handler, this.nativeException(context!));}
             }
         });
         return result;
@@ -1164,7 +1167,7 @@ class SourceValueFlow {
             const values = proof.values.filter(value => typeof value !== "symbol" || descriptiveSymbols && input.values.has(this.primitive(value)));
             if (values.length !== proof.values.length && context) {
                 const handler = this.exceptionHandlers.get(context);
-                if (handler) this.publish(handler, this.opaqueObject);
+                if (handler) this.publish(handler, this.nativeException(context!));
             }
             return [...new Set(values.map(String))];
         }
@@ -1172,7 +1175,11 @@ class SourceValueFlow {
         if (context) {
             const opaque = this.primitiveState(key, rule, true).unresolved;
             const handler = this.exceptionHandlers.get(context);
-            if (handler) this.publish(handler, opaque ? this.unknown : this.opaqueObject);
+            if (handler) {
+                const kinds=this.primitiveKinds(key);
+                if(opaque)this.publish(handler,this.unknown);
+                else if(kinds&KIND_SYMBOL)this.publish(handler,this.nativeException(context));
+            }
             if (opaque) this.onActive(context, () => this.opaqueEffect(context));
         }
         return null;
@@ -1426,7 +1433,7 @@ class SourceValueFlow {
                 if(accessor){for(const atom of base.values){const owner=this.ordinaryOwner(atom);
                     if(owner){this.defineAccessor(owner,name,"get",getter,context);this.defineAccessor(owner,name,"set",setter,context);}
                     else if(atom.tag==="unknown"||atom.tag==="opaque-object") {this.publish(this.globalMutation,this.unknown);this.opaqueEffect(context);}
-                    else if(atom.tag!=="abrupt"&&atom.tag!=="pending-source"){const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.opaqueObject);}
+                    else if(atom.tag!=="abrupt"&&atom.tag!=="pending-source"){const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context!));}
                 }}else if(getter.values.size && setter.values.size)this.writeProperty(base,name,value,true,"define",context);
             }
         });
@@ -1459,7 +1466,7 @@ class SourceValueFlow {
             if(key && keys===null){incomplete();return;}
             for(const atom of base.values){
                 if(atom.tag==="pending-source"||atom.tag==="abrupt"){this.publish(result,atom);continue;}
-                if(atom.tag==="primitive"&&(atom.value===null||atom.value===undefined)){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.opaqueObject);continue;}
+                if(atom.tag==="primitive"&&(atom.value===null||atom.value===undefined)){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.nativeException(context!));continue;}
                 const owner=this.ordinaryOwner(atom);
                 if(!owner){incomplete();if(atom.tag==="unknown"||atom.tag==="opaque-object")this.onActive(context,()=>this.opaqueEffect(context));continue;}
                 this.watch(rule,owner.shape);
@@ -1523,6 +1530,7 @@ class SourceValueFlow {
                     const value = this.newCell();this.publish(value,this.operation(operation));this.defineField(fields,name,value);
                 }
                 if (descriptor.normalResult !== "not-callable") fields.prototype = this.callablePrototype("ordinary");
+                if(runtimeErrorKinds.has(key))this.defineField(fields,"prototype",this.errorPrototype(key));
                 if(key==="Object")this.defineField(fields,"prototype",this.objectPrototype());
                 if(key==="Array")this.defineField(fields,"prototype",this.arrayPrototype());
                 if(key==="Symbol") {
@@ -1549,6 +1557,57 @@ class SourceValueFlow {
             this.publish(cell, this.intrinsic("prototype", kind));
         }
         return cell;
+    }
+    private errorPrototype(name:string):Cell {
+        let value=this.errorPrototypes.get(name);if(value)return value;
+        value=this.newCell();this.errorPrototypes.set(name,value);
+        const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:name==="Error"?this.objectPrototype():this.errorPrototype("Error")};
+        this.copy(this.opaqueMutation,owner.shape);this.copy(this.globalMutation,owner.shape);this.publish(value,{tag:"object",owner});
+        const spelling=this.newCell();this.publish(spelling,this.primitive(name));this.defineField(owner,"name",spelling);
+        this.defineField(owner,"constructor",this.globalBinding(name));
+        if(name==="Error"){
+            const message=this.newCell(),method=this.newCell();this.publish(message,this.primitive(""));this.publish(method,this.operation("error-text"));
+            this.defineField(owner,"message",message);this.defineField(owner,"toString",method);
+        }
+        return value;
+    }
+    /** Only language-created exceptions enter this allocation collection.
+     * Unknown messages keep their String category without inventing callbacks;
+     * mutable prototype properties still use the ordinary owner graph. */
+    private nativeException(context:ts.Node):Atom {
+        let value=this.nativeExceptions.get(context);if(value)return value;
+        const prototype=this.newCell(),message=this.newCell();
+        const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype};
+        value={tag:"object",owner};this.nativeExceptions.set(context,value);
+        this.copy(this.opaqueMutation,owner.shape);
+        for(const name of runtimeErrorKinds.keys())this.copy(this.errorPrototype(name),prototype);
+        this.publish(message,this.unknownString);this.defineField(owner,"message",message);
+        return value;
+    }
+    private errorText(receiver:Cell,context:ts.Node):Cell {
+        let receivers=this.errorStrings.get(context);if(!receivers){receivers=new Map();this.errorStrings.set(context,receivers);}
+        const prior=receivers.get(receiver);if(prior)return prior;
+        const result=this.newCell();receivers.set(receiver,result);
+        const objects=this.newCell();
+        this.rule([receiver],()=>{
+            for(const atom of receiver.values){
+                if(this.ordinaryOwner(atom)||atom.tag==="opaque-object"||atom.tag==="unknown")this.publish(objects,atom);
+                else if(atom.tag==="pending-source"||atom.tag==="abrupt")this.publish(result,atom);
+                else {this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}
+            }
+        });
+        const defaulted=(input:Cell,fallback:string):Cell=>{
+            const output=this.newCell();this.rule([input],()=>{for(const atom of input.values)this.publish(output,atom===this.primitive(undefined)?this.primitive(fallback):atom);});return output;
+        };
+        const name=this.stringHintCell(defaulted(this.property(objects,"name",context),"Error"),context);
+        const messageReceiver=this.newCell();let normal!:Rule;
+        normal=this.rule([name],()=>{
+            const state=this.primitiveState(name,normal,true);
+            if(state.pending&&!state.unresolved)return;
+            if(!state.proof.primitiveComplete||state.proof.values.length)this.copy(objects,messageReceiver);
+        });
+        const message=this.stringHintCell(defaulted(this.property(messageReceiver,"message",context),""),context);
+        this.publish(result,{tag:"text-operation",operation:"error-text",parts:[name,message]});return result;
     }
     private objectPrototype(): Cell {
         if (!this.ordinaryObjectPrototype) {
@@ -1617,7 +1676,7 @@ class SourceValueFlow {
         if(nullable&&[...receiver.values].some(atom=>atom===this.primitive(null)||atom===this.primitive(undefined)))empty=[[]];
         if([...receiver.values].some(atom=>atom.tag==="primitive"&&(!nullable||atom.value!==null&&atom.value!==undefined)||atom.tag==="text-operation")){
             this.publish(completion,this.abrupt);
-            const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.opaqueObject);
+            const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));
         }
         {
             let objects=this.arrayLikeObjectInputs.get(receiver);
@@ -1762,7 +1821,7 @@ class SourceValueFlow {
         }
         if (atom.tag === "abrupt") {this.publish(result, atom); return;}
         if (atom.tag === "primitive" && (atom.value === null || atom.value === undefined)) {
-            this.publish(result, this.abrupt); if (handler) this.publish(handler, this.opaqueObject); return;
+            this.publish(result, this.abrupt); if (handler) this.publish(handler, this.nativeException(context!)); return;
         }
         if (atom.tag === "pending-source") {this.publish(result,atom);return;}
         if (atom.tag === "unknown" || atom.tag === "opaque-object") {
@@ -2117,7 +2176,7 @@ class SourceValueFlow {
             const state=this.primitiveState(replaced,output,true);
             for(const value of state.proof.values){
                 try {this.publish(result,this.primitive(JSON.stringify(value)));}
-                catch {this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.opaqueObject);}
+                catch {this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context!));}
             }
             if(state.proof.primitiveComplete)return;
             if(state.pending&&!state.unresolved)return;
@@ -2328,11 +2387,11 @@ class SourceValueFlow {
                     if (operation.conversion === "equality" && states.some(state => state.unresolved)) this.onActive(node,()=>this.opaqueEffect(node));
                     if (!handler || operation.conversion === "none") return;
                     if(operation.form==="update"||ts.isBinaryExpression(node)&&operation.assignment===node.operatorToken.kind)
-                        this.publish(handler,this.opaqueObject);
+                        this.publish(handler,this.nativeException(node));
                     if (states.some(state => state.unresolved)) this.publish(handler,this.unknown);
-                    if (states.some(state => !state.proof.primitiveComplete) && !this.numericOperationCannotThrow(operation,converted)) this.publish(handler,this.opaqueObject);
+                    if (states.some(state => !state.proof.primitiveComplete) && !this.numericOperationCannotThrow(operation,converted)) this.publish(handler,this.nativeException(node));
                     for (const tuple of this.primitiveTuples(states.map(state => state.proof.values))) {
-                        try {operation.evaluate(tuple);} catch {this.publish(handler,this.opaqueObject);}
+                        try {operation.evaluate(tuple);} catch {this.publish(handler,this.nativeException(node));}
                     }
                 });
             }
@@ -2569,7 +2628,7 @@ class SourceValueFlow {
                     if (atom.tag === "abrupt") {this.publish(result!, atom); continue;}
                     if (atom.tag === "primitive" || atom.tag === "non-string" || atom.tag === "unknown-string" || atom.tag === "text-operation") {
                         this.publish(result,this.abrupt);
-                        const handler = this.exceptionHandlers.get(node); if (handler) this.publish(handler,this.opaqueObject);
+                        const handler = this.exceptionHandlers.get(node); if (handler) this.publish(handler,this.nativeException(node));
                         continue;
                     }
                     if (atom.tag === "pending-source") {this.publish(result!,atom);continue;}
@@ -2596,7 +2655,7 @@ class SourceValueFlow {
                     const argument = (index: number): Cell | undefined => argv ? argv[index] : invocation.sequence ? this.argumentPosition(invocation.sequence, index) : undefined;
                     if (atom.tag === "operation" && invocation.construct) {
                         this.publish(result,this.abrupt);
-                        const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.opaqueObject);
+                        const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));
                         continue;
                     }
                     if (atom.tag === "operation" && PROPERTY_MUTATIONS.has(atom.operation)) {
@@ -2660,7 +2719,7 @@ class SourceValueFlow {
                         }
                         if (atom.name === "Symbol") {
                             const handler = this.exceptionHandlers.get(node);
-                            if (invocation.construct) {this.publish(result, this.abrupt); if (handler) this.publish(handler, this.opaqueObject); continue;}
+                            if (invocation.construct) {this.publish(result, this.abrupt); if (handler) this.publish(handler, this.nativeException(node)); continue;}
                             this.normalResults.set(result, this.nonString);
                             if (!argv) {this.publish(result, this.nonString); if (handler) this.publish(handler, this.unknown); this.onActive(node, () => this.opaqueEffect(node)); continue;}
                             let allocations = this.symbolAllocations.get(node);
@@ -2706,7 +2765,7 @@ class SourceValueFlow {
                         }
                         const handler = this.exceptionHandlers.get(node);
                         if (handler) {
-                            if (atom.normalResult !== "primitive-string" || invocation.construct) this.publish(handler, this.opaqueObject);
+                            if (atom.normalResult !== "primitive-string" || invocation.construct) this.publish(handler, this.nativeException(node));
                             // Coercion can call arbitrary user code. A
                             // result category cannot erase its exceptions.
                             if (atom.normalResult === "unknown" || argv === null || atom.normalResult !== "primitive-string" && argv.some(argument =>
@@ -2716,7 +2775,7 @@ class SourceValueFlow {
                     } else if (atom.tag === "function") {
                         if (ts.isClassLike(atom.owner.definition) && !invocation.construct) {
                             const handler = this.exceptionHandlers.get(node);
-                            if (handler) this.publish(handler,this.opaqueObject);
+                            if (handler) this.publish(handler,this.nativeException(node));
                             // This target always throws; it has no String
                             // normal completion for source admission.
                             this.publish(result!,this.abrupt);
@@ -2772,6 +2831,7 @@ class SourceValueFlow {
                             if (handler) this.copy(atom.owner.throws, handler);
                         }
                     } else if (atom.tag === "operation") {
+                        if(atom.operation==="error-text"){this.copy(this.errorText(invocation.receiver,node),result);continue;}
                         if(atom.operation==="json-stringify"){
                             this.copy(this.jsonSerialization(argument(0)??omittedArgument,argument(1)??omittedArgument,argument(2)??omittedArgument,node),result);
                             continue;
@@ -2838,7 +2898,7 @@ class SourceValueFlow {
                                 if (value.tag === "primitive" && typeof value.value === "symbol")
                                     this.publish(result, this.primitive([...this.symbolRegistry].find(([, symbol]) => symbol === value.value)?.[0]));
                                 else if (value.tag === "unknown" || value.tag === "pending-source") this.publish(result, value);
-                                else {this.publish(result, this.abrupt); const handler = this.exceptionHandlers.get(node); if (handler) this.publish(handler, this.opaqueObject);}
+                                else {this.publish(result, this.abrupt); const handler = this.exceptionHandlers.get(node); if (handler) this.publish(handler, this.nativeException(node));}
                             }
                             continue;
                         }
@@ -2932,7 +2992,7 @@ class SourceValueFlow {
                                     this.publish(result!, this.text(`function ${receiver.name}() { [native code] }`));
                                 else if(receiver.tag==="primitive") {
                                     this.publish(result!,this.abrupt);
-                                    const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.opaqueObject);
+                                    const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));
                                 } else this.publish(result!, receiver.tag === "pending-source" ? receiver : this.unknown);
                             }
                             this.watch(rule, invocation.receiver);
@@ -2961,7 +3021,7 @@ class SourceValueFlow {
                                     if (!generated) this.publish(result!,this.pendingSource);
                                     if (this.invalidEvaluations.has(String(text))) {
                                         const handler = this.exceptionHandlers.get(node);
-                                        if (handler) this.onActive(node, () => this.publish(handler, this.opaqueObject));
+                                        if (handler) this.onActive(node, () => this.publish(handler, this.nativeException(node)));
                                     }
                                     for (const value of generated ?? []) this.copy(value, result!);
                                     const handler=this.exceptionHandlers.get(node);
@@ -3055,7 +3115,8 @@ class SourceValueFlow {
                                 try {add(atom.numeric!.evaluate(tuple));} catch {}
                             } else if (atom.operation === "coerce") {
                                 try {add(NUMERIC_CONVERSIONS.get(atom.conversion!)!(tuple[0]!));} catch {}
-                            } else if (atom.operation === "bound-name") add("bound " + (typeof tuple[0] === "string" ? tuple[0] : ""));
+                            } else if(atom.operation==="error-text")add(tuple[0]===""?tuple[1]!:tuple[1]===""?tuple[0]!:String(tuple[0])+": "+String(tuple[1]));
+                            else if (atom.operation === "bound-name") add("bound " + (typeof tuple[0] === "string" ? tuple[0] : ""));
                             else if(atom.operation==="array-join"){
                                 const range=atom.indexedRange,separator=String(tuple[0]),pieces:string[]=[];
                                 let previous=0;
