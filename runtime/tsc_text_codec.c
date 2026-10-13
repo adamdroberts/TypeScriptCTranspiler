@@ -56,32 +56,16 @@ static tsc_value_t codec_member_apply(void* environment, tsc_value_t receiver, t
             tsc_value_t input = codec_argument(actuals, 0);
             tsc_buffer_t* volatile bytes = NULL;
             if (!tsc_value_is_undefined(input)) {
-                if (!value_is_box(input) || value_tag(input) != TSC_VALUE_TAG_OBJECT)
-                    tsc_throw_error(TSC_ERROR_TYPE, codec_key("TextDecoder input requires a byte source"));
-                tsc_object_t* object = value_ptr(input);
-                if (!object->is_buffer && !object->is_array_buffer && !object->is_data_view)
-                    tsc_throw_error(TSC_ERROR_TYPE, codec_key("TextDecoder byte source cannot be represented"));
                 codec_require_default_options(codec_argument(actuals, 1), false);
-                if (object->is_buffer) bytes = tsc_value_as_buffer(input);
-                else {
-                    uint8_t* data; size_t length, offset=0; void* owner;
-                    tsc_array_buffer_t* source;
-                    if (object->is_array_buffer) {
-                        tsc_array_buffer_t* buffer = tsc_value_as_array_buffer(input);
-                        if (buffer->detached) tsc_throw_error(TSC_ERROR_TYPE, codec_key("TextDecoder buffer is detached"));
-                        source=buffer;data=buffer->data;length=tsc_array_buffer_length(buffer);owner=buffer->data;
-                    } else if (object->is_data_view) {
-                        tsc_data_view_t* view = tsc_value_as_data_view(input);
-                        tsc_data_view_witness_t witness = tsc_data_view_witness(view);
-                        source=view->buffer;offset=witness.offset;data=witness.data;length=witness.length;owner=view->buffer->data;
-                    } else tsc_throw_error(TSC_ERROR_TYPE, codec_key("TextDecoder byte source cannot be represented"));
-                    if(source->shared){
-                        bytes=tsc_buffer_alloc((double)length,0);
-                        for(size_t index=0;index<length;++index)bytes->data[index]=(uint8_t)tsc_array_buffer_read_bits(source,offset+index,1,true);
-                    }else{
-                        bytes=TSC_GC_MALLOC(sizeof(*bytes));memset(bytes,0,sizeof(*bytes));
-                        bytes->data=data;bytes->len=length;bytes->data_owner=owner;
-                    }
+                tsc_byte_source_t source = tsc_value_byte_source(input, true);
+                if (!source.valid) tsc_throw_error(TSC_ERROR_TYPE, codec_key("TextDecoder requires an attached byte source"));
+                if (source.backing && source.backing->shared) {
+                    bytes = tsc_buffer_alloc((double)source.length, 0);
+                    for (size_t index = 0; index < source.length; ++index)
+                        bytes->data[index] = (uint8_t)tsc_array_buffer_read_bits(source.backing, source.offset + index, 1, true);
+                } else {
+                    bytes = TSC_GC_MALLOC(sizeof(*bytes)); memset(bytes, 0, sizeof(*bytes));
+                    bytes->data = source.data; bytes->len = source.length; bytes->data_owner = source.data;
                 }
             } else codec_require_default_options(codec_argument(actuals, 1), false);
             return tsc_value_string(tsc_text_decoder_decode(tsc_value_as_text_decoder(receiver), bytes));

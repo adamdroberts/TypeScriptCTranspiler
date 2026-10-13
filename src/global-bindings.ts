@@ -9,6 +9,12 @@ export const runtimeUtilExports: ReadonlySet<string> = new Set(
 );
 if (!runtimeUtilExports.size) throw new Error("missing native util export collection");
 
+export const runtimeFsFdOperations: ReadonlyMap<string,number> = new Map(
+    [...fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_fs_fd.def"), "utf8")
+        .matchAll(/^TSC_FS_FD_OPERATION\((\w+), /gm)].map((match,index) => [match[1]!,index]),
+);
+if (!runtimeFsFdOperations.size) throw new Error("missing native filesystem descriptor collection");
+
 /** Names/attributes are projected from the native Realm initializer's table.
  * Ambient declarations describe types, not the current value of a binding. */
 export interface RuntimeGlobalBinding {

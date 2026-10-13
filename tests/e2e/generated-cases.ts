@@ -50,6 +50,7 @@ export interface DynamicImportSourceDepthSpec {
     generator: "dynamic-import-source-depth";
     depth: number;
 }
+export interface FsReadActualListWidthSpec {generator:"fs-read-actual-list-width";width:number;}
 export interface ReturnProjectionDepthSpec { generator:"return-projection-depth"; depth:number; }
 export interface ImportMetaReferenceWidthSpec {
     generator: "import-meta-reference-width";
@@ -217,6 +218,7 @@ export type GeneratedCaseSpec =
     | ModuleRequestWidthSpec
     | DynamicImportSourceDepthSpec
     | ReturnProjectionDepthSpec
+    | FsReadActualListWidthSpec
     | ImportMetaReferenceWidthSpec
     | ModuleStaticSemanticsWidthSpec
     | ModuleStaticSemanticsDepthSpec
@@ -327,7 +329,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "module-namespace-export-width" || spec.generator === "module-request-width" || spec.generator === "import-meta-reference-width") {
+    if (spec.generator === "module-namespace-export-width" || spec.generator === "module-request-width" || spec.generator === "fs-read-actual-list-width" || spec.generator === "import-meta-reference-width") {
         const width = spec.width;
         if (typeof width !== "number" || !Number.isInteger(width) || width < 2) {
             throw new Error(`invalid generated case spec ${filename}: width must be an integer of at least 2`);
@@ -1765,6 +1767,12 @@ console.log("raw JSON text width:", valid);
                 `for (const namespace of namespaces) if(namespace !== namespaces[0] || namespace.value !== 17) throw new Error("Module request identity");\n` +
                 `console.log("requests:", true, namespaces[0].value);\n`;
         }
+        case "fs-read-actual-list-width":
+            return `import {openSync as stressOpen,writeFileSync as stressWrite,readSync as stressRead,closeSync as stressClose,rmSync as stressRemove} from 'node:fs';\n` +
+                `const stressPath='/tmp/tsc2c-fs-actual-list-'+process.pid;stressWrite(stressPath,'ABCD');const stressFD=stressOpen(stressPath,'r+');\n` +
+                `const stressView=Buffer.alloc(4);let stressSeen=0;const stressOptions={get offset(){stressSeen++;return 0},get length(){stressSeen++;return 4},get position(){stressSeen++;return 0}};\n` +
+                `const stressBytes=stressRead(stressFD,stressView,stressOptions,...Array.from({length:${spec.width}},()=>++stressSeen));\n` +
+                `console.log('bytes:',stressBytes,'seen:',stressSeen,'text:',stressView.toString());stressClose(stressFD);stressRemove(stressPath);\n`;
         case "return-projection-depth":
             return `export {};\nconst marker:any={source:'23;'};let read:any=(ignored:any)=>marker.source;\n` +
                 `for(let index=0;index<${spec.depth};index++){const previous=read;read=(ignored:any)=>previous(ignored)}\n` +

@@ -18118,48 +18118,89 @@ double tsc_fs_open_sync(const tsc_str_t* path, const tsc_str_t* flags_str, doubl
     return (double)fd;
 }
 
-void tsc_fs_close_sync(double fd) {
-    int fd_int = (int)fd;
-    int r = close(fd_int);
-    if (r != 0) {
-        char err_msg[256];
-        snprintf(err_msg, sizeof(err_msg), "fs.closeSync: could not close file descriptor %d, %s", fd_int, strerror(errno));
-        tsc_throw_str(tsc_str_from_cstr(err_msg));
-    }
+static tsc_value_t fs_read_actual(tsc_array_t* args, size_t index) {
+    return args && index < args->len ? TSC_ARR(tsc_value_t, args, index) : tsc_value_undefined();
 }
-
-double tsc_fs_read_sync(double fd, tsc_buffer_t* buffer, double offset, double length, double position, bool position_is_null) {
-    int fd_int = (int)fd;
-    if (!buffer) {
-        tsc_throw_str(tsc_str_from_cstr("fs.readSync: buffer is null"));
-        return 0.0;
+static double fs_native_integer(tsc_value_t value, double minimum, double maximum) {
+    if (value_is_box(value)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("filesystem operation requires a numeric integer"));
+    double number = value_as_num(value);
+    if (!isfinite(number) || number != floor(number) || number < minimum || number > maximum)
+        tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("filesystem integer is outside its range"));
+    return number;
+}
+/* One ordered option record serves positional and object-option intake. */
+static const char* const fs_read_fields[] = {"offset", "length", "position"};
+double tsc_fs_read_sync_values(tsc_array_t* arguments) {
+    tsc_array_t* volatile actuals = arguments;
+    tsc_value_t buffer = fs_read_actual(actuals, 1);
+    void* volatile buffer_root = tsc_value_gc_root(buffer);
+    if (!value_is_box(buffer) || value_tag(buffer) != TSC_VALUE_TAG_OBJECT)
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("fs.readSync requires an ArrayBuffer view"));
+    tsc_object_t* owner = value_ptr(buffer);
+    if (!owner->is_buffer && !owner->is_typed_array && !owner->is_data_view)
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("fs.readSync requires an ArrayBuffer view"));
+    tsc_value_t options = fs_read_actual(actuals, 2);
+    bool object_options = tsc_value_is_object(options) && !tsc_value_is_callable(options);
+    bool options_form = !actuals || actuals->len <= 3 || object_options ||
+        (value_is_box(options) && value_tag(options) == TSC_VALUE_TAG_NULL);
+    if (options_form && !tsc_value_is_nullish(options) && !object_options)
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("fs.readSync options must be an object"));
+    tsc_value_t record[sizeof(fs_read_fields) / sizeof(*fs_read_fields)];
+    void* volatile roots[sizeof(record) / sizeof(*record)] = {0};
+    for (size_t index = 0; index < sizeof(record) / sizeof(*record); ++index) {
+        tsc_value_t value = options_form
+            ? (tsc_value_is_nullish(options) ? tsc_value_undefined() : tsc_value_get_prop(options, tsc_str_from_cstr(fs_read_fields[index])))
+            : fs_read_actual(actuals, index + 2);
+        if (options_form && tsc_value_is_undefined(value)) {
+            if (index == 0) value = tsc_value_num(0);
+            else if (index == 1) {
+                // The default length expression runs before the next Get.
+                tsc_value_t bytes = tsc_value_get_prop(buffer, tsc_str_from_lit("byteLength", 10));
+                value = tsc_value_sub(bytes, record[0]);
+            } else value = tsc_value_null();
+        }
+        record[index] = value; roots[index] = tsc_value_gc_root(value);
     }
-    double off_d = offset < 0 ? 0.0 : offset;
-    size_t off = (size_t)off_d;
-    if (off > buffer->len) {
-        tsc_throw_str(tsc_str_from_cstr("fs.readSync: offset out of bounds"));
-        return 0.0;
+    double offset = tsc_value_is_undefined(record[0]) ? 0 : fs_native_integer(record[0], 0, 9007199254740991.0);
+    int32_t length = tsc_to_int32(tsc_value_to_number(record[1]));
+    int64_t position = -1;
+    if (!tsc_value_is_nullish(record[2])) {
+        if (value_is_box(record[2]) && value_tag(record[2]) == TSC_VALUE_TAG_BIGINT) {
+            const tsc_bigint_t* integer = value_ptr(record[2]);
+            mpz_t maximum; mpz_init_set_ui(maximum, INT64_MAX);
+            if (length >= 0) mpz_sub_ui(maximum, maximum, (unsigned long)length);
+            else mpz_add_ui(maximum, maximum, (unsigned long)(-(int64_t)length));
+            bool valid = mpz_cmp_si(integer->value, -1) >= 0 && mpz_cmp(integer->value, maximum) <= 0;
+            mpz_clear(maximum);
+            if (!valid) tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("fs.readSync position is outside its range"));
+            uint64_t bits = tsc_bigint_to_uint64(integer); memcpy(&position, &bits, sizeof(position));
+        } else position = (int64_t)fs_native_integer(record[2], -1, 9007199254740991.0);
     }
-    double len_d = length < 0 ? (double)(buffer->len - off) : length;
-    size_t len = (size_t)len_d;
-    if (off + len > buffer->len) {
-        tsc_throw_str(tsc_str_from_cstr("fs.readSync: offset + length out of bounds"));
-        return 0.0;
+    if (length == 0) return 0;
+    tsc_value_t public_length = tsc_value_get_prop(buffer, tsc_str_from_lit("byteLength", 10));
+    if (tsc_value_eq(public_length, tsc_value_num(0)))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("fs.readSync view is empty"));
+    public_length = tsc_value_get_prop(buffer, tsc_str_from_lit("byteLength", 10));
+    if (length < 0 || tsc_value_cmp(tsc_value_num(offset + (double)length), public_length) == 1)
+        tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("fs.readSync byte range is outside the view"));
+    tsc_byte_source_t source = tsc_value_byte_source(buffer, false);
+    if (!source.valid) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("fs.readSync view is detached or out of bounds"));
+    if (offset > (double)source.length || (size_t)length > source.length - (size_t)offset)
+        tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("fs.readSync byte range is outside the backing view"));
+    double fd = fs_native_integer(fs_read_actual(actuals, 0), 0, INT_MAX);
+    uint8_t* volatile output = source.backing && source.backing->shared
+        ? TSC_GC_MALLOC((size_t)length) : source.data + (size_t)offset;
+    ssize_t bytes = position == -1 ? read((int)fd, output, (size_t)length)
+        : pread((int)fd, output, (size_t)length, (off_t)position);
+    if (bytes < 0) {
+        int error = errno; char message[256];
+        snprintf(message, sizeof(message), "fs.readSync: read failed, %s", strerror(error));
+        tsc_throw_error(TSC_ERROR_ERROR, tsc_str_from_cstr(message));
     }
-    uint8_t* ptr = buffer->data + off;
-    ssize_t bytes_read = 0;
-    if (position_is_null) {
-        bytes_read = read(fd_int, ptr, len);
-    } else {
-        bytes_read = pread(fd_int, ptr, len, (off_t)position);
-    }
-    if (bytes_read < 0) {
-        char err_msg[256];
-        snprintf(err_msg, sizeof(err_msg), "fs.readSync: read failed, %s", strerror(errno));
-        tsc_throw_str(tsc_str_from_cstr(err_msg));
-        return 0.0;
-    }
-    return (double)bytes_read;
+    if (source.backing && source.backing->shared)
+        for (size_t index = 0; index < (size_t)bytes; ++index)
+            tsc_array_buffer_write_bits(source.backing, source.offset + (size_t)offset + index, 1, true, output[index]);
+    (void)buffer_root; (void)roots; (void)actuals; return (double)bytes;
 }
 
 double tsc_fs_write_buffer_sync(double fd, const tsc_buffer_t* buffer, double offset, double length, double position, bool position_is_null) {
@@ -18516,36 +18557,34 @@ tsc_str_t* tsc_querystring_stringify(tsc_value_t obj_val, tsc_value_t sep_val, t
     return out;
 }
 
-void tsc_fs_fsync_sync(double fd) {
-    int fd_int = (int)fd;
-    int r = fsync(fd_int);
-    if (r != 0) {
-        char err_msg[256];
-        snprintf(err_msg, sizeof(err_msg), "fs.fsyncSync: fsync failed, %s", strerror(errno));
-        tsc_throw_str(tsc_str_from_cstr(err_msg));
+
+#define TSC_FS_FD_OPERATION(name, has_length, call) \
+    static int fs_fd_##name(int fd, off_t length) { return call; }
+#include "tsc_fs_fd.def"
+#undef TSC_FS_FD_OPERATION
+static const struct { const char* name; bool has_length; int (*call)(int,off_t); } fs_fd_operations[] = {
+#define TSC_FS_FD_OPERATION(name, has_length, call) { #name, has_length, fs_fd_##name },
+#include "tsc_fs_fd.def"
+#undef TSC_FS_FD_OPERATION
+};
+void tsc_fs_fd_sync_values(size_t operation, tsc_array_t* arguments) {
+    if (operation >= sizeof(fs_fd_operations) / sizeof(*fs_fd_operations))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("unknown filesystem descriptor operation"));
+    tsc_array_t* volatile actuals = arguments;
+    double fd = fs_native_integer(fs_read_actual(actuals, 0), 0, INT_MAX);
+    double length = 0;
+    if (fs_fd_operations[operation].has_length) {
+        tsc_value_t value = fs_read_actual(actuals, 1);
+        if (!tsc_value_is_undefined(value)) length = fs_native_integer(value, 0, 9007199254740991.0);
     }
+    if (fs_fd_operations[operation].call((int)fd, (off_t)length) != 0) {
+        int error = errno; char message[256];
+        snprintf(message, sizeof(message), "fs.%s: %s", fs_fd_operations[operation].name, strerror(error));
+        tsc_throw_error(TSC_ERROR_ERROR, tsc_str_from_cstr(message));
+    }
+    (void)actuals;
 }
 
-void tsc_fs_fdatasync_sync(double fd) {
-    int fd_int = (int)fd;
-    int r = fdatasync(fd_int);
-    if (r != 0) {
-        char err_msg[256];
-        snprintf(err_msg, sizeof(err_msg), "fs.fdatasyncSync: fdatasync failed, %s", strerror(errno));
-        tsc_throw_str(tsc_str_from_cstr(err_msg));
-    }
-}
-
-void tsc_fs_ftruncate_sync(double fd, double len) {
-    int fd_int = (int)fd;
-    off_t length = (off_t)len;
-    int r = ftruncate(fd_int, length);
-    if (r != 0) {
-        char err_msg[256];
-        snprintf(err_msg, sizeof(err_msg), "fs.ftruncateSync: ftruncate failed, %s", strerror(errno));
-        tsc_throw_str(tsc_str_from_cstr(err_msg));
-    }
-}
 
 void tsc_fs_fchmod_sync(double fd, double mode) {
     int fd_int = (int)fd;

@@ -903,6 +903,8 @@ typedef struct {uint8_t* data; size_t length; bool valid;} tsc_typed_array_witne
 uint64_t tsc_numeric_number_to_bits(double, tsc_numeric_format_t, size_t);
 tsc_value_t tsc_numeric_bits_to_value(uint64_t, tsc_numeric_format_t, size_t);
 tsc_typed_array_witness_t tsc_typed_array_witness(const tsc_typed_array_t*);
+typedef struct { tsc_array_buffer_t* backing; uint8_t* data; size_t length, offset; bool valid; } tsc_byte_source_t;
+tsc_byte_source_t tsc_value_byte_source(tsc_value_t value, bool allow_array_buffer);
 tsc_value_t tsc_typed_array_constructor_value(tsc_element_kind_t);
 tsc_value_t tsc_typed_array_prototype_value(tsc_element_kind_t);
 tsc_value_t tsc_typed_array_element_get(const tsc_object_t*, size_t);

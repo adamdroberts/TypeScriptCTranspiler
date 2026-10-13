@@ -456,8 +456,8 @@ interface ReflectConstructor {
 declare var Reflect: ReflectConstructor;
 
 interface ArrayConstructor {
-    from<T>(items: Iterable<T>, mapfn?: undefined, thisArg?: any, ...ignored: any[]): T[];
-    from<T, U>(items: Iterable<T>, mapfn: (value: T, index: number) => U, thisArg?: any, ...ignored: any[]): U[];
+    from<T>(items: Iterable<T> | ArrayLike<T>, mapfn?: undefined, thisArg?: any, ...ignored: any[]): T[];
+    from<T, U>(items: Iterable<T> | ArrayLike<T>, mapfn: (value: T, index: number) => U, thisArg?: any, ...ignored: any[]): U[];
     new <T>(...items: T[]): T[];
     (...items: any[]): any[];
     readonly prototype: any[];
@@ -1765,6 +1765,8 @@ interface FSStatsOptions {
     bigint?: false;
     throwIfNoEntry?: boolean;
 }
+type FSByteView = Buffer | TypedArray<any> | DataView;
+interface FSReadSyncOptions {offset?: number; length?: number; position?: number | bigint | null;}
 interface FSDescriptorStatsOptions {
     bigint?: false;
 }
@@ -1955,7 +1957,8 @@ interface FS {
     fchmodSync(fd: number, mode: number, ...ignored: any[]): void;
     fchownSync(fd: number, uid: number, gid: number, ...ignored: any[]): void;
     futimesSync(fd: number, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): void;
-    readSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
+    readSync(fd: number, buffer: FSByteView, options?: FSReadSyncOptions | null, ...ignored: any[]): number;
+    readSync(fd: number, buffer: FSByteView, offset: number, length: number, position?: number | bigint | null, ...ignored: any[]): number;
     readvSync(fd: number, buffers: Buffer[], position?: number | null, ...ignored: any[]): number;
     writeSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
     writeSync(fd: number, string: string, position?: number | null, encoding?: string | null, ...ignored: any[]): number;
@@ -2137,7 +2140,8 @@ declare module "fs" {
     export function fchmodSync(fd: number, mode: number, ...ignored: any[]): void;
     export function fchownSync(fd: number, uid: number, gid: number, ...ignored: any[]): void;
     export function futimesSync(fd: number, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): void;
-    export function readSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
+    export function readSync(fd: number, buffer: FSByteView, options?: FSReadSyncOptions | null, ...ignored: any[]): number;
+    export function readSync(fd: number, buffer: FSByteView, offset: number, length: number, position?: number | bigint | null, ...ignored: any[]): number;
     export function readvSync(fd: number, buffers: Buffer[], position?: number | null, ...ignored: any[]): number;
     export function writeSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
     export function writeSync(fd: number, string: string, position?: number | null, encoding?: string | null, ...ignored: any[]): number;
@@ -2195,7 +2199,8 @@ declare module "node:fs" {
     export function fchmodSync(fd: number, mode: number, ...ignored: any[]): void;
     export function fchownSync(fd: number, uid: number, gid: number, ...ignored: any[]): void;
     export function futimesSync(fd: number, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): void;
-    export function readSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
+    export function readSync(fd: number, buffer: FSByteView, options?: FSReadSyncOptions | null, ...ignored: any[]): number;
+    export function readSync(fd: number, buffer: FSByteView, offset: number, length: number, position?: number | bigint | null, ...ignored: any[]): number;
     export function readvSync(fd: number, buffers: Buffer[], position?: number | null, ...ignored: any[]): number;
     export function writeSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
     export function writeSync(fd: number, string: string, position?: number | null, encoding?: string | null, ...ignored: any[]): number;
@@ -3436,7 +3441,7 @@ interface TextDecoder {
     readonly encoding: string;
     readonly fatal: boolean;
     readonly ignoreBOM: boolean;
-    decode(input?: Buffer | ArrayBufferLike | DataView, options?: {stream?: boolean}, ...ignored: any[]): string;
+    decode(input?: Buffer | ArrayBufferLike | TypedArray<any> | DataView, options?: {stream?: boolean}, ...ignored: any[]): string;
 }
 interface TextDecoderConstructor {
     readonly prototype: TextDecoder;

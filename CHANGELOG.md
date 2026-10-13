@@ -1,3 +1,5 @@
+Retained complete filesystem argument Lists before byte-view and integer validation. Shared byte-source witnesses serve filesystem reads and codecs, including typed/DataView offsets, backing revalidation and synchronized shared storage. One native descriptor collection replaces emitter/native fixed-argument selectors; independent Node/native properties and a shared generated argument stress cover both memory profiles.
+
 Closed recursive captured return-source projections through one identity-aware memo graph, retaining empty substitutions without cloning. Independent Node/native semantic properties and a deep typed CLI input preserve actual returns and opaque effects; ambient semantic profiles retain one independently checked GC stress.
 
 Unified native util export ownership for text codecs, format and types through one descriptor collection and ordinary call/argument-List path. Renamed constructor imports now execute; default/namespace identity and mutation, typed/erased Node/native properties and a deep reexport graph provide scoped evidence. The emitter-local util call selectors and varargs formatting predecessor are removed.

@@ -35,6 +35,30 @@ bool tsc_typed_array_fixed_length(const tsc_object_t* object){
     const tsc_typed_array_t* view=object->class_ptr;
     return !view->tracking&&(view->buffer->shared||!view->buffer->resizable);
 }
+tsc_byte_source_t tsc_value_byte_source(tsc_value_t value, bool allow_array_buffer) {
+    if (!value_is_box(value) || value_tag(value) != TSC_VALUE_TAG_OBJECT) return (tsc_byte_source_t){0};
+    const tsc_object_t* object = value_ptr(value);
+    if (!object->class_ptr) return (tsc_byte_source_t){0};
+    if (object->is_buffer) {
+        const tsc_buffer_t* buffer = object->class_ptr;
+        return (tsc_byte_source_t){NULL, buffer->data, buffer->len, 0, true};
+    }
+    if (object->is_typed_array) {
+        const tsc_typed_array_t* view = object->class_ptr;
+        tsc_typed_array_witness_t witness = tsc_typed_array_witness(view);
+        return (tsc_byte_source_t){view->buffer, witness.data, witness.length * elements[view->kind].width, view->offset, witness.valid};
+    }
+    if (object->is_data_view) {
+        const tsc_data_view_t* view = object->class_ptr;
+        tsc_data_view_witness_t witness = tsc_data_view_witness(view);
+        return (tsc_byte_source_t){view->buffer, witness.data, witness.length, witness.offset, true};
+    }
+    if (allow_array_buffer && object->is_array_buffer) {
+        tsc_array_buffer_t* buffer = object->class_ptr;
+        return (tsc_byte_source_t){buffer, buffer->data, tsc_array_buffer_length(buffer), 0, !buffer->detached};
+    }
+    return (tsc_byte_source_t){0};
+}
 static uint64_t read_bits(const uint8_t* bytes,size_t width){
     uint16_t endian=1;bool little=*(uint8_t*)&endian;uint64_t raw=0;
     for(size_t byte=0;byte<width;++byte)raw|=(uint64_t)bytes[byte]<<((little?byte:width-byte-1)*8);

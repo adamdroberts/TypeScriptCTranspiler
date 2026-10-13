@@ -271,7 +271,8 @@
         "sec-number.prototype.valueof#ordinary-receiver-number-data-and-argument-list",
         "sec-number.prototype.tolocalestring#non-402-number-data-decimal-text-and-ignored-options",
         "sec-date.utc#ordinary-static-list-gregorian-number-time",
-        "sec-date.now#ordinary-static-list-integral-clock-time"
+        "sec-date.now#ordinary-static-list-integral-clock-time",
+        "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
       ]
     },
     {
@@ -1826,7 +1827,8 @@
       "id": "stdlib/lib.core.d.ts#ArrayConstructor",
       "targets": [
         "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback",
-        "sec-array.of#generic-constructor-item-list-and-length-finalization"
+        "sec-array.of#generic-constructor-item-list-and-length-finalization",
+        "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
       ]
     },
     {
@@ -3484,6 +3486,125 @@
         "rationale": "One native generated input exercises the same source projection memo and retained closure graph independently of source shape and capture depth.",
         "reviewedBy": "tsc2c compliance review"
       }
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/fs-byte-source.property.test.ts",
+      "targets": [
+        "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "fs_read_actual_list_width",
+      "targets": [
+        "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
+      ],
+      "stressReview": {
+        "dimension": "retained native actual-List width",
+        "parameter": "width",
+        "representativeHighDepth": 512,
+        "rationale": "One shared generated native input retains ordinary option getter effects after the complete growable actual List. No fixed argument tuple or argument-count family is used as a completion unit.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "fs_fd_sync_more",
+      "targets": [
+        "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
+      ]
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#FS",
+      "targets": [
+        "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitActualArgumentList",
+      "targets": [
+        "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitFsCall",
+      "targets": [
+        "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/global-bindings.ts#runtimeFsFdOperations",
+      "targets": [
+        "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_node.c#fs_read_fields",
+      "targets": [
+        "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_node.c#tsc_fs_read_sync_values",
+      "targets": [
+        "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_node.c#tsc_fs_fd_sync_values",
+      "targets": [
+        "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_node.c#fs_fd_operations",
+      "targets": [
+        "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_typed_array.c#tsc_value_byte_source",
+      "targets": [
+        "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_internal.h#tsc_byte_source_t",
+      "targets": [
+        "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
+      ]
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#FSByteView",
+      "targets": [
+        "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
+      ]
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#FSReadSyncOptions",
+      "targets": [
+        "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
+      ]
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#TextDecoder",
+      "targets": [
+        "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
+      ]
     }
   ]
 }
