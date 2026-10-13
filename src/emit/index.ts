@@ -32886,7 +32886,9 @@ class Emitter {
             ? null
             : this.sideEffectFreeTypeofString(operand, new Set());
         if (staticResult !== null) return { c: this.stringLit(staticResult), ty: T_STRING };
-        const inner = this.emitExpr(operand);
+        // The original operand owns any saved expression value. emitExpr
+        // normalizes wrappers while respecting those retained graph inputs.
+        const inner = this.emitExpr(to.expression);
         const result = this.typeofName(operand, inner.ty);
         const nullishResult = this.nullishTypeofName(operand);
         if (inner.ty.kind === "value" || inner.ty.kind === "function") {
