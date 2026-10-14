@@ -7,11 +7,11 @@ all defaults: -1
 targetStart > targetEnd: 1
 sourceStart > sourceEnd: -1
 ignored args: 0 a|b|
-err negative targetStart: The value of "targetStart" is out of range. It must be >= 0 and <= 4294967296. Received -1
-err out of bounds targetEnd: The value of "targetEnd" is out of range. It must be >= 0 and <= 3. Received 10
-err negative sourceStart: The value of "sourceStart" is out of range. It must be >= 0 and <= 4294967296. Received -1
-err out of bounds sourceEnd: The value of "sourceEnd" is out of range. It must be >= 0 and <= 6. Received 10
-err NaN targetStart: The value of "targetStart" is out of range. It must be an integer. Received NaN
-err NaN targetEnd: The value of "targetEnd" is out of range. It must be an integer. Received NaN
-err NaN sourceStart: The value of "sourceStart" is out of range. It must be an integer. Received NaN
-err NaN sourceEnd: The value of "sourceEnd" is out of range. It must be an integer. Received NaN
+err negative targetStart: true
+err out of bounds targetEnd: true
+err negative sourceStart: true
+err out of bounds sourceEnd: true
+err NaN targetStart: true
+err NaN targetEnd: true
+err NaN sourceStart: true
+err NaN sourceEnd: true

@@ -1,3 +1,5 @@
+Observed Buffer.compare invalid-bound RangeError identity in regression expectations.
+
 Made async body-await fixture array-to-String observations explicit.
 
 Boxed native Promise array payloads through the canonical element representation before fulfillment.

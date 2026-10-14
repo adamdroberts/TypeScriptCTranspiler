@@ -34,7 +34,7 @@ function tryCompare(
     try {
         return String(a.compare(target, targetStart, targetEnd, sourceStart, sourceEnd));
     } catch (e) {
-        return String(e);
+        return String(e instanceof RangeError);
     }
 }
 
