@@ -1,3 +1,5 @@
+Preserved pending generated eval keys through the canonical computed-read graph, preventing premature unknown sealing and retaining stable unknown-source admission.
+
 Corrected generator return-expression effect timing expectations and made intended object String display explicit, verified independently with Node.
 
 Materialized the generator locals Iterator helper and corrected remaining-value and completed-next observations from independent Node.

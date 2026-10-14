@@ -1458,6 +1458,11 @@ class SourceValueFlow {
                 }
             }
             else if (names === null) this.publish(result, this.unknown);
+            // Generated eval can still be awaiting the transitive AOT source
+            // closure. Preserve that dependency instead of sealing this read
+            // with top and tainting unrelated, already finite earlier reads.
+            else if (names === undefined && this.primitiveReadiness(key).pendingSource)
+                this.publish(result, this.pendingSource);
             else if (names?.length === 0) this.publish(result, this.abrupt);
             else for (const name of names ?? []) if (!selected.has(name)) {
                 selected.add(name);

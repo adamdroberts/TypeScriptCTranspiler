@@ -39,7 +39,16 @@ test("computed source keys follow one primitive projection and assignment target
  }
  expect(sourceEvaluationInvocations(program(pendingSource)).find(call=>call.node.getText()==='eval(C.toString())')?.choices).toContain("'source'");
  const mutations=['index++','++index','index--','--index','index+=1','index-=1','index*=2','index/=2','index%=2','index**=2','index<<=1','index>>=1','index>>>=1','index&=1','index|=1','index^=1'];
- for(const mutation of mutations){const source=`var index=0;${mutation};var object={0:"223;",1:"227;"};eval(object[index]);`;expect(sourceEvaluationInvocations(program(source)).some(call=>call.choices===null)).toBe(true);}
+ for(const mutation of mutations){
+  const source=`var index=0;${mutation};var object={0:"223;",1:"227;"};eval(object[index]);`;
+  const reference=Bun.spawnSync(['node','-e','const values=[];require("node:vm").runInNewContext(process.argv[1],{eval:value=>values.push(value)});require("node:fs").writeSync(1,JSON.stringify(values))',source],{stdout:'pipe',stderr:'pipe'});
+  expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:''});
+  const invocation=sourceEvaluationInvocations(program(source)).at(-1);expect(invocation).toBeDefined();
+  const choices=invocation!.choices;
+  // Numeric domains may remain opaque; a finite proof must contain every
+  // independently observed String source. Non-Strings enter eval unchanged.
+  if(choices!==null)expect(choices).toEqual(expect.arrayContaining(JSON.parse(reference.stdout.toString()).filter((value:unknown)=>typeof value==="string")));
+ }
  for(const source of ['var key=external;var object={source:"229;"};eval(object[key]);','var key="source";key=external;var object={source:"229;"};eval(object[key]);','var key="source";for(key of external){}var object={source:"229;"};eval(object[key]);','var key="source";for(key in external){}var object={source:"229;"};eval(object[key]);','class C {}var object={};object[external];eval(C.toString());'])expect(sourceEvaluationInvocations(program(source)).some(call=>call.choices===null)).toBe(true);
 });
 test("computed property sources and deep key forwarding match Node in both memory modes",async()=>{
@@ -65,11 +74,11 @@ test("computed property sources and deep key forwarding match Node in both memor
  }finally{await fs.rm(directory,{recursive:true,force:true});}
 },600_000);
 
-test("unresolved mutated keys retain the stable eval admission diagnostic",async()=>{
+test("opaque mutated keys retain the stable eval admission diagnostic",async()=>{
  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-computed-key-boundary-'));
  try{
   const entry=path.join(directory,'source.js'),messages:string[]=[];
-  await fs.writeFile(entry,'var index=0;index++;var object={0:"263;",1:"269;"};eval(object[index]);');
+  await fs.writeFile(entry,'var index=0;index=opaque();var object={0:"263;",1:"269;"};eval(object[index]);');
   const result=await compile({entry,output:path.join(directory,'rejected'),noGc:true,buildDir:path.join(directory,'build'),isolatedScriptRoots:[entry],initializationEntries:[entry],diagnosticWriter:message=>messages.push(message)});
   expect(result.exitCode).toBe(3);expect(messages.join('')).toContain('unknown eval() source requires --runtime-code-manifest allow-list or gated --unsafe-eval embedded Node bridge');
  }finally{await fs.rm(directory,{recursive:true,force:true});}

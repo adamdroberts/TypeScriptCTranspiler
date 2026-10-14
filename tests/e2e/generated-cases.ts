@@ -54,6 +54,7 @@ export interface FsReadActualListWidthSpec {generator:"fs-read-actual-list-width
 export interface CollectionSourceAliasDepthSpec {generator:"collection-source-alias-depth";depth:number;}
 export interface PrimitivePropertyPrototypeDepthSpec {generator:"primitive-property-prototype-depth";depth:number;}
 export interface GeneratorMethodOwnerDepthSpec {generator:"generator-method-owner-depth";depth:number;}
+export interface PendingComputedKeyDepthSpec {generator:"pending-computed-key-depth";depth:number;}
 export interface SwitchNormalCompletionDepthSpec {generator:"switch-normal-completion-depth";depth:number;}
 export interface ModuleAsyncCycleDepthSpec {generator:"module-async-cycle-depth";depth:number;}
 export interface PathComponentDepthSpec {generator:"path-component-depth";depth:number;}
@@ -241,6 +242,7 @@ export type GeneratedCaseSpec =
     | CollectionSourceAliasDepthSpec
     | PrimitivePropertyPrototypeDepthSpec
     | GeneratorMethodOwnerDepthSpec
+    | PendingComputedKeyDepthSpec
     | SwitchNormalCompletionDepthSpec
     | ModuleAsyncCycleDepthSpec
     | PathComponentDepthSpec
@@ -302,6 +304,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         throw new Error(`invalid generated case spec ${filename}: expected an object`);
     }
     const spec = value as Record<string, unknown>;
+    if(spec.generator==='pending-computed-key-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid pending computed key spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
     if(spec.generator==='switch-normal-completion-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid switch normal completion spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
@@ -1860,6 +1866,7 @@ console.log("raw JSON text width:", valid);
         case "collection-source-alias-depth": return collectionSourceAliasInput(spec.depth);
         case "primitive-property-prototype-depth": return primitivePropertyPrototypeInput(spec.depth);
         case "generator-method-owner-depth": return generatorMethodOwnerInput(spec.depth);
+        case "pending-computed-key-depth": return pendingComputedKeyInput(spec.depth);
         case "switch-normal-completion-depth": return switchNormalCompletionInput(spec.depth);
         case "module-async-cycle-depth": return moduleAsyncCycleInput(spec.depth).source;
         case "path-component-depth": return pathComponentInput(spec.depth);
@@ -2043,4 +2050,10 @@ export function moduleAsyncCycleInput(depth:number):{source:string;files:Record<
 export function switchNormalCompletionInput(depth:number):string {
     const clauses=Array.from({length:depth},(_,index)=>`case yield ${index}: return 'matched';`);
     return `export {};function* select():Generator<number,string,any>{switch('domain'){${clauses.join('\n')}}return 'after';}const iterator=select();let step=iterator.next(),index=0,ordered=true;while(!step.done){ordered=ordered&&step.value===index;step=iterator.next(index++);}console.log('switch normal tree:',ordered&&index===${depth}&&step.value==='after');\n`;
+}
+
+/** Pending generated eval results flow through the same computed-read graph. */
+export function pendingComputedKeyInput(depth:number):string {
+    const aliases=Array.from({length:depth},(_,index)=>`const key${index}:any=${index?'key'+(index-1):'eval("\'selected\'")'};`);
+    return `const object:any={selected:'17;',other:'19;'};console.log('earlier:',eval(object.selected));\n${aliases.join('\n')}\nconst source=object[key${depth-1}];console.log('pending key:',eval(source));\n`;
 }

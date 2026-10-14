@@ -4329,6 +4329,7 @@
       "kind": "implementation",
       "id": "src/source-value-flow.ts#computedProperty",
       "targets": [
+        "sec-evaluate-property-access-with-expression-key#pending-generated-source-key",
         "sec-evaluatecall#finite-host-callable-location-source-projections"
       ]
     },
@@ -4912,6 +4913,62 @@
       "id": "src/emit/async-cfg.ts#planAsyncControlFlowGraph",
       "targets": [
         "sec-runtime-semantics-caseblockevaluation#unmatched-and-suspended-normal-completion"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/pending-computed-key.property.test.ts",
+      "targets": [
+        "sec-evaluate-property-access-with-expression-key#pending-generated-source-key"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/computed-property-source.property.test.ts",
+      "targets": [
+        "sec-evaluate-property-access-with-expression-key#pending-generated-source-key"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "eval_computed_property_source",
+      "targets": [
+        "sec-evaluate-property-access-with-expression-key#pending-generated-source-key"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "eval_pending_computed_key_depth",
+      "targets": [
+        "sec-evaluate-property-access-with-expression-key#pending-generated-source-key"
+      ],
+      "stressReview": {
+        "dimension": "pending generated-eval key forwarding graph",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "The property and typed CLI share one representative deep alias graph; staged finite, pending, abrupt and opaque semantic partitions are checked independently.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#propertyKeys",
+      "targets": [
+        "sec-evaluate-property-access-with-expression-key#pending-generated-source-key"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#primitiveReadiness",
+      "targets": [
+        "sec-evaluate-property-access-with-expression-key#pending-generated-source-key"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#solve",
+      "targets": [
+        "sec-evaluate-property-access-with-expression-key#pending-generated-source-key"
       ]
     }
   ]
