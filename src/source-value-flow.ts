@@ -104,6 +104,7 @@ type Atom =
     | { readonly tag: "text-operation"; readonly operation: "array-join"; readonly parts: readonly Cell[]; readonly indexedRange: {readonly length:number;readonly positions:readonly number[]} }
     | { readonly tag: "text-operation"; readonly operation: "json-container"; readonly parts: readonly Cell[]; readonly keys:readonly string[]; readonly arrayLength:number|null; readonly level:number }
     | { readonly tag: "promise"; readonly value: Cell; readonly rejection: Cell }
+    | { readonly tag: "promise-resolver"; readonly value: Cell; readonly rejection: Cell; readonly reject: boolean; readonly fields:ObjectOwner }
     | { readonly tag: "generator"; readonly owner: FunctionOwner }
     | { readonly tag: "global";readonly realm:SourceRealmRecord } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record";readonly realm:SourceRealmRecord };
 class SourceFacts extends Set<Atom> {
@@ -228,6 +229,8 @@ class SourceValueFlow {
     private readonly primitivePrototypes = new Map<string,Cell>();
     private readonly typedArrayPrototypes = new Map<string,Cell>();
     private readonly atomicsWaitResults = new Map<ts.Node,Cell>();
+    private readonly promiseConstructions = new Map<ts.Node,Map<string,Cell>>();
+    private readonly promiseResolvers = new Map<Cell,Map<Cell,readonly Cell[]>>();
     private readonly primitiveBoxes = new Map<ts.Node,Map<string,Cell>>();
     private readonly booleanPrimitives = new Map<Cell,Cell>();
     private readonly primitiveDefaults = new Map<string,Cell>();
@@ -1768,7 +1771,7 @@ class SourceValueFlow {
                         }
                     }else mask|=KIND_STRING;
                 }else if(atom.tag==="unknown"||atom.tag==="pending-source")mask|=KIND_ALL;
-                else if(atom.tag==="function"||atom.tag==="bound"||atom.tag==="operation"||atom.tag==="intrinsic"&&(atom.domain==="constructor"||atom.domain==="prototype"&&atom.kind==="ordinary")||atom.tag==="builtin"&&atom.normalResult!=="not-callable")mask|=KIND_FUNCTION;
+                else if(atom.tag==="function"||atom.tag==="bound"||atom.tag==="promise-resolver"||atom.tag==="operation"||atom.tag==="intrinsic"&&(atom.domain==="constructor"||atom.domain==="prototype"&&atom.kind==="ordinary")||atom.tag==="builtin"&&atom.normalResult!=="not-callable")mask|=KIND_FUNCTION;
                 else mask|=KIND_OBJECT;
             }
             kinds.set(task.cell,mask);
@@ -2120,6 +2123,7 @@ class SourceValueFlow {
                 if(key==="Map"||key==="Set")this.defineField(fields,"prototype",this.collectionPrototype(key));
                 if(key==="Promise"){
                     this.defineField(fields,"prototype",this.promisePrototype());
+                    for(const [name,member]of runtimePromiseMethods)if(member.static){const value=this.newCell();this.publish(value,this.operation(`promise-member:${name}`));this.defineField(fields,name,value,false);}
                     const getter=this.newCell();this.publish(getter,this.operation("promise-species"));
                     this.defineAccessor(fields,this.wellKnownSymbols.get("species")!,"get",getter);
                     this.ownPresence(fields,this.wellKnownSymbols.get("species")!).initial=true;
@@ -2732,6 +2736,24 @@ class SourceValueFlow {
         const rule = this.rule([base], () => { for (const atom of base.values) this.read(atom, base, key, result, context && this.exceptionHandlers.get(context), rule, context,ownOnly); });
         return result;
     }
+    private promiseResolverCells(value:Cell,rejection:Cell):readonly Cell[] {
+        let rejections=this.promiseResolvers.get(value);if(!rejections){rejections=new Map();this.promiseResolvers.set(value,rejections);}
+        const prior=rejections.get(rejection);if(prior)return prior;
+        const resolvers=[false,true].map(reject=>{const cell=this.newCell(),fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.copy(this.opaqueMutation,fields.shape);this.publish(cell,{tag:"promise-resolver",value,rejection,reject,fields});return cell;});
+        rejections.set(rejection,resolvers);return resolvers;
+    }
+    private promiseConstruction(context:ts.Node,executor:Cell):Cell {
+        let calls=this.promiseConstructions.get(context);if(!calls){calls=new Map();this.promiseConstructions.set(context,calls);}
+        const key="executor:"+executor.id,prior=calls.get(key);if(prior)return prior;
+        const result=this.newCell(),value=this.newCell(),rejection=this.exceptionCell();calls.set(key,result);
+        this.publish(result,{tag:"promise",value,rejection});
+        const resolvers=this.promiseResolverCells(value,rejection).map(cell=>({cell,spread:false}));
+        const callback=ts.setTextRange(ts.factory.createEmptyStatement(),context);(callback as ts.Node&{parent:ts.Node}).parent=context;this.exceptionHandlers.set(callback,rejection);
+        const callable=this.newCell(),atoms=new Map<Atom,Cell>();
+        this.rule([executor],()=>{for(const atom of executor.values){let input=atoms.get(atom);if(!input){input=this.newCell();atoms.set(atom,input);this.publish(input,atom);}const kinds=this.primitiveKinds(input);if(kinds&KIND_FUNCTION)this.publish(callable,atom);if(kinds&~KIND_FUNCTION){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}}});
+        this.invoke(callback,callable,this.empty,resolvers,this.newCell());
+        return result;
+    }
     private promisePrototype():Cell {
         if(this.promisePrototypeValue)return this.promisePrototypeValue;
         const value=this.newCell(),owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};
@@ -2820,9 +2842,9 @@ class SourceValueFlow {
                 if(method.tag==="abrupt"||method.tag==="pending-source")continue;
                 const kinds=this.primitiveKinds(cell(method));
                 if(kinds&~KIND_FUNCTION)this.publish(value,atom);
-                if(kinds&KIND_FUNCTION){this.publish(target,method);this.publish(value,this.unknown);this.publish(rejection,this.unknown);}
+                if(kinds&KIND_FUNCTION)this.publish(target,method);
             }});
-            const unknown=this.newCell();this.publish(unknown,this.unknown);this.invoke(callback,target,input,[{cell:unknown,spread:false},{cell:unknown,spread:false}],this.newCell());
+            this.invoke(callback,target,input,this.promiseResolverCells(value,rejection).map(cell=>({cell,spread:false})),this.newCell());
         }});return {value,rejection};
     }
 
@@ -2889,6 +2911,7 @@ class SourceValueFlow {
         }
         if(atom.tag === "object")return atom.owner;
         if(atom.tag === "function")return atom.owner.fields;
+        if(atom.tag === "promise-resolver")return atom.fields;
         if(atom.tag === "bound")return atom.fields;
         if(atom.tag === "builtin")return atom.fields;
         if(atom.tag==="operation"&&atom.operation.startsWith("atomics-member:")){
@@ -3052,7 +3075,7 @@ class SourceValueFlow {
             if (key === "evalScript") this.publish(result, this.operation("eval-script"));
             if (key === "global") this.publish(result,atom.tag==="realm-record"?atom.realm.global:this.global);
         }
-        if ((["function", "bound", "intrinsic", "operation"].includes(atom.tag) ||
+        if ((["function", "bound", "intrinsic", "operation", "promise-resolver"].includes(atom.tag) ||
             atom.tag === "builtin" && atom.normalResult !== "not-callable") && typeof key === "string" && CALLABLE_FORWARDING_OPERATIONS.has(key))
             this.publish(result, this.operation(CALLABLE_FORWARDING_OPERATIONS.get(key)!));
         if (atom.tag === "generator" && key === "constructor") this.publish(result, this.intrinsic("prototype", atom.owner.kind));
@@ -4052,9 +4075,7 @@ class SourceValueFlow {
         } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
             this.dynamicImportEffects(node,result);
         } else if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
-            // Owned construction locations are retained until the callee's
-            // native/exotic result facts have joined the same owner graph.
-            if(ts.isNewExpression(node))this.publish(result,{tag:"object",owner:this.owner(node)});
+            // The callee publishes the actual native/exotic result owner.
             const target = unwrap(node.expression);
             const activation=this.enclosingActivation(node);
             const superOwner=target.kind===ts.SyntaxKind.SuperKeyword && activation?.node && ts.isConstructorDeclaration(activation.node) && ts.isClassLike(activation.node.parent) ? this.function(activation.node.parent) : null;
@@ -4387,6 +4408,12 @@ class SourceValueFlow {
                         let value=this.numericValues.get(KIND_NUMBER);if(!value){value={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,value);}this.publish(result,value);
                         continue;
                     }
+                    if(atom.tag==="promise-resolver"){
+                        if(invocation.construct){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));continue;}
+                        const input=argument(0)??omittedArgument;
+                        if(atom.reject)this.copy(input,atom.rejection);else{const resolved=this.promiseAssimilation(input,node);this.copy(resolved.value,atom.value);this.copy(resolved.rejection,atom.rejection);}
+                        this.publish(result,this.primitive(undefined));continue;
+                    }
                     if(atom.tag==="operation"&&atom.operation==="promise-species"){this.copy(invocation.receiver,result);continue;}
                     if(atom.tag==="operation"&&atom.operation==="promise-finally-forward") {
                         this.copy(this.promiseFinallyForward(argument(0)??omittedArgument,argument(2)??omittedArgument,argument(1)??omittedArgument,node),result);continue;
@@ -4394,6 +4421,28 @@ class SourceValueFlow {
                     if(atom.tag==="operation"&&atom.operation.startsWith("promise-member:")) {
                         if(invocation.construct){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));continue;}
                         const member=atom.operation.slice("promise-member:".length);
+                        if(runtimePromiseMethods.get(member)?.static){
+                            this.watch(rule,invocation.receiver);
+                            const receivers=[...invocation.receiver.values];if(!receivers.length)continue;
+                            if(receivers.some(receiver=>receiver.tag!=="builtin"||receiver.name!=="Promise")){
+                                this.publish(result,this.unknown);this.opaqueCallableCaptures(invocation.receiver,node);this.onActive(node,()=>this.opaqueEffect(node));const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.unknown);
+                            }
+                            if(!receivers.some(receiver=>receiver.tag==="builtin"&&receiver.name==="Promise"))continue;
+                            if(member==="resolve"||member==="reject"){
+                                const input=argument(0)??omittedArgument;
+                                if(member==="resolve"){
+                                    this.watch(rule,input);
+                                    for(const promise of input.values)if(promise.tag==="promise"){
+                                        let calls=this.promiseConstructions.get(node);if(!calls){calls=new Map();this.promiseConstructions.set(node,calls);}const identity="resolve-input:"+promise.value.id+":"+promise.rejection.id;let selected=calls.get(identity);if(!selected){selected=this.newCell();calls.set(identity,selected);this.publish(selected,promise);}const constructor=this.property(selected,"constructor",node);this.watch(rule,constructor);
+                                        if([...constructor.values].some(value=>value.tag==="unknown"||value.tag==="opaque-object")){this.onActive(node,()=>this.opaqueEffect(node));const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.unknown);}
+                                        this.publish(result,promise);
+                                    }
+                                    const resolved=this.promiseAssimilation(input,node);this.publish(result,{tag:"promise",value:resolved.value,rejection:resolved.rejection});
+                                }
+                                else{let calls=this.promiseConstructions.get(node);if(!calls){calls=new Map();this.promiseConstructions.set(node,calls);}const key="reject:"+input.id;let holder=calls.get(key);if(!holder){holder=this.newCell();calls.set(key,holder);const value=this.newCell(),rejection=this.exceptionCell();this.copy(input,rejection);this.publish(holder,{tag:"promise",value,rejection});}this.copy(holder,result);}
+                            }else{this.publish(result,this.opaqueObject);this.onActive(node,()=>this.opaqueEffect(node));}
+                            continue;
+                        }
                         if(member==="catch")this.copy(this.promiseCatch(invocation.receiver,argument(0)??omittedArgument,node),result);
                         else if(member==="then")this.copy(this.promiseReaction(invocation.receiver,argument(0)??omittedArgument,argument(1)??omittedArgument,node),result);
                         else if(member==="finally")this.copy(this.promiseFinally(invocation.receiver,argument(0)??omittedArgument,node),result);
@@ -4437,7 +4486,7 @@ class SourceValueFlow {
                         owner.proxy??={target:this.newCell(),handler:this.newCell(),context:node};
                         this.copy(argument(0)??omittedArgument,owner.proxy.target);this.copy(argument(1)??omittedArgument,owner.proxy.handler);
                         this.publish(owner.shape,this.unknown);this.publish(result,{tag:"object",owner});
-                    }else if(invocation.construct)this.publish(result!,{tag:"object",owner:this.owner(node)});
+                    }else if(invocation.construct&&!(atom.tag==="builtin"&&atom.name==="Promise"))this.publish(result!,{tag:"object",owner:this.owner(node)});
                     const evolvingPrimitiveResult = constructorArguments !== undefined || atom.tag === "builtin" && (atom.normalResult === "primitive-string" || atom.name === "Symbol" || NUMERIC_CONVERSIONS.has(atom.name));
                     if (!evolvingPrimitiveResult && (atom.tag !== "operation" || PROPERTY_MUTATIONS.has(atom.operation)) && handled(atom, signature)) continue;
                     if (atom.tag === "intrinsic" && atom.domain === "constructor") {
@@ -4460,6 +4509,10 @@ class SourceValueFlow {
                             this.copy(generated.value,result!);
                         }
                     } else if (atom.tag === "builtin") {
+                        if(atom.name==="Promise"){
+                            if(!invocation.construct){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));continue;}
+                            this.copy(this.promiseConstruction(node,argument(0)??omittedArgument),result);continue;
+                        }
                         if(atom.name==="Map"||atom.name==="Set"){
                             if(!invocation.construct){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));}
                             else this.copy(this.constructCollection(atom.name,argument(0)??omittedArgument,node,invocation.newTarget??invocation.target),result);

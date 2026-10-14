@@ -1,3 +1,5 @@
+Retained Promise source capabilities and resolver/thenable value paths through the shared graph.
+
 Retained primitive BigInt JSON source hooks and native abrupt paths through shared owners.
 
 Shared native Atomics operation owners and ordered scalar conversions with source analysis.

@@ -58,6 +58,7 @@ export interface PrimitivePropertyReadDepthSpec {generator:"primitive-property-r
 export interface RestSourceLocationDepthSpec {generator:"rest-source-location-depth";depth:number;}
 export interface SourceAllocationDepthSpec {generator:"source-allocation-depth";depth:number;}
 export interface ListExtentCaptureDepthSpec {generator:"list-extent-capture-depth";depth:number;}
+export interface PromiseCapabilitySourceDepthSpec {generator:"promise-capability-source-depth";depth:number;}
 export interface JSONNumericSourceDepthSpec {generator:"json-numeric-source-depth";depth:number;}
 export interface AtomicsSourceOwnerDepthSpec {generator:"atomics-source-owner-depth";depth:number;}
 export interface TypedArrayMetadataDepthSpec {generator:"typed-array-metadata-depth";depth:number;}
@@ -315,6 +316,7 @@ export type GeneratedCaseSpec =
     | RestSourceLocationDepthSpec
     | SourceAllocationDepthSpec
     | ListExtentCaptureDepthSpec
+    | PromiseCapabilitySourceDepthSpec
     | JSONNumericSourceDepthSpec
     | AtomicsSourceOwnerDepthSpec
     | TypedArrayMetadataDepthSpec
@@ -354,6 +356,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     }
     if(spec.generator==='list-extent-capture-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid List extent capture spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
+    if(spec.generator==='promise-capability-source-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid Promise capability source spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
     }
     if(spec.generator==='json-numeric-source-depth'){
@@ -1978,6 +1984,7 @@ console.log("raw JSON text width:", valid);
         case "rest-source-location-depth": return restSourceLocationInput(spec.depth);
         case "source-allocation-depth": return sourceAllocationInput(spec.depth);
         case "list-extent-capture-depth": return listExtentCaptureInput(spec.depth);
+        case "promise-capability-source-depth": return promiseCapabilitySourceInput(spec.depth);
         case "json-numeric-source-depth": return jsonNumericSourceInput(spec.depth);
         case "atomics-source-owner-depth": return atomicsSourceOwnerInput(spec.depth);
         case "typed-array-metadata-depth": return typedArrayMetadataInput(spec.depth);
@@ -2279,4 +2286,9 @@ export function atomicsSourceOwnerInput(depth:number):string {
 export function jsonNumericSourceInput(depth:number):string {
  const owners=Array.from({length:depth},(_,index)=>`const jsonNumericOwner${index}:any=${index?`{body:jsonNumericOwner${index-1}.body,previous:jsonNumericOwner${index-1}}`:`{body:'return 37;',previous:null}`};`);
  return `{const view=new BigInt64Array(new SharedArrayBuffer(8));${owners.join('\n')}try{JSON.stringify(Atomics.load(view,0))}catch(error){}console.log('JSON numeric source:',Function(jsonNumericOwner${depth-1}.body)());}\n`;
+}
+
+export function promiseCapabilitySourceInput(depth:number):string {
+ const owners=Array.from({length:depth},(_,index)=>`const promiseSourceOwner${index}:any=${index?`{body:promiseSourceOwner${index-1}.body,previous:promiseSourceOwner${index-1}}`:`{body:'return 41;',previous:null}`};`);
+ return `{${owners.join('\n')}new Promise<any>(resolve=>resolve(promiseSourceOwner${depth-1}.body)).then(body=>console.log('Promise capability source:',Function(body)()));}\n`;
 }
