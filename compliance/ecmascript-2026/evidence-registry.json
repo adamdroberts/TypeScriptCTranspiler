@@ -2654,7 +2654,8 @@
       "id": "src/source-value-flow.ts#iteratorElements",
       "targets": [
         "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
-        "sec-import-call-runtime-semantics-evaluation#canonical-expression-and-iterator-source-closure"
+        "sec-import-call-runtime-semantics-evaluation#canonical-expression-and-iterator-source-closure",
+        "sec-iteratornext#canonical-collection-and-iterator-source-records"
       ]
     },
     {
@@ -4595,6 +4596,62 @@
       "id": "src/emit/index.ts#objectLiteralEvaluationHasNoSideEffects",
       "targets": [
         "sec-runtime-semantics-propertydefinitionevaluation#object-creation-versus-enumerable-read-effects"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/collection-source-graph.property.test.ts",
+      "targets": [
+        "sec-iteratornext#canonical-collection-and-iterator-source-records"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "collection_source_alias_depth",
+      "targets": [
+        "sec-iteratornext#canonical-collection-and-iterator-source-records"
+      ],
+      "stressReview": {
+        "dimension": "source alias graph depth forwarding retained collection and iterator records",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One shared generated alias graph feeds the canonical value, collection-entry and iterator-record worklist in the Node/native property and typed CLI. Compact semantic partitions prove the protocol and effect boundaries independently of successive depths.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "collection_source_graph",
+      "targets": [
+        "sec-iteratornext#canonical-collection-and-iterator-source-records"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#collectionIteratorNext",
+      "targets": [
+        "sec-iteratornext#canonical-collection-and-iterator-source-records"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#opaqueCallableCaptures",
+      "targets": [
+        "sec-iteratornext#canonical-collection-and-iterator-source-records"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#functionThisBinding",
+      "targets": [
+        "sec-iteratornext#canonical-collection-and-iterator-source-records"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_map_set.c#collection_intrinsics",
+      "targets": [
+        "sec-iteratornext#canonical-collection-and-iterator-source-records"
       ]
     }
   ]

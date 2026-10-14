@@ -622,9 +622,11 @@ typedef enum {
     SET_SUBSET, SET_SUPERSET, SET_DISJOINT,
 } set_composition_operation_t;
 static const struct { const char* name; set_composition_operation_t operation; } set_composition_methods[] = {
-    {"union", SET_UNION}, {"intersection", SET_INTERSECTION},
-    {"difference", SET_DIFFERENCE}, {"symmetricDifference", SET_SYMMETRIC_DIFFERENCE},
-    {"isSubsetOf", SET_SUBSET}, {"isSupersetOf", SET_SUPERSET}, {"isDisjointFrom", SET_DISJOINT},
+#define TSC_COLLECTION_METHOD(operation, name, length, map_only)
+#define TSC_SET_COMPOSITION(operation, name) { #name, SET_##operation },
+#include "tsc_collection_methods.def"
+#undef TSC_SET_COMPOSITION
+#undef TSC_COLLECTION_METHOD
 };
 typedef struct {
     tsc_value_t object, has, keys;
@@ -928,13 +930,11 @@ static collection_intrinsics_t* collection_intrinsics(bool is_map) {
         tsc_object_define(state->iterator_prototype, tsc_symbol_property_key(tsc_symbol_to_string_tag()),
             tsc_value_string(tsc_str_from_cstr(is_map ? "Map Iterator" : "Set Iterator")), false, false, true);
         static const struct { const char* name; collection_operation_t operation; double length; bool map_only; } methods[] = {
-            { "get", COLLECTION_GET, 1, true },
-            { "getOrInsert", COLLECTION_GET_OR_INSERT, 2, true },
-            { "getOrInsertComputed", COLLECTION_GET_OR_INSERT_COMPUTED, 2, true }, { "has", COLLECTION_HAS, 1, false },
-            { "delete", COLLECTION_DELETE, 1, false }, { "clear", COLLECTION_CLEAR, 0, false },
-            { "keys", COLLECTION_KEYS, 0, false }, { "values", COLLECTION_VALUES, 0, false },
-            { "entries", COLLECTION_ENTRIES, 0, false }, { "forEach", COLLECTION_FOR_EACH, 1, false },
-            { "size", COLLECTION_SIZE, 0, false }, { "write", COLLECTION_WRITE, 0, false },
+#define TSC_COLLECTION_METHOD(operation, name, length, map_only) { #name, COLLECTION_##operation, length, map_only },
+#define TSC_SET_COMPOSITION(operation, name)
+#include "tsc_collection_methods.def"
+#undef TSC_SET_COMPOSITION
+#undef TSC_COLLECTION_METHOD
         };
         tsc_value_t values_method = tsc_value_undefined();
         for (size_t index = 0; index < sizeof(methods) / sizeof(*methods); ++index) {

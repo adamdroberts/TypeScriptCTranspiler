@@ -1,0 +1,1 @@
+export {};const map=new Map([["key","17;"]]);let total=Number(eval(map.get("key")));for(const source of new Set(["19;","23;"]))total+=Number(eval(source));for(const [key,source]of new Map([["key","29;"]]).entries())total+=Number(eval(source));console.log(total===88);

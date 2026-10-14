@@ -2,6 +2,18 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import {resolvePackageRoot} from "./program";
 
+export const runtimeCollectionMethods:ReadonlyMap<string,{operation:string;name:string;length:number;mapOnly:boolean}>=new Map(
+    [...fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_collection_methods.def"),"utf8")
+        .matchAll(/^TSC_COLLECTION_METHOD\((\w+), (\w+), (\d+), (true|false)\)$/gm)]
+        .map(([,operation,name,length,mapOnly])=>[operation!,{operation:operation!,name:name!,length:Number(length),mapOnly:mapOnly==="true"}] as const),
+);
+if(!runtimeCollectionMethods.size)throw new Error("missing native collection method descriptors");
+
+export const runtimeSetCompositionMethods:ReadonlyMap<string,string>=new Map(
+    [...fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_collection_methods.def"),"utf8")
+        .matchAll(/^TSC_SET_COMPOSITION\((\w+), (\w+)\)$/gm)].map(([,operation,name])=>[name!,operation!] as const),
+);
+
 /** Host import publication uses the same collection as the native module. */
 export const runtimeUtilExports: ReadonlySet<string> = new Set(
     [...fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_util_exports.def"), "utf8")

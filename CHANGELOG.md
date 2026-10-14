@@ -1,3 +1,5 @@
+Represented collection sources and mutable iterator next lookup through shared records, with canonical key and source receiver binding. Native method descriptors share one table; Proxy target/Get effects and private collection escapes stay conservative. Full effect/purity and eligible conformance remain open.
+
 Removed unused typed object method/accessor creation through a shared property-tree worklist while preserving computed keys, getters, abrupt order and escaping values. Existing collection-spread DCE and inferred-type-depth limits remain open.
 
 Derived ImportCall targets from canonical expression flow and a module source worklist. Iterator activity and actual Lists preserve empty/dense/hole domains; dynamic namespaces share live source bindings. Independent Node/native properties retain the original deferred-error loop and reject imported iterator mutations. Full host/source eligibility remains open. Immutable String target leaves avoid unrelated graph reconstruction. Shared proof discovery defers recursive builders and preserves imported Module goals separately from ambient declarations.

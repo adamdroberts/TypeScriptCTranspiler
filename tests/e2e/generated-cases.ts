@@ -51,6 +51,7 @@ export interface DynamicImportSourceDepthSpec {
     depth: number;
 }
 export interface FsReadActualListWidthSpec {generator:"fs-read-actual-list-width";width:number;}
+export interface CollectionSourceAliasDepthSpec {generator:"collection-source-alias-depth";depth:number;}
 export interface ObjectLiteralEffectDepthSpec {generator:"object-literal-effect-depth";depth:number;}
 export interface ModuleIteratorImportDepthSpec {generator:"module-iterator-import-depth";depth:number;}
 export interface ModuleFailureDepthSpec {generator:"module-failure-depth";depth:number;phase:"load"|"link";}
@@ -230,6 +231,7 @@ export type GeneratedCaseSpec =
     | ModuleRequestWidthSpec
     | DynamicImportSourceDepthSpec
     | ModuleFailureDepthSpec
+    | CollectionSourceAliasDepthSpec
     | ObjectLiteralEffectDepthSpec
     | ModuleIteratorImportDepthSpec
     | OsUserInfoOptionDepthSpec
@@ -286,6 +288,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         throw new Error(`invalid generated case spec ${filename}: expected an object`);
     }
     const spec = value as Record<string, unknown>;
+    if(spec.generator==='collection-source-alias-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid collection source alias spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
     if(spec.generator==='object-literal-effect-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid object literal effect spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
@@ -1809,6 +1815,7 @@ console.log("raw JSON text width:", valid);
                 `const stressView=Buffer.alloc(4);let stressSeen=0;const stressOptions={get offset(){stressSeen++;return 0},get length(){stressSeen++;return 4},get position(){stressSeen++;return 0}};\n` +
                 `const stressBytes=stressRead(stressFD,stressView,stressOptions,...Array.from({length:${spec.width}},()=>++stressSeen));\n` +
                 `console.log('bytes:',stressBytes,'seen:',stressSeen,'text:',stressView.toString());stressClose(stressFD);stressRemove(stressPath);\n`;
+        case "collection-source-alias-depth": return collectionSourceAliasInput(spec.depth);
         case "object-literal-effect-depth": return objectLiteralEffectInput(spec.depth);
         case "module-iterator-import-depth": return moduleIteratorImportInput(spec.depth).source;
         case "module-failure-depth":
@@ -1942,4 +1949,10 @@ export function objectLiteralEffectInput(depth:number):string {
     let value='{method(){return "'+marker+'"},get value(){return "'+marker+'"}}';
     for(let index=0;index<depth;index++)value='{nested:'+value+',method(){return "'+marker+'"},set value(input:string){console.log("'+marker+'",input)}}';
     return 'export {};const unused:unknown='+value+';console.log("done");\n';
+}
+
+export function collectionSourceAliasInput(depth:number):string {
+    const aliases=['const owner0=new Map([["key","17;"]]);'];
+    for(let index=1;index<depth;index++)aliases.push(`const owner${index}=owner${index-1};`);
+    return `export {};${aliases.join("\n")}let total=Number(eval(owner${depth-1}.get("key")));for(const source of new Set(["19;","23;"]))total+=Number(eval(source));for(const [key,source]of new Map([["key","29;"]]).entries())total+=Number(eval(source));console.log(total===88);\n`;
 }

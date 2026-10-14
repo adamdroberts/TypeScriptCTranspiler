@@ -38,18 +38,18 @@ export function sourceFileExpressionTexts(expression:ts.Expression):readonly str
         try{
             const roots=new Set<string>();
             for(;;){
-                const parsed=createEcmaSourceFile(source.fileName,source.text,ts.ScriptTarget.ESNext,true,
+                const parsed=createEcmaSourceFile(path.resolve(source.fileName),source.text,ts.ScriptTarget.ESNext,true,
                     (source as ts.SourceFile&{scriptKind?:ts.ScriptKind}).scriptKind??ts.ScriptKind.TS,ecmaParseGoal(source));
                 proofSources.set(parsed,source);
                 const expressions:ts.Expression[]=[],pending:ts.Node[]=[parsed];
                 while(pending.length){const node=pending.pop()!;if(ts.isExpression(node))expressions.push(node);node.forEachChild(child=>{pending.push(child)});}
-                const built=buildProgram({entry:source.fileName,packageRoot:resolvePackageRoot(),retainModuleFailures:true,deferDynamicImportDiscovery:true,
-                    additionalRoots:[...roots],moduleRoots:[...(ecmaParseGoal(source)==="module"?[source.fileName]:[]),...roots],
-                    ...(ecmaParseGoal(source)==="script"?{isolatedScriptRoots:[source.fileName]}:{}),
+                const built=buildProgram({entry:path.resolve(source.fileName),packageRoot:resolvePackageRoot(),retainModuleFailures:true,deferDynamicImportDiscovery:true,
+                    additionalRoots:[...roots],moduleRoots:[...(ecmaParseGoal(source)==="module"?[path.resolve(source.fileName)]:[]),...roots],
+                    ...(ecmaParseGoal(source)==="script"?{isolatedScriptRoots:[path.resolve(source.fileName)]}:{}),
                     sourceOverrides:new Map([[path.resolve(source.fileName),parsed]]),sourceFileCreated:adopt});
                 const program=built.program;
                 const targetArguments=program.getSourceFiles().filter(file=>!file.isDeclarationFile).flatMap(file=>dynamicImportCalls(file).flatMap(call=>call.arguments[0]?[call.arguments[0]]:[]));
-                const queries=sourceExpressionTexts(program,[...expressions,...targetArguments],{roots:[source.fileName]});
+                const queries=sourceExpressionTexts(program,[...expressions,...targetArguments],{roots:[path.resolve(source.fileName)]});
                 result=new Map(expressions.map(node=>[key(node),queries.get(node)??null]));
                 let added=false;
                 for(const argument of targetArguments)for(const text of queries.get(argument)??[]){

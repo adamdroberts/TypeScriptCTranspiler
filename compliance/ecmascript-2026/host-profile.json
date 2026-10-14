@@ -128,6 +128,7 @@
     "runtime/tsc_json_methods.def",
     "src/json-methods.ts",
     "runtime/tsc_weak_collections.def",
+    "runtime/tsc_collection_methods.def",
     "src/console-operations.ts",
     "src/crypto-digest-owners.ts",
     "runtime/tsc_fs_dirent.c",
