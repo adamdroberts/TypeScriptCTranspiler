@@ -2898,7 +2898,8 @@
         "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
         "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
         "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context",
-        "sec-createdynamicfunction#exact-function-source-and-realm-records"
+        "sec-createdynamicfunction#exact-function-source-and-realm-records",
+        "sec-runtime-semantics-iteratorbindinginitialization#canonical-rest-source-own-locations"
       ]
     },
     {
@@ -5523,7 +5524,8 @@
       "kind": "property",
       "id": "tests/property/function-source-owner.property.test.ts",
       "targets": [
-        "sec-createdynamicfunction#exact-function-source-and-realm-records"
+        "sec-createdynamicfunction#exact-function-source-and-realm-records",
+        "sec-runtime-semantics-iteratorbindinginitialization#canonical-rest-source-own-locations"
       ]
     },
     {
@@ -5579,7 +5581,8 @@
       "kind": "implementation",
       "id": "src/source-value-flow.ts#invoke",
       "targets": [
-        "sec-createdynamicfunction#exact-function-source-and-realm-records"
+        "sec-createdynamicfunction#exact-function-source-and-realm-records",
+        "sec-runtime-semantics-iteratorbindinginitialization#canonical-rest-source-own-locations"
       ]
     },
     {
@@ -5587,6 +5590,48 @@
       "id": "src/function-constructor-source.ts#functionConstructorSourceKey",
       "targets": [
         "sec-createdynamicfunction#exact-function-source-and-realm-records"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/rest-source-location.property.test.ts",
+      "targets": [
+        "sec-runtime-semantics-iteratorbindinginitialization#canonical-rest-source-own-locations"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "rest_source_location_depth",
+      "targets": [
+        "sec-runtime-semantics-iteratorbindinginitialization#canonical-rest-source-own-locations"
+      ],
+      "stressReview": {
+        "dimension": "rest source-owner alias graph depth",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One shared generated alias graph checks rest own-location propagation independently of offset, routing, mutation, missing-element and opaque semantic partitions.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#restLocations",
+      "targets": [
+        "sec-runtime-semantics-iteratorbindinginitialization#canonical-rest-source-own-locations"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#defineField",
+      "targets": [
+        "sec-runtime-semantics-iteratorbindinginitialization#canonical-rest-source-own-locations"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#lists",
+      "targets": [
+        "sec-runtime-semantics-iteratorbindinginitialization#canonical-rest-source-own-locations"
       ]
     }
   ]

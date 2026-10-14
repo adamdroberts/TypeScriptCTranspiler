@@ -1,3 +1,5 @@
+Defined retained rest elements through the canonical own-property source record, preserving presence and enumerability.
+
 Selected exact generated Function source records and connected free names to the actual constructor Realm global environment.
 
 Projected generated eval var/function declarations into actual Realm and caller variable binding destinations through one declaration graph.

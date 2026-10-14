@@ -4415,7 +4415,7 @@ class SourceValueFlow {
                                 const rest = location.value, restOwner = location.owner;
                                 if (argv) this.publish(restOwner.listLength!, this.primitive(Math.max(0, argv.length - index)));
                                 else {this.publish(restOwner.listLength!, this.unknown); this.publish(restOwner.shape, this.unknown);}
-                                for(const [offset,value] of (argv?.slice(index) ?? []).entries())this.copy(value,this.field(restOwner,String(offset)));
+                                for(const [offset,value] of (argv?.slice(index) ?? []).entries())this.defineField(restOwner,String(offset),value,true);
                                 this.bind(parameter.name, rest);
                             } else {
                                 const supplied=argument(index)??omittedArgument;
