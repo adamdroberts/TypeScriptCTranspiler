@@ -1701,7 +1701,10 @@
     {
       "kind": "implementation",
       "id": "runtime/tsc_object.c#tsc_object_set_receiver",
-      "targets": ["sec-module-namespace-exotic-objects-set-p-v-receiver#all-writes-rejected"]
+      "targets": [
+        "sec-module-namespace-exotic-objects-set-p-v-receiver#all-writes-rejected",
+        "sec-putvalue#primitive-base-current-realm-set"
+      ]
     },
     {
       "kind": "implementation",
@@ -4652,6 +4655,55 @@
       "id": "runtime/tsc_map_set.c#collection_intrinsics",
       "targets": [
         "sec-iteratornext#canonical-collection-and-iterator-source-records"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/primitive-property-reference.property.test.ts",
+      "targets": [
+        "sec-putvalue#primitive-base-current-realm-set"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "primitive_property_prototype_depth",
+      "targets": [
+        "sec-putvalue#primitive-base-current-realm-set"
+      ],
+      "stressReview": {
+        "dimension": "ordinary prototype graph depth for primitive Set receiver traversal",
+        "parameter": "depth",
+        "representativeHighDepth": 4096,
+        "rationale": "One shared prototype graph verifies the ordinary Set traversal and retained primitive receiver in native property and typed CLI. Compact domain, strict/sloppy, descriptor, abrupt and Realm partitions are independent of depth.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "primitive_property_reference",
+      "targets": [
+        "sec-putvalue#primitive-base-current-realm-set"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitCapturedPropertyReference",
+      "targets": [
+        "sec-putvalue#primitive-base-current-realm-set"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_set_prop",
+      "targets": [
+        "sec-putvalue#primitive-base-current-realm-set"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#writeProperty",
+      "targets": [
+        "sec-putvalue#primitive-base-current-realm-set"
       ]
     }
   ]

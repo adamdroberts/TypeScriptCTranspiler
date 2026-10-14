@@ -1075,6 +1075,18 @@ class SourceValueFlow {
         const signature=base.id+":"+this.keyIdentity(key)+":"+value.id+":"+unknownGlobal+":"+mode+":"+(context?this.cell(context).id:"none")+":"+receiver.id;
         if(this.propertyWrites.has(signature))return;
         this.propertyWrites.add(signature);
+        if(mode==="set"&&context){
+            const primitives=this.newCell();let opened=false;
+            this.rule([base],()=>{
+                for(const atom of base.values)if(!this.ordinaryOwner(atom)&&atom!==this.primitive(null)&&atom!==this.primitive(undefined)&&
+                    (atom.tag==="primitive"||atom.tag==="text-operation"||atom.tag==="non-string"||atom.tag==="unknown-string"))this.publish(primitives,atom);
+                if(opened||!primitives.values.size)return;opened=true;
+                const conversion=ts.setTextRange(ts.factory.createEmptyStatement(),context);(conversion as ts.Node&{parent:ts.Node}).parent=context;
+                this.writeProperty(this.objectValue(primitives,conversion),key,value,unknownGlobal,mode,context,receiver);
+            });
+        }
+        const proxyEffects=new Set<ObjectOwner>();
+        const setterEffects=new Set<Cell>();
         let rule!:Rule;
         rule=this.rule([base,receiver],()=>{for(const atom of base.values){
             const owner=this.ordinaryOwner(atom);
@@ -1084,10 +1096,17 @@ class SourceValueFlow {
                     const pending=[owner],visited=new Set<ObjectOwner>();
                     while(pending.length){
                         const current=pending.pop()!;if(visited.has(current))continue;visited.add(current);
+                        if(current.proxy&&context&&!proxyEffects.has(current)){
+                            proxyEffects.add(current);
+                            const trap=this.property(current.proxy.handler,"set",context);
+                            this.opaqueCallableCaptures(trap,context);this.onActive(context,()=>this.opaqueEffect(context));
+                        }
                         this.watch(rule,current.shape);
                         if(handler && this.opaqueShape(current,context))this.publish(handler,this.unknown);
-                        for(const[name,accessor]of current.accessors)if(key===null || name===key || name===null)
+                        for(const[name,accessor]of current.accessors)if((key===null || name===key || name===null)&&!setterEffects.has(accessor.set)){
+                            setterEffects.add(accessor.set);
                             this.invoke(context ?? this.accessorDefinitions.get(accessor.set)!,this.accessorCallee(accessor.set),receiver,[{cell:value,spread:false}],this.newCell());
+                        }
                         const presence=key===null?null:this.presence(current,key);
                         if(presence)this.watch(rule,presence);
                         if(key!==null && current.accessors.has(key) && presence?.values.has(this.primitive(true)) && !presence.values.has(this.primitive(false)))continue;

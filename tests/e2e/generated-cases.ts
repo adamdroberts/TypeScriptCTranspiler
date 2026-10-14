@@ -52,6 +52,7 @@ export interface DynamicImportSourceDepthSpec {
 }
 export interface FsReadActualListWidthSpec {generator:"fs-read-actual-list-width";width:number;}
 export interface CollectionSourceAliasDepthSpec {generator:"collection-source-alias-depth";depth:number;}
+export interface PrimitivePropertyPrototypeDepthSpec {generator:"primitive-property-prototype-depth";depth:number;}
 export interface ObjectLiteralEffectDepthSpec {generator:"object-literal-effect-depth";depth:number;}
 export interface ModuleIteratorImportDepthSpec {generator:"module-iterator-import-depth";depth:number;}
 export interface ModuleFailureDepthSpec {generator:"module-failure-depth";depth:number;phase:"load"|"link";}
@@ -232,6 +233,7 @@ export type GeneratedCaseSpec =
     | DynamicImportSourceDepthSpec
     | ModuleFailureDepthSpec
     | CollectionSourceAliasDepthSpec
+    | PrimitivePropertyPrototypeDepthSpec
     | ObjectLiteralEffectDepthSpec
     | ModuleIteratorImportDepthSpec
     | OsUserInfoOptionDepthSpec
@@ -288,6 +290,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         throw new Error(`invalid generated case spec ${filename}: expected an object`);
     }
     const spec = value as Record<string, unknown>;
+    if(spec.generator==='primitive-property-prototype-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid primitive property prototype spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
     if(spec.generator==='collection-source-alias-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid collection source alias spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
@@ -1816,6 +1822,7 @@ console.log("raw JSON text width:", valid);
                 `const stressBytes=stressRead(stressFD,stressView,stressOptions,...Array.from({length:${spec.width}},()=>++stressSeen));\n` +
                 `console.log('bytes:',stressBytes,'seen:',stressSeen,'text:',stressView.toString());stressClose(stressFD);stressRemove(stressPath);\n`;
         case "collection-source-alias-depth": return collectionSourceAliasInput(spec.depth);
+        case "primitive-property-prototype-depth": return primitivePropertyPrototypeInput(spec.depth);
         case "object-literal-effect-depth": return objectLiteralEffectInput(spec.depth);
         case "module-iterator-import-depth": return moduleIteratorImportInput(spec.depth).source;
         case "module-failure-depth":
@@ -1955,4 +1962,9 @@ export function collectionSourceAliasInput(depth:number):string {
     const aliases=['const owner0=new Map([["key","17;"]]);'];
     for(let index=1;index<depth;index++)aliases.push(`const owner${index}=owner${index-1};`);
     return `export {};${aliases.join("\n")}let total=Number(eval(owner${depth-1}.get("key")));for(const source of new Set(["19;","23;"]))total+=Number(eval(source));for(const [key,source]of new Map([["key","29;"]]).entries())total+=Number(eval(source));console.log(total===88);\n`;
+}
+
+/** Prototype cardinality is independent of the primitive domain partitions. */
+export function primitivePropertyPrototypeInput(depth:number):string {
+    return `export {};const prototype=Number.prototype as any,previous=Object.getPrototypeOf(prototype);let seen=0;let parent:any={set probe(value:number){'use strict';if(typeof this==='number'&&(this as any)===17&&value===19)seen++;}};for(let index=0;index<${depth};index++)parent=Object.create(parent);Object.setPrototypeOf(prototype,parent);(17 as any).probe=19;Object.setPrototypeOf(prototype,previous);console.log('primitive prototype:',seen===1);\n`;
 }

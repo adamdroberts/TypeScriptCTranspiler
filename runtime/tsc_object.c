@@ -710,60 +710,67 @@ bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value,
     (void)value_gc_root;
     void* volatile receiver_gc_root = tsc_value_gc_root(receiver);
     (void)receiver_gc_root;
-    double byte_index = 0;
-    if (tsc_integer_indexed_key(o, key, &byte_index)) {
-        if (receiver == tsc_value_object(o)) {
-            tsc_integer_indexed_set(o, byte_index, value);
-            return true;
+    tsc_object_t* volatile base_gc_root = o;
+    (void)base_gc_root;
+    for (;;) {
+        double byte_index = 0;
+        if (tsc_integer_indexed_key(o, key, &byte_index)) {
+            if (receiver == tsc_value_object(o)) {
+                tsc_integer_indexed_set(o, byte_index, value);
+                return true;
+            }
+            if (!tsc_integer_indexed_valid(o, byte_index)) return true;
+            return value_set_receiver_own_data(receiver, key, value);
         }
-        if (!tsc_integer_indexed_valid(o, byte_index)) return true;
-        return value_set_receiver_own_data(receiver, key, value);
-    }
 
 
-    if (o->is_proxy) {
-        if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'set' on a proxy that has been revoked"));
-        tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("set", 3));
-        if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
-            return tsc_value_set_prop_receiver(o->proxy_target, key, value, receiver);
+        if (o->is_proxy) {
+            if (o->proxy_revoked) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Cannot perform 'set' on a proxy that has been revoked"));
+            tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("set", 3));
+            if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
+                if (value_is_box(o->proxy_target) && value_tag(o->proxy_target) == TSC_VALUE_TAG_OBJECT) {
+                    o = value_ptr(o->proxy_target);base_gc_root = o;continue;
+                }
+                return tsc_value_set_prop_receiver(o->proxy_target, key, value, receiver);
+            }
+            tsc_proxy_require_callable_trap(trap, "Proxy set trap must be callable");
+            tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
+            tsc_array_push_value(args, o->proxy_target);
+            tsc_array_push_value(args, property_key_value(key));
+            tsc_array_push_value(args, value);
+            tsc_array_push_value(args, receiver);
+            tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
+            bool success = tsc_value_is_truthy(res);
+            validate_proxy_set_result(o, key, value, success);
+            return success;
         }
-        tsc_proxy_require_callable_trap(trap, "Proxy set trap must be callable");
-        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 4);
-        tsc_array_push_value(args, o->proxy_target);
-        tsc_array_push_value(args, property_key_value(key));
-        tsc_array_push_value(args, value);
-        tsc_array_push_value(args, receiver);
-        tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
-        bool success = tsc_value_is_truthy(res);
-        validate_proxy_set_result(o, key, value, success);
-        return success;
-    }
-    /* Module Namespace Exotic Objects have a [[Set]] method that always
-     * returns false, including for absent keys and alternate receivers. */
-    if (o->is_module_namespace) return false;
-    ssize_t idx = object_find(o, key);
-    if (idx >= 0) {
-        const tsc_object_prop_t* prop = &o->props[idx];
-        if (prop->accessor) {
-            return prop->setter ? prop->setter(prop->setter_env, receiver, value) : false;
+        /* Module Namespace Exotic Objects have a [[Set]] method that always
+         * returns false, including for absent keys and alternate receivers. */
+        if (o->is_module_namespace) return false;
+        ssize_t idx = object_find(o, key);
+        if (idx >= 0) {
+            const tsc_object_prop_t* prop = &o->props[idx];
+            if (prop->accessor) {
+                return prop->setter ? prop->setter(prop->setter_env, receiver, value) : false;
+            }
+            if (!prop->writable) return false;
+            return value_set_receiver_own_data(receiver, key, value);
         }
-        if (!prop->writable) return false;
+        if (value_is_box(o->prototype) && value_tag(o->prototype) == TSC_VALUE_TAG_OBJECT) {
+            o = value_ptr(o->prototype);base_gc_root = o;continue;
+        }
+        if (
+            value_is_box(o->prototype) &&
+            (value_tag(o->prototype) == TSC_VALUE_TAG_ARRAY || value_tag(o->prototype) == TSC_VALUE_TAG_FUNCTION)
+        ) {
+            return tsc_value_set_prop_receiver(o->prototype, key, value, receiver);
+        }
+        if (str_lit_eq(key, "__proto__")) {
+            if (!value_is_valid_prototype(value)) return true;
+            return tsc_value_set_prototype_of(receiver, value);
+        }
         return value_set_receiver_own_data(receiver, key, value);
     }
-    if (value_is_box(o->prototype) && value_tag(o->prototype) == TSC_VALUE_TAG_OBJECT) {
-        return tsc_object_set_receiver((tsc_object_t*)value_ptr(o->prototype), key, value, receiver);
-    }
-    if (
-        value_is_box(o->prototype) &&
-        (value_tag(o->prototype) == TSC_VALUE_TAG_ARRAY || value_tag(o->prototype) == TSC_VALUE_TAG_FUNCTION)
-    ) {
-        return tsc_value_set_prop_receiver(o->prototype, key, value, receiver);
-    }
-    if (str_lit_eq(key, "__proto__")) {
-        if (!value_is_valid_prototype(value)) return true;
-        return tsc_value_set_prototype_of(receiver, value);
-    }
-    return value_set_receiver_own_data(receiver, key, value);
 }
 
 

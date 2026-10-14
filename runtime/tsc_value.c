@@ -5484,6 +5484,15 @@ bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
     void* volatile value_gc_root = tsc_value_gc_root(value);
     (void)value_gc_root;
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_SET_PROP);
+    if (!tsc_value_is_object(v)) {
+        void* volatile receiver_gc_root = tsc_value_gc_root(v);
+        const tsc_str_t* volatile key_gc_root = key;
+        tsc_value_t object = tsc_value_to_object(v);
+        void* volatile object_gc_root = tsc_value_gc_root(object);
+        (void)receiver_gc_root; (void)key_gc_root;
+        (void)object_gc_root;
+        return tsc_value_set_prop_receiver(object, key, value, v);
+    }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_set((tsc_object_t*)value_ptr(v), key, value);
     }

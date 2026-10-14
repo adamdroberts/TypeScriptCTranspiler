@@ -1,0 +1,38 @@
+assignment number 11 set:number:true:11|
+compound number 5 get|set:number:true:5|
+update number 3 get|set:number:true:4|
+logical number 7 get|set:number:true:7|
+symbol number symbol:number:true:13|
+inherited number proxy:number:true:probe:19
+assignment string 11 set:string:true:11|
+compound string 5 get|set:string:true:5|
+update string 3 get|set:string:true:4|
+logical string 7 get|set:string:true:7|
+symbol string symbol:string:true:13|
+inherited string proxy:string:true:probe:19
+assignment boolean 11 set:boolean:true:11|
+compound boolean 5 get|set:boolean:true:5|
+update boolean 3 get|set:boolean:true:4|
+logical boolean 7 get|set:boolean:true:7|
+symbol boolean symbol:boolean:true:13|
+inherited boolean proxy:boolean:true:probe:19
+assignment bigint 11 set:bigint:true:11|
+compound bigint 5 get|set:bigint:true:5|
+update bigint 3 get|set:bigint:true:4|
+logical bigint 7 get|set:bigint:true:7|
+symbol bigint symbol:bigint:true:13|
+inherited bigint proxy:bigint:true:probe:19
+assignment symbol 11 set:symbol:true:11|
+compound symbol 5 get|set:symbol:true:5|
+update symbol 3 get|set:symbol:true:4|
+logical symbol 7 get|set:symbol:true:7|
+symbol symbol symbol:symbol:true:13|
+inherited symbol proxy:symbol:true:probe:19
+literal number true 23
+strict failure true base|name|rhs|key|
+nullish true name|rhs|
+abrupt true
+string own 0 true
+string own length true
+done
+suspended 8 get|await|set:number:8|

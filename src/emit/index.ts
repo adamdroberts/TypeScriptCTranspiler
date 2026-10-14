@@ -34569,7 +34569,7 @@ class Emitter {
             });
         }
         const raw = this.propertyBaseValue(this.emitExpr(node.expression), node.expression);
-        const receiver = (this.isPrivatePropertyReference(node) || ["function", "buffer", "array"].includes(raw.ty.kind) ||
+        const receiver = (this.isPrivatePropertyReference(node) || ["function", "buffer", "array", "number", "bigint", "symbol", "string", "boolean"].includes(raw.ty.kind) ||
             raw.ty.kind === "class" && !!this.findClassDecl(raw.ty.className!))
             ? { c: this.coerce(raw, T_VALUE, node.expression), ty: T_VALUE } : raw;
         if (receiver.ty.kind !== "value") return null;
