@@ -1,3 +1,5 @@
+Added shared cyclic Module depth evidence for asynchronous cycle-root dependencies, retaining disabled host eligibility.
+
 Aligned the retained dynamic coercion expectation with ordinary String addition after TypeScript annotation erasure.
 
 Stopped finite Buffer source proofs from inventing zero-filled unsafe allocation bytes; shared transformations remain unknown and use the existing AOT closure diagnostic.

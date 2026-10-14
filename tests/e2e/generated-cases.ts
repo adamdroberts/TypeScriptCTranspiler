@@ -54,6 +54,7 @@ export interface FsReadActualListWidthSpec {generator:"fs-read-actual-list-width
 export interface CollectionSourceAliasDepthSpec {generator:"collection-source-alias-depth";depth:number;}
 export interface PrimitivePropertyPrototypeDepthSpec {generator:"primitive-property-prototype-depth";depth:number;}
 export interface GeneratorMethodOwnerDepthSpec {generator:"generator-method-owner-depth";depth:number;}
+export interface ModuleAsyncCycleDepthSpec {generator:"module-async-cycle-depth";depth:number;}
 export interface PathComponentDepthSpec {generator:"path-component-depth";depth:number;}
 export interface ArrayIteratorSourceDepthSpec {generator:"array-iterator-source-depth";depth:number;}
 export interface SetCompositionSourceDepthSpec {generator:"set-composition-source-depth";depth:number;}
@@ -239,6 +240,7 @@ export type GeneratedCaseSpec =
     | CollectionSourceAliasDepthSpec
     | PrimitivePropertyPrototypeDepthSpec
     | GeneratorMethodOwnerDepthSpec
+    | ModuleAsyncCycleDepthSpec
     | PathComponentDepthSpec
     | ArrayIteratorSourceDepthSpec
     | SetCompositionSourceDepthSpec
@@ -298,6 +300,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         throw new Error(`invalid generated case spec ${filename}: expected an object`);
     }
     const spec = value as Record<string, unknown>;
+    if(spec.generator==='module-async-cycle-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<2)throw new Error(`invalid asynchronous Module cycle spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
     if(spec.generator==='path-component-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid path component spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
@@ -1848,6 +1854,7 @@ console.log("raw JSON text width:", valid);
         case "collection-source-alias-depth": return collectionSourceAliasInput(spec.depth);
         case "primitive-property-prototype-depth": return primitivePropertyPrototypeInput(spec.depth);
         case "generator-method-owner-depth": return generatorMethodOwnerInput(spec.depth);
+        case "module-async-cycle-depth": return moduleAsyncCycleInput(spec.depth).source;
         case "path-component-depth": return pathComponentInput(spec.depth);
         case "array-iterator-source-depth": return arrayIteratorSourceInput(spec.depth);
         case "set-composition-source-depth": return setCompositionSourceInput(spec.depth);
@@ -1968,6 +1975,7 @@ export function moduleFailureDepthInput(depth:number,phase:'load'|'link'='load')
 }
 export function generateE2eCaseFiles(raw:string,filename:string):Readonly<Record<string,string>>{
     const spec=parseGeneratedCaseSpec(raw,filename);
+    if(spec.generator==='module-async-cycle-depth')return moduleAsyncCycleInput(spec.depth).files;
     if(spec.generator==='module-iterator-import-depth')return moduleIteratorImportInput(spec.depth).files;
     return spec.generator==='module-failure-depth'?moduleFailureDepthInput(spec.depth,spec.phase).files:{};
 }
@@ -2015,4 +2023,12 @@ export function arrayIteratorSourceInput(depth:number):string {
 
 export function pathComponentInput(depth:number):string {
     return `import path from 'node:path';const count=${depth};let parts:string[]=[];for(let index=0;index<count;index++)parts.push('component'+index);const long=parts.join('/'),joined=path.join(...parts),normalized=path.normalize(long+'/../tail/'),resolved=path.resolve('/root',...parts,'..','tail'),relative=path.relative('/root/'+long,'/root/leaf');console.log('path components:',joined===long&&normalized===parts.slice(0,-1).join('/')+'/tail/'&&resolved==='/root/'+parts.slice(0,-1).join('/')+'/tail'&&relative==='../'.repeat(count)+'leaf');\n`;
+}
+
+export function moduleAsyncCycleInput(depth:number):{source:string;files:Record<string,string>} {
+    const files:Record<string,string>={'cycle-shared.mjs':`export const events=[];`};
+    for(let index=0;index<depth;index++)files[`cycle-${index}.mjs`]=`import './cycle-${(index+1)%depth}.mjs';import {events} from './cycle-shared.mjs';events.push('start:${index}');await Promise.resolve();events.push('end:${index}');export function read(){return ${index};}`;
+    files['cycle-consumer.mjs']=`import {read} from './cycle-${Math.floor(depth/2)}.mjs';import {events} from './cycle-shared.mjs';events.push('consumer:'+read());`;
+    const expected=Array.from({length:depth},(_,index)=>depth-1-index).flatMap(index=>[`start:${index}`,`end:${index}`]);expected.push('consumer:'+Math.floor(depth/2));
+    return {files,source:`import './cycle-0.mjs';import './cycle-consumer.mjs';import {events} from './cycle-shared.mjs';console.log('module async cycle:',events.join('|')===${JSON.stringify(expected.join('|'))});\n`};
 }

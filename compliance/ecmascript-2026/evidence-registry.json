@@ -4424,7 +4424,8 @@
         "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
         "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation",
         "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
-        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
+        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation",
+        "sec-innermoduleevaluation#canonical-async-cycle-dependencies"
       ]
     },
     {
@@ -4819,6 +4820,55 @@
       "id": "src/source-value-flow.ts#arrayIterationView",
       "targets": [
         "sec-createarrayiterator#canonical-array-iterator-source-records"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/module-async-cycle.property.test.ts",
+      "targets": [
+        "sec-innermoduleevaluation#canonical-async-cycle-dependencies"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/module-evaluation.property.test.ts",
+      "targets": [
+        "sec-innermoduleevaluation#canonical-async-cycle-dependencies"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "module_async_cycle_depth",
+      "targets": [
+        "sec-innermoduleevaluation#canonical-async-cycle-dependencies"
+      ],
+      "stressReview": {
+        "dimension": "retained strongly connected asynchronous Module request graph depth",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One shared generated strongly connected Module graph verifies cycle-root waiting in the native property and typed CLI; existing completion, rejection and independent ordering partitions are separate from depth.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "module_async_cycle",
+      "targets": [
+        "sec-innermoduleevaluation#canonical-async-cycle-dependencies"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_module.c#module_execution_fulfilled",
+      "targets": [
+        "sec-innermoduleevaluation#canonical-async-cycle-dependencies"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_module.c#module_execution_rejected",
+      "targets": [
+        "sec-innermoduleevaluation#canonical-async-cycle-dependencies"
       ]
     }
   ]
