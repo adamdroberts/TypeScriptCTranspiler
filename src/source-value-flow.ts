@@ -2892,7 +2892,13 @@ class SourceValueFlow {
             if(atom.tag==="pending-source"){this.publish(value,atom);continue;}
             if(atom.tag==="abrupt")continue;
             const owner=this.ordinaryOwner(atom);
-            if(!owner){this.publish(value,atom);continue;}
+            if(!owner){
+                this.publish(value,atom);
+                if(atom.tag==="unknown"||atom.tag==="opaque-object"){
+                    this.publish(rejection,this.unknown);this.onActive(context,()=>this.opaqueEffect(context));
+                }
+                continue;
+            }
             if(seen.has(atom))continue;seen.add(atom);
             const input=cell(atom),then=this.property(input,"then",callback),target=this.newCell();
             let intrinsicThen=false;
@@ -2908,6 +2914,33 @@ class SourceValueFlow {
             }});
             this.invoke(callback,target,input,this.promiseResolverCells(value,rejection).map(cell=>({cell,spread:false})),this.newCell());
         }});return {value,rejection};
+    }
+
+    /** PromiseResolve keeps an intrinsic Promise whose constructor matches;
+     * all other values enter the same resolver/thenable graph. Await and the
+     * native static resolve member share this identity and effect boundary. */
+    private promiseResolve(input:Cell,context:ts.Node):Cell {
+        let calls=this.promiseConstructions.get(context);if(!calls){calls=new Map();this.promiseConstructions.set(context,calls);}
+        const key="resolve:"+input.id,prior=calls.get(key);if(prior)return prior;
+        const result=this.newCell(),adopted=this.newCell(),seen=new Set<Atom>();calls.set(key,result);
+        const resolved=this.promiseAssimilation(adopted,context);this.publish(result,{tag:"promise",value:resolved.value,rejection:resolved.rejection});
+        this.rule([input],()=>{for(const atom of input.values){
+            if(atom.tag!=="promise"){this.publish(adopted,atom);continue;}
+            if(seen.has(atom))continue;seen.add(atom);
+            const receiver=this.newCell();this.publish(receiver,atom);
+            const constructor=this.property(receiver,"constructor",context);
+            this.rule([constructor],()=>{for(const value of constructor.values){
+                if(value.tag==="abrupt"||value.tag==="pending-source")continue;
+                if(value.tag==="builtin"&&value.name==="Promise")this.publish(result,atom);
+                else{
+                    this.publish(adopted,atom);
+                    if(value.tag==="unknown"||value.tag==="opaque-object"){
+                        this.publish(result,atom);this.onActive(context,()=>this.opaqueEffect(context));
+                        const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.unknown);
+                    }
+                }
+            }});
+        }});return result;
     }
 
     private promiseFinallyForward(handler:Cell,previous:Cell,rejected:Cell,context:ts.Node):Cell {
@@ -4130,16 +4163,12 @@ class SourceValueFlow {
             for (const span of node.templateSpans) { parts.push(this.cell(span.expression)); literal(span.literal.text); }
             this.publish(result, { tag: "text-operation", operation: "template", parts: this.convertList(parts,node,"text") });
         } else if (ts.isAwaitExpression(node)) {
-            const operand = this.cell(node.expression);
+            const operand = this.promiseResolve(this.cell(node.expression),node);
             this.rule([operand], () => { for (const atom of operand.values) {
                 if (atom.tag === "promise") {
                     this.copy(atom.value, result!);
                     const handler = this.exceptionHandlers.get(node);
                     if (handler) this.copy(atom.rejection, handler);
-                } else {
-                    this.publish(result!, atom);
-                    const handler = this.exceptionHandlers.get(node);
-                    if (handler && atom.tag !== "primitive" && atom.tag !== "non-string") this.publish(handler, this.unknown);
                 }
             } });
         } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
@@ -4520,15 +4549,7 @@ class SourceValueFlow {
                             if(!receivers.some(receiver=>receiver.tag==="builtin"&&receiver.name==="Promise"))continue;
                             if(member==="resolve"||member==="reject"){
                                 const input=argument(0)??omittedArgument;
-                                if(member==="resolve"){
-                                    this.watch(rule,input);
-                                    for(const promise of input.values)if(promise.tag==="promise"){
-                                        let calls=this.promiseConstructions.get(node);if(!calls){calls=new Map();this.promiseConstructions.set(node,calls);}const identity="resolve-input:"+promise.value.id+":"+promise.rejection.id;let selected=calls.get(identity);if(!selected){selected=this.newCell();calls.set(identity,selected);this.publish(selected,promise);}const constructor=this.property(selected,"constructor",node);this.watch(rule,constructor);
-                                        if([...constructor.values].some(value=>value.tag==="unknown"||value.tag==="opaque-object")){this.onActive(node,()=>this.opaqueEffect(node));const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.unknown);}
-                                        this.publish(result,promise);
-                                    }
-                                    const resolved=this.promiseAssimilation(input,node);this.publish(result,{tag:"promise",value:resolved.value,rejection:resolved.rejection});
-                                }
+                                if(member==="resolve")this.copy(this.promiseResolve(input,node),result);
                                 else{let calls=this.promiseConstructions.get(node);if(!calls){calls=new Map();this.promiseConstructions.set(node,calls);}const key="reject:"+input.id;let holder=calls.get(key);if(!holder){holder=this.newCell();calls.set(key,holder);const value=this.newCell(),rejection=this.exceptionCell();this.copy(input,rejection);this.publish(holder,{tag:"promise",value,rejection});}this.copy(holder,result);}
                             }else if(member==="try"||member==="withResolvers")this.copy(this.promiseStaticCapability(member,node,argv),result);
                             else{this.publish(result,this.opaqueObject);this.onActive(node,()=>this.opaqueEffect(node));}

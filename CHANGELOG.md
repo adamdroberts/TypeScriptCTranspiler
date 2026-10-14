@@ -1,3 +1,5 @@
+Shared await and intrinsic Promise.resolve identity, thenable and source-effect resolution.
+
 Projected async return adoption and observable Promise then/species effects through shared source owners.
 
 Observed delayed Module rejection through its retained source role after draining jobs.
