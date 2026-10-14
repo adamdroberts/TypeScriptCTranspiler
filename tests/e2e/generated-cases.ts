@@ -3,6 +3,11 @@ export interface RegexpPatternDepthSpec {
     depth: number;
 }
 
+export interface RegexpSplitCaptureWorklistSpec {
+    generator: "regexp-split-capture-worklist";
+    depth: number;
+}
+
 export interface AsyncLeadingAwaitChainSpec {
     generator: "async-leading-await-chain";
     awaitCount: number;
@@ -269,6 +274,7 @@ export interface SwitchCaseBlockClassWorklistWidthSpec {
 
 export type GeneratedCaseSpec =
     | RegexpPatternDepthSpec
+    | RegexpSplitCaptureWorklistSpec
     | AsyncLeadingAwaitChainSpec
     | AsyncBindingDefaultDepthSpec
     | AsyncLogicalExpressionDepthSpec
@@ -549,6 +555,11 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     if(spec.generator==='module-failure-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<2||!['load','link'].includes(String(spec.phase)))throw new Error(`invalid generated Module failure spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth,phase:spec.phase as 'load'|'link'};
+    }
+    if (spec.generator === "regexp-split-capture-worklist") {
+        if (typeof spec.depth !== "number" || !Number.isInteger(spec.depth) || spec.depth < 2)
+            throw new Error(`invalid generated split worklist spec ${filename}`);
+        return { generator: spec.generator, depth: spec.depth };
     }
     if (spec.generator === "regexp-pattern-depth") {
         const depth = spec.depth;
@@ -2025,6 +2036,34 @@ const valid = evaluated === ${spec.width} && raw.rawJSON === text &&
     JSON.stringify(raw) === text && Reflect.apply(JSON.isRawJSON, null, brandArgs) &&
     Object.isFrozen(raw) && Object.getPrototypeOf(raw) === null;
 console.log("raw JSON text width:", valid);
+`;
+        case "regexp-split-capture-worklist":
+            return `const split: any = RegExp.prototype[Symbol.split];
+let graph: any = null;
+for (let index = 0; index < ${spec.depth}; index++) {
+    const capture: any = { index };
+    function Species(): any {
+        return { lastIndex: 0, exec(): any {
+            if (this.lastIndex !== 0) return null;
+            this.lastIndex = 1; return { 0: "x", 1: capture, length: 2 };
+        } };
+    }
+    const value: any = split.call({ constructor: { [Symbol.species]: Species }, flags: "" }, "x", 2);
+    graph = { capture, value, previous: graph };
+}
+let valid = true;
+for (let index = ${spec.depth} - 1; index >= 0; index--) {
+    valid = valid && graph.capture.index === index && graph.value.length === 2 &&
+        graph.value[0] === "" && graph.value[1] === graph.capture;
+    graph = graph.previous;
+}
+const captures: any = { 0: "x", length: ${spec.depth} + 1 };
+for (let index = 1; index <= ${spec.depth}; index++) captures[index] = { index };
+function WideSpecies(): any { return { lastIndex: 0, exec(): any { this.lastIndex = 1; return captures; } }; }
+const values: any = split.call({ constructor: { [Symbol.species]: WideSpecies }, flags: "" }, "x");
+valid = valid && values.length === ${spec.depth} + 2 && values[0] === "" && values[values.length - 1] === "";
+for (let index = 1; index <= ${spec.depth}; index++) valid = valid && values[index] === captures[index];
+console.log("split worklist:", valid && graph === null);
 `;
         case "regexp-pattern-depth":
             return `const openings: string[] = [];

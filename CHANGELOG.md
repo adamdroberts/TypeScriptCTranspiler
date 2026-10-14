@@ -1,3 +1,5 @@
+- Register scoped RegExp split intrinsic evidence and exact historical/directory mappings with one capture/owner worklist stress.
+
 - Update dynamic matchAll consumers to materialize and observe the lazy iterator through Array.from.
 
 - Share immutable String wrapper source field publication across actual-input views of the same allocation owner.

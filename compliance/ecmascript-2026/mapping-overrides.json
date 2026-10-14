@@ -303,6 +303,16 @@
       ],
       "reason": "The exact ES6 PromiseResolveThenableJob algorithm is the current NewPromiseResolveThenableJob operation, including resolving functions and abrupt then-call completion.",
       "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es6id",
+      "match": "exact",
+      "value": "21.2.5.11",
+      "clauses": [
+        "sec-regexp.prototype-%symbol.split%"
+      ],
+      "reason": "The ES6 RegExp.prototype @@split intrinsic is the same algorithm now named RegExp.prototype [ %Symbol.split% ]; exact historical ID correspondence preserves the algorithm owner.",
+      "reviewedBy": "tsc2c compliance review"
     }
   ],
   "pathRules": [
@@ -518,6 +528,14 @@
         "sec-number.prototype.tolocalestring"
       ],
       "reason": "Legacy or intrinsic-specific metadata in the pinned Number.prototype.toLocaleString semantic directory exercises that exact owner contract; the directory relationship does not depend on filenames or inventory cardinality.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "prefix": "test/built-ins/RegExp/prototype/Symbol.split/",
+      "clauses": [
+        "sec-regexp.prototype-%symbol.split%"
+      ],
+      "reason": "The structural intrinsic directory directly exercises RegExp.prototype [ %Symbol.split% ], including descriptor, species, RegExpExec, cursor and abrupt branches.",
       "reviewedBy": "tsc2c compliance review"
     }
   ],

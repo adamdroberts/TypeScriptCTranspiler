@@ -6525,6 +6525,61 @@
         }
       ],
       "rationale": "Scoped rest source own-location evidence; complete IteratorBindingInitialization remains open."
+    },
+    {
+      "clause": "sec-regexp.prototype-%symbol.split%",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "species-exec-capture-and-utf16-cursor-worklist",
+          "title": "Generic receiver and ordered conversion, species construction, RegExpExec, limits and actual capture Lists, UTF-16 empty-match cursor advancement, abrupt identity and intrinsic descriptors",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-regexp.prototype-%symbol.split%"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/regexp-split-protocol.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "regexp_split_capture_worklist"
+            ],
+            "e2e": [
+              "regexp_split_protocol"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#RegExp"
+            ],
+            "implementation": [
+              "runtime/tsc_regexp_api.c#tsc_regexp_split_apply",
+              "runtime/tsc_regexp_api.c#regexp_exec_value",
+              "runtime/tsc_regexp_api.c#regexp_set_last_index_value",
+              "runtime/tsc_value.c#tsc_value_species_constructor",
+              "runtime/tsc_value.c#tsc_value_length_of_array_like",
+              "runtime/tsc_value.c#tsc_value_method_split",
+              "runtime/tsc_regexp.c#tsc_regexp_prototype_value"
+            ]
+          },
+          "rationale": "One retained splitter and cursor traverse the UTF-16 input; one actual capture List appends live Get results with limit checks. Shared SpeciesConstructor, RegExpExec, LengthOfArrayLike and ordinary Set/Get supply ordering and abrupt completion. Independent Node properties cover receiver, flags/limits, custom species/Proxy/result, capture identity, original lastIndex, empty/Unicode advancement, metadata and failures. One generated owner graph and capture List stress independently checks retained identity. The complete pinned intrinsic directory passes immutably at ca85cc025 with independent Node source execution and native artifact-byte audit. Host eligibility, broader RegExp/String clause registration and exhaustive signed target coverage remain separate open requirements."
+        }
+      ],
+      "rationale": "Scoped reciprocal evidence for the RegExp split intrinsic; passing diagnostic execution is not a whole-target conformance claim."
     }
   ],
   "groups": [

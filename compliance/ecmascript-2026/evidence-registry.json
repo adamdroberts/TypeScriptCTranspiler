@@ -5763,6 +5763,90 @@
       "targets": [
         "sec-conditional-operator-runtime-semantics-evaluation#selected-value-and-lazy-arms"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/regexp-split-protocol.property.test.ts",
+      "targets": [
+        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "regexp_split_capture_worklist",
+      "targets": [
+        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist"
+      ],
+      "stressReview": {
+        "dimension": "retained splitter/capture owner graph depth and actual capture List traversal",
+        "parameter": "depth",
+        "representativeHighDepth": 4096,
+        "rationale": "One generated worklist verifies retained native capture identities and ordered actual capture intake; the algorithm and owner graph are independent of the chosen representative depth.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "regexp_split_protocol",
+      "targets": [
+        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist"
+      ]
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#RegExp",
+      "targets": [
+        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_regexp_api.c#tsc_regexp_split_apply",
+      "targets": [
+        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_regexp_api.c#regexp_exec_value",
+      "targets": [
+        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_regexp_api.c#regexp_set_last_index_value",
+      "targets": [
+        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_species_constructor",
+      "targets": [
+        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_length_of_array_like",
+      "targets": [
+        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_method_split",
+      "targets": [
+        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_regexp.c#tsc_regexp_prototype_value",
+      "targets": [
+        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist"
+      ]
     }
   ]
 }
