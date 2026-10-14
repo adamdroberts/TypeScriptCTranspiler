@@ -58,6 +58,7 @@ export interface PrimitivePropertyReadDepthSpec {generator:"primitive-property-r
 export interface RestSourceLocationDepthSpec {generator:"rest-source-location-depth";depth:number;}
 export interface SourceAllocationDepthSpec {generator:"source-allocation-depth";depth:number;}
 export interface ListExtentCaptureDepthSpec {generator:"list-extent-capture-depth";depth:number;}
+export interface RelationalSourceDepthSpec {generator:"relational-source-depth";depth:number;}
 export interface StrictTypeSourceDepthSpec {generator:"strict-type-source-depth";depth:number;}
 export interface PromiseCapabilitySourceDepthSpec {generator:"promise-capability-source-depth";depth:number;}
 export interface JSONNumericSourceDepthSpec {generator:"json-numeric-source-depth";depth:number;}
@@ -317,6 +318,7 @@ export type GeneratedCaseSpec =
     | RestSourceLocationDepthSpec
     | SourceAllocationDepthSpec
     | ListExtentCaptureDepthSpec
+    | RelationalSourceDepthSpec
     | StrictTypeSourceDepthSpec
     | PromiseCapabilitySourceDepthSpec
     | JSONNumericSourceDepthSpec
@@ -358,6 +360,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     }
     if(spec.generator==='list-extent-capture-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid List extent capture spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
+    if(spec.generator==='relational-source-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid relational source spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
     }
     if(spec.generator==='strict-type-source-depth'){
@@ -1990,6 +1996,7 @@ console.log("raw JSON text width:", valid);
         case "rest-source-location-depth": return restSourceLocationInput(spec.depth);
         case "source-allocation-depth": return sourceAllocationInput(spec.depth);
         case "list-extent-capture-depth": return listExtentCaptureInput(spec.depth);
+        case "relational-source-depth": return relationalSourceInput(spec.depth);
         case "strict-type-source-depth": return strictTypeSourceInput(spec.depth);
         case "promise-capability-source-depth": return promiseCapabilitySourceInput(spec.depth);
         case "json-numeric-source-depth": return jsonNumericSourceInput(spec.depth);
@@ -2303,4 +2310,9 @@ export function promiseCapabilitySourceInput(depth:number):string {
 export function strictTypeSourceInput(depth:number):string {
  const owners=Array.from({length:depth},(_,index)=>`const strictTypeOwner${index}:any=${index?`{body:strictTypeOwner${index-1}.body,previous:strictTypeOwner${index-1}}`:`{body:'return 59;',previous:null}`};`);
  return `{${owners.join('\n')}if(globalThis.setTimeout===undefined)throw new Error('timer absent');console.log('strict type source:',Function(strictTypeOwner${depth-1}.body)());}\n`;
+}
+
+export function relationalSourceInput(depth:number):string {
+ const owners=Array.from({length:depth},(_,index)=>`const relationOwner${index}:any=${index?`{value:relationOwner${index-1}.value,previous:relationOwner${index-1}}`:`{value:7n,previous:null}`};`);
+ return `{${owners.join('\n')}const left:any={valueOf(){return relationOwner${depth-1}.value}};console.log('relational source:',Function('return '+(left<9n)+';')());}\n`;
 }

@@ -1,3 +1,5 @@
+Preserved BigInt and String relational source semantics through ordered ToPrimitive conversion.
+
 Proved strict comparisons across disjoint source type domains without activating impossible effects.
 
 Retained Promise source capabilities and resolver/thenable value paths through the shared graph.

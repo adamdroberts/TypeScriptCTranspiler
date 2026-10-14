@@ -11,7 +11,7 @@ export interface SourceNumericOperation {
     assignment?: ts.SyntaxKind;
     kernel: string;
     result: "value" | "number" | "boolean";
-    conversion: "default" | "numeric" | "number" | "none" | "equality";
+    conversion: "default" | "numeric" | "number" | "primitive-number" | "none" | "equality";
     evaluate: (values: readonly SourcePrimitive[]) => SourcePrimitive;
     negate?: boolean;
     relation?: "<" | "<=" | ">" | ">=";
@@ -38,10 +38,10 @@ export const SOURCE_SCALAR_OPERATIONS: readonly SourceNumericOperation[] = [
     { form: "prefix", token: ts.SyntaxKind.TildeToken, kernel: "tsc_value_bit_not", result: "value", conversion: "numeric", evaluate: ([left, right]) => ~(left as number) },
     { form: "update", token: ts.SyntaxKind.PlusPlusToken, kernel: "tsc_value_inc", result: "value", conversion: "numeric", evaluate: ([left, right]) => typeof left === "bigint" ? left + 1n : Number(left) + 1 },
     { form: "update", token: ts.SyntaxKind.MinusMinusToken, kernel: "tsc_value_dec", result: "value", conversion: "numeric", evaluate: ([left, right]) => typeof left === "bigint" ? left - 1n : Number(left) - 1 },
-    { form: "relational", token: ts.SyntaxKind.LessThanToken, kernel: "tsc_value_cmp", result: "boolean", relation: "<", conversion: "number", evaluate: ([left, right]) => (left as number) < (right as number) },
-    { form: "relational", token: ts.SyntaxKind.LessThanEqualsToken, kernel: "tsc_value_cmp", result: "boolean", relation: "<=", conversion: "number", evaluate: ([left, right]) => (left as number) <= (right as number) },
-    { form: "relational", token: ts.SyntaxKind.GreaterThanToken, kernel: "tsc_value_cmp", result: "boolean", relation: ">", conversion: "number", evaluate: ([left, right]) => (left as number) > (right as number) },
-    { form: "relational", token: ts.SyntaxKind.GreaterThanEqualsToken, kernel: "tsc_value_cmp", result: "boolean", relation: ">=", conversion: "number", evaluate: ([left, right]) => (left as number) >= (right as number) },
+    { form: "relational", token: ts.SyntaxKind.LessThanToken, kernel: "tsc_value_cmp", result: "boolean", relation: "<", conversion: "primitive-number", evaluate: ([left, right]) => (left as number) < (right as number) },
+    { form: "relational", token: ts.SyntaxKind.LessThanEqualsToken, kernel: "tsc_value_cmp", result: "boolean", relation: "<=", conversion: "primitive-number", evaluate: ([left, right]) => (left as number) <= (right as number) },
+    { form: "relational", token: ts.SyntaxKind.GreaterThanToken, kernel: "tsc_value_cmp", result: "boolean", relation: ">", conversion: "primitive-number", evaluate: ([left, right]) => (left as number) > (right as number) },
+    { form: "relational", token: ts.SyntaxKind.GreaterThanEqualsToken, kernel: "tsc_value_cmp", result: "boolean", relation: ">=", conversion: "primitive-number", evaluate: ([left, right]) => (left as number) >= (right as number) },
 ];
 export const SOURCE_NUMERIC_OPERATION_FUNCTIONS: ReadonlyMap<ts.SyntaxKind, string> = new Map(
     SOURCE_SCALAR_OPERATIONS.filter(operation => operation.form === "binary")

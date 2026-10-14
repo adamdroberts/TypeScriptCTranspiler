@@ -1528,7 +1528,7 @@ class SourceValueFlow {
     }
     /** The same ordered List advances only through possible normal results.
      * An abrupt conversion suppresses every later conversion edge. */
-    private convertList(args: readonly Cell[], context: ts.Node, mode: PrimitiveHint | "numeric" | "number" | "text" | readonly (PrimitiveHint | "numeric" | "number" | "text")[]): readonly Cell[] {
+    private convertList(args: readonly Cell[], context: ts.Node, mode: PrimitiveHint | "numeric" | "number" | "primitive-number" | "text" | readonly (PrimitiveHint | "numeric" | "number" | "primitive-number" | "text")[]): readonly Cell[] {
         let conversions = this.orderedConversions.get(context);
         if (!conversions) {conversions = new Map(); this.orderedConversions.set(context, conversions);}
         const modes=typeof mode==="string"?args.map(()=>mode):mode;
@@ -1538,7 +1538,7 @@ class SourceValueFlow {
         const converted: Cell[] = []; conversions.set(identity, converted);
         for (const [index, argument] of args.entries()) {
             const conversion=modes[index]!,input = this.newCell(), result = conversion === "text" ? this.stringHintCell(input, context)
-                : conversion === "numeric" || conversion === "number" ? this.coerceCell(input, context, conversion) : this.primitiveConversion(input, context, conversion);
+                : conversion === "numeric" || conversion === "number" ? this.coerceCell(input, context, conversion) : this.primitiveConversion(input, context, conversion==="primitive-number"?"number":conversion);
             converted.push(result);
             if (index === 0) this.copy(argument, input);
             else {
@@ -1789,6 +1789,7 @@ class SourceValueFlow {
         if(operation.conversion==="none")return true;
         if(operation.form==="update")return false;
         const kinds=inputs.map(input=>this.primitiveKinds(input));
+        if(operation.form==="relational")return kinds.every(kinds=>!!kinds&&!(kinds&~(KIND_PRIMITIVE&~KIND_SYMBOL)));
         if(kinds.some(kinds=>!kinds||kinds&~(KIND_UNDEFINED|KIND_NULL|KIND_BOOLEAN|KIND_NUMBER|KIND_STRING)))return false;
         return true;
     }
@@ -3859,7 +3860,7 @@ class SourceValueFlow {
         const operation = sourceNumericOperation(node);
         if (operation) {
             const operands = ts.isBinaryExpression(node) ? [this.cell(node.left), this.cell(node.right)] : [this.cell((node as ts.PrefixUnaryExpression | ts.PostfixUnaryExpression).operand)];
-            const converted = operation.form === "equality" ? operands : this.convertList(operands, node, operation.conversion as PrimitiveHint | "numeric");
+            const converted = operation.form === "equality" ? operands : this.convertList(operands, node, operation.conversion as PrimitiveHint | "numeric" | "primitive-number");
             const computed = operation.form === "update" ? this.newCell() : result;
             this.publish(computed, {tag: "text-operation", operation: "numeric", numeric: operation, parts: converted});
             if (operation.form === "update") {
