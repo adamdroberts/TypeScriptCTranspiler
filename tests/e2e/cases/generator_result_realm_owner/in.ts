@@ -1,0 +1,1 @@
+export {};function* source(){yield 17;return 19;}const iterator=source(),next=source().next;const first=next.call(iterator),last=next.call(iterator),after=next.call(iterator);console.log(first.value===17&&!first.done,last.value===19&&last.done,after.value===undefined&&after.done,Object.getPrototypeOf(last)===Object.prototype);

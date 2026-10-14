@@ -1881,7 +1881,8 @@
       "kind": "implementation",
       "id": "runtime/tsc_iterator.c#generator_resume",
       "targets": [
-        "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback"
+        "sec-array.from#generic-constructor-iteration-mapping-and-array-like-fallback",
+        "sec-generatorstart#completed-result-method-realm"
       ]
     },
     {
@@ -4704,6 +4705,34 @@
       "id": "src/source-value-flow.ts#writeProperty",
       "targets": [
         "sec-putvalue#primitive-base-current-realm-set"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/generator-result-realm.property.test.ts",
+      "targets": [
+        "sec-generatorstart#completed-result-method-realm"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "generator_method_owner_depth",
+      "targets": [
+        "sec-generatorstart#completed-result-method-realm"
+      ],
+      "stressReview": {
+        "dimension": "retained generator iterator and borrowed-method owner graph depth",
+        "parameter": "depth",
+        "representativeHighDepth": 8192,
+        "rationale": "One shared generated retained owner graph verifies method, iterator and result-prototype references in the native property and typed CLI; compact completion and Realm semantic partitions are independent of depth.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "generator_result_realm_owner",
+      "targets": [
+        "sec-generatorstart#completed-result-method-realm"
       ]
     }
   ]

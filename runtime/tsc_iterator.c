@@ -687,11 +687,14 @@ static tsc_value_t generator_resume(void* env, tsc_value_t receiver, tsc_array_t
         (void)error_root;
         tsc_throw_value(error);
     }
+    /* GeneratorStart removes its execution context before constructing a
+     * completed IteratorResult. Yielded results were already created by the
+     * generator continuation and retain their original Realm. */
+    (void)tsc_realm_swap(previous);
     tsc_value_t result = generator->state == TSC_GENERATOR_SUSPENDED_YIELD
         ? generator->result.value : tsc_iterator_result(generator->result.value, true);
     void* volatile result_root = tsc_value_gc_root(result);
     if (generator->state == TSC_GENERATOR_COMPLETED) tsc_completion_record_clear(&generator->result);
-    (void)tsc_realm_swap(previous);
     (void)result_root;
     return result;
 }

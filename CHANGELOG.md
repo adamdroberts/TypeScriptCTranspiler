@@ -1,3 +1,5 @@
+Restored the borrowed synchronous generator method Realm before completed iterator-result allocation, preserving yielded and delegated record ownership.
+
 Routed primitive property writes and updates through the captured Reference and shared ToObject/Set path, preserving original receivers and current-Realm prototypes.
 
 Represented collection sources and mutable iterator next lookup through shared records, with canonical key and source receiver binding. Native method descriptors share one table; Proxy target/Get effects and private collection escapes stay conservative. Full effect/purity and eligible conformance remain open.

@@ -1,0 +1,29 @@
+var host:any=globalThis,other=host.$262.createRealm().global;
+function output(value:string):void{host.print(value)}
+function check(value:boolean,label:string):void{if(!value)throw label;output(label+':true')}
+function collect():void{if(COLLECT)host.$262.gc()}
+function* local(){yield Object.prototype;return Object.prototype;}
+var foreign=other.eval('(function*(){yield Object.prototype;return Object.prototype;})');
+var localMethods=local(),foreignMethods=foreign(),marker={};
+for(var direction of [false,true]){
+ var factory=direction?foreign:local,methods=direction?localMethods:foreignMethods;
+ var bodyPrototype=direction?other.Object.prototype:Object.prototype,methodPrototype=direction?Object.prototype:other.Object.prototype;
+ for(var operation of ['next','return','throw']){
+  var iterator=factory(),first=methods.next.call(iterator);collect();
+  check(first.value===bodyPrototype&&Object.getPrototypeOf(first)===bodyPrototype,'yield-body-realm-'+direction+'-'+operation);
+  if(operation==='throw'){
+   var preserved=false;try{methods.throw.call(iterator,marker)}catch(error){preserved=error===marker}check(preserved,'throw-identity-'+direction);
+   var result=methods.next.call(iterator);check(result.done&&result.value===undefined&&Object.getPrototypeOf(result)===methodPrototype,'throw-completed-'+direction);
+  }else{
+   var result=methods[operation].call(iterator,marker);collect();check(result.done&&Object.getPrototypeOf(result)===methodPrototype&&result.value===(operation==='return'?marker:bodyPrototype),'completion-method-realm-'+direction+'-'+operation);
+   var again=methods.next.call(iterator);check(again.done&&again.value===undefined&&Object.getPrototypeOf(again)===methodPrototype,'already-completed-'+direction+'-'+operation);
+   var value=Object.getOwnPropertyDescriptor(result,'value'),done=Object.getOwnPropertyDescriptor(result,'done');check(value.writable&&value.enumerable&&value.configurable&&done.writable&&done.enumerable&&done.configurable,'result-descriptors-'+direction+'-'+operation);
+  }
+ }
+ var untouched=factory(),before=methods.return.call(untouched,marker);check(before.done&&before.value===marker&&Object.getPrototypeOf(before)===methodPrototype,'return-before-start-'+direction);
+}
+function* caught(){try{yield 1}catch(error){return error}}
+iterator=caught();iterator.next();var result=foreignMethods.throw.call(iterator,marker);check(result.done&&result.value===marker&&Object.getPrototypeOf(result)===other.Object.prototype,'caught-throw-result-realm');
+var live:any={done:false,value:marker};function* delegated(){yield* {[Symbol.iterator](){return this},next(){return live}};}
+iterator=delegated();result=foreignMethods.next.call(iterator);check(result===live,'delegated-result-identity');
+var same=foreignMethods.return.call(foreign(),marker);check(Object.getPrototypeOf(same)===other.Object.prototype,'same-realm-result');
