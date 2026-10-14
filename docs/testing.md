@@ -30,6 +30,9 @@ The harness streams each discovered case result and exits non-zero if any compil
 
 The native E2E corpus remains a required regression layer, but it cannot establish complete language coverage. The full claim gate additionally uses the exact ECMA-262 2026 source revision, an exact Test262 Git tree, a generated normative clause/choice/optional-family catalog, a canonical feature-tag map, reciprocal evidence registrations, and independently evidenced semantic partitions.
 
+The pinned Test262 registry can include features introduced after the target edition. `feature-edition-reviews.json` retains a reviewed introduction source forest keyed by immutable specification commits. Feature generation, scenario discovery and matrix validation use the same classifier; the baseline binds the review digest, and full fetch/inventory verification rejoins each excerpt with its exact primary Git tree. Offline matrix checks verify the retained forest and target catalog. Later standard tags are excluded only through that reviewed collection, while unknown or invalid evidence rejects. Excluded scenarios retain source metadata and scope rationale without a native pass result. `tests/property/feature-edition-scope.property.test.ts` checks category, integrity and boundary partitions plus one deeply nested introduced clause tree.
+
+
 ```bash
 # Materialize and verify the exact spec and Test262 revisions.
 bun run prepare:e2e-fixtures

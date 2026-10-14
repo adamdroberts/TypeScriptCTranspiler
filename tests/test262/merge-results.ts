@@ -95,6 +95,7 @@ async function main(): Promise<void> {
         fullInventory.resourceDirectories.map((directory) => [directory.directory, directory]),
     );
     for (const report of reports) {
+        if(report.inventory.featureEditionReviewSha256!==fullInventory.featureEditionReviewSha256)throw new Error("Test262 shard edition scope differs from the reviewed primary source collection");
         const expectedDirectories = new Set(report.inventory.scenarios.map((scenario) => scenario.resourceDirectory));
         const actualDirectories = new Set(report.inventory.resourceDirectories.map((directory) => directory.directory));
         if (

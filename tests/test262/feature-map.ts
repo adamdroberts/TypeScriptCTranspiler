@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import {featureDisposition,loadFeatureEditionReviews,requirePostEditionFeatureTags,verifyFeatureIntroductions} from "./feature-edition";
+import type {ClauseCatalog} from "./spec-catalog";
 import { parseFeatureRegistry, parseTest262Metadata } from "./metadata";
 import {
     argumentValue,
@@ -75,6 +77,8 @@ async function main(): Promise<void> {
     const output = path.join(complianceDir, "feature-map.json");
     await verifyPinnedCheckout("Test262", test262, baseline.test262);
     const registry = parseFeatureRegistry(await fs.readFile(path.join(test262, "features.txt"), "utf8"));
+    const {document,reviews}=await loadFeatureEditionReviews(baseline,await readJson<ClauseCatalog>(path.join(complianceDir,'clauses.json')),registry);
+    requirePostEditionFeatureTags(baseline,registry,reviews);await verifyFeatureIntroductions(document);
     const derivedEcma402Features = await deriveEcma402FeatureTags(test262, baseline, registry.standard);
     if (JSON.stringify(derivedEcma402Features) !== JSON.stringify([...baseline.test262.ecma402FeatureTags].sort())) {
         throw new Error("baseline ECMA-402-only feature tags differ from independent pinned-corpus usage");
@@ -86,13 +90,7 @@ async function main(): Promise<void> {
     const existingByTag = new Map(existing.features.map((entry) => [entry.tag, entry]));
     const features: FeatureMapEntry[] = [];
     for (const tag of [...registry.all].sort()) {
-        const disposition = registry.proposed.has(tag)
-            ? "post-edition"
-            : registry.harness.has(tag)
-                ? "harness-only"
-                : ecma402Features.has(tag)
-                    ? "ecma402-only"
-                    : "standard";
+        const disposition=featureDisposition(tag,registry,ecma402Features,reviews);
         const prior = existingByTag.get(tag);
         features.push(prior && prior.disposition === disposition
             ? prior
@@ -107,7 +105,7 @@ async function main(): Promise<void> {
                         ? "Pinned Test262 host capability tag; clause evidence comes from the tagged test metadata."
                         : disposition === "ecma402-only"
                             ? "Excluded from the ECMA-262 claim because independent pinned-corpus usage is confined to ECMA-402 tests."
-                            : "Excluded because the pinned Test262 registry classifies this as a post-edition proposal.",
+                            : reviews.get(tag)?.rationale ?? "Excluded because the pinned Test262 registry classifies this as a post-edition proposal.",
             });
     }
     const rendered = stableJson({ schemaVersion: 1, test262Commit: baseline.test262.commit, features });

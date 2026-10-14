@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import {loadFeatureEditionReviews,postEditionFeatureTags,requirePostEditionFeatureTags,verifyFeatureIntroductions,type FeatureEditionReview} from "./feature-edition";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -138,6 +139,7 @@ export interface Test262Inventory {
     };
     corpusManifestSha256: string;
     catalogSha256: string;
+    featureEditionReviewSha256: string;
     featureRegistry: {
         proposed: string[];
         standard: string[];
@@ -245,10 +247,11 @@ export function matchingLegacyIdRules(
     });
 }
 
-function scopeFor(
+export function scopeFor(
     test: string,
     features: readonly string[],
-    proposed: ReadonlySet<string>,
+    postEdition: ReadonlySet<string>,
+    reviews:ReadonlyMap<string,FeatureEditionReview>=new Map(),
 ): { scope: ScenarioScope; reason: string } {
     if (test.startsWith("test/intl402/") || test.startsWith("test/staging/intl402/")) {
         return { scope: "ecma402", reason: "ECMA-402 is outside the ECMA-262 claim" };
@@ -256,9 +259,10 @@ function scopeFor(
     if (test.startsWith("test/harness/")) {
         return { scope: "runner-self-test", reason: "Test262 harness validation, required as runner evidence" };
     }
-    const proposal = features.find((feature) => proposed.has(feature));
+    const proposal = features.find((feature) => postEdition.has(feature));
     if (proposal) {
-        return { scope: "post-edition", reason: `feature ${proposal} is post-ECMAScript-2026 at the pin` };
+        const review=reviews.get(proposal);
+        return { scope: "post-edition", reason: review ? `feature ${proposal} is outside pinned ECMAScript 2026; introduction ${review.source}; ${review.primarySource}; ${review.rationale}` : `feature ${proposal} is post-ECMAScript-2026 at the pin` };
     }
     return { scope: "in-scope", reason: "ECMA-262 2026 language/built-in/Annex B evidence" };
 }
@@ -461,11 +465,9 @@ export async function buildInventory(options: {
     ) {
         throw new Error("feature-map.json is stale or incomplete for the pinned Test262 feature registry");
     }
-    const expectedProposals = [...baseline.test262.postEditionFeatureTags].sort();
-    const actualProposals = [...registry.proposed].sort();
-    if (JSON.stringify(expectedProposals) !== JSON.stringify(actualProposals)) {
-        throw new Error("Test262 proposed-feature registry differs from the reviewed ES2026 baseline");
-    }
+    const {document,reviews}=await loadFeatureEditionReviews(baseline,catalog,registry);
+    requirePostEditionFeatureTags(baseline,registry,reviews);await verifyFeatureIntroductions(document);
+    const postEdition=new Set(postEditionFeatureTags(registry,reviews));
     const issues: InventoryIssue[] = [];
     const mappings = normalizeMappings(overrides, normativeClauseIds, issues);
     const usedAliases = new Set<string>();
@@ -494,7 +496,7 @@ export async function buildInventory(options: {
             });
             continue;
         }
-        const scope = scopeFor(test, metadata.features, registry.proposed);
+        const scope = scopeFor(test, metadata.features, postEdition, reviews);
         let mappedClauses: string[] = [];
         const mappingSources: string[] = [];
         for (const feature of metadata.features) {
@@ -703,6 +705,7 @@ export async function buildInventory(options: {
         },
         corpusManifestSha256: corpus.manifestSha256,
         catalogSha256: sha256Text(catalogRaw),
+        featureEditionReviewSha256: baseline.test262.featureEditionReviewSha256,
         featureRegistry: {
             proposed: [...registry.proposed].sort(),
             standard: [...registry.standard].sort(),

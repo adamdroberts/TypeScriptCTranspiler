@@ -1,3 +1,4 @@
+import {featureDisposition,loadFeatureEditionReviews,requirePostEditionFeatureTags,verifyFeatureIntroductions} from "./feature-edition";
 import Ajv2020 from "ajv/dist/2020";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -227,6 +228,7 @@ export async function loadAndValidateMatrix(test262Checkout?: string): Promise<{
     requireSha256(baseline.ecma262.specSourceSha256, "baseline ECMA-262 source digest");
     requireSha256(baseline.ecma262.clauseCatalogSha256, "baseline clause catalog digest");
     requireSha256(baseline.test262.interpretationSha256, "baseline Test262 interpretation digest");
+    requireSha256(baseline.test262.featureEditionReviewSha256, "baseline feature edition review digest");
     requireSha256(baseline.test262.featureRegistrySha256, "baseline Test262 feature registry digest");
     if (
         baseline.claim.standard !== "ECMA-262" ||
@@ -594,13 +596,10 @@ export async function loadAndValidateMatrix(test262Checkout?: string): Promise<{
             throw new Error(`${feature.disposition} feature ${feature.tag} must be classified without clause mappings`);
         }
     }
-    const proposedTags = featureMap.features
-        .filter((feature) => feature.disposition === "post-edition")
-        .map((feature) => feature.tag)
-        .sort();
-    if (JSON.stringify(proposedTags) !== JSON.stringify([...baseline.test262.postEditionFeatureTags].sort())) {
-        throw new Error("feature-map post-edition classification differs from baseline.json");
-    }
+    const editionReview=await loadFeatureEditionReviews(baseline,catalog);
+    const proposedTags=featureMap.features.filter(feature=>feature.disposition==='post-edition').map(feature=>feature.tag).sort();
+    if(JSON.stringify(proposedTags)!==JSON.stringify([...baseline.test262.postEditionFeatureTags].sort()))throw new Error('feature-map post-edition classification differs from baseline.json');
+    for(const tag of editionReview.reviews.keys())if(featureMap.features.find(feature=>feature.tag===tag)?.disposition!=="post-edition")throw new Error("reviewed edition scope is absent from feature-map: "+tag);
     if (test262Checkout) {
         await verifyPinnedCheckout("Test262", test262Checkout, baseline.test262);
         const registry = parseFeatureRegistry(await fs.readFile(path.join(test262Checkout, "features.txt"), "utf8"));
@@ -614,14 +613,10 @@ export async function loadAndValidateMatrix(test262Checkout?: string): Promise<{
         ) {
             throw new Error("baseline ECMA-402-only feature classification differs from independent pinned-corpus usage");
         }
+        const {document,reviews}=await loadFeatureEditionReviews(baseline,catalog,registry);
+        requirePostEditionFeatureTags(baseline,registry,reviews);await verifyFeatureIntroductions(document);
         for (const feature of featureMap.features) {
-            const expected = registry.proposed.has(feature.tag)
-                ? "post-edition"
-                : registry.harness.has(feature.tag)
-                    ? "harness-only"
-                    : ecma402Features.has(feature.tag)
-                        ? "ecma402-only"
-                        : "standard";
+            const expected=featureDisposition(feature.tag,registry,ecma402Features,reviews);
             if (feature.disposition !== expected) {
                 throw new Error(`feature ${feature.tag} disposition ${feature.disposition} differs from pinned registry/scope ${expected}`);
             }

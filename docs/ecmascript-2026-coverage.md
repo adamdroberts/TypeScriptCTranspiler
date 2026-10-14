@@ -2806,7 +2806,7 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `dynamic-import` — standard, tracking: `todo`; no clause mapping.
 - [ ] `error-cause` — standard, tracking: `todo`; no clause mapping.
 - `error-stack-accessor` — post-edition, tracking: `ready-for-verification`; no clause mapping.
-- [ ] `explicit-resource-management` — standard, tracking: `todo`; no clause mapping.
+- `explicit-resource-management` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `exponentiation` — standard, tracking: `todo`; no clause mapping.
 - `export-defer` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `export-star-as-namespace-from-module` — standard, tracking: `todo`; no clause mapping.

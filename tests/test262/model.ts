@@ -42,6 +42,7 @@ export interface Baseline {
         ecma402Roots: string[];
         ecma402FeatureTags: string[];
         postEditionFeatureTags: string[];
+        featureEditionReviewSha256: string;
     };
     runnerContract: {
         version: number;

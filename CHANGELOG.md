@@ -1,3 +1,5 @@
+Derived Test262 target-edition scope from reviewed immutable introduction sources through one shared classifier.
+
 Captured canonical property source reads against actual caller origins, preserving earlier Function sources before later opaque effects.
 
 Defined retained rest elements through the canonical own-property source record, preserving presence and enumerability.

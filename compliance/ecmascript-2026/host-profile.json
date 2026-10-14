@@ -106,6 +106,7 @@
     "tests/test262/check-claim.ts",
     "tests/test262/check-matrix.ts",
     "tests/test262/diagnostic-host.ts",
+    "tests/test262/feature-edition.ts",
     "tests/test262/feature-map.ts",
     "tests/test262/fetch.ts",
     "tests/test262/inventory.ts",

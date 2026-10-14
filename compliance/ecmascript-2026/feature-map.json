@@ -992,10 +992,10 @@
     },
     {
       "tag": "explicit-resource-management",
-      "disposition": "standard",
-      "tracking": "todo",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
       "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "rationale": "The complete explicit-resource-management proposal (using and await using declarations, disposal interfaces, SuppressedError, DisposableStack and AsyncDisposableStack) was merged into ECMA-262 in PR #3000 on 2026-06-24, after the pinned es2026 edition freeze. Its new normative clause forest is absent from the pinned target source/catalog and present in the exact introduction commit. The later Test262 standard registry category does not move the target edition."
     },
     {
       "tag": "exponentiation",

@@ -1,9 +1,13 @@
 #!/usr/bin/env bun
+import {introductionCheckout,loadFeatureEditionReviews,verifyFeatureIntroductions} from "./feature-edition";
+import type {ClauseCatalog} from "./spec-catalog";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import {
     argumentValue,
     defaultCacheRoot,
+    complianceDir,
+    readJson,
     git,
     hasArgument,
     loadBaseline,
@@ -80,12 +84,15 @@ async function main(): Promise<void> {
     const baseline = await loadBaseline();
     const test262 = path.resolve(argumentValue("--test262") ?? path.join(defaultCacheRoot, "test262"));
     const ecma262 = path.resolve(argumentValue("--ecma262") ?? path.join(defaultCacheRoot, "ecma262"));
+    const {document}=await loadFeatureEditionReviews(baseline,await readJson<ClauseCatalog>(path.join(complianceDir,"clauses.json")));
     if (!hasArgument("--verify-only")) {
         await fetchPinned(baseline.test262.repository, baseline.test262.commit, test262);
         await fetchPinned(baseline.ecma262.repository, baseline.ecma262.commit, ecma262);
         await fetchAndVerifyReleaseTag(ecma262, baseline.ecma262.tag, baseline.ecma262.commit);
+        for(const source of document.sources)await fetchPinned(source.repository,source.commit,introductionCheckout(source));
     }
     await verifyFiles(test262, ecma262);
+    await verifyFeatureIntroductions(document);
     console.log(`Pinned Test262 verified at ${test262}`);
     console.log(`Pinned ECMAScript 2026 specification verified at ${ecma262}`);
 }
