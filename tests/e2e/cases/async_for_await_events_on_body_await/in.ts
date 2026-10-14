@@ -102,19 +102,19 @@ collect(iterator, []).then((value: string): void => {
             const returnEmitter = new EventEmitter();
             const returnIterator: any = on(returnEmitter, "data");
             returnBody(returnIterator).then((returnValue: string): void => {
-                console.log("body-return-await:", returnValue);
+                console.log("body-return-await:", String(returnValue));
 
                 const postReturnEmitter = new EventEmitter();
                 const postReturnIterator: any = on(postReturnEmitter, "data");
                 returnAfterAwait(postReturnIterator).then((postReturnValue: string): void => {
-                    console.log("body-return-after-await:", postReturnValue);
+                    console.log("body-return-after-await:", String(postReturnValue));
 
                     const postThrowEmitter = new EventEmitter();
                     const postThrowIterator: any = on(postThrowEmitter, "data");
                     throwAfterAwait(postThrowIterator).then((unexpectedValue: string): void => {
                         console.log("body-throw-after-await-unexpected:", unexpectedValue);
                     }, (reason: any): void => {
-                        console.log("body-throw-after-await:", reason);
+                        console.log("body-throw-after-await:", String(reason));
 
                         const twoAwaitEmitter = new EventEmitter();
                         const twoAwaitIterator: any = on(twoAwaitEmitter, "data");
