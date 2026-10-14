@@ -1,3 +1,5 @@
+- Align dynamic Array locale observations with the selected ECMA-262 empty element argument List and actual TypeError identity.
+
 - Filesystem calls share ordinary export owners and full actual Lists; runtime options, native flags and boxed Promise publication replace direct compiler dispatch.
 
 - Filesystem named exports and native fd dispatch share one operation collection; named Promise open is declared and lexical fs shadowing retains local receivers.
