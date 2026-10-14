@@ -5171,6 +5171,48 @@
       "targets": [
         "sec-return-statement-runtime-semantics-evaluation#composed-source-projection-provenance"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/cross-thread-queue-roots.property.test.ts",
+      "targets": [
+        "sec-jobs#cross-thread-transport-payload-ownership"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "queue_microtask",
+      "targets": [
+        "sec-jobs#cross-thread-transport-payload-ownership"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_core.c#tsc_cross_post",
+      "targets": [
+        "sec-jobs#cross-thread-transport-payload-ownership"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_core.c#tsc_drain_cross_queue",
+      "targets": [
+        "sec-jobs#cross-thread-transport-payload-ownership"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "job_queue_depth",
+      "targets": [
+        "sec-jobs#cross-thread-transport-payload-ownership"
+      ],
+      "stressReview": {
+        "dimension": "retained pending job FIFO depth",
+        "parameter": "depth",
+        "representativeHighDepth": 4096,
+        "rationale": "One shared generated CLI job graph verifies pending closure payloads and FIFO order in both memory modes; the native property separately exercises the same depth through cross-thread transport and directly proves consumed roots.",
+        "reviewedBy": "tsc2c compliance review"
+      }
     }
   ]
 }

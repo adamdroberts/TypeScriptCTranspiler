@@ -55,6 +55,7 @@ export interface CollectionSourceAliasDepthSpec {generator:"collection-source-al
 export interface PrimitivePropertyPrototypeDepthSpec {generator:"primitive-property-prototype-depth";depth:number;}
 export interface GeneratorMethodOwnerDepthSpec {generator:"generator-method-owner-depth";depth:number;}
 export interface PrimitivePropertyReadDepthSpec {generator:"primitive-property-read-depth";depth:number;}
+export interface JobQueueDepthSpec {generator:"job-queue-depth";depth:number;}
 export interface SourceProjectionProvenanceDepthSpec {generator:"source-projection-provenance-depth";depth:number;}
 export interface LexicalSourceCaptureDepthSpec {generator:"lexical-source-capture-depth";depth:number;}
 export interface EvalCallerEnvironmentDepthSpec {generator:"eval-caller-environment-depth";depth:number;}
@@ -298,6 +299,7 @@ export type GeneratedCaseSpec =
     | SwitchCaseBlockFunctionWorklistWidthSpec
     | SwitchCaseBlockGeneratorCaptureWidthSpec
     | SwitchCaseBlockAsyncCaptureWidthSpec
+    | JobQueueDepthSpec
     | SourceProjectionProvenanceDepthSpec
     | SwitchCaseBlockClassWorklistWidthSpec;
 
@@ -314,6 +316,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     const spec = value as Record<string, unknown>;
     if(spec.generator==='primitive-property-read-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid primitive property read spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
+    if(spec.generator==='job-queue-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid job queue spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
     }
     if(spec.generator==='source-projection-provenance-depth'){
@@ -1891,6 +1897,7 @@ console.log("raw JSON text width:", valid);
         case "primitive-property-prototype-depth": return primitivePropertyPrototypeInput(spec.depth);
         case "generator-method-owner-depth": return generatorMethodOwnerInput(spec.depth);
         case "primitive-property-read-depth": return primitivePropertyReadInput(spec.depth);
+        case "job-queue-depth": return jobQueueInput(spec.depth);
         case "source-projection-provenance-depth": return sourceProjectionProvenanceInput(spec.depth);
         case "lexical-source-capture-depth": return lexicalSourceCaptureInput(spec.depth);
         case "eval-caller-environment-depth": return evalCallerEnvironmentInput(spec.depth);
@@ -2114,4 +2121,8 @@ function twice(fn:(value:any)=>any,value:any):any{return fn(fn(value))}
 console.log('source:',eval(twice(select,source${depth-1})));
 }
 `;
+}
+
+export function jobQueueInput(depth:number):string {
+ return `let observed=0;for(let index=0;index<${depth};++index){const payload={index};queueMicrotask(()=>{if(payload.index!==observed++)throw new Error('FIFO')})}queueMicrotask(()=>console.log('jobs:',observed));\n`;
 }

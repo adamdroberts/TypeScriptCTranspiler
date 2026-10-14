@@ -1,3 +1,5 @@
+Released consumed cross-thread queue payload roots through the canonical synchronized FIFO drain.
+
 Preserved source projection provenance across capture and return substitution, closing mutual operation cloning through recursive edges without iteration bounds.
 
 Routed literal String named properties through the shared ordinary primitive Get path; removed String member whitelist and direct length-read predecessors.

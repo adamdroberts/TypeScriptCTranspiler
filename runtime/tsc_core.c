@@ -961,6 +961,9 @@ static void tsc_drain_cross_queue(void) {
         tsc_cross_entry_t entry = g_cross_queue[0];
         memmove(g_cross_queue, g_cross_queue + 1, (g_cross_len - 1) * sizeof(tsc_cross_entry_t));
         g_cross_len--;
+        /* The live prefix owns queued payloads. The consumed tail must not
+         * retain a Promise, callback environment or decoded value root. */
+        g_cross_queue[g_cross_len] = (tsc_cross_entry_t){0};
         if (entry.kind == TSC_CROSS_SETTLE && g_dispatch_outstanding > 0) g_dispatch_outstanding--;
         pthread_mutex_unlock(&g_loop_mutex);
         switch (entry.kind) {
