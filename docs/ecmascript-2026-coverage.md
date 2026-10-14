@@ -2679,7 +2679,7 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `Array.prototype.values` — standard, tracking: `todo`; no clause mapping.
 - [ ] `ArrayBuffer` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Atomics` — standard, tracking: `todo`; no clause mapping.
-- [ ] `Atomics.pause` — standard, tracking: `todo`; no clause mapping.
+- `Atomics.pause` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `Atomics.waitAsync` — standard, tracking: `todo`; no clause mapping.
 - [ ] `BigInt` — standard, tracking: `ready-for-verification`; `sec-bigint-objects`, `sec-ecmascript-language-types-bigint-type`.
 - [ ] `DataView` — standard, tracking: `todo`; no clause mapping.
@@ -2761,7 +2761,7 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `Symbol.toPrimitive` — standard, tracking: `ready-for-verification`; `sec-symbol.toprimitive`.
 - [ ] `Symbol.toStringTag` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Symbol.unscopables` — standard, tracking: `todo`; no clause mapping.
-- [ ] `Temporal` — standard, tracking: `todo`; no clause mapping.
+- `Temporal` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `TypedArray` — standard, tracking: `todo`; no clause mapping.
 - [ ] `TypedArray.prototype.at` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Uint16Array` — standard, tracking: `todo`; no clause mapping.
@@ -2827,7 +2827,7 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `iterator-helpers` — standard, tracking: `todo`; no clause mapping.
 - [ ] `iterator-includes` — standard, tracking: `todo`; no clause mapping.
 - [ ] `iterator-sequencing` — standard, tracking: `todo`; no clause mapping.
-- [ ] `joint-iteration` — standard, tracking: `todo`; no clause mapping.
+- `joint-iteration` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `json-modules` — standard, tracking: `ready-for-verification`; `sec-ParseJSON`, `sec-create-default-export-synthetic-module`, `sec-parse-json-module`, `sec-setsyntheticmoduleexport`, `sec-synthetic-module-records`.
 - [ ] `json-parse-with-source` — standard, tracking: `todo`; no clause mapping.
 - [ ] `json-superset` — standard, tracking: `todo`; no clause mapping.

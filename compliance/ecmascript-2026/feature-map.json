@@ -67,10 +67,10 @@
     },
     {
       "tag": "Atomics.pause",
-      "disposition": "standard",
-      "tracking": "todo",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
       "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "rationale": "Atomics.pause was merged in official ECMA-262 PR #3847 on 2026-06-02, after the pinned es2026 freeze. These introduced clauses are absent from the target catalog and retained verbatim from the immutable later specification snapshot. The Test262 standard registry category does not add this later feature to the target edition."
     },
     {
       "tag": "Atomics.waitAsync",
@@ -673,10 +673,10 @@
     },
     {
       "tag": "Temporal",
-      "disposition": "standard",
-      "tracking": "todo",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
       "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "rationale": "Temporal is absent from the pinned es2026 specification and official annual edition. PR #3966 is an open, unmerged replacement for PR #3759; this review retains exact proposal-head source files as evidence of the feature boundary, not as published target semantics. Its namespace, Instant constructor and Date integration introduction forest is absent from the target catalog. The later Test262 standard registry label does not move proposal text into the fixed target edition."
     },
     {
       "tag": "TypedArray",
@@ -1139,10 +1139,10 @@
     },
     {
       "tag": "joint-iteration",
-      "disposition": "standard",
-      "tracking": "todo",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
       "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "rationale": "Iterator.zip and Iterator.zipKeyed was merged in official ECMA-262 PR #3802 on 2026-06-02, after the pinned es2026 freeze. These introduced clauses are absent from the target catalog and retained verbatim from the immutable later specification snapshot. The Test262 standard registry category does not add this later feature to the target edition."
     },
     {
       "tag": "json-modules",

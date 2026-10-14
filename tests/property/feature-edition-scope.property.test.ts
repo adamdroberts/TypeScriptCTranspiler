@@ -1,7 +1,7 @@
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import {featureDisposition,loadFeatureEditionReviews,postEditionFeatureTags,requirePostEditionFeatureTags,validateFeatureEditionReviews,verifyFeatureIntroductions,type FeatureEditionReviews} from '../test262/feature-edition';
+import {featureDisposition,featureIntroductionId,loadFeatureEditionReviews,postEditionFeatureTags,requirePostEditionFeatureTags,validateFeatureEditionReviews,verifyFeatureIntroductions,type FeatureEditionReviews} from '../test262/feature-edition';
 import {scopeFor} from '../test262/inventory';
 import {parseFeatureRegistry,type FeatureRegistry} from '../test262/metadata';
 import {complianceDir,defaultCacheRoot,loadBaseline,readJson,sha256Text,type Baseline} from '../test262/model';
@@ -12,7 +12,8 @@ function input(depth:number):{baseline:Baseline;catalog:ClauseCatalog;document:F
  const commit='1'.repeat(40),tree='2'.repeat(40),sha='3'.repeat(64),introduced='4'.repeat(40),text=Array.from({length:depth},(_,index)=>`<emu-clause id="new-${index}">`).join('')+'</emu-clause>'.repeat(depth);
  const baseline={ecma262:{repository:'https://github.com/tc39/ecma262.git',commit,tree,specSource:'spec.html',specSourceSha256:sha},test262:{ecma402FeatureTags:['intl'],postEditionFeatureTags:['proposal','later']}} as Baseline;
  const catalog={commit,tree,specSourceSha256:sha,anchors:[{id:'target'}]} as ClauseCatalog;
- const document:FeatureEditionReviews={schemaVersion:1,target:{commit,specSourceSha256:sha},sources:[{id:introduced,repository:baseline.ecma262.repository,commit:introduced,tree:'5'.repeat(40),specSource:'spec.html',specSourceSha256:'6'.repeat(64),excerpts:[{clause:'new-0',byteStart:0,byteEnd:Buffer.byteLength(text),sha256:sha256Text(text),text}]}],reviews:[{feature:'later',source:introduced,introducedClauses:['new-0'],primarySource:'https://github.com/tc39/ecma262/pull/3000',reviewedBy:'property review',rationale:'Exact later source forest absent from target.'}]};return{baseline,catalog,document};
+ const sourceId=featureIntroductionId({repository:baseline.ecma262.repository,commit:introduced,specSource:'spec.html'});
+ const document:FeatureEditionReviews={schemaVersion:2,target:{commit,specSourceSha256:sha},sources:[{id:sourceId,repository:baseline.ecma262.repository,commit:introduced,tree:'5'.repeat(40),specSource:'spec.html',specSourceSha256:'6'.repeat(64),excerpts:[{clause:'new-0',byteStart:0,byteEnd:Buffer.byteLength(text),sha256:sha256Text(text),text}]}],reviews:[{feature:'later',evidence:[{source:sourceId,introducedClauses:['new-0']}],primarySource:'https://github.com/tc39/ecma262/pull/3000',reviewedBy:'property review',rationale:'Exact later source forest absent from target.'}]};return{baseline,catalog,document};
 }
 
 test('one edition review forest classifies registry categories and rejects incomplete evidence',()=>{
@@ -27,13 +28,18 @@ test('one edition review forest classifies registry categories and rejects incom
   expect(scopeFor('test/intl402/main.js',['later'],new Set(['later']),reviews).scope).toBe('ecma402');
   expect(()=>featureDisposition('unknown',tags,intl,reviews)).toThrow('invalid feature edition review');
  }
+ const imported=input(2),file=structuredClone(imported.document.sources[0]!),text='<emu-clause id="new-import"></emu-clause>';
+ file.specSource='imports/feature.emu';file.id=featureIntroductionId(file);file.excerpts=[{clause:'new-import',byteStart:0,byteEnd:Buffer.byteLength(text),text,sha256:sha256Text(text)}];imported.document.sources.push(file);imported.document.reviews[0]!.evidence.push({source:file.id,introducedClauses:['new-import']});
+ expect(validateFeatureEditionReviews(imported.baseline,imported.catalog,imported.document,tags).has('later')).toBe(true);
+ const inconsistent=structuredClone(imported);inconsistent.document.sources[1]!.tree='8'.repeat(40);expect(()=>validateFeatureEditionReviews(inconsistent.baseline,inconsistent.catalog,inconsistent.document,tags)).toThrow('inconsistent introduction tree');
+ const unsafe=structuredClone(imported);unsafe.document.sources[1]!.specSource='../feature.emu';unsafe.document.sources[1]!.id=featureIntroductionId(unsafe.document.sources[1]!);expect(()=>validateFeatureEditionReviews(unsafe.baseline,unsafe.catalog,unsafe.document,tags)).toThrow('introduction identity');
  const original=input(2);
  for(const alter of [
   (value:typeof original)=>{value.document.target.commit='7'.repeat(40)},
   (value:typeof original)=>{value.catalog.anchors.push({id:'new-1'} as ClauseCatalog['anchors'][number])},
   (value:typeof original)=>{value.document.sources[0]!.excerpts[0]!.text+=' '},
   (value:typeof original)=>{value.document.sources[0]!.excerpts[0]!.byteStart=-1},
-  (value:typeof original)=>{value.document.reviews[0]!.introducedClauses=['absent']},
+  (value:typeof original)=>{value.document.reviews[0]!.evidence[0]!.introducedClauses=['absent']},
   (value:typeof original)=>{value.document.reviews[0]!.feature='unknown'},
   (value:typeof original)=>{value.document.reviews[0]!.feature='proposal'},
   (value:typeof original)=>{value.document.reviews[0]!.feature='intl'},

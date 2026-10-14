@@ -262,7 +262,7 @@ export function scopeFor(
     const proposal = features.find((feature) => postEdition.has(feature));
     if (proposal) {
         const review=reviews.get(proposal);
-        return { scope: "post-edition", reason: review ? `feature ${proposal} is outside pinned ECMAScript 2026; introduction ${review.source}; ${review.primarySource}; ${review.rationale}` : `feature ${proposal} is post-ECMAScript-2026 at the pin` };
+        return { scope: "post-edition", reason: review ? `feature ${proposal} is outside pinned ECMAScript 2026; introduction ${review.evidence.map(evidence=>evidence.source).join("; ")}; ${review.primarySource}; ${review.rationale}` : `feature ${proposal} is post-ECMAScript-2026 at the pin` };
     }
     return { scope: "in-scope", reason: "ECMA-262 2026 language/built-in/Annex B evidence" };
 }

@@ -84,9 +84,12 @@
       "await-dictionary",
       "error-stack-accessor",
       "Iterator.prototype.join",
-      "explicit-resource-management"
+      "explicit-resource-management",
+      "Atomics.pause",
+      "joint-iteration",
+      "Temporal"
     ],
-    "featureEditionReviewSha256": "3478c3e8905680b5b8fad1cdbb71f0c0bcf0c8d6a58cb8f3e7b1a67b764fc4f4"
+    "featureEditionReviewSha256": "016827fdc5d9bd8d54b3f599a1863181d1ff4f784c15ac9b9acf67a022330b42"
   },
   "runnerContract": {
     "version": 4,

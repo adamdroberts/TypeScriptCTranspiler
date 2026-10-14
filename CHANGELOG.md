@@ -1,3 +1,5 @@
+Generalized reviewed edition introductions to canonical primary file forests, retaining merged and explicitly unmerged target boundaries.
+
 Derived Test262 target-edition scope from reviewed immutable introduction sources through one shared classifier.
 
 Captured canonical property source reads against actual caller origins, preserving earlier Function sources before later opaque effects.

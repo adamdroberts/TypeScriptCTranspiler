@@ -7,8 +7,10 @@ import type {ClauseCatalog} from './spec-catalog';
 export type FeatureDisposition='standard'|'ecma402-only'|'harness-only'|'post-edition';
 interface IntroductionExcerpt {clause:string;byteStart:number;byteEnd:number;sha256:string;text:string;}
 export interface FeatureIntroduction extends PinnedRepository {id:string;specSource:string;specSourceSha256:string;excerpts:IntroductionExcerpt[];}
-export interface FeatureEditionReview {feature:string;source:string;introducedClauses:string[];primarySource:string;reviewedBy:string;rationale:string;}
-export interface FeatureEditionReviews {schemaVersion:1;target:{commit:string;specSourceSha256:string};sources:FeatureIntroduction[];reviews:FeatureEditionReview[];}
+export interface FeatureEditionReview {feature:string;evidence:Array<{source:string;introducedClauses:string[]}>;primarySource:string;reviewedBy:string;rationale:string;}
+export interface FeatureEditionReviews {schemaVersion:2;target:{commit:string;specSourceSha256:string};sources:FeatureIntroduction[];reviews:FeatureEditionReview[];}
+export function featureIntroductionId(source:Pick<FeatureIntroduction,'repository'|'commit'|'specSource'>):string{return JSON.stringify([source.repository,source.commit,source.specSource]);}
+function primarySourcePath(filename:string):boolean{return typeof filename==='string'&&!path.posix.isAbsolute(filename)&&!filename.includes('\\')&&path.posix.normalize(filename)===filename&&!filename.split('/').some(part=>part==='.'||part==='..')&&/\.(html|emu)$/.test(filename);}
 function fail(detail:string):never{throw new Error('invalid feature edition review: '+detail);}
 function object(value:unknown,keys:readonly string[],label:string):void{
  if(!value||typeof value!=='object'||Array.isArray(value)||JSON.stringify(Object.keys(value).sort())!==JSON.stringify([...keys].sort()))fail(label+' shape');
@@ -21,12 +23,13 @@ function strings(values:readonly string[],label:string):void{if(!Array.isArray(v
 export function validateFeatureEditionReviews(baseline:Baseline,catalog:ClauseCatalog,document:FeatureEditionReviews,registry?:FeatureRegistry):ReadonlyMap<string,FeatureEditionReview>{
  object(document,['schemaVersion','target','sources','reviews'],'document');object(document.target,['commit','specSourceSha256'],'target');
  if(catalog.commit!==baseline.ecma262.commit||catalog.tree!==baseline.ecma262.tree||catalog.specSourceSha256!==baseline.ecma262.specSourceSha256)fail('target catalog identity');
- if(document.schemaVersion!==1||document.target.commit!==baseline.ecma262.commit||document.target.specSourceSha256!==baseline.ecma262.specSourceSha256||!Array.isArray(document.sources)||!Array.isArray(document.reviews))fail('target identity');
- const target=new Set(catalog.anchors.map(anchor=>anchor.id)),sources=new Map<string,FeatureIntroduction>(),used=new Map<string,Set<string>>(),reviews=new Map<string,FeatureEditionReview>();
+ if(document.schemaVersion!==2||document.target.commit!==baseline.ecma262.commit||document.target.specSourceSha256!==baseline.ecma262.specSourceSha256||!Array.isArray(document.sources)||!Array.isArray(document.reviews))fail('target identity');
+ const target=new Set(catalog.anchors.map(anchor=>anchor.id)),sources=new Map<string,FeatureIntroduction>(),trees=new Map<string,string>(),used=new Map<string,Set<string>>(),reviews=new Map<string,FeatureEditionReview>();
  for(const source of document.sources){
   object(source,["id","repository","commit","tree","specSource","specSourceSha256","excerpts"],"introduction");
   fullSha(source.commit,'edition introduction commit');fullSha(source.tree,'edition introduction tree');digest(source.specSourceSha256,'introduction source');
-  if(source.id!==source.commit||sources.has(source.id)||source.repository!==baseline.ecma262.repository||source.commit===baseline.ecma262.commit||source.specSource!==baseline.ecma262.specSource||!Array.isArray(source.excerpts)||!source.excerpts.length)fail('introduction identity');
+  if(source.id!==featureIntroductionId(source)||sources.has(source.id)||source.repository!==baseline.ecma262.repository||source.commit===baseline.ecma262.commit||!primarySourcePath(source.specSource)||!Array.isArray(source.excerpts)||!source.excerpts.length)fail('introduction identity');
+  const treeKey=JSON.stringify([source.repository,source.commit]),tree=trees.get(treeKey);if(tree&&tree!==source.tree)fail('inconsistent introduction tree');trees.set(treeKey,source.tree);
   const roots=new Set<string>();let previousEnd=0;
   for(const excerpt of source.excerpts){
    object(excerpt,["clause","byteStart","byteEnd","sha256","text"],"excerpt");if(typeof excerpt.clause!=="string"||typeof excerpt.text!=="string")fail("excerpt text");
@@ -43,14 +46,19 @@ export function validateFeatureEditionReviews(baseline:Baseline,catalog:ClauseCa
   sources.set(source.id,source);
  }
  for(const review of document.reviews){
-  object(review,["feature","source","introducedClauses","primarySource","reviewedBy","rationale"],"review");
-  if([review.feature,review.source,review.primarySource,review.reviewedBy,review.rationale].some(value=>typeof value!=="string"))fail("review fields");
-  strings(review.introducedClauses,'introduced clauses');const source=sources.get(review.source);
-  if(!source||!review.feature||reviews.has(review.feature)||!review.reviewedBy?.trim()||!review.rationale?.trim()||!/^https:\/\/github\.com\/tc39\/ecma262\/pull\/\d+$/.test(review.primarySource))fail('review identity');
-  const roots=new Set(source.excerpts.map(excerpt=>excerpt.clause));if(review.introducedClauses.some(clause=>!roots.has(clause)))fail('unrepresented introduced clause');
-  if(baseline.test262.ecma402FeatureTags.includes(review.feature))fail("ECMA-402 scope collision");
+  object(review,['feature','evidence','primarySource','reviewedBy','rationale'],'review');
+  if([review.feature,review.primarySource,review.reviewedBy,review.rationale].some(value=>typeof value!=='string')||!Array.isArray(review.evidence)||!review.evidence.length)fail('review fields');
+  if(!review.feature||reviews.has(review.feature)||!review.reviewedBy.trim()||!review.rationale.trim()||!/^https:\/\/github\.com\/tc39\/ecma262\/pull\/\d+$/.test(review.primarySource))fail('review identity');
+  const represented=new Set<string>();
+  for(const evidence of review.evidence){
+   object(evidence,['source','introducedClauses'],'review evidence');strings(evidence.introducedClauses,'introduced clauses');const source=sources.get(evidence.source);
+   if(!source||represented.has(evidence.source))fail('unrepresented or duplicated evidence source');represented.add(evidence.source);
+   const roots=new Set(source.excerpts.map(excerpt=>excerpt.clause));if(evidence.introducedClauses.some(clause=>!roots.has(clause)))fail('unrepresented introduced clause');
+   let clauses=used.get(source.id);if(!clauses){clauses=new Set();used.set(source.id,clauses);}for(const clause of evidence.introducedClauses)clauses.add(clause);
+  }
+  if(baseline.test262.ecma402FeatureTags.includes(review.feature))fail('ECMA-402 scope collision');
   if(registry&&(!registry.standard.has(review.feature)||registry.proposed.has(review.feature)||registry.harness.has(review.feature)))fail('reviewed tag is not a pinned standard feature');
-  reviews.set(review.feature,review);let clauses=used.get(review.source);if(!clauses){clauses=new Set();used.set(review.source,clauses);}for(const clause of review.introducedClauses)clauses.add(clause);
+  reviews.set(review.feature,review);
  }
  if(used.size!==sources.size)fail('unused introduction source');for(const source of sources.values())if(source.excerpts.some(excerpt=>!used.get(source.id)!.has(excerpt.clause)))fail('unused introduced clause');return reviews;
 }
@@ -62,8 +70,15 @@ export function introductionCheckout(source:FeatureIntroduction,cacheRoot=defaul
 /** Full corpus verification independently rejoins authored excerpts with the
  * exact immutable primary Git tree and source bytes; missing evidence rejects. */
 export async function verifyFeatureIntroductions(document:FeatureEditionReviews,cacheRoot=defaultCacheRoot):Promise<void>{
- for(const source of document.sources){const checkout=introductionCheckout(source,cacheRoot);await verifyPinnedCheckout('ECMA-262',checkout,source);const data=await fs.readFile(path.join(checkout,source.specSource));if(sha256Text(data)!==source.specSourceSha256)fail('primary source bytes');for(const excerpt of source.excerpts)if(!data.subarray(excerpt.byteStart,excerpt.byteEnd).equals(Buffer.from(excerpt.text)))fail('primary clause forest bytes');}
+ const verified=new Set<string>();
+ for(const source of document.sources){
+  const checkout=introductionCheckout(source,cacheRoot),key=JSON.stringify([source.repository,source.commit,source.tree]);
+  if(!verified.has(key)){await verifyPinnedCheckout('ECMA-262',checkout,source);verified.add(key);}
+  const data=await fs.readFile(path.join(checkout,source.specSource));if(sha256Text(data)!==source.specSourceSha256)fail('primary source bytes');
+  for(const excerpt of source.excerpts)if(!data.subarray(excerpt.byteStart,excerpt.byteEnd).equals(Buffer.from(excerpt.text)))fail('primary clause forest bytes');
+ }
 }
+
 export function featureDisposition(tag:string,registry:FeatureRegistry,ecma402:ReadonlySet<string>,reviews:ReadonlyMap<string,FeatureEditionReview>):FeatureDisposition{
  if(!registry.all.has(tag))fail('unknown feature '+tag);
  return registry.proposed.has(tag)||reviews.has(tag)?'post-edition':registry.harness.has(tag)?'harness-only':ecma402.has(tag)?'ecma402-only':'standard';
