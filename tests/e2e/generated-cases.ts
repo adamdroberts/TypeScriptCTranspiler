@@ -54,6 +54,7 @@ export interface FsReadActualListWidthSpec {generator:"fs-read-actual-list-width
 export interface CollectionSourceAliasDepthSpec {generator:"collection-source-alias-depth";depth:number;}
 export interface PrimitivePropertyPrototypeDepthSpec {generator:"primitive-property-prototype-depth";depth:number;}
 export interface GeneratorMethodOwnerDepthSpec {generator:"generator-method-owner-depth";depth:number;}
+export interface SwitchNormalCompletionDepthSpec {generator:"switch-normal-completion-depth";depth:number;}
 export interface ModuleAsyncCycleDepthSpec {generator:"module-async-cycle-depth";depth:number;}
 export interface PathComponentDepthSpec {generator:"path-component-depth";depth:number;}
 export interface ArrayIteratorSourceDepthSpec {generator:"array-iterator-source-depth";depth:number;}
@@ -240,6 +241,7 @@ export type GeneratedCaseSpec =
     | CollectionSourceAliasDepthSpec
     | PrimitivePropertyPrototypeDepthSpec
     | GeneratorMethodOwnerDepthSpec
+    | SwitchNormalCompletionDepthSpec
     | ModuleAsyncCycleDepthSpec
     | PathComponentDepthSpec
     | ArrayIteratorSourceDepthSpec
@@ -300,6 +302,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         throw new Error(`invalid generated case spec ${filename}: expected an object`);
     }
     const spec = value as Record<string, unknown>;
+    if(spec.generator==='switch-normal-completion-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid switch normal completion spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
     if(spec.generator==='module-async-cycle-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<2)throw new Error(`invalid asynchronous Module cycle spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
@@ -1854,6 +1860,7 @@ console.log("raw JSON text width:", valid);
         case "collection-source-alias-depth": return collectionSourceAliasInput(spec.depth);
         case "primitive-property-prototype-depth": return primitivePropertyPrototypeInput(spec.depth);
         case "generator-method-owner-depth": return generatorMethodOwnerInput(spec.depth);
+        case "switch-normal-completion-depth": return switchNormalCompletionInput(spec.depth);
         case "module-async-cycle-depth": return moduleAsyncCycleInput(spec.depth).source;
         case "path-component-depth": return pathComponentInput(spec.depth);
         case "array-iterator-source-depth": return arrayIteratorSourceInput(spec.depth);
@@ -2031,4 +2038,9 @@ export function moduleAsyncCycleInput(depth:number):{source:string;files:Record<
     files['cycle-consumer.mjs']=`import {read} from './cycle-${Math.floor(depth/2)}.mjs';import {events} from './cycle-shared.mjs';events.push('consumer:'+read());`;
     const expected=Array.from({length:depth},(_,index)=>depth-1-index).flatMap(index=>[`start:${index}`,`end:${index}`]);expected.push('consumer:'+Math.floor(depth/2));
     return {files,source:`import './cycle-0.mjs';import './cycle-consumer.mjs';import {events} from './cycle-shared.mjs';console.log('module async cycle:',events.join('|')===${JSON.stringify(expected.join('|'))});\n`};
+}
+
+export function switchNormalCompletionInput(depth:number):string {
+    const clauses=Array.from({length:depth},(_,index)=>`case yield ${index}: return 'matched';`);
+    return `export {};function* select():Generator<number,string,any>{switch('domain'){${clauses.join('\n')}}return 'after';}const iterator=select();let step=iterator.next(),index=0,ordered=true;while(!step.done){ordered=ordered&&step.value===index;step=iterator.next(index++);}console.log('switch normal tree:',ordered&&index===${depth}&&step.value==='after');\n`;
 }

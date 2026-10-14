@@ -23,7 +23,7 @@ import { AgentStoragePlan } from "./agent-storage";
 import { planAsyncControlFlowGraph, type AsyncControlFlowTarget } from "./async-cfg";
 import { normalizeAssignmentTarget, unwrapTransparentExpression } from "./binding-tree";
 import { callableSourceText } from "../callable-source-text";
-import { callableName, expectedArgumentCount, statementCompletionStartsUndefined } from "../function-static-semantics";
+import { callableName, expectedArgumentCount, statementCompletionStartsUndefined, statementBodyCompletions } from "../function-static-semantics";
 import { isTailPositionCall } from "../tail-position";
 import { planResumableExpression, type ResumableReference, type ResumableExpressionState } from "./resumable-expression";
 import {
@@ -26737,11 +26737,9 @@ class Emitter {
                     if (!symbol || !fieldBySymbol.has(symbol)) return false;
                 }
             } else if (stateNode.kind === "switch-dispatch") {
-                this.assertExhaustiveSwitch(stateNode.statement);
                 const discriminatorType = expressionResultTypes[stateNode.discriminatorResultSlot];
                 if (!discriminatorType || discriminatorType.kind !== "value") return false;
             } else if (stateNode.kind === "switch-compare") {
-                this.assertExhaustiveSwitch(stateNode.statement);
                 const discriminatorType = expressionResultTypes[stateNode.discriminatorResultSlot];
                 if (!discriminatorType || discriminatorType.kind !== "value") return false;
                 if (stateNode.caseResultSlot !== null) {
@@ -30786,7 +30784,8 @@ class Emitter {
             if (selected) {
                 return !!selected.statements && this.statementListAlwaysExits(selected.statements);
             }
-            return this.switchStatementAlwaysExits(stmt);
+            const completion=statementBodyCompletions(stmt);
+            return completion.complete&&!completion.normal;
         }
         if (ts.isWhileStatement(stmt)) {
             return this.isTrueExpression(stmt.expression) &&
@@ -30811,33 +30810,6 @@ class Emitter {
             if (this.statementAlwaysExits(stmt)) return true;
         }
         return false;
-    }
-
-    private switchStatementAlwaysExits(stmt: ts.SwitchStatement): boolean {
-        let hasDefault = false;
-        let hasExitingBody = false;
-        for (const clause of stmt.caseBlock.clauses) {
-            if (ts.isDefaultClause(clause)) hasDefault = true;
-            if (clause.statements.some((s) => this.statementContainsBreak(s))) return false;
-            if (clause.statements.length === 0) continue;
-            if (!this.statementListAlwaysExits(clause.statements)) return false;
-            hasExitingBody = true;
-        }
-        const lastClause = stmt.caseBlock.clauses[stmt.caseBlock.clauses.length - 1];
-        if (!hasExitingBody || !lastClause || lastClause.statements.length === 0) return false;
-        return hasDefault || this.switchCoversFiniteDomain(stmt);
-    }
-
-    private switchCoversFiniteDomain(stmt: ts.SwitchStatement): boolean {
-        const domain = this.finiteSwitchDomain(stmt.expression);
-        if (!domain) return false;
-        const seen = new Set<string>();
-        for (const clause of stmt.caseBlock.clauses) {
-            if (!ts.isCaseClause(clause)) continue;
-            const key = this.switchCaseKey(clause.expression);
-            if (key) seen.add(key);
-        }
-        return [...domain.keys()].every((key) => seen.has(key));
     }
 
     private statementContainsBreak(stmt: ts.Statement): boolean {
@@ -31820,7 +31792,6 @@ class Emitter {
     }
 
     private emitSwitch(buf: CBuf, sw: ts.SwitchStatement): void {
-        this.assertExhaustiveSwitch(sw);
         const scriptCompletion = this.isTest262ScriptEvaluationNode(sw)
             ? this.scriptCompletionTargets[this.scriptCompletionTargets.length - 1]
             : undefined;
@@ -31934,70 +31905,6 @@ class Emitter {
             return { statements: clause.statements };
         }
         return { statements: null };
-    }
-
-    private assertExhaustiveSwitch(sw: ts.SwitchStatement): void {
-        // Untyped JavaScript switch statements may intentionally leave the
-        // dynamic domain unmatched and then complete the function normally.
-        if (this.isJavaScriptSourceFile(sw.getSourceFile())) return;
-        const domain = this.finiteSwitchDomain(sw.expression);
-        if (!domain) return;
-        if (sw.caseBlock.clauses.some(ts.isDefaultClause)) return;
-
-        const seen = new Set<string>();
-        for (const clause of sw.caseBlock.clauses) {
-            if (!ts.isCaseClause(clause)) continue;
-            const key = this.switchCaseKey(clause.expression);
-            if (key) seen.add(key);
-        }
-        const missing = [...domain.entries()]
-            .filter(([key]) => !seen.has(key))
-            .map(([, label]) => label);
-        if (missing.length > 0) {
-            unsupported(
-                sw,
-                `non-exhaustive switch; missing case${missing.length === 1 ? "" : "s"}: ${missing.join(", ")}`,
-            );
-        }
-    }
-
-    private finiteSwitchDomain(expr: ts.Expression): Map<string, string> | null {
-        const t = this.checker.getTypeAtLocation(expr);
-        const out = new Map<string, string>();
-        const addType = (part: ts.Type): boolean => {
-            const key = this.literalTypeKey(part);
-            if (!key) return false;
-            out.set(key.key, key.label);
-            return true;
-        };
-        if (t.flags & ts.TypeFlags.Boolean) {
-            out.set("b:true", "true");
-            out.set("b:false", "false");
-            return out;
-        }
-        if (t.isUnion()) {
-            for (const part of t.types) {
-                if (!addType(part)) return null;
-            }
-            return out.size > 0 ? out : null;
-        }
-        return addType(t) ? out : null;
-    }
-
-    private literalTypeKey(t: ts.Type): { key: string; label: string } | null {
-        if (t.isStringLiteral()) {
-            return { key: `s:${t.value}`, label: JSON.stringify(t.value) };
-        }
-        if (t.isNumberLiteral()) {
-            return { key: `n:${t.value}`, label: String(t.value) };
-        }
-        if (t.flags & ts.TypeFlags.BooleanLiteral) {
-            const name = (t as unknown as { intrinsicName?: string }).intrinsicName;
-            if (name === "true" || name === "false") {
-                return { key: `b:${name}`, label: name };
-            }
-        }
-        return null;
     }
 
     private staticSwitchKey(

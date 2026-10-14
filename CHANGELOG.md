@@ -1,3 +1,5 @@
+Removed typed switch exhaustiveness rejection and finite-domain termination shortcuts; canonical statement completions retain ordinary and suspended unmatched paths.
+
 Added shared cyclic Module depth evidence for asynchronous cycle-root dependencies, retaining disabled host eligibility.
 
 Aligned the retained dynamic coercion expectation with ordinary String addition after TypeScript annotation erasure.

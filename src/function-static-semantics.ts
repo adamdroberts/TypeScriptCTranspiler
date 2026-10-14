@@ -45,7 +45,7 @@ export function statementCompletionStartsUndefined(node:ts.Node):boolean {
 }
 /** One statement tree and iterative completion worklist. Interned records
  * retain kind, value and target; UpdateEmpty composes sequences and exits. */
-export function statementBodyCompletions(body: ts.Block | ts.SourceFile): StatementBodyCompletions {
+export function statementBodyCompletions(body: ts.Statement | ts.SourceFile): StatementBodyCompletions {
     const records = new Map<string, BodyCompletion>(), expressions = new Map<ts.Expression, number>();
     const record = (kind: BodyCompletion["kind"], value: CompletionValue = null, label: string | null = null): BodyCompletion => {
         let key: string;

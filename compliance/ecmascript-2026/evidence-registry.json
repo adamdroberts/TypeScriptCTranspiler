@@ -1778,7 +1778,8 @@
       "kind": "implementation",
       "id": "src/emit/index.ts#emitSwitch",
       "targets": [
-        "sec-runtime-semantics-caseclauseisselected#strict-equality-selection-and-abrupt-completion"
+        "sec-runtime-semantics-caseclauseisselected#strict-equality-selection-and-abrupt-completion",
+        "sec-runtime-semantics-caseblockevaluation#unmatched-and-suspended-normal-completion"
       ]
     },
     {
@@ -4869,6 +4870,48 @@
       "id": "runtime/tsc_module.c#module_execution_rejected",
       "targets": [
         "sec-innermoduleevaluation#canonical-async-cycle-dependencies"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/switch-normal-completion.property.test.ts",
+      "targets": [
+        "sec-runtime-semantics-caseblockevaluation#unmatched-and-suspended-normal-completion"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "switch_normal_completion_depth",
+      "targets": [
+        "sec-runtime-semantics-caseblockevaluation#unmatched-and-suspended-normal-completion"
+      ],
+      "stressReview": {
+        "dimension": "suspended CaseBlock selector graph width",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One shared generated CaseBlock graph verifies suspension order and unmatched normal completion in native property and typed CLI; compact match/default/abrupt/type-erasure partitions are independent of width.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "generator_lazy_switch_yield_case",
+      "targets": [
+        "sec-runtime-semantics-caseblockevaluation#unmatched-and-suspended-normal-completion"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/function-static-semantics.ts#statementBodyCompletions",
+      "targets": [
+        "sec-runtime-semantics-caseblockevaluation#unmatched-and-suspended-normal-completion"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/async-cfg.ts#planAsyncControlFlowGraph",
+      "targets": [
+        "sec-runtime-semantics-caseblockevaluation#unmatched-and-suspended-normal-completion"
       ]
     }
   ]
