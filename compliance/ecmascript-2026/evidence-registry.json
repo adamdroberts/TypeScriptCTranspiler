@@ -1589,7 +1589,8 @@
       "kind": "implementation",
       "id": "src/module-static-semantics.ts#bindingNameEntries",
       "targets": [
-        "sec-arrow-function-definitions-static-semantics-early-errors#complete-arrow-parameter-and-body-early-errors"
+        "sec-arrow-function-definitions-static-semantics-early-errors#complete-arrow-parameter-and-body-early-errors",
+        "sec-evaldeclarationinstantiation#canonical-generated-declaration-destinations"
       ]
     },
     {
@@ -4493,7 +4494,8 @@
       "id": "src/module-static-semantics.ts#moduleVarDeclaredNames",
       "targets": [
         "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
-        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
+        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation",
+        "sec-evaldeclarationinstantiation#canonical-generated-declaration-destinations"
       ]
     },
     {
@@ -4988,7 +4990,8 @@
       "id": "tests/property/eval-caller-environment.property.test.ts",
       "targets": [
         "sec-performeval#canonical-caller-environment-references",
-        "sec-function-calls#actual-eval-intrinsic-realm-source-owners"
+        "sec-function-calls#actual-eval-intrinsic-realm-source-owners",
+        "sec-evaldeclarationinstantiation#canonical-generated-declaration-destinations"
       ]
     },
     {
@@ -5046,7 +5049,8 @@
       "id": "src/source-value-flow.ts#connectEvaluationEnvironment",
       "targets": [
         "sec-performeval#canonical-caller-environment-references",
-        "sec-function-calls#actual-eval-intrinsic-realm-source-owners"
+        "sec-function-calls#actual-eval-intrinsic-realm-source-owners",
+        "sec-evaldeclarationinstantiation#canonical-generated-declaration-destinations"
       ]
     },
     {
@@ -5069,7 +5073,8 @@
       "targets": [
         "sec-getvalue#canonical-binding-source-origin-capture",
         "sec-return-statement-runtime-semantics-evaluation#composed-source-projection-provenance",
-        "sec-function-calls#actual-eval-intrinsic-realm-source-owners"
+        "sec-function-calls#actual-eval-intrinsic-realm-source-owners",
+        "sec-evaldeclarationinstantiation#canonical-generated-declaration-destinations"
       ]
     },
     {
@@ -5404,7 +5409,8 @@
       "kind": "property",
       "id": "tests/property/eval-realm-owner.property.test.ts",
       "targets": [
-        "sec-function-calls#actual-eval-intrinsic-realm-source-owners"
+        "sec-function-calls#actual-eval-intrinsic-realm-source-owners",
+        "sec-evaldeclarationinstantiation#canonical-generated-declaration-destinations"
       ]
     },
     {
@@ -5461,6 +5467,55 @@
       "id": "runtime/tsc_test262.c#tsc_test262_direct_eval_call",
       "targets": [
         "sec-function-calls#actual-eval-intrinsic-realm-source-owners"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/eval-declaration-projection.property.test.ts",
+      "targets": [
+        "sec-evaldeclarationinstantiation#canonical-generated-declaration-destinations"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "eval_declaration_depth",
+      "targets": [
+        "sec-evaldeclarationinstantiation#canonical-generated-declaration-destinations"
+      ],
+      "stressReview": {
+        "dimension": "generated var declaration alias graph depth",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One shared generated declaration graph verifies bound-name destination propagation independently of scope, strictness, ordering and opaque semantic partitions.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#EvaluationEnvironment",
+      "targets": [
+        "sec-evaldeclarationinstantiation#canonical-generated-declaration-destinations"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#registerEvaluationDeclaration",
+      "targets": [
+        "sec-evaldeclarationinstantiation#canonical-generated-declaration-destinations"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#evaluationDeclarationUnavailable",
+      "targets": [
+        "sec-evaldeclarationinstantiation#canonical-generated-declaration-destinations"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#binding",
+      "targets": [
+        "sec-evaldeclarationinstantiation#canonical-generated-declaration-destinations"
       ]
     }
   ]

@@ -8,6 +8,7 @@ import {jsonMethods, jsonOperations, type JSONSourceOperation} from "./json-meth
 import {test262AgentOperations} from "./test262-agent-operations";
 import {sourceModuleFailure} from "./module-source-record";
 import { sourceUnitBodyIncluded, sourceUnitFileName } from "./program";
+import {moduleVarDeclaredNames} from "./module-static-semantics";
 import { ecmaParseGoal } from "./ecmascript-source";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
@@ -164,6 +165,7 @@ interface EvaluationEnvironment {
     readonly realms:Cell;
     readonly callers: Map<ts.Node,Set<SourceRealmRecord>>;
     readonly references: Map<ts.Identifier, {value: Cell; writes: Cell}>;
+    readonly declarations:Map<string,{node:ts.Identifier;function?:ts.FunctionDeclaration}>;
 }
 interface SourceRealmRecord {objectPrototype?:Cell;readonly bindings:Map<string,Cell>;owner?:ObjectOwner;host?:ObjectOwner;readonly global:Atom;readonly record:Atom;readonly operations:Map<Operation,Atom>;readonly intrinsics:Map<string,Atom>;}
 interface SourceCapturePhase {readonly kind:"capture";readonly context:ts.Node;readonly argumentsRead:boolean;}
@@ -258,6 +260,8 @@ class SourceValueFlow {
     private readonly exceptionCells = new Set<Cell>();
     private readonly catchGuards = new Map<ts.CatchClause, Cell>();
     private readonly bindings = new Map<ts.Symbol, Cell>();
+    private readonly evaluationVarBindings=new Map<FunctionOwner,Map<string,Cell>>();
+    private readonly evaluationDeclarationBindings=new Map<Cell,{origins:Set<ts.Node>;fallback?:Cell}>();
     private readonly utilModules = new Map<boolean,{value:Cell;owner:ObjectOwner}>();
     private readonly utilExportValues = new Map<string,Cell>();
     private readonly globalLexicals = new Map<string, Cell>();
@@ -410,8 +414,13 @@ class SourceValueFlow {
             const file = entry.entry ? program.getSourceFile(path.resolve(entry.entry)) : undefined;
             if (!file) continue;
             if (entry.kind === "direct" || entry.kind === "indirect") {
-                const environment: EvaluationEnvironment = {source:file,direct:entry.kind === "direct",realms:this.newCell(),callers:new Map(),references:new Map()};
+                const environment: EvaluationEnvironment = {source:file,direct:entry.kind === "direct",realms:this.newCell(),callers:new Map(),references:new Map(),declarations:new Map()};
                 this.evaluationEnvironments.set(file,environment);
+                if(!isStrictCodeContext(file)){
+                    for(const entry of moduleVarDeclaredNames(file))if(ts.isIdentifier(entry.node))environment.declarations.set(entry.name,{node:entry.node});
+                    for(const statement of file.statements)if(ts.isFunctionDeclaration(statement)&&statement.name)
+                        environment.declarations.set(statement.name.text,{node:statement.name,function:statement});
+                }
                 const environments=this.evaluationSourceEnvironments.get(entry.source)??[];
                 environments.push(environment);this.evaluationSourceEnvironments.set(entry.source,environments);
             }
@@ -850,7 +859,20 @@ class SourceValueFlow {
     private binding(node: ts.Identifier): Cell {
         const origin = declarativeSourceBindingSymbol(this.checker, node);
         if(this.evaluationGlobalTargets.has(node)){const realm=this.evaluationGlobalTargets.get(node)!;return (realm===this.currentRealm?this.globalLexicals.get(node.text):undefined)??this.realmBinding(realm,node.text);}
+        const activation=this.enclosingActivation(node);
+        const injected=activation&&this.evaluationVarBindings.get(activation)?.get(node.text);
+        if(injected&&!!this.evaluationDeclarationBindings.get(injected)?.origins.size&&!(origin?.declarations??[]).some(declaration=>
+            !isAmbientSourceDeclaration(declaration)&&sourceDeclarationIntroducesBinding(declaration)))return injected;
         const environment=this.evaluationReferenceEnvironment(node);
+        const declared=(origin?.declarations??[]).some(declaration=>!isAmbientSourceDeclaration(declaration)&&sourceDeclarationIntroducesBinding(declaration));
+        if(environment&&activation&&!declared){
+            let names=this.evaluationVarBindings.get(activation);if(!names){names=new Map();this.evaluationVarBindings.set(activation,names);}
+            let binding=names.get(node.text);if(!binding){binding=this.newCell();names.set(node.text,binding);
+                let reference=environment.references.get(node);if(!reference){reference={value:this.newCell(),writes:this.newCell()};environment.references.set(node,reference);for(const[caller,realms]of environment.callers)for(const realm of realms)this.connectEvaluationReference(environment,node,reference,caller,realm);}
+                this.evaluationDeclarationBindings.set(binding,{origins:new Set(),fallback:reference.value});
+            }
+            return binding;
+        }
         if(environment) {
             let reference=environment.references.get(node);
             if(!reference){
@@ -881,7 +903,15 @@ class SourceValueFlow {
         if (declaration && ts.isExportAssignment(declaration)) return this.cell(declaration.expression);
         if (declaration && callableDefinition(declaration) && !sourceDeclarationIntroducesBinding(declaration)) return this.cell(declaration);
         if (declaration && isAmbientSourceDeclaration(declaration)) return this.globalLexicals.get(node.text) ?? this.globalBinding(node.text);
-        if (!symbol || !(symbol.declarations ?? []).some(sourceDeclarationIntroducesBinding)) return this.globalLexicals.get(node.text) ?? this.globalBinding(node.text);
+        if (!symbol || !(symbol.declarations ?? []).some(sourceDeclarationIntroducesBinding)) {
+            const owner=this.enclosingActivation(node);
+            if(owner){
+                let names=this.evaluationVarBindings.get(owner);if(!names){names=new Map();this.evaluationVarBindings.set(owner,names);}
+                let binding=names.get(node.text);if(!binding){binding=this.newCell();names.set(node.text,binding);this.evaluationDeclarationBindings.set(binding,{origins:new Set(),fallback:this.globalLexicals.get(node.text)??this.globalBinding(node.text)});}
+                return binding;
+            }
+            return this.globalLexicals.get(node.text) ?? this.globalBinding(node.text);
+        }
         const sourceGlobal = declaration && this.scriptDeclarationBinding(declaration, node.text);
         if (sourceGlobal) {
             if (callableDefinition(declaration!)) this.copy(this.cell(declaration!), sourceGlobal);
@@ -925,7 +955,37 @@ class SourceValueFlow {
             if(direct)this.copy(this.executionRealms(caller),environment.realms);else this.publish(environment.realms,realm.record);
             let realms=environment.callers.get(caller);if(!realms){realms=new Set();environment.callers.set(caller,realms);}if(realms.has(realm))continue;realms.add(realm);
             for(const[node,reference]of environment.references)this.connectEvaluationReference(environment,node,reference,caller,realm);
+            if(direct&&isStrictCodeContext(caller))continue;
+            for(const[name,declaration]of environment.declarations){
+                const binding=this.binding(declaration.node);
+                if(direct){
+                    const target=ts.setTextRange(ts.factory.createIdentifier(name),caller);(target as ts.Identifier&{parent:ts.Node}).parent=caller;
+                    const symbol=this.bindingSymbol(target),lexical=(symbol?.declarations??[]).some(node=>
+                        ts.isClassDeclaration(node)||ts.isVariableDeclaration(node)&&ts.isVariableDeclarationList(node.parent)&&!!(node.parent.flags&ts.NodeFlags.BlockScoped));
+                    if(lexical){const handler=this.exceptionHandlers.get(caller);if(handler)this.publish(handler,this.nativeException(caller));continue;}
+                    const owner=this.enclosingActivation(caller);
+                    let destination:Cell;
+                    if(symbol&&(symbol.declarations??[]).some(sourceDeclarationIntroducesBinding))destination=this.binding(target);
+                    else if(owner){let names=this.evaluationVarBindings.get(owner);if(!names){names=new Map();this.evaluationVarBindings.set(owner,names);}destination=names.get(name)??this.newCell();names.set(name,destination);}
+                    else destination=this.realmBinding(realm,name);
+                    this.copy(binding,destination);this.registerEvaluationDeclaration(destination,caller);
+                }else{
+                    const destination=this.realmBinding(realm,name);this.copy(binding,destination);this.registerEvaluationDeclaration(destination,caller);
+                    const receiver=this.newCell();this.publish(receiver,realm.global);
+                    this.writeProperty(receiver,name,binding,true,"define",caller);
+                }
+                if(declaration.function)this.copy(this.cell(declaration.function),binding);
+            }
         }
+    }
+    private registerEvaluationDeclaration(binding:Cell,caller:ts.Node):void {
+        let record=this.evaluationDeclarationBindings.get(binding);if(!record){record={origins:new Set()};this.evaluationDeclarationBindings.set(binding,record);}record.origins.add(caller);
+    }
+    private evaluationDeclarationUnavailable(binding:Cell,read:ts.Node):boolean {
+        const origins=this.evaluationDeclarationBindings.get(binding)?.origins;if(!origins?.size)return false;
+        const activation=this.enclosingActivation(read);
+        return [...origins].every(caller=>this.sourceFile(caller)===this.sourceFile(read)&&
+            this.enclosingActivation(caller)===activation&&read.getEnd()<=caller.getStart());
     }
     private scriptDeclarationBinding(declaration: ts.Node, name: string): Cell | null {
         let selected = declaration;
@@ -3726,6 +3786,10 @@ class SourceValueFlow {
             }
             const ambient=this.isAmbientIdentifier(node);
             const binding=this.binding(node);
+            let absence!:Rule;absence=this.rule([binding],()=>{
+                if(!this.presenceClosed){this.presenceRules.add(absence);return;}
+                if(ambient&&this.evaluationDeclarationUnavailable(binding,node))this.publish(result,this.unknown);
+            });
             // Lexical, imported and global source bindings share the same
             // origin capture. Dynamic/repeated contexts remain conservative.
             this.copyRead(binding,result,node);
@@ -4762,6 +4826,11 @@ class SourceValueFlow {
             // impossible branch. Seal them only after the known graph closes,
             // then propagate the same interned top fact through normal edges.
             let changed = false;
+            for(const[binding,record]of this.evaluationDeclarationBindings){
+                if(record.origins.size||!record.fallback)continue;
+                this.copy(record.fallback,binding);delete record.fallback;
+            }
+            if(this.queueCursor<this.queue.length)continue;
             if(!this.presenceClosed){
                 // Unresolved external bindings are value inputs, rather than
                 // owner absence dependencies. Wake their guarded mutations
