@@ -749,6 +749,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
     - [ ] `ordered-immediate-source-effects-and-promise-rejection` (algorithm, unbounded): ImportCall retains operand conversion, option enumeration and Promise rejection source effects.
     - [ ] `deferred-source-load-failures-before-evaluation` (algorithm, unbounded): Deferred source loading failures reject before graph evaluation.
     - [ ] `canonical-entry-link-validation-before-evaluation` (algorithm, unbounded): Canonical Module entry linking rejects before graph evaluation.
+    - [ ] `canonical-expression-and-iterator-source-closure` (algorithm, unbounded): Canonical expression and iterator source facts close finite ImportCall targets.
   - [ ] `sec-evaluate-import-call` — EvaluateImportCall ( _specifierExpression_: a Parse Node, optional _optionsExpression_: a Parse Node, ): either a normal completion containing a Promise or an abrupt completion: exact disposition and partitions missing.
   - [ ] `sec-ContinueDynamicImport` — ContinueDynamicImport ( _promiseCapability_: a PromiseCapability Record, _moduleCompletion_: either a normal completion containing a Module Record or a throw completion, ): ~unused~: exact disposition and partitions missing.
   - [ ] `sec-tagged-templates` — Tagged Templates: exact disposition and partitions missing.

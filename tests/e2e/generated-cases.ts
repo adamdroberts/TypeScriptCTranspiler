@@ -51,6 +51,7 @@ export interface DynamicImportSourceDepthSpec {
     depth: number;
 }
 export interface FsReadActualListWidthSpec {generator:"fs-read-actual-list-width";width:number;}
+export interface ModuleIteratorImportDepthSpec {generator:"module-iterator-import-depth";depth:number;}
 export interface ModuleFailureDepthSpec {generator:"module-failure-depth";depth:number;phase:"load"|"link";}
 export interface OsUserInfoOptionDepthSpec { generator:"os-user-info-option-depth"; depth:number; }
 export interface EventTargetActualsDepthSpec { generator:"event-target-actuals-depth"; depth:number; }
@@ -228,6 +229,7 @@ export type GeneratedCaseSpec =
     | ModuleRequestWidthSpec
     | DynamicImportSourceDepthSpec
     | ModuleFailureDepthSpec
+    | ModuleIteratorImportDepthSpec
     | OsUserInfoOptionDepthSpec
     | EventTargetActualsDepthSpec
     | ParseGoalSourceDepthSpec
@@ -282,6 +284,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         throw new Error(`invalid generated case spec ${filename}: expected an object`);
     }
     const spec = value as Record<string, unknown>;
+    if(spec.generator==='module-iterator-import-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid iterator import source spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
     if(spec.generator==='module-failure-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<2||!['load','link'].includes(String(spec.phase)))throw new Error(`invalid generated Module failure spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth,phase:spec.phase as 'load'|'link'};
@@ -1797,6 +1803,7 @@ console.log("raw JSON text width:", valid);
                 `const stressView=Buffer.alloc(4);let stressSeen=0;const stressOptions={get offset(){stressSeen++;return 0},get length(){stressSeen++;return 4},get position(){stressSeen++;return 0}};\n` +
                 `const stressBytes=stressRead(stressFD,stressView,stressOptions,...Array.from({length:${spec.width}},()=>++stressSeen));\n` +
                 `console.log('bytes:',stressBytes,'seen:',stressSeen,'text:',stressView.toString());stressClose(stressFD);stressRemove(stressPath);\n`;
+        case "module-iterator-import-depth": return moduleIteratorImportInput(spec.depth).source;
         case "module-failure-depth":
             return moduleFailureDepthInput(spec.depth,spec.phase).source;
         case "os-user-info-option-depth":
@@ -1912,5 +1919,12 @@ export function moduleFailureDepthInput(depth:number,phase:'load'|'link'='load')
 }
 export function generateE2eCaseFiles(raw:string,filename:string):Readonly<Record<string,string>>{
     const spec=parseGeneratedCaseSpec(raw,filename);
+    if(spec.generator==='module-iterator-import-depth')return moduleIteratorImportInput(spec.depth).files;
     return spec.generator==='module-failure-depth'?moduleFailureDepthInput(spec.depth,spec.phase).files:{};
+}
+
+export function moduleIteratorImportInput(depth:number):{source:string;files:Readonly<Record<string,string>>}{
+    const aliases=['const requests0=["./a.mjs"];'];
+    for(let index=1;index<depth;index++)aliases.push(`const requests${index}=requests${index-1};`);
+    return {files:{"a.mjs":"export const value=17;\n","b.mjs":"export const value=19;\n"},source:`export {};${aliases.join("\n")}async function main(){let total=0;for(const request of ["./a.mjs","./b.mjs"])total+=(await import(request)).value;for(const request of [])await import(request);for(const request of requests${depth-1})total+=(await import(request)).value;console.log("iterator source:",total===53)}main();\n`};
 }

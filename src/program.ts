@@ -27,6 +27,10 @@ export interface BuildProgramOpts {
     entry: string;
     packageRoot: string;
     retainModuleFailures?: boolean;
+    /** The expression proof owns the complete dynamic request root worklist. */
+    deferDynamicImportDiscovery?: boolean;
+    sourceOverrides?: ReadonlyMap<string,ts.SourceFile>;
+    sourceFileCreated?: (source:ts.SourceFile,physicalPath:string)=>void;
     /** Additional independent source records compiled in the same program. */
     additionalRoots?: readonly string[];
     /** Source records that must be parsed/bound with the ECMAScript Module goal. */
@@ -114,7 +118,7 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
         ...(opts.additionalRoots ?? []),
     ].map((filename) => path.resolve(filename)))];
     const reachableModuleTargets = new Set<string>();
-    const discoveredRoots = collectStaticRequireRoots(sourceRoots, compilerOptions, opts.dynamicRequires, reachableModuleTargets);
+    const discoveredRoots = collectStaticRequireRoots(sourceRoots, compilerOptions, opts.dynamicRequires, reachableModuleTargets,opts.sourceOverrides,opts.sourceFileCreated,opts.deferDynamicImportDiscovery);
     const explicitModuleTargets = new Set((opts.moduleRoots ?? []).map(filename => path.resolve(filename)));
     const moduleTargets = new Set([...explicitModuleTargets, ...reachableModuleTargets]);
     const isolatedScriptRoots = new Set(
@@ -182,8 +186,8 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
     const compilerHost = ts.createCompilerHost(compilerOptions);
     const readFile = compilerHost.readFile.bind(compilerHost);
     const fileExists = compilerHost.fileExists.bind(compilerHost);
-    compilerHost.readFile = fileName => readFile(materializedUnits.get(path.resolve(fileName))?.sourcePath ?? fileName);
-    compilerHost.fileExists = fileName => fileExists(materializedUnits.get(path.resolve(fileName))?.sourcePath ?? fileName);
+    compilerHost.readFile = fileName => {const source=materializedUnits.get(path.resolve(fileName))?.sourcePath??path.resolve(fileName);return opts.sourceOverrides?.get(source)?.text??readFile(source);};
+    compilerHost.fileExists = fileName => {const source=materializedUnits.get(path.resolve(fileName))?.sourcePath??path.resolve(fileName);return !!opts.sourceOverrides?.has(source)||fileExists(source);};
     compilerHost.resolveModuleNames = (names, containingFile) => names.map(name => {
         const sourcePath = materializedUnits.get(path.resolve(containingFile))?.sourcePath ?? containingFile;
         const resolved = ts.resolveModuleName(name, sourcePath, compilerOptions, compilerHost).resolvedModule;
@@ -193,9 +197,10 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
     });
     const getSourceFile = compilerHost.getSourceFile.bind(compilerHost);
     compilerHost.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
-        let sourceFile = getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+        const overridden=opts.sourceOverrides?.get(path.resolve(fileName));
+        let sourceFile = overridden ?? getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
         if (
-            sourceFile &&
+            sourceFile && !overridden &&
             !sourceFile.isDeclarationFile &&
             /\.[cm]?[jt]sx?$/i.test(sourceFile.fileName) &&
             (opts.retainModuleFailures || /\.[cm]?jsx?$/i.test(sourceFile.fileName) || ecmaImportAttributesParserShadow(sourceFile.text) !== sourceFile.text)
@@ -207,13 +212,13 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
                 languageVersion,
                 true,
                 (original as ts.SourceFile & { scriptKind?: ts.ScriptKind }).scriptKind ?? scriptKindForFile(fileName),
-                moduleRoots.has(path.resolve(fileName)) ? "module" : isolatedScriptRoots.has(path.resolve(fileName)) ? "script" : undefined,
+                moduleRoots.has(path.resolve(fileName)) || opts.deferDynamicImportDiscovery && !isolatedScriptRoots.has(path.resolve(fileName)) ? "module" : isolatedScriptRoots.has(path.resolve(fileName)) ? "script" : undefined,
             );
             (sourceFile as ts.SourceFile & { impliedNodeFormat?: ts.ResolutionMode }).impliedNodeFormat =
                 (original as ts.SourceFile & { impliedNodeFormat?: ts.ResolutionMode }).impliedNodeFormat;
         }
         if (sourceFile && !(sourceFile.flags & ts.NodeFlags.JsonFile) && (
-            moduleRoots.has(path.resolve(sourceFile.fileName)) ||
+            moduleRoots.has(path.resolve(sourceFile.fileName)) || opts.deferDynamicImportDiscovery && !sourceFile.isDeclarationFile && !isolatedScriptRoots.has(path.resolve(sourceFile.fileName)) ||
             isolatedScriptRoots.has(path.resolve(sourceFile.fileName))
         )) {
             // TypeScript otherwise infers the goal from import/export syntax. Test262
@@ -238,6 +243,7 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
             };
         }
         if(sourceFile&&opts.retainModuleFailures&&!sourceFile.isDeclarationFile){
+            opts.sourceFileCreated?.(sourceFile,sourceUnit?.sourcePath??path.resolve(fileName));
             const original=sourceFile;sourceFile=retainModuleParseFailure(sourceFile);
             const format=sourceUnitFormats.get(original);if(format)sourceUnitFormats.set(sourceFile,format);
         }
@@ -281,21 +287,25 @@ function collectStaticRequireRoots(
     compilerOptions: ts.CompilerOptions,
     dynamicRequires: DynamicRequireManifest | undefined,
     moduleTargets: Set<string>,
+    sourceOverrides?:ReadonlyMap<string,ts.SourceFile>,
+    sourceFileCreated?:(source:ts.SourceFile,physicalPath:string)=>void,
+    deferDynamicImportDiscovery=false,
 ): string[] {
     const roots: string[] = [];
     const queue = entries.map(entry => path.resolve(entry));
     const seen = new Set<string>(queue);
     while (queue.length > 0) {
         const fileName = queue.shift()!;
-        const sourceText = ts.sys.readFile(fileName);
+        const sourceText = sourceOverrides?.get(fileName)?.text??ts.sys.readFile(fileName);
         if (sourceText === undefined) continue;
-        const sf = createEcmaSourceFile(
+        const sf = sourceOverrides?.get(fileName)??createEcmaSourceFile(
             fileName,
             sourceText,
             compilerOptions.target ?? ts.ScriptTarget.ES2022,
             true,
             scriptKindForFile(fileName),
         );
+        sourceFileCreated?.(sf,fileName);
         const moduleAliases = commonJsModuleAliases(sf);
         const requireAliases = commonJsRequireAliases(sf, moduleAliases);
         for (const stmt of sf.statements) {
@@ -309,7 +319,7 @@ function collectStaticRequireRoots(
                     queue.push(resolvedFile);
                 }
             }
-            for (const specifier of dynamicModuleSpecifiers(stmt)) {
+            for (const specifier of deferDynamicImportDiscovery?[]:dynamicModuleSpecifiers(stmt)) {
                 const resolvedFile = resolveTypeScriptModuleName(specifier, fileName, compilerOptions);
                 if (resolvedFile) moduleTargets.add(resolvedFile);
                 if (resolvedFile && !seen.has(resolvedFile)) {

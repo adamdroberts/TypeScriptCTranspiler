@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { staticStringExpressionTexts } from "./module-specifiers";
+import {sourceFileExpressionTexts} from "./source-file-expression-proof";
 
 /** ECMA-262 ImportAttribute Record, normalized in UTF-16 key order. */
 export interface ImportAttributeRecord {
@@ -37,8 +37,8 @@ export function dynamicImportSpecifiersFromCall(
     if (call.expression.kind !== ts.SyntaxKind.ImportKeyword) return null;
     const specifier = call.arguments[0];
     if (!specifier) return { specifiers: null, error: "dynamic import requires a module specifier" };
-    const specifiers = staticStringExpressionTexts(specifier);
-    if (specifiers.length === 0) {
+    const specifiers = sourceFileExpressionTexts(specifier);
+    if (!specifiers) {
         return { specifiers: null, error: "dynamic import needs a finite AOT specifier proof" };
     }
     return {

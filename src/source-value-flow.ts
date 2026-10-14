@@ -6,6 +6,7 @@ import { callableNameInput, expectedArgumentCount, functionBodyCompletions, stat
 import {consoleOperations} from "./console-operations";
 import {jsonMethods, jsonOperations, type JSONSourceOperation} from "./json-methods";
 import {test262AgentOperations} from "./test262-agent-operations";
+import {sourceModuleFailure} from "./module-source-record";
 import { sourceUnitBodyIncluded, sourceUnitFileName } from "./program";
 import { ecmaParseGoal } from "./ecmascript-source";
 import * as path from "node:path";
@@ -244,6 +245,7 @@ class SourceValueFlow {
     private readonly arrayLikeLengths = new Map<Cell,Map<ts.Node,Cell>>();
     private readonly indexedReads = new Map<Cell,Map<ts.Node,Map<string,Cell>>>();
     private readonly iterationMethods = new Map<Cell,Map<ts.Node|undefined,Cell>>();
+    private readonly iterationActivity = new Map<Cell,Cell>();
     private readonly iterationRecords = new Map<Cell,Cell>();
     private readonly arrayIterators = new Map<ts.Node,Map<Cell,Cell>>();
     private ordinaryIteratorPrototype?:Cell;
@@ -259,6 +261,7 @@ class SourceValueFlow {
     private readonly restLocations = new Map<ts.ParameterDeclaration, {value: Cell; owner: ObjectOwner}>();
     private readonly moduleNamespaces = new Map<ts.SourceFile, {value: Cell; owner: ObjectOwner}>();
     private readonly moduleMetadata = new Map<ts.SourceFile, Cell>();
+    private readonly importTargetCells = new Map<ts.CallExpression,Cell>();
     private readonly moduleNamespacePending: {source: ts.SourceFile; symbol: ts.Symbol; owner: ObjectOwner}[] = [];
     private readonly copies = new Map<Cell, Set<Cell>>();
     private readonly queue: Rule[] = [];
@@ -575,6 +578,10 @@ class SourceValueFlow {
                 guards.push({condition:this.cell(parent.condition),truthy:child === parent.whenTrue});
             if (ts.isCatchClause(parent) && child === parent.block) {
                 guards.push({condition:this.catchCondition(parent),truthy:true});
+            }
+            if(ts.isForOfStatement(parent)&&child===parent.statement&&!parent.awaitModifier){
+                const elements=this.iteratorElements(this.cell(parent.expression),parent);
+                guards.push({condition:this.iterationActivity.get(elements)!,truthy:true});
             }
         }
         this.executionGuards.set(node,guards);return guards;
@@ -2248,7 +2255,8 @@ class SourceValueFlow {
         const callback=ts.setTextRange(ts.factory.createEmptyStatement(),context);(callback as ts.Node&{parent:ts.Node}).parent=context;this.exceptionHandlers.set(callback,rejection);
         const seen=new Set<Atom>(),cells=new Map<Atom,Cell>(),cell=(atom:Atom)=>{let value=cells.get(atom);if(!value){value=this.newCell();cells.set(atom,value);this.publish(value,atom)}return value;};
         this.rule([returned],()=>{for(const atom of returned.values){
-            if(atom.tag==="abrupt"||atom.tag==="pending-source")continue;
+            if(atom.tag==="pending-source"){this.publish(value,atom);continue;}
+            if(atom.tag==="abrupt")continue;
             if(atom.tag==="promise"){this.copy(atom.value,value);this.copy(atom.rejection,rejection);continue;}
             const owner=this.ordinaryOwner(atom);
             if(!owner){this.publish(value,atom);continue;}
@@ -3126,6 +3134,7 @@ class SourceValueFlow {
         if (!contexts) {contexts = new Map(); this.iterationElements.set(receiver, contexts);}
         const prior = contexts.get(context); if (prior) return prior;
         const result = this.newCell(); contexts.set(context, result);
+        const activity=this.newCell();this.iterationActivity.set(result,activity);
         const method = this.iterationMethod(receiver, context), custom = this.newCell(), iterator = this.newCell();
         const closeIterators=this.newCell();this.copy(iterator,closeIterators);this.iterationRecords.set(result,closeIterators);
         const returned = this.newCell();
@@ -3134,11 +3143,18 @@ class SourceValueFlow {
             for (const atom of method.values) {
                 if (atom.tag === "operation" && atom.operation === "array-values") {
                     this.copy(this.arrayIterator(receiver,context),closeIterators);
-                    const keys = this.propertyDomainKeys(receiver, context, methods, "index");
-                    if (keys === null) this.publish(result, this.unknown);
-                    else if (keys) {
-                        this.publish(result, this.primitive(undefined));
-                        for (const key of keys) this.copy(this.indexedRead(receiver, Number(key), context), result);
+                    this.watchList(methods,receiver,context);
+                    const actual=this.lists(receiver,context);
+                    for(const values of actual)if(values){this.publish(activity,this.primitive(values.length>0));for(const value of values)this.copy(value,result);}
+                    if(actual.includes(null)){
+                        this.publish(activity,this.primitive(true));this.publish(activity,this.primitive(false));
+                        if([...method.values].some(value=>value.tag!=="operation"||value.operation!=="array-values"))this.publish(result,this.unknown);
+                        const keys = this.propertyDomainKeys(receiver, context, methods, "index");
+                        if (keys === null) this.publish(result, this.unknown);
+                        else if (keys) {
+                            this.publish(result, this.primitive(undefined));
+                            for (const key of keys) this.copy(this.indexedRead(receiver, Number(key), context), result);
+                        }
                     }
                 } else this.publish(custom, atom);
             }
@@ -3153,7 +3169,7 @@ class SourceValueFlow {
                 if (atom.tag === "abrupt") continue;
                 const owner = this.ordinaryOwner(atom);
                 if (!owner) {
-                    if (atom.tag === "unknown" || atom.tag === "opaque-object" || atom.tag === "pending-source") this.publish(result, atom);
+                    if (atom.tag === "unknown" || atom.tag === "opaque-object" || atom.tag === "pending-source") {this.publish(result, atom);this.publish(activity,this.primitive(true));this.publish(activity,this.primitive(false));}
                     continue;
                 }
                 let record = records.get(atom);
@@ -3166,6 +3182,8 @@ class SourceValueFlow {
                     values = this.rule([selected.done], () => {
                         const state = this.primitiveState(selected.done, values, true);
                         if (state.pending && !state.unresolved) return;
+                        if(!state.proof.primitiveComplete){this.publish(activity,this.primitive(true));this.publish(activity,this.primitive(false));}
+                        else for(const value of state.proof.values)this.publish(activity,this.primitive(!value));
                         if (!state.proof.primitiveComplete || state.proof.values.some(value => !value)) {
                             valueRead ??= this.property(input, "value", context);
                             this.copy(valueRead, selected.value);
@@ -3186,6 +3204,15 @@ class SourceValueFlow {
         return result;
     }
     private initialize(node: ts.Node, result: Cell): void {
+        const guards=this.guards(node);
+        if(guards.length){
+            let initialized=false,rule!:Rule;
+            rule=this.rule(guards.map(guard=>guard.condition),()=>{if(!initialized&&this.guardsAllow(guards,rule)){initialized=true;this.initializeActive(node,result);}});
+            return;
+        }
+        this.initializeActive(node,result);
+    }
+    private initializeActive(node: ts.Node, result: Cell): void {
         if (callableDefinition(node)) { this.publish(result, { tag: "function", owner: this.function(node) }); return; }
         const operation = sourceNumericOperation(node);
         if (operation) {
@@ -3423,7 +3450,10 @@ class SourceValueFlow {
         if(!node.arguments[1])this.publish(options,this.primitive(undefined));
         const context=ts.setTextRange(ts.factory.createEmptyStatement(),node);
         (context as ts.Node & {parent:ts.Node}).parent=node;
-        const rejection=this.exceptionCell(),value=this.newCell();this.publish(value,this.unknown);
+        const rejection=this.exceptionCell(),value=this.newCell(),namespace=this.newCell();
+        const converted=this.newCell();this.importTargetCells.set(node,converted);
+        const assimilated=this.promiseAssimilation(namespace,context);
+        this.copy(assimilated.value,value);this.copy(assimilated.rejection,rejection);
         const atoms=new Map<Atom,Cell>(),atomCell=(atom:Atom)=>{let cell=atoms.get(atom);if(!cell){cell=this.newCell();atoms.set(atom,cell);this.publish(cell,atom)}return cell};
         this.exceptionHandlers.set(context,rejection);
         const normal=(cell:Cell)=>[...cell.values].some(atom=>atom.tag!=="abrupt"&&atom.tag!=="pending-source");
@@ -3432,14 +3462,30 @@ class SourceValueFlow {
         this.onActive(node,()=>{
             let operands!:Rule;
             operands=this.rule([specifier,options],()=>{
-                if(specifier.values.has(this.abrupt)||options.values.has(this.abrupt))this.publish(result,this.abrupt);
+                if(specifier.values.has(this.abrupt)||options.values.has(this.abrupt)){this.publish(result,this.abrupt);this.publish(converted,this.abrupt);}
                 if(started||!normal(specifier)||!normal(options))return;started=true;
                 this.publish(result,{tag:"promise",value,rejection});
-                const converted=this.newCell();let conversion!:Rule;
+                let conversion!:Rule;
                 conversion=this.rule([specifier],()=>{
                     const strings=this.stringHintTexts(specifier,conversion,context);
                     if(strings===null)this.publish(converted,this.unknown);
+                    else if(strings?.length===0)this.publish(converted,this.abrupt);
                     else for(const text of strings??[])this.publish(converted,this.primitive(text));
+                });
+                let modules!:Rule;
+                modules=this.rule([converted],()=>{
+                    const proof=this.primitiveState(converted,modules,true);
+                    if(proof.pending&&!proof.unresolved)return;
+                    if(!proof.proof.primitiveComplete){this.publish(namespace,this.unknown);return;}
+                    for(const text of proof.proof.values){
+                        const resolved=ts.resolveModuleName(String(text),node.getSourceFile().fileName,this.program.getCompilerOptions(),ts.sys).resolvedModule;
+                        const source=resolved?this.program.getSourceFile(sourceUnitFileName(this.program,resolved.resolvedFileName,"module")):undefined;
+                        const symbol=source?this.checker.getSymbolAtLocation(source):undefined;
+                        if(source&&sourceModuleFailure(source))this.publish(rejection,this.nativeException(context));
+                        else if(source&&symbol)this.copy(this.moduleNamespace(source,symbol),namespace);
+                        else if(resolved&&!source)this.publish(namespace,this.pendingSource);
+                        else this.publish(namespace,this.unknown);
+                    }
                 });
                 const selected=this.newCell();
                 this.rule([converted,options],()=>{
@@ -4204,7 +4250,11 @@ class SourceValueFlow {
     }
     expressionTexts(expressions:readonly ts.Expression[]):ReadonlyMap<ts.Expression,readonly string[]|null> {
         const cells=expressions.map(expression=>this.cell(expression));this.solve();
-        return new Map(expressions.map((expression,index)=>[expression,this.choices(cells[index]!)]));
+        return new Map(expressions.map((expression,index)=>{
+            const parent=expression.parent;
+            const target=parent&&ts.isCallExpression(parent)&&parent.expression.kind===ts.SyntaxKind.ImportKeyword&&parent.arguments[0]===expression?this.importTargetCells.get(parent):undefined;
+            return [expression,this.choices(target??cells[index]!)];
+        }));
     }
     solve(): { constructors: ConstructorInvocation[]; evaluations: EvaluationInvocation[] } {
         for (;;) {
@@ -4227,7 +4277,8 @@ class SourceValueFlow {
                 // owner absence dependencies. Wake their guarded mutations
                 // before sealing any contextual own-location absence.
                 for(const [node,cell]of this.cells)if(ts.isIdentifier(node)&&!cell.values.size&&!this.bindingSymbol(node)){
-                    this.publish(this.binding(node),this.unknown);changed=true;
+                    const binding=this.binding(node);
+                    if(!binding.values.has(this.unknown)){this.publish(binding,this.unknown);changed=true;}
                 }
                 if(changed)continue;
                 this.presenceClosed=true;for(const rule of this.presenceRules)this.schedule(rule);continue;

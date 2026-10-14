@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import * as path from "node:path";
 import ts from "typescript";
 import { escapeRegExpString } from "./regexp-escape";
-import {sourceFileCallTexts} from "./source-file-expression-proof";
+import {sourceFileExpressionTexts} from "./source-file-expression-proof";
 
 /* Static target derivation has no fixture-shaped cardinality ceiling. Existing
  * guard sites retain their fail-closed structure for non-finite future policy,
@@ -510,7 +510,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
     };
 
     const resolveSourceCall = (call: ts.CallExpression): string[] => {
-        return [...sourceFileCallTexts(call)??[]];
+        return [...sourceFileExpressionTexts(call)??[]];
     };
 
     const resolveStaticBooleanCall = (call: ts.CallExpression): string[] => {

@@ -2653,7 +2653,8 @@
       "kind": "implementation",
       "id": "src/source-value-flow.ts#iteratorElements",
       "targets": [
-        "sec-json.parse#ordered-text-parse-and-callable-reviver-root"
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-import-call-runtime-semantics-evaluation#canonical-expression-and-iterator-source-closure"
       ]
     },
     {
@@ -3333,7 +3334,8 @@
         "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
         "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
         "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
-        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding",
+        "sec-import-call-runtime-semantics-evaluation#canonical-expression-and-iterator-source-closure"
       ]
     },
     {
@@ -3380,7 +3382,8 @@
         "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
         "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
         "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
-        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding",
+        "sec-import-call-runtime-semantics-evaluation#canonical-expression-and-iterator-source-closure"
       ]
     },
     {
@@ -3440,7 +3443,8 @@
         "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
         "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
         "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
-        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding",
+        "sec-import-call-runtime-semantics-evaluation#canonical-expression-and-iterator-source-closure"
       ]
     },
     {
@@ -3664,9 +3668,10 @@
     },
     {
       "kind": "implementation",
-      "id": "src/source-file-expression-proof.ts#sourceFileCallTexts",
+      "id": "src/source-file-expression-proof.ts#sourceFileExpressionTexts",
       "targets": [
-        "sec-evaluatecall#finite-host-callable-location-source-projections"
+        "sec-evaluatecall#finite-host-callable-location-source-projections",
+        "sec-import-call-runtime-semantics-evaluation#canonical-expression-and-iterator-source-closure"
       ]
     },
     {
@@ -4141,14 +4146,15 @@
       ]
     },
 {
-      "kind": "property",
-      "id": "tests/property/source-proof-identity.property.test.ts",
-      "targets": [
-        "sec-evaluatecall#finite-host-callable-location-source-projections",
-        "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
-        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
-      ]
-    },
+  "kind": "property",
+  "id": "tests/property/source-proof-identity.property.test.ts",
+  "targets": [
+    "sec-evaluatecall#finite-host-callable-location-source-projections",
+    "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
+    "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation",
+    "sec-import-call-runtime-semantics-evaluation#canonical-expression-and-iterator-source-closure"
+  ]
+},
 {
   "kind": "property",
   "id": "tests/property/source-callable-formals.property.test.ts",
@@ -4327,7 +4333,8 @@
         "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
         "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation",
         "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
-        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
+        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#canonical-expression-and-iterator-source-closure"
       ]
     },
     {
@@ -4379,7 +4386,8 @@
       "targets": [
         "sec-parsemodule#deferred-source-load-failures-before-evaluation",
         "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
-        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation"
+        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#canonical-expression-and-iterator-source-closure"
       ]
     },
     {
@@ -4517,6 +4525,41 @@
       "id": "src/emit/index.ts#test262HostGlobalBindingName",
       "targets": [
         "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/module-iterator-source.property.test.ts",
+      "targets": [
+        "sec-import-call-runtime-semantics-evaluation#canonical-expression-and-iterator-source-closure"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "module_iterator_source_depth",
+      "targets": [
+        "sec-import-call-runtime-semantics-evaluation#canonical-expression-and-iterator-source-closure"
+      ],
+      "stressReview": {
+        "dimension": "source alias graph depth forwarding a retained iterator target collection",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One shared generated source and resource collection exercises the canonical copy graph, iterator reads, module closure and native CLI independently of alias depth. Compact Node/native partitions supply semantic evidence; successive depths are not completion units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "module_iterator_requests",
+      "targets": [
+        "sec-import-call-runtime-semantics-evaluation#canonical-expression-and-iterator-source-closure"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/module-request.ts#dynamicImportSpecifiersFromCall",
+      "targets": [
+        "sec-import-call-runtime-semantics-evaluation#canonical-expression-and-iterator-source-closure"
       ]
     }
   ]

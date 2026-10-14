@@ -4178,6 +4178,54 @@
             ]
           },
           "rationale": "Module imports, local/indirect/star exports, binding nodes and namespace declarations now come from one canonical source entry collection shared by native preflight, graph validation and emission. Type-only/ambient syntax erases through the existing source predicate; nested var bindings reuse the declaration-name worklist. The separate preflight and emitter entry builders are deleted. Captured Cell and operation-atom projections now retain applied phase provenance, so a cyclic value copied between source-order contexts cannot generate an endless clone sequence. The retained full linking property exposed this source-solver cycle and now verifies its termination without dropping the input. Shared ResolveExport binding identity distinguishes same-target star paths from null or ambiguous bindings. Static request records retain link failures and their ancestors without lowering non-evaluable bodies; native loading and dependency-first linking now use one phase-parameterized visited frame worklist before any body. Parse failures stay fresh load completions; the selected native host caches linking rejection for the same target, matching independent Node. module-link-failure.property compares missing/ambiguous/cyclic bindings, local imported reexports, namespace/default/nested var identities, eager/deferred phases, repeated rejection and healthy loading; module-load-failure and request/evaluation/source neighbors verify the shared path. One phase-aware generated request graph replaces the load-only generator and supplies both properties and CLI stress. module_link_failure verifies typed consumers in both memory modes. Existing declarations and CType suffice; the runtime definition retains separate load and link metadata. The formerly failing pinned ambiguous ImportCall now completes normally. Complete host specifier resolution/attributes, finite iterator-derived import admission, all host formats/Realm/agent behavior, reciprocal full-clause evidence and eligible exhaustive ECMAScript 2026 coverage remain open; capability flags are unchanged."
+        },
+        {
+          "id": "canonical-expression-and-iterator-source-closure",
+          "title": "Canonical expression and iterator source facts close finite ImportCall targets",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-import-call-runtime-semantics-evaluation"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/module-iterator-source.property.test.ts",
+              "tests/property/module-load-failure.property.test.ts",
+              "tests/property/source-proof-identity.property.test.ts",
+              "tests/property/dynamic-import-source-effects.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "module_iterator_source_depth"
+            ],
+            "e2e": [
+              "module_iterator_requests"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "src/source-file-expression-proof.ts#sourceFileExpressionTexts",
+              "src/source-value-flow.ts#iteratorElements",
+              "src/source-value-flow.ts#dynamicImportEffects",
+              "src/source-value-flow.ts#promiseAssimilation",
+              "src/module-request.ts#dynamicImportSpecifiersFromCall",
+              "src/program.ts#buildProgram"
+            ]
+          },
+          "rationale": "One canonical expression tree and module source-root worklist replace call-only target admission. Actual List projections retain dense/hole/inherited/getter domains; a shared iterator activity cell excludes empty bodies. Dynamic import results reuse live namespace bindings and Promise assimilation. Module body and exported then-hook mutations participate before the final proof, while unrepresented iterator protocols retain the stable finite-AOT diagnostic. The original deferred-error request loop is retained. Compact independent Node/native semantic partitions and one shared deep alias graph verify the path in both memory modes. Full activation/versioned effect correlation, custom iterator source semantics, host resolution/attributes and eligible exhaustive coverage remain open. Import target records retain the actual ToString completion rather than raw primitive formatting. Pending module facts survive Promise assimilation until closure. One physical-path/goal/source-tree provenance collection preserves the active identity across discovery and binder clones, including self-importing units."
         }
       ],
       "rationale": "One reactive owner/call/continuation representation retains immediate import and Promise source effects independently of key-list size or owner depth."
@@ -4512,7 +4560,7 @@
             "implementation": [
               "src/source-value-flow.ts#sourceExpressionTexts",
               "src/source-value-flow.ts#utilModule",
-              "src/source-file-expression-proof.ts#sourceFileCallTexts",
+              "src/source-file-expression-proof.ts#sourceFileExpressionTexts",
               "src/util-format-source.ts#nativePrimitiveFormat",
               "src/source-value-flow.ts#bind",
               "src/source-value-flow.ts#captureRead",

@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import ts from 'typescript';
 import {createEcmaSourceFile} from '../../src/ecmascript-source';
-import {sourceFileCallTexts} from '../../src/source-file-expression-proof';
+import {sourceFileExpressionTexts} from '../../src/source-file-expression-proof';
 import {compile} from '../../src/compile';
 import {generateE2eCaseSource} from '../e2e/generated-cases';
 
@@ -12,7 +12,7 @@ function proof(source:string):readonly string[]|null {
  const parsed=createEcmaSourceFile('/tmp/util-format-source-proof.ts',source,ts.ScriptTarget.ESNext,true,ts.ScriptKind.TS,'module');
  const pending:ts.Node[]=[parsed];let query:ts.CallExpression|undefined;
  while(pending.length){const node=pending.pop()!;if(ts.isVariableDeclaration(node)&&node.name.getText(parsed)==='query'&&node.initializer&&ts.isCallExpression(node.initializer))query=node.initializer;node.forEachChild(child=>{pending.push(child)});}
- if(!query)throw new Error('missing query');return sourceFileCallTexts(query);
+ if(!query)throw new Error('missing query');return sourceFileExpressionTexts(query);
 }
 const imports="import ordinary from 'util';import * as namespace from 'node:util';import {format as named} from 'util';";
 
@@ -36,7 +36,7 @@ test('finite formatter queries follow callable locations, actual Lists and retur
  ] as const;
  for(const [source,expected]of partitions){const actual=proof(imports+source);expect({source,actual:actual&&[...actual].sort()}).toEqual({source,actual:expected&&[...expected].sort()})}
  const synthetic=ts.factory.createCallExpression(ts.factory.createIdentifier('format'),undefined,[]);
- expect(sourceFileCallTexts(synthetic)).toBeNull();
+ expect(sourceFileExpressionTexts(synthetic)).toBeNull();
 });
 
 const scenarios=[
