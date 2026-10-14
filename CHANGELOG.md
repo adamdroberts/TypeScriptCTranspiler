@@ -1,3 +1,5 @@
+Preserved actual right-hand comma Values through source-aware boxing, including null and undefined.
+
 Reused canonical StatementList conflict validation across Block, function Body, Script and CaseBlock scopes.
 
 Registered independent CaseBlock selection/fallthrough/UpdateEmpty completion evidence with reciprocal canonical references.

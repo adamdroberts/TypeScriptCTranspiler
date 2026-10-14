@@ -12,3 +12,6 @@ const text = (mark(3), "ok");
 console.log("text:", text, calls);
 
 console.log("nested:", (mark(4), mark(5), mark(6)), calls);
+const nullValue: any = (mark(7), null);
+const undefinedValue: any = (mark(8), undefined);
+console.log("nullish:", nullValue === null, undefinedValue === undefined, calls);

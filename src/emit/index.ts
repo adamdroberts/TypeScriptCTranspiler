@@ -33718,7 +33718,7 @@ class Emitter {
         const right = op === ts.SyntaxKind.InKeyword ? this.emitOrdinaryObjectExpression(bin.right) : this.emitExpr(bin.right);
 
         if (op === ts.SyntaxKind.CommaToken) {
-            return this.emitSequencedExpr(right.ty, [{ value: left }], () => right.c);
+            return this.emitSequencedExpr(T_VALUE, [{ value: left }], () => this.boxSourceValue(right, bin.right));
         }
 
         switch (op) {
