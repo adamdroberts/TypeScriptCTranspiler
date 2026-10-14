@@ -1,3 +1,5 @@
+- Project String wrapper source fields lazily from one owner input graph, retaining mixed-length absence and descriptor presence; add independent source and CLI checks.
+
 - Use exact independent Node replacement-property output, removing the manual large-capture oracle rewrite.
 
 - Share opaque source field mutation origins through one owner effect cell and remove repeated per-field write propagation.

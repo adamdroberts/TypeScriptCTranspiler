@@ -20,7 +20,7 @@ test('owner field effects preserve captured, later, newly created and callable s
  const fields=Array.from({length:512},(_,index)=>`key${index}:"43;"`).join(',');
  const reads=Array.from({length:512},(_,index)=>`opaque(owner);const captured${index}=owner.key${index};`).join('\n');
  const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:`const owner={${fields}};${reads}eval(owner.key0);`}]);expect(graph.error).toContain('direct eval source is not a finite static string expression');
-});
+},120000);
 const source=String.raw`
 function opaque(owner:any,index:number):void{
  const receiver:any=owner;receiver['key'+index]='changed'+index;

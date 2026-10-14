@@ -233,7 +233,7 @@ class SourceValueFlow {
     private readonly instanceSources = new Map<ts.Node,Map<string,Cell>>();
     private readonly timerCallbacks = new Map<ts.Node,Map<string,{context:ts.Node;result:Cell}>>();
     private readonly primitiveBoxes = new Map<ts.Node,Map<string,Cell>>();
-    private readonly primitiveStringFields = new WeakMap<ObjectOwner,Set<string>>();
+    private readonly primitiveStringFields = new WeakMap<ObjectOwner,{input:Cell;keys:Set<SourcePropertyKey>}>();
     private readonly ownerFieldEffects = new WeakMap<ObjectOwner,Cell>();
     private readonly booleanPrimitives = new Map<Cell,Cell>();
     private readonly primitiveDefaults = new Map<string,Cell>();
@@ -1287,6 +1287,38 @@ class SourceValueFlow {
             }
         });
     }
+    /** String exotics keep one actual-input graph. Project a field only when
+     * a read or complete own-key operation observes it. */
+    private stringField(owner:ObjectOwner,key:SourcePropertyKey):void {
+        const record=this.primitiveStringFields.get(owner);if(!record||record.keys.has(key))return;
+        if(key!=="length"&&(typeof key!=="string"||!Number.isSafeInteger(Number(key))||Number(key)<0||String(Number(key))!==key))return;
+        record.keys.add(key);const value=this.newCell();let rule!:Rule;
+        rule=this.rule([record.input],()=>{
+            const state=this.primitiveState(record.input,rule,true);
+            for(const text of state.proof.values){
+                if(typeof text!=="string")continue;
+                if(key==="length"){this.publish(value,this.primitive(text.length));this.defineField(owner,key,value,false);}
+                else if(Number(key)<text.length){this.publish(value,this.primitive(text[Number(key)]));this.defineField(owner,key,value,true);}
+                else this.publish(this.presence(owner,key),this.primitive(false));
+            }
+            if(state.unresolved){this.publish(value,this.unknown);this.copy(value,this.field(owner,key));this.publish(this.presence(owner,key),this.primitive(true));this.publish(this.presence(owner,key),this.primitive(false));}
+        });
+    }
+    private ownerKeys(owner:ObjectOwner,rule:Rule):(SourcePropertyKey|null)[]|null|undefined {
+        const record=this.primitiveStringFields.get(owner),keys=new Set<SourcePropertyKey|null>();
+        if(record){
+            const state=this.primitiveState(record.input,rule,true);
+            if(state.pending&&!state.unresolved)return undefined;
+            if(!state.proof.primitiveComplete)return null;
+            for(const text of state.proof.values)if(typeof text==="string"){
+                for(let index=0;index<text.length;index++){const key=String(index);keys.add(key);this.stringField(owner,key);}
+                keys.add("length");this.stringField(owner,"length");
+            }
+        }
+        for(const key of owner.fields.keys())keys.add(key);
+        for(const key of owner.accessors.keys())keys.add(key);
+        return [...keys];
+    }
     private field(owner: ObjectOwner, key: SourcePropertyKey): Cell {
         let cell = owner.fields.get(key);
         if (!cell) {
@@ -1340,10 +1372,22 @@ class SourceValueFlow {
         return true;
     }
     private propertyPresence(owner:ObjectOwner,key:SourcePropertyKey,context?:ts.Node):Cell {
+        this.stringField(owner,key);
         const record=this.ownPresence(owner,key),previous=record.contexts.get(context);if(previous)return previous;
         const result=this.newCell();record.contexts.set(context,result);
         let rule!:Rule;
         rule=this.rule([record.facts],()=>{
+            const string=this.primitiveStringFields.get(owner);
+            if(string&&(key==="length"||typeof key==="string"&&Number.isSafeInteger(Number(key))&&Number(key)>=0&&String(Number(key))===key)){
+                const state=this.primitiveState(string.input,rule,true);
+                for(const text of state.proof.values)if(typeof text==="string"){
+                    if(key==="length"||Number(key)<text.length)this.publish(result,this.primitive(true));
+                    else if(!record.writes.size)this.publish(result,this.primitive(false));
+                }
+                if(state.unresolved){this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));}
+                if(!record.writes.size)return;
+            }
+            if(!record.writes.size&&record.facts.values.has(this.primitive(false)))this.publish(result,this.primitive(false));
             if(record.initial&&![...record.writes.values()].some(event=>event.mode==="delete")&&!(typeof key==="symbol"&&this.freshSymbols.has(key))){this.publish(result,this.primitive(true));return;}
             const origins=context?this.executionOrigins(context):null;
             if(origins)this.watch(rule,origins);
@@ -1901,12 +1945,12 @@ class SourceValueFlow {
         const result=this.newCell();this.proxyReads.set(signature,result);
         const method=this.property(proxy.handler,trap,context),callee=this.newCell(),property=this.newCell(),receiver=this.newCell();
         this.publish(property,key===null?this.unknown:this.primitive(key));this.publish(receiver,{tag:"object",owner});
-        this.rule([method],()=>{for(const atom of method.values){
+        let read!:Rule;read=this.rule([method],()=>{for(const atom of method.values){
             if(atom!==this.primitive(undefined)&&atom!==this.primitive(null))this.publish(callee,atom);
             else if(trap==="ownKeys"||trap==="getOwnPropertyDescriptor")this.publish(result,this.unknown);
             else if(trap==="get") {
                 if(key!==null)this.copy(this.property(proxy.target,key,context),result);
-                else for(const target of proxy.target.values){const targetOwner=this.ordinaryOwner(target);if(targetOwner)for(const name of targetOwner.own?.keys()??[])if(typeof name==="string")this.copy(this.property(proxy.target,name,context),result);}
+                else for(const target of proxy.target.values){const targetOwner=this.ordinaryOwner(target);if(targetOwner){this.watch(read,proxy.target);this.watch(read,targetOwner.shape);const names=this.ownerKeys(targetOwner,read);if(names===null)this.publish(result,this.unknown);else for(const name of names??[])if(typeof name==="string")this.copy(this.property(proxy.target,name,context),result);}}
             }
         }});
         this.invoke(context,callee,proxy.handler,[{cell:proxy.target,spread:false},...(trap!=="ownKeys"?[{cell:property,spread:false}]:[]),...(trap==="get"?[{cell:receiver,spread:false}]:[])],result);
@@ -2025,7 +2069,8 @@ class SourceValueFlow {
             if(!owner){if(atom.tag!=="pending-source")this.writeProperty(base,null,this.empty,true,"define",context);continue;}
             this.watch(rule,owner.shape);
             if(this.opaqueShape(owner,context))this.writeProperty(base,null,this.empty,true,"define",context);
-            for(const name of new Set([...owner.fields.keys(),...owner.accessors.keys()])){
+            const names=this.ownerKeys(owner,rule);if(names===undefined)continue;if(names===null){this.writeProperty(base,null,this.empty,true,"define",context);continue;}
+            for(const name of names){
                 if(name===null){this.writeProperty(base,null,this.empty,true,"define",context);continue;}
                 const key=owner.shape.id+":"+this.keyIdentity(name);if(selected.has(key))continue;selected.add(key);
                 const propertyKey=this.newCell();this.publish(propertyKey,this.primitive(name));
@@ -2067,7 +2112,7 @@ class SourceValueFlow {
                 this.watch(rule,owner.shape);
                 if(!this.definitionsReady(owner,rule))continue;
                 if(this.opaqueShape(owner,context)){incomplete();continue;}
-                const names=key?keys!:[...new Set([...owner.fields.keys(),...owner.accessors.keys()])];
+                const names=key?keys!:this.ownerKeys(owner,rule);if(names===undefined)continue;if(names===null){incomplete();continue;}
                 // Intrinsic/function metadata and exotic own-key collections
                 // stay incomplete until represented by the shared owner graph.
                 if(!key && atom.tag!=="object")incomplete();
@@ -2097,7 +2142,12 @@ class SourceValueFlow {
                         this.defineField(record.owner,"value",data);
                         this.defineBooleanField(record.owner,"writable");
                     }
-                    if(key)this.copy(record.value,result);else this.defineField(collection,name,record.value);
+                    if(key)this.copy(record.value,result);else {
+                        this.copy(record.value,this.field(collection,name));
+                        const location=this.ownPresence(collection,name);location.initial=true;this.publish(location.enumerable,this.primitive(true));
+                        if(present)this.publish(location.facts,this.primitive(true));
+                        if(presence.values.has(this.primitive(false)))this.publish(location.facts,this.primitive(false));
+                    }
                 }
             }
         });
@@ -2551,21 +2601,9 @@ class SourceValueFlow {
         if(newTarget){const prototype=this.property(newTarget,"prototype",context);this.rule([prototype],()=>{for(const atom of prototype.values){if(this.ordinaryOwner(atom)||atom.tag==="unknown"||atom.tag==="opaque-object")this.publish(owner.prototype!,atom);else if(atom.tag!=="abrupt"&&atom.tag!=="pending-source")this.copy(fallback,owner.prototype!);}});}else this.copy(fallback,owner.prototype);
         this.rule([input],()=>{for(const atom of input.values){if(atom.tag==="abrupt"||atom.tag==="pending-source")this.publish(result,atom);else this.publish(result,{tag:"object",owner});}});
         if(kind==="string") {
-            // Actual-input projections share this allocation owner. Publish
-            // each String's immutable indexed fields once for that owner.
-            let initialized=this.primitiveStringFields.get(owner);
-            if(!initialized){initialized=new Set<string>();this.primitiveStringFields.set(owner,initialized);}
-            const texts=initialized;let fields!:Rule;
-            fields=this.rule([input],()=>{
-                const state=this.primitiveState(input,fields,true);
-                for(const text of state.proof.values){
-                    if(typeof text!=="string"||texts.has(text))continue;texts.add(text);
-                    for(let index=0;index<text.length;index++){
-                        const value=this.newCell();this.publish(value,this.primitive(text[index]));this.defineField(owner,String(index),value,true);
-                    }
-                    const length=this.newCell();this.publish(length,this.primitive(text.length));this.defineField(owner,"length",length,false);
-                }
-            });
+            let record=this.primitiveStringFields.get(owner);
+            if(!record){record={input:this.newCell(),keys:new Set()};this.primitiveStringFields.set(owner,record);this.copy(record.input,owner.shape);}
+            this.copy(input,record.input);
         }
         return result;
     }
@@ -2847,8 +2885,7 @@ class SourceValueFlow {
             this.watch(rule,owner.shape);
             if(!this.definitionsReady(owner,rule))return undefined;
             if(this.opaqueShape(owner,context)||owner.accessors.has(null))return null;
-            for(const key of owner.fields.keys())add(key);
-            for(const key of owner.accessors.keys())add(key);
+            const names=this.ownerKeys(owner,rule);if(names===null||names===undefined)return names;for(const key of names)add(key);
             if(owner.prototype){
                 this.watch(rule,owner.prototype);
                 if(!owner.prototype.values.size)return undefined;
@@ -3343,6 +3380,7 @@ class SourceValueFlow {
             if(owner.proxy)this.copy(this.proxyReadEffects(owner,key,"get",context),result);
             if(rule)this.watch(rule,owner.shape);
             if(!this.definitionsReady(owner,rule))continue;
+            this.stringField(owner,key);
             this.copyRead(this.field(owner, key), result, context);
             for (const name of [key,null]) {
                 const accessor=owner.accessors.get(name);
@@ -3697,7 +3735,8 @@ class SourceValueFlow {
                     // every index through the same property continuation.
                     for(const value of length.proof.values){const extent=Number(value),keys=positions.filter(index=>index<extent);if(!Number.isSafeInteger(extent)||extent<0||keys.length!==extent){fail(result);continue;}selections.push(keys.map(String));}
                 }else {
-                    const keys=[...owner.own?.keys()??[]].filter((key):key is string=>typeof key==="string").sort((a,b)=>{const ai=Number(a),bi=Number(b),ia=String(ai)===a&&Number.isInteger(ai)&&ai>=0&&ai<0xffffffff,ib=String(bi)===b&&Number.isInteger(bi)&&bi>=0&&bi<0xffffffff;return ia&&ib?ai-bi:ia?-1:ib?1:0;});
+                    const ownKeys=this.ownerKeys(owner,open);if(ownKeys===undefined)continue;if(ownKeys===null){opened.add(atom);fail(result);continue;}
+                    const keys=ownKeys.filter((key):key is string=>typeof key==="string").sort((a,b)=>{const ai=Number(a),bi=Number(b),ia=String(ai)===a&&Number.isInteger(ai)&&ai>=0&&ai<0xffffffff,ib=String(bi)===b&&Number.isInteger(bi)&&bi>=0&&bi<0xffffffff;return ia&&ib?ai-bi:ia?-1:ib?1:0;});
                     const names:string[]=[],choices:Primitive[][]=[];let ready=true;
                     for(const key of keys){
                         const location=this.ownPresence(owner,key),presence=this.propertyPresence(owner,key,context);this.watch(open,presence);
@@ -3860,7 +3899,8 @@ class SourceValueFlow {
                         for(const size of extent.proof.values){const length=Number(size);if(!Number.isSafeInteger(length)||length<0){fail(output);continue;}const keys=positions.filter(index=>index<length).map(String);
                             if(plan.callee!==this.empty&&keys.length!==length){fail(output);continue;}selections.push({keys,length});}
                     }else {
-                        const names=plan.keys??[...owner.own?.keys()??[]].filter((key):key is string=>typeof key==="string").sort((a,b)=>{const ai=Number(a),bi=Number(b),ia=String(ai)===a&&Number.isInteger(ai)&&ai>=0&&ai<0xffffffff,ib=String(bi)===b&&Number.isInteger(bi)&&bi>=0&&bi<0xffffffff;return ia&&ib?ai-bi:ia?-1:ib?1:0;});
+                        const ownKeys=plan.keys??this.ownerKeys(owner,outputRule);if(ownKeys===undefined)continue;if(ownKeys===null){fail(output);continue;}
+                        const names=ownKeys.filter((key):key is string=>typeof key==="string").sort((a,b)=>{const ai=Number(a),bi=Number(b),ia=String(ai)===a&&Number.isInteger(ai)&&ai>=0&&ai<0xffffffff,ib=String(bi)===b&&Number.isInteger(bi)&&bi>=0&&bi<0xffffffff;return ia&&ib?ai-bi:ia?-1:ib?1:0;});
                         selections=[{keys:names,length:null}];
                     }
                     for(const selection of selections){
@@ -4489,9 +4529,10 @@ class SourceValueFlow {
                         });
                     }
                     if(this.opaqueShape(owner,context)||owner.proxy){this.opaqueEffect(context);this.publish(rejection,this.unknown);}
-                    if(opened.has(owner))continue;opened.add(owner);
-                    const receiver=this.newCell();this.publish(receiver,atom);
-                    const names=[...owner.own?.keys()??[]].filter((key):key is string=>typeof key==="string");
+                    if(opened.has(owner))continue;
+                    const ownKeys=this.ownerKeys(owner,intake);if(ownKeys===undefined)continue;opened.add(owner);
+                    const receiver=this.newCell();this.publish(receiver,atom);if(ownKeys===null){this.opaqueEffect(context);this.publish(rejection,this.unknown);continue;}
+                    const names=ownKeys.filter((key):key is string=>typeof key==="string");
                     names.sort((a,b)=>{const index=(name:string)=>{const number=Number(name);return String(number)===name&&Number.isInteger(number)&&number>=0&&number<0xffffffff?number:null};const ai=index(a),bi=index(b);return ai!==null&&bi!==null?ai-bi:ai!==null?-1:bi!==null?1:0});
                     const active=this.newCell();this.publish(active,this.primitive(true));
                     const pending:{index:number;active:Cell}[]=[{index:0,active}];
