@@ -1,3 +1,5 @@
+- Share immutable String wrapper source field publication across actual-input views of the same allocation owner.
+
 - Check accessor function prototype constructor identity independently of console object formatting.
 
 - Align dynamic Array locale observations with the selected ECMA-262 empty element argument List and actual TypeError identity.

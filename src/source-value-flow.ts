@@ -233,6 +233,7 @@ class SourceValueFlow {
     private readonly instanceSources = new Map<ts.Node,Map<string,Cell>>();
     private readonly timerCallbacks = new Map<ts.Node,Map<string,{context:ts.Node;result:Cell}>>();
     private readonly primitiveBoxes = new Map<ts.Node,Map<string,Cell>>();
+    private readonly primitiveStringFields = new WeakMap<ObjectOwner,Set<string>>();
     private readonly booleanPrimitives = new Map<Cell,Cell>();
     private readonly primitiveDefaults = new Map<string,Cell>();
     private readonly defaultedPrimitiveInputs = new Map<Cell,Map<string,Cell>>();
@@ -2540,7 +2541,23 @@ class SourceValueFlow {
         const name=[...runtimePrimitiveDescriptors].find(([,descriptor])=>descriptor.kind===kind)![0],fallback=this.primitivePrototype(name);
         if(newTarget){const prototype=this.property(newTarget,"prototype",context);this.rule([prototype],()=>{for(const atom of prototype.values){if(this.ordinaryOwner(atom)||atom.tag==="unknown"||atom.tag==="opaque-object")this.publish(owner.prototype!,atom);else if(atom.tag!=="abrupt"&&atom.tag!=="pending-source")this.copy(fallback,owner.prototype!);}});}else this.copy(fallback,owner.prototype);
         this.rule([input],()=>{for(const atom of input.values){if(atom.tag==="abrupt"||atom.tag==="pending-source")this.publish(result,atom);else this.publish(result,{tag:"object",owner});}});
-        if(kind==="string") {const initialized=new Set<string>();let fields!:Rule;fields=this.rule([input],()=>{const state=this.primitiveState(input,fields,true);for(const text of state.proof.values){if(typeof text!=="string"||initialized.has(text))continue;initialized.add(text);for(let index=0;index<text.length;index++){const value=this.newCell();this.publish(value,this.primitive(text[index]));this.defineField(owner,String(index),value,true);}const length=this.newCell();this.publish(length,this.primitive(text.length));this.defineField(owner,"length",length,false);}});}
+        if(kind==="string") {
+            // Actual-input projections share this allocation owner. Publish
+            // each String's immutable indexed fields once for that owner.
+            let initialized=this.primitiveStringFields.get(owner);
+            if(!initialized){initialized=new Set<string>();this.primitiveStringFields.set(owner,initialized);}
+            const texts=initialized;let fields!:Rule;
+            fields=this.rule([input],()=>{
+                const state=this.primitiveState(input,fields,true);
+                for(const text of state.proof.values){
+                    if(typeof text!=="string"||texts.has(text))continue;texts.add(text);
+                    for(let index=0;index<text.length;index++){
+                        const value=this.newCell();this.publish(value,this.primitive(text[index]));this.defineField(owner,String(index),value,true);
+                    }
+                    const length=this.newCell();this.publish(length,this.primitive(text.length));this.defineField(owner,"length",length,false);
+                }
+            });
+        }
         return result;
     }
     private objectValue(input:Cell,context:ts.Node,newTarget?:Cell):Cell {
