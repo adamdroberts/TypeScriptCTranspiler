@@ -561,7 +561,7 @@ class Emitter {
         readonly globalConstructor?: string;
         readonly constructorType?: string;
         readonly instanceType: string;
-    }>([["date", {globalConstructor: "Date", constructorType: "DateConstructor", instanceType:"Date"}], ["buffer", {instanceType:"Buffer"}], ["url", {globalConstructor:"URL", constructorType:"URLConstructor", instanceType:"URL"}], ["urlsearchparams", {globalConstructor:"URLSearchParams", constructorType:"URLSearchParamsConstructor", instanceType:"URLSearchParams"}]]);
+    }>([["fsstats", {instanceType:"FSStats"}], ["date", {globalConstructor: "Date", constructorType: "DateConstructor", instanceType:"Date"}], ["buffer", {instanceType:"Buffer"}], ["url", {globalConstructor:"URL", constructorType:"URLConstructor", instanceType:"URL"}], ["urlsearchparams", {globalConstructor:"URLSearchParams", constructorType:"URLSearchParamsConstructor", instanceType:"URLSearchParams"}]]);
     private readonly canonicalSourceValueFacts = new Map<ts.Node, boolean>();
     private canonicalSourceValueInputs: Map<ts.Node, Set<ts.Node>> | null = null;
     private ordinaryAggregateDepth = 0;
@@ -36954,24 +36954,6 @@ class Emitter {
             );
         }
 
-        if (
-            memberName === "isFile" ||
-            memberName === "isDirectory" ||
-            memberName === "isSymbolicLink" ||
-            memberName === "isBlockDevice" ||
-            memberName === "isCharacterDevice" ||
-            memberName === "isFIFO" ||
-            memberName === "isSocket" ||
-            memberName === "toLocaleString" ||
-            memberName === "toString" ||
-            memberName === "valueOf"
-        ) {
-            const earlyRecv = this.emitExpr(recvExpr);
-            if (earlyRecv.ty.kind === "fsstats") {
-                return this.emitFsStatsMethod(call, earlyRecv, memberName);
-            }
-        }
-
         if (this.isFsPromisesReceiver(recvExpr)) {
             return this.emitFsPromisesCall(call, memberName);
         }
@@ -37666,8 +37648,6 @@ class Emitter {
         if (this.ordinaryNativeOwners.has(recv.ty.kind))
             return this.emitDynamicNamedPropertyCall(call, recv, memberName);
 
-        if (recv.ty.kind === "fsstats")
-            return this.emitFsStatsMethod(call, recv, memberName);
         if (recv.ty.kind === "class" && this.isObjectPrototypeFallback(call)) {
             return this.emitTypedObjectPrototypeMethod(call, recvExpr, recv, memberName);
         }
@@ -43750,49 +43730,6 @@ class Emitter {
         }
     }
 
-    private emitFsStatsMethod(
-        call: ts.CallExpression,
-        recv: EmitResult,
-        method: string,
-    ): EmitResult {
-        const args = call.arguments;
-        const predicates: Record<string, string> = {
-            isFile: "tsc_fs_stats_is_file",
-            isDirectory: "tsc_fs_stats_is_directory",
-            isSymbolicLink: "tsc_fs_stats_is_symbolic_link",
-            isBlockDevice: "tsc_fs_stats_is_block_device",
-            isCharacterDevice: "tsc_fs_stats_is_character_device",
-            isFIFO: "tsc_fs_stats_is_fifo",
-            isSocket: "tsc_fs_stats_is_socket",
-        };
-        const predicate = Object.prototype.hasOwnProperty.call(predicates, method)
-            ? predicates[method]
-            : undefined;
-        if (predicate) {
-            return this.emitSequencedExpr(
-                T_BOOLEAN,
-                [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                ([stats]) => `${predicate}(${stats})`,
-            );
-        }
-        switch (method) {
-            case "toLocaleString":
-            case "toString":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([stats]) => `({ (void)${stats}; tsc_str_from_lit("[object Stats]", 14); })`,
-                );
-            case "valueOf":
-                return this.emitSequencedExpr(
-                    recv.ty,
-                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([stats]) => stats,
-                );
-        }
-        unsupported(call, `Stats method .${method}`);
-    }
-
     private emitBufferPropertyKeyCheck(objExpr: ts.Expression, obj: EmitResult, keyExpr: ts.Expression, inherited: boolean, ignored: SequencedCallArg[] = []): EmitResult {
         const key = this.emitExpr(keyExpr);
         const operation = inherited ? "tsc_value_has_computed_prop" : "tsc_value_has_own_computed_prop";
@@ -45396,38 +45333,6 @@ class Emitter {
             return this.emitSequencedExpr(T_VALUE, [{ value: recv, target: T_VALUE, node: pa.expression }],
                 ([owner]) => `tsc_value_get_prop(${owner}, tsc_str_from_lit("${escapeCString(pa.name.text)}", ${utf8ByteLen(pa.name.text)}))`);
         }
-        if (recv.ty.kind === "fsstats") {
-            const numericStatsProps: Record<string, string> = {
-                dev: "tsc_fs_stats_dev",
-                ino: "tsc_fs_stats_ino",
-                size: "tsc_fs_stats_size",
-                mode: "tsc_fs_stats_mode",
-                nlink: "tsc_fs_stats_nlink",
-                uid: "tsc_fs_stats_uid",
-                gid: "tsc_fs_stats_gid",
-                rdev: "tsc_fs_stats_rdev",
-                blksize: "tsc_fs_stats_blksize",
-                blocks: "tsc_fs_stats_blocks",
-                atimeMs: "tsc_fs_stats_atime_ms",
-                mtimeMs: "tsc_fs_stats_mtime_ms",
-                ctimeMs: "tsc_fs_stats_ctime_ms",
-                birthtimeMs: "tsc_fs_stats_birthtime_ms",
-            };
-            const fn = numericStatsProps[pa.name.text];
-            if (fn) return { c: `${fn}(${recv.c})`, ty: T_NUMBER };
-        }
-        if (recv.ty.kind === "fsstats" && pa.name.text === "atime") {
-            return { c: `tsc_date_from_ms(tsc_fs_stats_atime_ms(${recv.c}))`, ty: T_DATE };
-        }
-        if (recv.ty.kind === "fsstats" && pa.name.text === "mtime") {
-            return { c: `tsc_date_from_ms(tsc_fs_stats_mtime_ms(${recv.c}))`, ty: T_DATE };
-        }
-        if (recv.ty.kind === "fsstats" && pa.name.text === "ctime") {
-            return { c: `tsc_date_from_ms(tsc_fs_stats_ctime_ms(${recv.c}))`, ty: T_DATE };
-        }
-        if (recv.ty.kind === "fsstats" && pa.name.text === "birthtime") {
-            return { c: `tsc_date_from_ms(tsc_fs_stats_birthtime_ms(${recv.c}))`, ty: T_DATE };
-        }
         if (recv.ty.kind === "value") {
             if (this.moduleNamespacePlanForExpression(pa.expression)) {
                 const key = this.stringLit(pa.name.text);
@@ -45978,7 +45883,7 @@ class Emitter {
             return `tsc_value_to_string(${this.boxSourceValue(r, node)})`;
         if (r.ty.kind === "date") return `tsc_date_to_string(${r.c})`;
         if (r.ty.kind === "buffer") return `tsc_buffer_to_string(${r.c}, tsc_str_from_lit("utf8", 4))`;
-        if (r.ty.kind === "fsstats") return `tsc_str_from_lit("[object Stats]", 14)`;
+        if (r.ty.kind === "fsstats") return `tsc_value_to_string(${this.boxSourceValue(r, node)})`;
         if (r.ty.kind === "function") return `tsc_value_to_string(${this.boxSourceValue(r, node)})`;
         if (r.ty.kind === "void" || r.ty.kind === "never") return `tsc_str_from_lit("undefined", 9)`;
         if (r.ty.kind === "value") return `tsc_value_to_string(${r.c})`;

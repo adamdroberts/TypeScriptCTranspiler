@@ -1,3 +1,5 @@
+- Typed Stats fields, methods, lazy dates and String conversion now share the ordinary returned owner and writable declaration surface.
+
 - Register scoped conditional Value/lazy-arm evidence with one canonical expression-tree stress.
 
 - Conditional expressions preserve actual null/undefined Values through static arm selection and the shared lazy boxed boundary.
