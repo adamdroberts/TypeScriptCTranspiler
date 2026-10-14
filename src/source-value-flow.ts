@@ -23,6 +23,12 @@ export interface SourceValueGraphEntries {
     readonly functions?: readonly FunctionConstructorEntry[];
     readonly evaluations?: readonly { readonly source: string; readonly entry: string | null; readonly kind?: string; readonly domain?: string }[];
 }
+function evaluationContextKey(source:string,kind:string|undefined):string {
+    // Reused text does not merge direct caller environments with Realm-global
+    // evaluation. Legacy graph queries without a kind retain a shared domain.
+    const operation=kind==='script'?'eval-script':kind==='agent'?'agent-start':'eval';
+    return JSON.stringify([operation,kind==='direct'?'direct':kind==='indirect'?'indirect':'shared',source]);
+}
 export function sourceAgentDomain(source:string):string {return "agent:"+createHash("sha256").update(source).digest("hex");}
 export interface ConstructorInvocation {
     readonly domain?: string;
@@ -151,6 +157,12 @@ interface FunctionOwner {
 interface EvaluationRecord {
     readonly node: ts.Node; readonly operation: "eval" | "eval-script" | "agent-start";
     readonly direct: boolean; readonly source: Cell | null; readonly unknown: boolean;
+}
+interface EvaluationEnvironment {
+    readonly source: ts.SourceFile;
+    readonly direct: boolean;
+    readonly callers: Set<ts.Node>;
+    readonly references: Map<ts.Identifier, {value: Cell; writes: Cell}>;
 }
 
 const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
@@ -308,6 +320,11 @@ class SourceValueFlow {
     private readonly scriptCompletions = new Map<ts.SourceFile,{summary:StatementBodyCompletions;throws:Cell}>();
     private readonly evaluationOrigins = new Map<string, Cell[]>();
     private readonly sourceOrigins = new Map<ts.SourceFile, Cell>();
+    private readonly evaluationEnvironments = new Map<ts.SourceFile, EvaluationEnvironment>();
+    private readonly evaluationSourceEnvironments = new Map<string, EvaluationEnvironment[]>();
+    private readonly evaluationReferenceTargets = new Map<ts.Node, Map<string, ts.Identifier>>();
+    private readonly evaluationGlobalTargets = new WeakSet<ts.Identifier>();
+    private readonly evaluationCallerTargets = new WeakSet<ts.Identifier>();
     private readonly dynamicSourceTexts = new Map<FunctionNode, string>();
     private readonly callablePrototypes = new Map<DynamicFunctionKind, Cell>();
     private ordinaryObjectPrototype?: Cell;
@@ -377,20 +394,27 @@ class SourceValueFlow {
                 this.copy(this.cell(statement), this.globalBinding(statement.name.text));
         }
         for (const entry of entries.evaluations ?? []) {
+            const contextKey=evaluationContextKey(entry.source,entry.kind);
             if (entry.entry === null) {
-                this.invalidEvaluations.add(entry.source);
+                this.invalidEvaluations.add(contextKey);
                 const completion = this.newCell(); this.publish(completion, this.abrupt);
-                const values = this.evaluations.get(entry.source) ?? [];
-                values.push(completion); this.evaluations.set(entry.source, values);
+                const values = this.evaluations.get(contextKey) ?? [];
+                values.push(completion); this.evaluations.set(contextKey, values);
                 continue;
             }
             const file = entry.entry ? program.getSourceFile(path.resolve(entry.entry)) : undefined;
             if (!file) continue;
+            if (entry.kind === "direct" || entry.kind === "indirect") {
+                const environment: EvaluationEnvironment = {source:file,direct:entry.kind === "direct",callers:new Set(),references:new Map()};
+                this.evaluationEnvironments.set(file,environment);
+                const environments=this.evaluationSourceEnvironments.get(entry.source)??[];
+                environments.push(environment);this.evaluationSourceEnvironments.set(entry.source,environments);
+            }
             if(entry.kind!=="agent"){
                 let origins=this.sourceOrigins.get(file);
                 if(!origins){origins=this.newCell();this.sourceOrigins.set(file,origins);}
-                const callers=this.evaluationOrigins.get(entry.source)??[];
-                callers.push(origins);this.evaluationOrigins.set(entry.source,callers);
+                const callers=this.evaluationOrigins.get(contextKey)??[];
+                callers.push(origins);this.evaluationOrigins.set(contextKey,callers);
             }
             const completion = this.newCell(),summary=statementBodyCompletions(file),exceptions=this.exceptionCell();
             this.scriptCompletions.set(file,{summary,throws:exceptions});
@@ -401,10 +425,10 @@ class SourceValueFlow {
                 else this.copy(this.cell(value),completion);
             }
             if(!summary.normal)this.publish(completion,this.abrupt);
-            const errors=this.evaluationThrows.get(entry.source)??[];
-            errors.push(exceptions);this.evaluationThrows.set(entry.source,errors);
-            const values = this.evaluations.get(entry.source) ?? [];
-            values.push(completion); this.evaluations.set(entry.source, values);
+            const errors=this.evaluationThrows.get(contextKey)??[];
+            errors.push(exceptions);this.evaluationThrows.set(contextKey,errors);
+            const values = this.evaluations.get(contextKey) ?? [];
+            values.push(completion); this.evaluations.set(contextKey, values);
         }
         for (const entry of entries.functions ?? []) {
             const file = entry.entry ? program.getSourceFile(path.resolve(entry.entry)) : undefined;
@@ -571,12 +595,13 @@ class SourceValueFlow {
     }
     private onActive(node: ts.Node, action: () => void): void {
         const owner = this.enclosingActivation(node);
+        const source=owner?undefined:this.sourceOrigins.get(this.sourceFile(node));
         const guards = this.guards(node);
-        if (!owner && !guards.length) action();
+        if (!owner && !source && !guards.length) action();
         else {
             let rule!: Rule;
-            rule = this.rule([...(owner ? [owner.active] : []), ...guards.map(guard => guard.condition)],()=>{
-                if ((!owner || owner.active.values.size) && this.guardsAllow(guards,rule)) action();
+            rule = this.rule([...(owner ? [owner.active] : source?[source]:[]), ...guards.map(guard => guard.condition)],()=>{
+                if ((!owner || owner.active.values.size) && (!source || source.values.size) && this.guardsAllow(guards,rule)) action();
             });
         }
     }
@@ -796,8 +821,25 @@ class SourceValueFlow {
         // fallback separately; object-record candidates remain graph edges.
         return sourceBindingTarget(this.checker, declarativeSourceBindingSymbol(this.checker, node)).symbol;
     }
+    private evaluationReferenceEnvironment(node:ts.Identifier):EvaluationEnvironment|undefined {
+        const environment=this.evaluationEnvironments.get(this.sourceFile(node));
+        if(!environment)return undefined;
+        const symbol=declarativeSourceBindingSymbol(this.checker,node);
+        return (symbol?.declarations??[]).some(declaration=>declaration.getSourceFile()===environment.source &&
+            !isAmbientSourceDeclaration(declaration)&&sourceDeclarationIntroducesBinding(declaration))?undefined:environment;
+    }
     private binding(node: ts.Identifier): Cell {
         const origin = declarativeSourceBindingSymbol(this.checker, node);
+        if(this.evaluationGlobalTargets.has(node))return this.globalLexicals.get(node.text)??this.globalBinding(node.text);
+        const environment=this.evaluationReferenceEnvironment(node);
+        if(environment) {
+            let reference=environment.references.get(node);
+            if(!reference){
+                reference={value:this.newCell(),writes:this.newCell()};environment.references.set(node,reference);
+                for(const caller of environment.callers)this.connectEvaluationReference(environment,node,reference,caller);
+            }
+            return reference.value;
+        }
         for(const declaration of origin?.declarations??[]){
             let current:ts.Node|undefined=declaration;
             while(current&&!ts.isImportDeclaration(current)&&!ts.isSourceFile(current))current=current.parent;
@@ -834,6 +876,30 @@ class SourceValueFlow {
             if (declaration && callableDefinition(declaration)) this.copy(this.cell(declaration), cell);
         }
         return cell;
+    }
+    private connectEvaluationReference(environment:EvaluationEnvironment,node:ts.Identifier,
+        reference:{value:Cell;writes:Cell},caller:ts.Node):void {
+        // Contextual identifiers re-enter the same binding/with/property graph.
+        // Intern them by caller and name so nested or recursive source edges
+        // join canonical locations rather than extending an invocation path.
+        const context=environment.direct?caller:caller.getSourceFile();
+        let targets=this.evaluationReferenceTargets.get(context);
+        if(!targets){targets=new Map();this.evaluationReferenceTargets.set(context,targets);}
+        let target=targets.get(node.text);
+        if(!target){target=ts.setTextRange(ts.factory.createIdentifier(node.text),caller);
+            (target as ts.Identifier&{parent:ts.Node}).parent=context;targets.set(node.text,target);
+            if(!environment.direct)this.evaluationGlobalTargets.add(target);
+            else this.evaluationCallerTargets.add(target);
+            const handler=this.exceptionHandlers.get(node);if(handler)this.exceptionHandlers.set(target,handler);}
+        this.copy(this.cell(target),reference.value);
+        this.rule([reference.writes],()=>this.writeBinding(target,reference.writes));
+    }
+    private connectEvaluationEnvironment(source:string,caller:ts.Node,direct:boolean):void {
+        for(const environment of this.evaluationSourceEnvironments.get(source)??[]) {
+            if(environment.direct!==direct||environment.callers.has(caller))continue;
+            environment.callers.add(caller);
+            for(const[node,reference]of environment.references)this.connectEvaluationReference(environment,node,reference,caller);
+        }
     }
     private scriptDeclarationBinding(declaration: ts.Node, name: string): Cell | null {
         let selected = declaration;
@@ -898,6 +964,20 @@ class SourceValueFlow {
         }
         return false;
     }
+    private bindingDefinitelyInTDZ(node:ts.Identifier):boolean {
+        // This syntactic dominance proof is only for captured caller references;
+        // general lexical activation/initialization precision stays conservative.
+        if(!this.evaluationCallerTargets.has(node))return false;
+        for(const declaration of this.bindingSymbol(node)?.declarations??[]) {
+            let binding:ts.Node=declaration;
+            while(ts.isBindingElement(binding))binding=binding.parent.parent;
+            const lexical=ts.isClassDeclaration(binding)||ts.isVariableDeclaration(binding)&&
+                ts.isVariableDeclarationList(binding.parent)&&!!(binding.parent.flags&ts.NodeFlags.BlockScoped);
+            if(!lexical||binding.getSourceFile()!==this.sourceFile(node)||this.enclosingActivation(binding)!==this.enclosingActivation(node))continue;
+            if(node.getEnd()<=binding.getStart())return true;
+        }
+        return false;
+    }
     private withBindingObjects(node: ts.Identifier): Cell[] {
         const symbol = this.bindingSymbol(node);
         let declaration = symbol?.valueDeclaration && sourceDeclarationIntroducesBinding(symbol.valueDeclaration)
@@ -926,6 +1006,10 @@ class SourceValueFlow {
         return objects;
     }
     private writeBinding(node: ts.Identifier, value: Cell): void {
+        const environment=this.evaluationGlobalTargets.has(node)?undefined:this.evaluationReferenceEnvironment(node);
+        if(environment) {
+            this.binding(node);this.copy(value,environment.references.get(node)!.writes);return;
+        }
         this.copy(value, this.binding(node));
         if(this.isAmbientIdentifier(node)){
             this.publish(this.globalReceiver,this.global);
@@ -1858,6 +1942,7 @@ class SourceValueFlow {
         return cell;
     }
     private isAmbientIdentifier(node: ts.Identifier): boolean {
+        if(this.evaluationGlobalTargets.has(node))return true;
         return !(this.bindingSymbol(node)?.declarations ?? []).some(declaration =>
             !isAmbientSourceDeclaration(declaration) && sourceDeclarationIntroducesBinding(declaration));
     }
@@ -3569,13 +3654,17 @@ class SourceValueFlow {
         else if (node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword || node.kind === ts.SyntaxKind.NullKeyword)
             this.publish(result, this.primitive(node.kind === ts.SyntaxKind.NullKeyword ? null : node.kind === ts.SyntaxKind.TrueKeyword));
         else if (ts.isIdentifier(node)) {
+            if(this.bindingDefinitelyInTDZ(node)) {
+                this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);
+                if(handler)this.publish(handler,this.nativeException(node));return;
+            }
             const ambient=this.isAmbientIdentifier(node);
             const binding=this.binding(node);
             if(ambient)this.copyRead(binding,result,node);
             else this.copy(binding,result);
             if (this.bindingMayBeUninitialized(node)) this.publish(result,this.primitive(undefined));
             for (const base of this.withBindingObjects(node)) this.copy(this.property(base, node.text, node), result);
-            if (ambient && !this.globalLexicals.has(node.text)) {
+            if (ambient && !this.evaluationEnvironments.has(this.sourceFile(node)) && !this.globalLexicals.has(node.text)) {
                 if (node.text === "globalThis") this.publish(result, this.global);
                 this.copyRead(this.globalBinding(node.text),result,node);
             }
@@ -4413,17 +4502,22 @@ class SourceValueFlow {
                                         this.publish(result!, this.primitive(text));
                                         continue;
                                     }
-                                    const generated = this.evaluations.get(String(text));
-                                    for(const origins of this.evaluationOrigins.get(String(text))??[])
-                                        this.copy(this.executionOrigins(node),origins);
-                                    if (!generated) this.publish(result!,this.pendingSource);
-                                    if (this.invalidEvaluations.has(String(text))) {
+                                    const contextKey=evaluationContextKey(String(text),atom.operation==='eval'?direct?'direct':'indirect':atom.operation==='eval-script'?'script':'agent');
+                                    const sharedKey=evaluationContextKey(String(text),undefined);
+                                    const generated=[...(this.evaluations.get(contextKey)??[]),...(this.evaluations.get(sharedKey)??[])];
+                                    if(!handled(atom,signature+":environment:"+contextKey))this.onActive(node,()=>{
+                                        if(atom.operation==="eval")this.connectEvaluationEnvironment(String(text),node,direct);
+                                        for(const origins of [...(this.evaluationOrigins.get(contextKey)??[]),...(this.evaluationOrigins.get(sharedKey)??[])])
+                                            this.copy(this.executionOrigins(node),origins);
+                                    });
+                                    if (!generated.length) this.publish(result!,this.pendingSource);
+                                    if (this.invalidEvaluations.has(contextKey)||this.invalidEvaluations.has(sharedKey)) {
                                         const handler = this.exceptionHandlers.get(node);
                                         if (handler) this.onActive(node, () => this.publish(handler, this.nativeException(node)));
                                     }
-                                    for (const value of generated ?? []) this.copy(value, result!);
+                                    for (const value of generated) this.copy(value, result!);
                                     const handler=this.exceptionHandlers.get(node);
-                                    if(handler)for(const errors of this.evaluationThrows.get(String(text))??[])this.copy(errors,handler);
+                                    if(handler)for(const errors of [...(this.evaluationThrows.get(contextKey)??[]),...(this.evaluationThrows.get(sharedKey)??[])])this.copy(errors,handler);
                                 }
                                 if (atom.operation === "eval") for (const value of source.values) {
                                     if (value.tag === "unknown-string") this.publish(result,this.unknown);
@@ -4602,6 +4696,8 @@ class SourceValueFlow {
                 // owner absence dependencies. Wake their guarded mutations
                 // before sealing any contextual own-location absence.
                 for(const [node,cell]of this.cells)if(ts.isIdentifier(node)&&!cell.values.size&&!this.bindingSymbol(node)){
+                    const origins=this.sourceOrigins.get(this.sourceFile(node));
+                    if(origins&&!origins.values.size)continue;
                     const binding=this.binding(node);
                     if(!binding.values.has(this.unknown)){this.publish(binding,this.unknown);changed=true;}
                 }
@@ -4614,6 +4710,8 @@ class SourceValueFlow {
             for (const [node, cell] of this.cells) if (!cell.values.size) {
                 const activation = this.enclosingActivation(node);
                 if (activation && !activation.active.values.size) continue;
+                const origins=this.sourceOrigins.get(this.sourceFile(node));
+                if(!activation&&origins&&!origins.values.size)continue;
                 if(this.guards(node).some(guard=>{
                     const proof=this.primitiveChoiceProof(guard.condition);
                     return proof.primitiveComplete&&!proof.values.some(value=>!!value===guard.truthy);

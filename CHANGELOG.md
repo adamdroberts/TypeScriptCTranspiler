@@ -1,3 +1,5 @@
+Projected generated direct eval free references through canonical caller binding edges and separated direct/indirect source completion domains; retained opaque admission and caller TDZ completion.
+
 Preserved pending generated eval keys through the canonical computed-read graph, preventing premature unknown sealing and retaining stable unknown-source admission.
 
 Corrected generator return-expression effect timing expectations and made intended object String display explicit, verified independently with Node.

@@ -4970,6 +4970,83 @@
       "targets": [
         "sec-evaluate-property-access-with-expression-key#pending-generated-source-key"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/eval-caller-environment.property.test.ts",
+      "targets": [
+        "sec-performeval#canonical-caller-environment-references"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/local-class-eval-bindings.property.test.ts",
+      "targets": [
+        "sec-performeval#canonical-caller-environment-references"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "eval_caller_environment_depth",
+      "targets": [
+        "sec-performeval#canonical-caller-environment-references"
+      ],
+      "stressReview": {
+        "dimension": "direct eval retained caller lexical binding graph",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One generated lexical graph is shared by native property and typed CLI; actual caller read/write/directness/opacity partitions are independent of graph depth.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "eval_local_class_bindings",
+      "targets": [
+        "sec-performeval#canonical-caller-environment-references"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#evaluationContextKey",
+      "targets": [
+        "sec-performeval#canonical-caller-environment-references"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#evaluationReferenceEnvironment",
+      "targets": [
+        "sec-performeval#canonical-caller-environment-references"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#connectEvaluationReference",
+      "targets": [
+        "sec-performeval#canonical-caller-environment-references"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#connectEvaluationEnvironment",
+      "targets": [
+        "sec-performeval#canonical-caller-environment-references"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#bindingDefinitelyInTDZ",
+      "targets": [
+        "sec-performeval#canonical-caller-environment-references"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#onActive",
+      "targets": [
+        "sec-performeval#canonical-caller-environment-references"
+      ]
     }
   ]
 }
