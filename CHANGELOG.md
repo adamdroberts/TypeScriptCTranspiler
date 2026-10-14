@@ -1,3 +1,5 @@
+Aligned the retained dynamic coercion expectation with ordinary String addition after TypeScript annotation erasure.
+
 Stopped finite Buffer source proofs from inventing zero-filled unsafe allocation bytes; shared transformations remain unknown and use the existing AOT closure diagnostic.
 
 Unified POSIX path normalization, joining, resolving and relative output through one dynamic component record and complete actual Lists; removed fixed path buffers and component limits.
