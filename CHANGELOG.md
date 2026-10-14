@@ -1,3 +1,5 @@
+- Update dynamic matchAll consumers to materialize and observe the lazy iterator through Array.from.
+
 - Share immutable String wrapper source field publication across actual-input views of the same allocation owner.
 
 - Check accessor function prototype constructor identity independently of console object formatting.
