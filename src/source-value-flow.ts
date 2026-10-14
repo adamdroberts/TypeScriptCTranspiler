@@ -846,8 +846,10 @@ class SourceValueFlow {
             // Reuse that canonical projection instead of composing an alias
             // path of equivalent phase filters through every saved binding.
             if(inherited?.has(phase!)||[...(inherited??[])].some(prior=>{
-                return prior.kind==="capture" && prior.argumentsRead===argumentsRead && !this.dynamicContext(prior.context) &&
-                    this.sourceFile(prior.context)===this.sourceFile(context) && prior.context.getEnd()<=context.getStart();
+                if(prior.kind!=="capture"||prior.argumentsRead!==argumentsRead||this.sourceFile(prior.context)!==this.sourceFile(context)||prior.context.getEnd()>context.getStart())return false;
+                const before=this.enclosingActivation(prior.context),after=this.enclosingActivation(context);
+                return before===after&&!this.repeatedActivationContext(prior.context)&&!this.repeatedActivationContext(context)&&
+                    (!before||!this.activationTiming(before).values.size);
             }))return source;
             let contexts=this.readCaptures.get(source);if(!contexts){contexts=new Map();this.readCaptures.set(source,contexts);}
             let phases=contexts.get(context);if(!phases){phases=new Map();contexts.set(context,phases);}

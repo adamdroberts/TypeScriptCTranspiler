@@ -59,6 +59,7 @@ export interface RestSourceLocationDepthSpec {generator:"rest-source-location-de
 export interface SourceAllocationDepthSpec {generator:"source-allocation-depth";depth:number;}
 export interface ListExtentCaptureDepthSpec {generator:"list-extent-capture-depth";depth:number;}
 export interface MathSourceOwnerDepthSpec {generator:"math-source-owner-depth";depth:number;}
+export interface ActivationCaptureOwnerDepthSpec {generator:"activation-capture-owner-depth";depth:number;}
 export interface FunctionSourceOwnerDepthSpec {generator:"function-source-owner-depth";depth:number;}
 export interface EvalDeclarationDepthSpec {generator:"eval-declaration-depth";depth:number;}
 export interface EvalRealmAliasDepthSpec {generator:"eval-realm-alias-depth";depth:number;}
@@ -312,6 +313,7 @@ export type GeneratedCaseSpec =
     | SourceAllocationDepthSpec
     | ListExtentCaptureDepthSpec
     | MathSourceOwnerDepthSpec
+    | ActivationCaptureOwnerDepthSpec
     | FunctionSourceOwnerDepthSpec
     | EvalDeclarationDepthSpec
     | EvalRealmAliasDepthSpec
@@ -350,6 +352,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     }
     if(spec.generator==='math-source-owner-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid Math source owner spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
+    if(spec.generator==='activation-capture-owner-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid activation capture owner spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
     }
     if(spec.generator==='function-source-owner-depth'){
@@ -1955,6 +1961,7 @@ console.log("raw JSON text width:", valid);
         case "source-allocation-depth": return sourceAllocationInput(spec.depth);
         case "list-extent-capture-depth": return listExtentCaptureInput(spec.depth);
         case "math-source-owner-depth": return mathSourceOwnerInput(spec.depth);
+        case "activation-capture-owner-depth": return activationCaptureOwnerInput(spec.depth);
         case "function-source-owner-depth": return functionSourceOwnerInput(spec.depth);
         case "eval-declaration-depth": return evalDeclarationInput(spec.depth);
         case "eval-realm-alias-depth": return evalRealmAliasInput(spec.depth);
@@ -2231,4 +2238,9 @@ export function listExtentCaptureInput(depth:number):string {
 export function mathSourceOwnerInput(depth:number):string {
  const aliases=Array.from({length:depth},(_,index)=>`const mathSource${index}:any=${index?'mathSource'+(index-1):'Math.random()<0.5?["return 109;"]:["return 109;"]'};`);
  return `{${aliases.join('\n')}console.log('Math source:',Function.apply(null,[...mathSource${depth-1}])());}\nasync function* mathSourceLater(){yield 1}mathSourceLater().next();\n`;
+}
+
+export function activationCaptureOwnerInput(depth:number):string {
+ const owners=Array.from({length:depth},(_,index)=>`const capturedOwner${index}:any=${index?`{body:capturedOwner${index-1}.body,previous:capturedOwner${index-1}}`:`{body:'return 113;',previous:null}`};`);
+ return `async function capturedOwnerRun():Promise<any>{${owners.join('\n')}await 0;return Function(capturedOwner${depth-1}.body)()}capturedOwnerRun().then(value=>console.log('captured owner:',value));\n`;
 }
