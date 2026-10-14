@@ -21,7 +21,7 @@ console.log("array-like comparator:", arrayLike[0], arrayLike[1], arrayLike[2]);
 try {
     Reflect.apply(sort, [1, 2] as any, [null as any]);
 } catch (err) {
-    console.log("bad comparator:", String(err));
+    console.log("bad comparator:", err instanceof Error ? err.name : typeof err);
 }
 
 const badComparatorReceivers: any = [
@@ -36,11 +36,11 @@ for (const entry of badComparatorReceivers) {
     try {
         Reflect.apply(sort, receiver, [5 as any]);
     } catch (err) {
-        console.log(label + " sort bad:", String(err));
+        console.log(label + " sort bad:", err instanceof Error ? err.name : typeof err);
     }
     try {
         Reflect.apply(toSorted, receiver, [5 as any]);
     } catch (err) {
-        console.log(label + " toSorted bad:", String(err));
+        console.log(label + " toSorted bad:", err instanceof Error ? err.name : typeof err);
     }
 }

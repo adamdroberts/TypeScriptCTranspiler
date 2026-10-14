@@ -1,3 +1,5 @@
+Materialized Array keys/values/entries in prototype regression consumers and compared sort comparator failures by actual Error kind.
+
 Corrected inherited Array regression consumers to borrow methods displaced by custom prototypes, and compare reduce errors by actual Error kind.
 
 Aligned retained generator expectations with independent Node evaluation order and captured values across suspension; source inputs and lowering are unchanged.
