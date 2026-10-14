@@ -33,7 +33,7 @@ test('virtual String fields conservatively retain independent actual reads and d
   const actual=proof(partition.setup,[partition.query])[0];expect(actual).not.toBeNull();expect(actual).toContain(observations[index]!);
   if(partition.exact)expect(actual).toEqual([observations[index]!]);
  }
- for(const setup of ['const owner=Object(external);','const owner=Object("xy");opaque(owner);']){
+ for(const setup of ['const owner=Object(external);','const owner=Object(String(external));','const owner=new String(external);','const owner=Object(String(Math.random()));','const owner=Object("xy");opaque(owner);']){
   for(const query of ['owner[0]','owner.length','Object.getOwnPropertyDescriptor(owner,"0").value'])expect(proof(setup,[query])[0]).toBeNull();
  }
 },120000);

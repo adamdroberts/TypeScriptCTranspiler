@@ -1294,7 +1294,7 @@ class SourceValueFlow {
         if(key!=="length"&&(typeof key!=="string"||!Number.isSafeInteger(Number(key))||Number(key)<0||String(Number(key))!==key))return;
         record.keys.add(key);const value=this.newCell();let rule!:Rule;
         rule=this.rule([record.input],()=>{
-            const state=this.primitiveState(record.input,rule,true);
+            const state=this.primitiveState(record.input,rule);
             for(const text of state.proof.values){
                 if(typeof text!=="string")continue;
                 if(key==="length"){this.publish(value,this.primitive(text.length));this.defineField(owner,key,value,false);}
@@ -1307,7 +1307,7 @@ class SourceValueFlow {
     private ownerKeys(owner:ObjectOwner,rule:Rule):(SourcePropertyKey|null)[]|null|undefined {
         const record=this.primitiveStringFields.get(owner),keys=new Set<SourcePropertyKey|null>();
         if(record){
-            const state=this.primitiveState(record.input,rule,true);
+            const state=this.primitiveState(record.input,rule);
             if(state.pending&&!state.unresolved)return undefined;
             if(!state.proof.primitiveComplete)return null;
             for(const text of state.proof.values)if(typeof text==="string"){
@@ -1379,7 +1379,7 @@ class SourceValueFlow {
         rule=this.rule([record.facts],()=>{
             const string=this.primitiveStringFields.get(owner);
             if(string&&(key==="length"||typeof key==="string"&&Number.isSafeInteger(Number(key))&&Number(key)>=0&&String(Number(key))===key)){
-                const state=this.primitiveState(string.input,rule,true);
+                const state=this.primitiveState(string.input,rule);
                 for(const text of state.proof.values)if(typeof text==="string"){
                     if(key==="length"||Number(key)<text.length)this.publish(result,this.primitive(true));
                     else if(!record.writes.size)this.publish(result,this.primitive(false));

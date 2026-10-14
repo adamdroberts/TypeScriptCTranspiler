@@ -1,3 +1,5 @@
+- Keep non-finite primitive String payloads unresolved in virtual source fields and presence.
+
 - Register scoped RegExp replacement intrinsic evidence with exact legacy metadata mapping and an independent retained capture worklist stress.
 
 - Project String wrapper source fields lazily from one owner input graph, retaining mixed-length absence and descriptor presence; add independent source and CLI checks.
