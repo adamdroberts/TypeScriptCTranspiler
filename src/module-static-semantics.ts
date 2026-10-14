@@ -168,8 +168,10 @@ export function moduleVarDeclaredNames(sourceFile: ts.SourceFile): NameEntry[] {
     return statementListVarDeclaredNames(sourceFile.statements);
 }
 
-export function statementListVarDeclaredNames(statements: readonly ts.Statement[]): NameEntry[] {
+export function statementListVarDeclaredNames(statements: readonly ts.Statement[], topLevelFunctions = false): NameEntry[] {
     const entries: NameEntry[] = [];
+    if (topLevelFunctions) for (const statement of statements)
+        if (ts.isFunctionDeclaration(statement)) entries.push(...declarationBoundNames(statement).map(entry => ({...entry, declaration:statement})));
     const worklist: ts.Node[] = [];
     for (let index = statements.length - 1; index >= 0; index--) {
         worklist.push(statements[index]!);

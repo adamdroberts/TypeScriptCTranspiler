@@ -91,6 +91,23 @@ export function earlyControlFlowStaticSemanticsFailure(
         lexicalIterationNames: new Set(),
         catchPatternNames: new Set(),
     };
+    const functionBodies = new Set<ts.Block>();
+    const declarationConflict = (statements: readonly ts.Statement[], functionsAreLexical: boolean, strict: boolean, label: string): ControlStaticSemanticsFailure | null => {
+        const lexicalNames = new Map<string, ts.Declaration | undefined>();
+        const ordinaryFunction = (declaration: ts.Declaration | undefined): boolean =>
+            !!declaration && ts.isFunctionDeclaration(declaration) && !declaration.asteriskToken &&
+            !(ts.getModifiers(declaration)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ?? false);
+        for (const entry of statementListLexicallyDeclaredNames(statements, functionsAreLexical)) {
+            const previous = lexicalNames.get(entry.name);
+            if (lexicalNames.has(entry.name) && (strict || !functionsAreLexical || !ordinaryFunction(previous) || !ordinaryFunction(entry.declaration)))
+                return {node: entry.node, message: `${label} LexicallyDeclaredNames contains duplicate '${entry.name}'`};
+            lexicalNames.set(entry.name, entry.declaration);
+        }
+        if (!lexicalNames.size) return null;
+        for (const entry of statementListVarDeclaredNames(statements, !functionsAreLexical))
+            if (lexicalNames.has(entry.name)) return {node: entry.node, message: `${label} LexicallyDeclaredNames and VarDeclaredNames both contain '${entry.name}'`};
+        return null;
+    };
     const worklist: Array<{ readonly node: ts.Node; readonly context: ControlContext }> = [
         { node: sourceFile, context: { ...rootContext, allowAwait: ecmaParseGoal(sourceFile) === "module" } },
     ];
@@ -170,6 +187,7 @@ export function earlyControlFlowStaticSemanticsFailure(
         if (ts.isFunctionLike(node)) {
             const body = (node as ts.SignatureDeclaration & { body?: ts.ConciseBody }).body;
             if (body) {
+                if (ts.isBlock(body)) functionBodies.add(body);
                 worklist.push({
                     node: body,
                     context: {
@@ -309,19 +327,13 @@ export function earlyControlFlowStaticSemanticsFailure(
                 defaultClause = clause;
             }
             const statements = node.clauses.flatMap(clause => Array.from(clause.statements));
-            const lexicalNames = new Map<string, ts.Declaration | undefined>();
-            const ordinaryFunction = (declaration: ts.Declaration | undefined): boolean => {
-                return !!declaration && ts.isFunctionDeclaration(declaration) && !declaration.asteriskToken &&
-                    !(ts.getModifiers(declaration)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ?? false);
-            };
-            for (const entry of statementListLexicallyDeclaredNames(statements, true)) {
-                const previous = lexicalNames.get(entry.name);
-                if (lexicalNames.has(entry.name) && (context.strict || !ordinaryFunction(previous) || !ordinaryFunction(entry.declaration)))
-                    return {node: entry.node, message: `CaseBlock LexicallyDeclaredNames contains duplicate '${entry.name}'`};
-                lexicalNames.set(entry.name, entry.declaration);
-            }
-            for (const entry of statementListVarDeclaredNames(statements))
-                if (lexicalNames.has(entry.name)) return {node: entry.node, message: `CaseBlock LexicallyDeclaredNames and VarDeclaredNames both contain '${entry.name}'`};
+            const failure = declarationConflict(statements, true, context.strict, "CaseBlock");
+            if (failure) return failure;
+        }
+        if (ts.isBlock(node) || ts.isSourceFile(node) && ecmaParseGoal(sourceFile) === "script") {
+            const topLevel = ts.isSourceFile(node) || functionBodies.has(node);
+            const failure = declarationConflict(node.statements, !topLevel, context.strict, topLevel ? "Body" : "Block");
+            if (failure) return failure;
         }
         const iteration = ts.isForStatement(node) ||
             ts.isForInStatement(node) ||

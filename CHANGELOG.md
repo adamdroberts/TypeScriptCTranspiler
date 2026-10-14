@@ -1,3 +1,5 @@
+Reused canonical StatementList conflict validation across Block, function Body, Script and CaseBlock scopes.
+
 Registered independent CaseBlock selection/fallthrough/UpdateEmpty completion evidence with reciprocal canonical references.
 
 Shared StatementList declaration-name collections and rejected CaseBlock lexical conflicts with selected sloppy FunctionDeclaration exceptions.
