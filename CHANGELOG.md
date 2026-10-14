@@ -1,3 +1,5 @@
+Replaced the obsolete private-field rejection expectation with accepted-value and brand observations.
+
 Decoded permissive Buffer hex/base64 through shared unit scanners and estimated byteLength independently.
 
 Observed Buffer.compare invalid-bound RangeError identity in regression expectations.
