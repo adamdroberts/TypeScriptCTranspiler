@@ -39632,9 +39632,7 @@ class Emitter {
                 } else {
                     argsNode = secondNode;
                     args = second;
-                    if (args.ty.kind !== "array" || args.ty.elem?.kind !== "string") {
-                        unsupported(argsNode, "child_process.execFile args must be string[]");
-                    }
+                    args = this.childProcessStringArguments(args, argsNode);
                     const optionsAsThirdArg = this.isStaticObjectLiteralExpression(call.arguments[2]) || (!!call.arguments[2] && this.isUndefinedLikeExpression(call.arguments[2]!));
                     callbackNode = optionsAsThirdArg ? call.arguments[3] : call.arguments[2];
                     if (!callbackNode) unsupported(call, "child_process.execFile expects file, args, optional options, and callback");
@@ -39840,10 +39838,7 @@ class Emitter {
                     return encoding ? `tsc_buffer_to_string(${callC}, tsc_str_from_lit("utf8", 4))` : callC;
                 });
             }
-            const args = this.emitExpr(argsNode);
-            if (args.ty.kind !== "array" || args.ty.elem?.kind !== "string") {
-                unsupported(argsNode, "child_process.execFileSync args must be string[]");
-            }
+            const args = this.childProcessStringArguments(this.emitExpr(argsNode), argsNode);
             return this.emitSequencedExpr(encoding ? T_STRING : T_BUFFER, [
                 { value: file, target: T_STRING, node: call.arguments[0]! },
                 { value: args, target: arrayType(T_STRING), node: argsNode },
@@ -39902,10 +39897,7 @@ class Emitter {
             const file = this.emitExpr(call.arguments[0]!);
             const optionsAsSecondArg = this.isStaticObjectLiteralExpression(call.arguments[1]);
             const argsNode = optionsAsSecondArg ? undefined : call.arguments[1]!;
-            const args = argsNode ? this.emitExpr(argsNode) : { c: "NULL", ty: arrayType(T_STRING) };
-            if (argsNode && (args.ty.kind !== "array" || args.ty.elem?.kind !== "string")) {
-                unsupported(argsNode, "child_process.spawnSync args must be string[]");
-            }
+            const args = argsNode ? this.childProcessStringArguments(this.emitExpr(argsNode), argsNode) : { c: "NULL", ty: arrayType(T_STRING) };
             const optionsNode = optionsAsSecondArg ? call.arguments[1] : call.arguments[2];
             const consumedArgCount = optionsNode ? (optionsAsSecondArg ? 2 : 3) : (argsNode ? 2 : 1);
             const options = this.childProcessObjectOptions(optionsNode, "spawnSync");
@@ -39973,10 +39965,7 @@ class Emitter {
             const file = this.emitExpr(call.arguments[0]!);
             const optionsAsSecondArg = this.isStaticObjectLiteralExpression(call.arguments[1]) || (!!call.arguments[1] && this.isUndefinedLikeExpression(call.arguments[1]!));
             const argsNode = optionsAsSecondArg ? undefined : call.arguments[1];
-            const args = argsNode ? this.emitExpr(argsNode) : { c: "NULL", ty: arrayType(T_STRING) };
-            if (argsNode && (args.ty.kind !== "array" || args.ty.elem?.kind !== "string")) {
-                unsupported(argsNode, "child_process.spawn args must be string[]");
-            }
+            const args = argsNode ? this.childProcessStringArguments(this.emitExpr(argsNode), argsNode) : { c: "NULL", ty: arrayType(T_STRING) };
             const optionsNode = optionsAsSecondArg ? call.arguments[1] : call.arguments[2];
             const consumedArgCount = optionsNode ? (optionsAsSecondArg ? 2 : 3) : (argsNode ? 2 : 1);
             const options = this.childProcessObjectOptions(optionsNode, "spawn");
@@ -40461,6 +40450,12 @@ class Emitter {
             { value, target: T_STRING, node: call.arguments[0]! },
             ...this.ignoredArgumentSpecs(call.arguments, 1),
         ], ([input]) => `${fn}(${input!})`);
+    }
+
+    private childProcessStringArguments(value: EmitResult, node: ts.Expression): EmitResult {
+        if (value.ty.kind !== "value" && value.ty.kind !== "array")
+            unsupported(node, "child_process arguments require a canonical Array value");
+        return {c: this.nativeArrayRepresentation(value, arrayType(T_STRING), node), ty: arrayType(T_STRING)};
     }
 
     private emitBufferTranscodeCall(call: ts.CallExpression): EmitResult {

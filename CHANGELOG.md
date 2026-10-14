@@ -1,3 +1,5 @@
+Projected every child-process argv Array through the canonical native element bridge after ordinary mutation.
+
 Published ordinary Buffer constructor/static owners from canonical descriptors and removed direct static call bypasses.
 
 Replaced the obsolete private-field rejection expectation with accepted-value and brand observations.
