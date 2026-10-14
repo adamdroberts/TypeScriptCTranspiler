@@ -58,6 +58,7 @@ export interface PrimitivePropertyReadDepthSpec {generator:"primitive-property-r
 export interface RestSourceLocationDepthSpec {generator:"rest-source-location-depth";depth:number;}
 export interface SourceAllocationDepthSpec {generator:"source-allocation-depth";depth:number;}
 export interface ListExtentCaptureDepthSpec {generator:"list-extent-capture-depth";depth:number;}
+export interface PromiseStaticSourceDepthSpec {generator:"promise-static-source-depth";depth:number;}
 export interface CallbackTimerSourceDepthSpec {generator:"callback-timer-source-depth";depth:number;}
 export interface HasInstanceDepthSpec {generator:"has-instance-depth";depth:number;}
 export interface RelationalSourceDepthSpec {generator:"relational-source-depth";depth:number;}
@@ -320,6 +321,7 @@ export type GeneratedCaseSpec =
     | RestSourceLocationDepthSpec
     | SourceAllocationDepthSpec
     | ListExtentCaptureDepthSpec
+    | PromiseStaticSourceDepthSpec
     | CallbackTimerSourceDepthSpec
     | HasInstanceDepthSpec
     | RelationalSourceDepthSpec
@@ -364,6 +366,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     }
     if(spec.generator==='list-extent-capture-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid List extent capture spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
+    if(spec.generator==='promise-static-source-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid Promise static source spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
     }
     if(spec.generator==='callback-timer-source-depth'){
@@ -2008,6 +2014,7 @@ console.log("raw JSON text width:", valid);
         case "rest-source-location-depth": return restSourceLocationInput(spec.depth);
         case "source-allocation-depth": return sourceAllocationInput(spec.depth);
         case "list-extent-capture-depth": return listExtentCaptureInput(spec.depth);
+        case "promise-static-source-depth": return promiseStaticSourceInput(spec.depth);
         case "callback-timer-source-depth": return callbackTimerSourceInput(spec.depth);
         case "has-instance-depth": return hasInstanceInput(spec.depth);
         case "relational-source-depth": return relationalSourceInput(spec.depth);
@@ -2338,4 +2345,9 @@ export function hasInstanceInput(depth:number):string {
 export function callbackTimerSourceInput(depth:number):string {
  const owners=Array.from({length:depth},(_,index)=>`const timerSourceOwner${index}:any=${index?`{body:timerSourceOwner${index-1}.body,previous:timerSourceOwner${index-1}}`:`{body:'return 71;',previous:null}`};`);
  return `{${owners.join('\n')}setTimeout((body:string)=>console.log('timer source:',Function(body)()),0,timerSourceOwner${depth-1}.body);}\n`;
+}
+
+export function promiseStaticSourceInput(depth:number):string {
+ const owners=Array.from({length:depth},(_,index)=>`const staticPromiseOwner${index}:any=${index?`{body:staticPromiseOwner${index-1}.body,previous:staticPromiseOwner${index-1}}`:`{body:'return 79;',previous:null}`};`);
+ return `{${owners.join('\n')}Promise.try((body:string)=>body,staticPromiseOwner${depth-1}.body).then(body=>console.log('static Promise source:',Function(body)()));}\n`;
 }

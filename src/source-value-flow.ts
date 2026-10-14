@@ -2781,6 +2781,25 @@ class SourceValueFlow {
         const resolvers=[false,true].map(reject=>{const cell=this.newCell(),fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.copy(this.opaqueMutation,fields.shape);this.publish(cell,{tag:"promise-resolver",value,rejection,reject,fields});return cell;});
         rejections.set(rejection,resolvers);return resolvers;
     }
+    private promiseStaticCapability(member:string,context:ts.Node,args:readonly Cell[]|null):Cell {
+        let calls=this.promiseConstructions.get(context);if(!calls){calls=new Map();this.promiseConstructions.set(context,calls);}
+        const key=member+":"+(args?.map(cell=>cell.id).join(",")??"unknown"),prior=calls.get(key);if(prior)return prior;
+        const result=this.newCell(),value=this.newCell(),rejection=this.exceptionCell(),promise=this.newCell();calls.set(key,result);this.publish(promise,{tag:"promise",value,rejection});
+        if(member==="withResolvers"){
+            const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype(),ordinary:true};this.ownerCreations.set(owner,context);this.ownerMutation(owner);this.publish(result,{tag:"object",owner});
+            const [resolve,reject]=this.promiseResolverCells(value,rejection);this.defineField(owner,"promise",promise);this.defineField(owner,"resolve",resolve!);this.defineField(owner,"reject",reject!);
+        }else{
+            this.copy(promise,result);const returned=this.newCell(),callback=ts.setTextRange(ts.factory.createEmptyStatement(),context);(callback as ts.Node&{parent:ts.Node}).parent=context;this.exceptionHandlers.set(callback,rejection);
+            if(args){
+                const target=args[0]??(()=>{const cell=this.newCell();this.publish(cell,this.primitive(undefined));return cell})(),callable=this.newCell(),atoms=new Map<Atom,Cell>();
+                this.rule([target],()=>{for(const atom of target.values){let input=atoms.get(atom);if(!input){input=this.newCell();atoms.set(atom,input);this.publish(input,atom);}const kinds=this.primitiveKinds(input);if(kinds&KIND_FUNCTION)this.publish(callable,atom);if(kinds&~KIND_FUNCTION){this.publish(rejection,this.nativeException(context));this.publish(returned,this.abrupt);}}});
+                this.invoke(callback,callable,this.empty,args.slice(1).map(cell=>({cell,spread:false})),returned);
+            }
+            else{this.publish(returned,this.unknown);this.publish(rejection,this.unknown);this.onActive(context,()=>this.opaqueEffect(context));}
+            const resolved=this.promiseAssimilation(returned,callback);this.copy(resolved.value,value);this.copy(resolved.rejection,rejection);
+        }
+        return result;
+    }
     private promiseConstruction(context:ts.Node,executor:Cell):Cell {
         let calls=this.promiseConstructions.get(context);if(!calls){calls=new Map();this.promiseConstructions.set(context,calls);}
         const key="executor:"+executor.id,prior=calls.get(key);if(prior)return prior;
@@ -3083,7 +3102,7 @@ class SourceValueFlow {
             // The native builtin's unrepresented own members are opaque.
             // A closed prototype chain must not turn them into known absence.
             const closedIndex=owner.closedIndices&&typeof key==="string"&&Number.isSafeInteger(Number(key))&&Number(key)>=0&&String(Number(key))===key;
-            const representedAbsence=atom.tag==="builtin"&&atom.name==="Object"&&key===this.wellKnownSymbols.get("species")&&!runtimeObjectConstructorOwnKeys.has(key);
+            const representedAbsence=atom.tag==="builtin"&&(atom.name==="Object"&&key===this.wellKnownSymbols.get("species")&&!runtimeObjectConstructorOwnKeys.has(key)||runtimeErrorKinds.has(atom.name)&&key===this.wellKnownSymbols.get("hasInstance"));
             if (owner === firstOwner && atom.tag === "builtin" && !representedAbsence && !closedIndex && !presence?.values.has(this.primitive(true)) &&
                 !(typeof key === "string" && (runtimeObjectPrototypeMethods.has(key) || key === "constructor" ||
                     atom.normalResult !== "not-callable" && CALLABLE_FORWARDING_OPERATIONS.has(key)))) {
@@ -4507,7 +4526,8 @@ class SourceValueFlow {
                                     const resolved=this.promiseAssimilation(input,node);this.publish(result,{tag:"promise",value:resolved.value,rejection:resolved.rejection});
                                 }
                                 else{let calls=this.promiseConstructions.get(node);if(!calls){calls=new Map();this.promiseConstructions.set(node,calls);}const key="reject:"+input.id;let holder=calls.get(key);if(!holder){holder=this.newCell();calls.set(key,holder);const value=this.newCell(),rejection=this.exceptionCell();this.copy(input,rejection);this.publish(holder,{tag:"promise",value,rejection});}this.copy(holder,result);}
-                            }else{this.publish(result,this.opaqueObject);this.onActive(node,()=>this.opaqueEffect(node));}
+                            }else if(member==="try"||member==="withResolvers")this.copy(this.promiseStaticCapability(member,node,argv),result);
+                            else{this.publish(result,this.opaqueObject);this.onActive(node,()=>this.opaqueEffect(node));}
                             continue;
                         }
                         if(member==="catch")this.copy(this.promiseCatch(invocation.receiver,argument(0)??omittedArgument,node),result);

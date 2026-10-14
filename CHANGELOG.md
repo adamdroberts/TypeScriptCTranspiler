@@ -1,3 +1,5 @@
+Projected Promise.try and withResolvers source results through canonical capabilities.
+
 Shared native callback timer metadata and source callback/actual-List effects, closing finite agent templates.
 
 Implemented Symbol.hasInstance dispatch and shared bound-target OrdinaryHasInstance traversal.
