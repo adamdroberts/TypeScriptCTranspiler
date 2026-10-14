@@ -23,15 +23,15 @@ initialized-var 41 42 true 25
 side-leaf 43 44 true 15 side-leaf
 update-leaf 45 46 true 5 1
 prefix-leaf 47 48 true 6 1
-delete-leaf-before 53 54 1
+delete-leaf-before 53 54 undefined
 delete-leaf true 6 undefined
-assignment-leaf-before 55 56 0
+assignment-leaf-before 55 56 2
 assignment-leaf true 7 2
-conditional-leaf-before 57 58 0
+conditional-leaf-before 57 58 1
 conditional-leaf true 12 1
-template-leaf-before left right 0
+template-leaf-before left right 1
 template-leaf true AmidB 1
-tagged-template-leaf-before left right 0
+tagged-template-leaf-before left right 1
 tagged-template-leaf true AtagB 1
 literal-leaf 61 62
 literal-leaf-done true 11
@@ -47,7 +47,7 @@ numeric-logical-leaf-before 81 82 1
 numeric-logical-leaf true 9 1
 numeric-logical-false-before 85 86 1
 numeric-logical-false true 5 1
-boolean-logical-leaf-before 83 84 0
+boolean-logical-leaf-before 83 84 1
 boolean-logical-leaf true 6 1
 boolean-logical-false-before 87 88 1
 boolean-logical-false true 5 1
@@ -69,15 +69,15 @@ bigint-logical-or-true-before 103 104 2
 bigint-logical-or-true true false 2
 optional-property-leaf null 1 true false
 optional-element-leaf null 1 true false
-new-leaf-before 73 74 0
+new-leaf-before 73 74 1
 new-leaf true 12 1
-member-call-leaf-before 75 76 0
+member-call-leaf-before 75 76 1
 member-call-leaf true 11 1
-spread-call-leaf-before 77 78 0
+spread-call-leaf-before 77 78 1
 spread-call-leaf true 10 1
-function-value-leaf-before 105 106 0
+function-value-leaf-before 105 106 1
 function-value-leaf true 11 1
-arrow-function-value-leaf-before 107 108 0
+arrow-function-value-leaf-before 107 108 1
 arrow-function-value-leaf true 12 1
 inline-function-value-leaf-before 109 110 1
 inline-function-value-leaf true 12 1

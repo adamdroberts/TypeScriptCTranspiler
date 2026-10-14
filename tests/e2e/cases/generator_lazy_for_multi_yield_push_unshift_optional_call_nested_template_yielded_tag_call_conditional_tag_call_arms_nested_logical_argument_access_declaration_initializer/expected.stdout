@@ -2,8 +2,8 @@ push-first  push-first false push-receiver
 push-second  push-first false push-selector
 push-third  push-first false push-logical-left
 push-fourth  push-first false push-nested-seed
-push-fifth  push-first false push-nested-value
-push-sixth  push-first false push-arm-value
+push-fifth nested-push-nested-seed-value push-first false push-nested-value
+push-sixth nested-push-nested-seed-value,arm-push-nested-nested-push-nested-value push-first false push-arm-value
 push-seventh nested-push-nested-seed-value,arm-push-nested-nested-push-nested-value,outer-push-arm-arm-push-arm-value push-first false push-inner
 push-eighth nested-push-nested-seed-value,arm-push-nested-nested-push-nested-value,outer-push-arm-arm-push-arm-value push-first false push-outer
 push-ninth nested-push-nested-seed-value,arm-push-nested-nested-push-nested-value,outer-push-arm-arm-push-arm-value push-first false push-item
@@ -14,8 +14,8 @@ unshift-first  unshift-first false unshift-receiver
 unshift-second  unshift-first false unshift-selector
 unshift-third  unshift-first false unshift-logical-left
 unshift-fourth  unshift-first false unshift-nested-seed
-unshift-fifth  unshift-first false unshift-nested-value
-unshift-sixth  unshift-first false unshift-arm-value
+unshift-fifth nested-unshift-nested-seed-value unshift-first false unshift-nested-value
+unshift-sixth nested-unshift-nested-seed-value,arm-unshift-nested-nested-unshift-nested-value unshift-first false unshift-arm-value
 unshift-seventh nested-unshift-nested-seed-value,arm-unshift-nested-nested-unshift-nested-value,outer-unshift-arm-arm-unshift-arm-value unshift-first false unshift-inner
 unshift-eighth nested-unshift-nested-seed-value,arm-unshift-nested-nested-unshift-nested-value,outer-unshift-arm-arm-unshift-arm-value unshift-first false unshift-outer
 unshift-ninth nested-unshift-nested-seed-value,arm-unshift-nested-nested-unshift-nested-value,outer-unshift-arm-arm-unshift-arm-value unshift-first false unshift-item

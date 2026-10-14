@@ -3,8 +3,8 @@ push-second  push-first false push-selector
 push-third  push-first false push-nested-selector
 push-fourth  push-first false push-true-left
 push-fifth  push-first false push-true-seed
-push-sixth  push-first false push-true-value
-push-seventh  push-first false push-arm-value
+push-sixth true-nested-push-true-seed-value push-first false push-true-value
+push-seventh true-nested-push-true-seed-value,arm-push-true-nested-nested-push-true-value push-first false push-arm-value
 push-eighth true-nested-push-true-seed-value,arm-push-true-nested-nested-push-true-value,outer-push-arm-arm-push-arm-value push-first false push-inner
 push-ninth true-nested-push-true-seed-value,arm-push-true-nested-nested-push-true-value,outer-push-arm-arm-push-arm-value push-first false push-outer
 push-tenth true-nested-push-true-seed-value,arm-push-true-nested-nested-push-true-value,outer-push-arm-arm-push-arm-value push-first false push-item
@@ -16,8 +16,8 @@ unshift-second  unshift-first false unshift-selector
 unshift-third  unshift-first false unshift-nested-selector
 unshift-fourth  unshift-first false unshift-false-left
 unshift-fifth  unshift-first false unshift-false-seed
-unshift-sixth  unshift-first false unshift-false-value
-unshift-seventh  unshift-first false unshift-arm-value
+unshift-sixth false-nested-unshift-false-seed-value unshift-first false unshift-false-value
+unshift-seventh false-nested-unshift-false-seed-value,arm-unshift-false-nested-nested-unshift-false-value unshift-first false unshift-arm-value
 unshift-eighth false-nested-unshift-false-seed-value,arm-unshift-false-nested-nested-unshift-false-value,outer-unshift-arm-arm-unshift-arm-value unshift-first false unshift-inner
 unshift-ninth false-nested-unshift-false-seed-value,arm-unshift-false-nested-nested-unshift-false-value,outer-unshift-arm-arm-unshift-arm-value unshift-first false unshift-outer
 unshift-tenth false-nested-unshift-false-seed-value,arm-unshift-false-nested-nested-unshift-false-value,outer-unshift-arm-arm-unshift-arm-value unshift-first false unshift-item

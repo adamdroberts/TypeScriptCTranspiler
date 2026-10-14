@@ -1,7 +1,7 @@
 push-first  push-first false push-receiver
 push-second  push-first false push-selector
 push-third  push-first false push-arm-seed
-push-fourth  push-first false push-arm-value
+push-fourth arm-push-arm-seed-value push-first false push-arm-value
 push-fifth arm-push-arm-seed-value,outer-push-arm-arm-push-arm-value push-first false push-inner
 push-sixth arm-push-arm-seed-value,outer-push-arm-arm-push-arm-value push-first false push-outer
 push-seventh arm-push-arm-seed-value,outer-push-arm-arm-push-arm-value push-first false push-item
@@ -11,7 +11,7 @@ push-done arm-push-arm-seed-value,outer-push-arm-arm-push-arm-value push-first,p
 unshift-first  unshift-first false unshift-receiver
 unshift-second  unshift-first false unshift-selector
 unshift-third  unshift-first false unshift-arm-seed
-unshift-fourth  unshift-first false unshift-arm-value
+unshift-fourth arm-unshift-arm-seed-value unshift-first false unshift-arm-value
 unshift-fifth arm-unshift-arm-seed-value,outer-unshift-arm-arm-unshift-arm-value unshift-first false unshift-inner
 unshift-sixth arm-unshift-arm-seed-value,outer-unshift-arm-arm-unshift-arm-value unshift-first false unshift-outer
 unshift-seventh arm-unshift-arm-seed-value,outer-unshift-arm-arm-unshift-arm-value unshift-first false unshift-item

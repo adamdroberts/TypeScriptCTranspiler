@@ -1,3 +1,5 @@
+Corrected retained generator captured tag/member/unary/return expectations using independent unchanged Script observations.
+
 Materialized the parameterized generator Iterator helper and corrected its remaining-value and terminal-next observations from independent Node.
 
 Removed typed switch exhaustiveness rejection and finite-domain termination shortcuts; canonical statement completions retain ordinary and suspended unmatched paths.
