@@ -6580,6 +6580,59 @@
         }
       ],
       "rationale": "Scoped reciprocal evidence for the RegExp split intrinsic; passing diagnostic execution is not a whole-target conformance claim."
+    },
+    {
+      "clause": "sec-regexp.prototype-%symbol.replace%",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "exec-result-capture-and-substitution-worklist",
+          "title": "Ordered receiver/input/replacement/flags conversion, RegExpExec result collection, live capture and callback Lists, GetSubstitution, UTF-16 cursor advancement, abrupt completion and intrinsic metadata",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-regexp.prototype-%symbol.replace%"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/regexp-replace.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "regexp_replace_capture_worklist"
+            ],
+            "e2e": [
+              "regexp_replace_protocol"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#RegExp"
+            ],
+            "implementation": [
+              "runtime/tsc_regexp_api.c#tsc_regexp_replace_apply",
+              "runtime/tsc_regexp_api.c#regexp_exec_value",
+              "runtime/tsc_regexp_api.c#regexp_set_last_index_value",
+              "runtime/tsc_regexp_api.c#tsc_string_get_substitution",
+              "runtime/tsc_regexp.c#tsc_regexp_prototype_value"
+            ]
+          },
+          "rationale": "One retained RegExpExec result collection and one actual capture List drive the ordinary replacement worklist. Generic live Gets, callback argument/this identity, ordered conversion and abrupt completion are shared with token substitution. Independent Node property partitions cover built-in/custom exec, undefined captures, named groups, position normalization, Unicode advancement, errors and descriptors. One generated high-depth owner graph and wide actual capture List verifies ordered conversion, callback placement and group identity. The exact pinned intrinsic directory, retaining separate dependency metadata owners, passes immutably at 0d13d3120 with independent Node and corpus/request/containment/native artifact-byte audit. Separate GetSubstitution registration, Symbol.replace feature readiness, host eligibility and exhaustive signed target coverage remain open."
+        }
+      ],
+      "rationale": "Scoped reciprocal replacement intrinsic evidence; no whole-RegExp, whole-String or whole-target conformance claim."
     }
   ],
   "groups": [

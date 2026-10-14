@@ -1710,7 +1710,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-regexp.prototype-%symbol.match%` — RegExp.prototype [ %Symbol.match% ] ( _string_ ): exact disposition and partitions missing.
   - [ ] `sec-regexp-prototype-%symbol.matchall%` — RegExp.prototype [ %Symbol.matchAll% ] ( _string_ ): exact disposition and partitions missing.
   - [ ] `sec-get-regexp.prototype.multiline` — get RegExp.prototype.multiline: exact disposition and partitions missing.
-  - [ ] `sec-regexp.prototype-%symbol.replace%` — RegExp.prototype [ %Symbol.replace% ] ( _string_, _replaceValue_ ): exact disposition and partitions missing.
+  - [ ] `sec-regexp.prototype-%symbol.replace%` — RegExp.prototype [ %Symbol.replace% ] ( _string_, _replaceValue_ )
+    - [ ] `exec-result-capture-and-substitution-worklist` (intrinsic, unbounded): Ordered receiver/input/replacement/flags conversion, RegExpExec result collection, live capture and callback Lists, GetSubstitution, UTF-16 cursor advancement, abrupt completion and intrinsic metadata.
   - [ ] `sec-regexp.prototype-%symbol.search%` — RegExp.prototype [ %Symbol.search% ] ( _string_ ): exact disposition and partitions missing.
   - [ ] `sec-get-regexp.prototype.source` — get RegExp.prototype.source: exact disposition and partitions missing.
   - [ ] `sec-escaperegexppattern` — EscapeRegExpPattern ( _P_: a String, _F_: a String, ): a String: exact disposition and partitions missing.

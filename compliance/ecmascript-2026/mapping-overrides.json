@@ -313,6 +313,16 @@
       ],
       "reason": "The ES6 RegExp.prototype @@split intrinsic is the same algorithm now named RegExp.prototype [ %Symbol.split% ]; exact historical ID correspondence preserves the algorithm owner.",
       "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es6id",
+      "match": "exact",
+      "value": "21.2.5.8",
+      "clauses": [
+        "sec-regexp.prototype-%symbol.replace%"
+      ],
+      "reason": "The exact ES6 RegExp.prototype @@replace section is the current RegExp.prototype [ %Symbol.replace% ] intrinsic.",
+      "reviewedBy": "tsc2c compliance review"
     }
   ],
   "pathRules": [

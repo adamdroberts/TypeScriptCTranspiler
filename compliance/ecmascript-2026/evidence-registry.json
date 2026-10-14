@@ -5796,7 +5796,8 @@
       "kind": "declarationSurface",
       "id": "stdlib/lib.core.d.ts#RegExp",
       "targets": [
-        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist"
+        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist",
+        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist"
       ]
     },
     {
@@ -5810,14 +5811,16 @@
       "kind": "implementation",
       "id": "runtime/tsc_regexp_api.c#regexp_exec_value",
       "targets": [
-        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist"
+        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist",
+        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist"
       ]
     },
     {
       "kind": "implementation",
       "id": "runtime/tsc_regexp_api.c#regexp_set_last_index_value",
       "targets": [
-        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist"
+        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist",
+        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist"
       ]
     },
     {
@@ -5845,7 +5848,50 @@
       "kind": "implementation",
       "id": "runtime/tsc_regexp.c#tsc_regexp_prototype_value",
       "targets": [
-        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist"
+        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist",
+        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/regexp-replace.property.test.ts",
+      "targets": [
+        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "regexp_replace_capture_worklist",
+      "targets": [
+        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist"
+      ],
+      "stressReview": {
+        "dimension": "retained replacement result/capture owner graph depth and actual capture List traversal",
+        "parameter": "depth",
+        "representativeHighDepth": 4096,
+        "rationale": "One generated worklist independently verifies ordered capture conversion, retained source owner identity, complete callback List layout and named-group identity; the algorithm does not depend on the representative depth.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "regexp_replace_protocol",
+      "targets": [
+        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_regexp_api.c#tsc_regexp_replace_apply",
+      "targets": [
+        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_regexp_api.c#tsc_string_get_substitution",
+      "targets": [
+        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist"
       ]
     }
   ]
