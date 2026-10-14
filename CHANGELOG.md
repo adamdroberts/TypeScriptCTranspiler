@@ -1,3 +1,5 @@
+Moved class constructor post-body completion checks into the restored caller context through the retained constructor environment.
+
 Released cancelled and consumed immediate callback payload roots while preserving snapshot FIFO and reentrant appends.
 
 Released consumed cross-thread queue payload roots through the canonical synchronized FIFO drain.

@@ -1536,7 +1536,8 @@
       "kind": "implementation",
       "id": "runtime/tsc_value.c#construct_from_argument_list",
       "targets": [
-        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist"
+        "sec-reflect.construct#validated-target-newtarget-and-array-like-argument-worklist",
+        "sec-ecmascript-function-objects-construct-argumentslist-newtarget#caller-context-postbody-completion"
       ]
     },
     {
@@ -5242,6 +5243,62 @@
       "id": "runtime/tsc_core.c#tsc_drain_immediates",
       "targets": [
         "sec-jobs#immediate-queue-payload-ownership"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/constructor-completion-realm.property.test.ts",
+      "targets": [
+        "sec-ecmascript-function-objects-construct-argumentslist-newtarget#caller-context-postbody-completion"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/derived-class-constructor.property.test.ts",
+      "targets": [
+        "sec-ecmascript-function-objects-construct-argumentslist-newtarget#caller-context-postbody-completion"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/dynamic-class-constructor.property.test.ts",
+      "targets": [
+        "sec-ecmascript-function-objects-construct-argumentslist-newtarget#caller-context-postbody-completion"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "constructor_completion_depth",
+      "targets": [
+        "sec-ecmascript-function-objects-construct-argumentslist-newtarget#caller-context-postbody-completion"
+      ],
+      "stressReview": {
+        "dimension": "retained constructor completion graph depth",
+        "parameter": "depth",
+        "representativeHighDepth": 2048,
+        "rationale": "One shared generated retained graph verifies post-body completion independently of caller/callee Realm, object/primitive return and initialized this partitions.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "derived_class_constructor",
+      "targets": [
+        "sec-ecmascript-function-objects-construct-argumentslist-newtarget#caller-context-postbody-completion"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_class_construct_body",
+      "targets": [
+        "sec-ecmascript-function-objects-construct-argumentslist-newtarget#caller-context-postbody-completion"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_environment.c#tsc_environment_get_this",
+      "targets": [
+        "sec-ecmascript-function-objects-construct-argumentslist-newtarget#caller-context-postbody-completion"
       ]
     }
   ]

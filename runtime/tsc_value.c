@@ -3907,18 +3907,15 @@ tsc_value_t tsc_value_class_construct_body(tsc_value_t constructor, tsc_value_t 
         : ((tsc_function_identity_t*)value_ptr(identity->class_constructor_body))->lexical_environment;
     tsc_environment_t* volatile environment = tsc_environment_constructor_new(parent, constructor, new_target,
         receiver, identity->derived_class_constructor);
+    value_current_callee->constructor_environment = environment;
     if (!identity->derived_class_constructor) tsc_value_class_initialize_elements(constructor, receiver, false);
     if (default_body) {
         if (identity->derived_class_constructor) return tsc_environment_super_construct(environment,
             tsc_environment_super_constructor(environment), tsc_value_array(arguments));
         return receiver;
     }
-    tsc_value_t result = tsc_value_apply_with_activation(identity->class_constructor_body, receiver,
+    return tsc_value_apply_with_activation(identity->class_constructor_body, receiver,
         tsc_value_array(arguments), constructor, new_target, environment);
-    if (tsc_value_is_object(result)) return result;
-    if (identity->derived_class_constructor && !tsc_value_is_undefined(result))
-        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Derived constructor may only return an object or undefined"));
-    return tsc_environment_get_this(environment);
 }
 
 static tsc_value_t tsc_value_apply_with_activation(
@@ -4127,6 +4124,16 @@ static tsc_value_t construct_from_argument_list(
             (void)tsc_realm_swap(previous_realm);
             if (frame.tail_call)
                 result = tsc_value_apply_function(frame.tail_callee, frame.tail_receiver, frame.tail_arguments);
+            /* Ordinary constructor return validation runs in the restored
+             * caller context. The retained environment owns the this binding
+             * independently of the constructor body's execution Realm. */
+            if (frame.constructor_environment) {
+                if (tsc_value_is_object(result)) return result;
+                if (!ident->derived_class_constructor) return receiver;
+                if (!tsc_value_is_undefined(result))
+                    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Derived constructor may only return an object or undefined"));
+                return tsc_environment_get_this(frame.constructor_environment);
+            }
             if (
                 value_is_box(result) &&
                 (
