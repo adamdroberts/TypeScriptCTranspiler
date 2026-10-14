@@ -1,3 +1,5 @@
+Projected native TypedArray element-width metadata into shared source owners.
+
 Reused equivalent earlier capture phases within represented activations, closing retained source owner graphs.
 
 Shared native Math descriptors with ordinary source owners, preserving ordered conversion effects and unbounded Number results.

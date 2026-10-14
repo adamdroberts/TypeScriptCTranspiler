@@ -59,6 +59,17 @@ export const runtimeMathMethods:ReadonlyMap<string,{length:number;kind:string}>=
 );
 if(!runtimeMathMethods.size)throw new Error("missing native Math method descriptors");
 
+/** Element brands and widths share the native TypedArray collection. */
+export const runtimeTypedArrayDescriptors:ReadonlyMap<string,{width:number;kind:string}>=new Map(
+    fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_typed_array.def"),"utf8")
+        .split(/\r?\n/).filter(line=>line.startsWith("TSC_TYPED_ARRAY")).map(line=>{
+            const row=/^TSC_TYPED_ARRAY\((\w+), (\d+), (SIGNED|UNSIGNED|CLAMPED|FLOAT|BIG_SIGNED|BIG_UNSIGNED)\)$/.exec(line);
+            if(!row||!Number.isSafeInteger(Number(row[2]))||Number(row[2])<=0)throw new Error("invalid native TypedArray descriptor");
+            return [row[1]!,{width:Number(row[2]),kind:row[3]!}] as const;
+        }),
+);
+if(!runtimeTypedArrayDescriptors.size)throw new Error("missing native TypedArray descriptors");
+
 export const runtimeObjectPrototypeMethods: ReadonlyMap<string, NonNullable<RuntimeGlobalBinding["normalResult"]>> = new Map(
     fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_object_prototype_methods.def"), "utf8")
         .split(/\r?\n/).filter(line => line.startsWith("TSC_OBJECT_PROTOTYPE_METHOD"))
@@ -131,9 +142,8 @@ export const runtimeGlobalBindings: ReadonlyMap<string, RuntimeGlobalBinding> = 
     [...(fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_global_bindings.def"), "utf8") + "\n" + [...fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_callback_timers.def"), "utf8")
             .matchAll(/^TSC_CALLBACK_TIMER_OPERATION\((\w+), /gm)]
             .map(([, name]) => `TSC_GLOBAL_INTRINSIC(${name}, collection, NON_STRING)`).join("\n")
-        + "\n" + [...fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_typed_array.def"), "utf8")
-            .matchAll(/^TSC_TYPED_ARRAY\((\w+), /gm)]
-            .map(([, name]) => `TSC_GLOBAL_INTRINSIC(${name}, collection, OBJECT)`).join("\n"))
+        + "\n" + [...runtimeTypedArrayDescriptors.keys()]
+            .map(name => `TSC_GLOBAL_INTRINSIC(${name}, collection, OBJECT)`).join("\n"))
         .matchAll(/^TSC_GLOBAL_(INTRINSIC|FUNCTION|VALUE)\((\w+), (.*)\)$/gm)]
         .map(([, kind, name, operands]) => {
             const attributes = operands!.match(/, (true|false), (true|false)$/);

@@ -17,7 +17,7 @@ import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, functionConstructorSourceKey, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
 import {declarativeSourceBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding, sourceBindingTarget} from "./source-bindings";
-import {runtimeMathMethods,runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeUtilExports, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
+import {runtimeTypedArrayDescriptors,runtimeMathMethods,runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeUtilExports, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
     readonly roots?: readonly string[];
@@ -226,6 +226,7 @@ class SourceValueFlow {
     private presenceClosed = false;
     private readonly errorPrototypes = new Map<string,Cell>();
     private readonly primitivePrototypes = new Map<string,Cell>();
+    private readonly typedArrayPrototypes = new Map<string,Cell>();
     private readonly primitiveBoxes = new Map<ts.Node,Map<string,Cell>>();
     private readonly booleanPrimitives = new Map<Cell,Cell>();
     private readonly primitiveDefaults = new Map<string,Cell>();
@@ -2117,6 +2118,8 @@ class SourceValueFlow {
                 }
                 if(key==="Iterator")this.defineField(fields,"prototype",this.iteratorPrototype());
                 if(runtimePrimitiveDescriptors.has(key))this.defineField(fields,"prototype",this.primitivePrototype(key),false);
+                const element=runtimeTypedArrayDescriptors.get(key);
+                if(element){const width=this.newCell();this.publish(width,this.primitive(element.width));this.defineField(fields,"BYTES_PER_ELEMENT",width,false);this.defineField(fields,"prototype",this.typedArrayPrototype(key,width),false);}
                 if(key==="Symbol") {
                     for (const [name, symbol] of this.wellKnownSymbols) {
                         const value = this.newCell(); this.publish(value, this.primitive(symbol)); this.defineField(fields, name, value);
@@ -2356,6 +2359,15 @@ class SourceValueFlow {
             const message=this.newCell(),method=this.newCell();this.publish(message,this.primitive(""));this.publish(method,this.operation("error-text"));
             this.defineField(owner,"message",message);this.defineField(owner,"toString",method);
         }
+        return value;
+    }
+    private typedArrayPrototype(name:string,width:Cell):Cell {
+        let value=this.typedArrayPrototypes.get(name);if(value)return value;
+        value=this.newCell();this.typedArrayPrototypes.set(name,value);
+        const parent=this.newCell();this.publish(parent,this.unknown);
+        const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:parent};
+        this.publish(value,{tag:"object",owner});this.copy(this.opaqueMutation,owner.shape);
+        this.defineField(owner,"BYTES_PER_ELEMENT",width,false);this.defineField(owner,"constructor",this.globalBinding(name),false);
         return value;
     }
     private primitivePrototype(name:string):Cell {
