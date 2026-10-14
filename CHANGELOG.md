@@ -1,3 +1,5 @@
+- Share unfiltered source owner mutations through the canonical origin graph and use a file-backed activation oracle.
+
 - Register scoped GetSubstitution evidence with exact pinned metadata reconciliation and a live named-capture template worklist stress.
 
 - Retain JSON dynamic-import source namespace owners without checker symbols and model finite missing relative targets as rejection.

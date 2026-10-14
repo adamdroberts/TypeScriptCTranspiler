@@ -21,6 +21,13 @@ test('owner field effects preserve captured, later, newly created and callable s
  const reads=Array.from({length:512},(_,index)=>`opaque(owner);const captured${index}=owner.key${index};`).join('\n');
  const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:`const owner={${fields}};${reads}eval(owner.key0);`}]);expect(graph.error).toContain('direct eval source is not a finite static string expression');
 },120000);
+test('unfiltered owner mutation origins share one dependency graph at ordinary callable owners',()=>{
+ const width=512,definitions=Array.from({length:width},(_,index)=>`function fn${index}(){return "17;"}`).join('\n');
+ const effects=Array.from({length:width},()=>`opaque();`).join('\n');
+ const reads=Array.from({length:width},(_,index)=>`const captured${index}=fn${index}.name;`).join('\n');
+ const source=definitions+'\n'+reads+'\n'+effects+'\neval("19;");';
+ const graph=finiteEvalScriptSourceGraph([{path:'main.js',source}]);expect(graph.error).toBeNull();expect(graph.directEvalSources.map(entry=>entry.source)).toContain('19;');
+},120000);
 const source=String.raw`
 function opaque(owner:any,index:number):void{
  const receiver:any=owner;receiver['key'+index]='changed'+index;

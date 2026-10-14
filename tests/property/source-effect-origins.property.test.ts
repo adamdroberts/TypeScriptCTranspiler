@@ -1,5 +1,5 @@
 import {expect,test} from 'bun:test';
-import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {compile} from '../../src/compile';
@@ -50,14 +50,14 @@ test('activation origins close over the call graph and declared Script order ind
    const functions=Array.from({length:depth},(_,index)=>`function f${index}(){return ${index+1<depth?'f'+(index+1)+'()':'(0,eval)("Math.random();")'};}`).join('\n');
    const sources=[`globalThis.setting={body:'return "saved";'};`,functions+'\nconst body=globalThis.setting.body;f0();console.log(Function(body)());','Math.random();'];
    const reference=join(directory,'reference.js');await writeFile(reference,sources.join('\n'));
-   const node=Bun.spawnSync(['node',reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(node.stdout.toString()).toBe('saved\n');
+   const oracleOutput=reference+'.stdout';const node=Bun.spawnSync(['node',reference],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120_000});const oracleText=await readFile(oracleOutput,'utf8');expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(oracleText).toBe('saved\n');
    const entries:string[]=[];
    for(const [index,source] of sources.entries()){const entry=join(directory,index===1&&typed?'main.ts':'script-'+index+'.js');await writeFile(entry,(typed?'// @ts-nocheck\n':'')+source);entries.push(entry);}
    const entry=entries[1]!,output=join(directory,'program'),diagnostics:string[]=[];
    const result=await compile({entry,output,buildDir:join(directory,'build'),noGc,additionalRoots:entries,isolatedScriptRoots:entries,initializationEntries:entries,test262Observation:{kind:'test262-native-observation',scenarioId:'source-effect-origins#script',setupEntries:[],testEntry:entry,scriptEntries:entries,async:false},diagnosticWriter:message=>diagnostics.push(message)});
    expect({noGc,typed,code:result.exitCode,diagnostics:diagnostics.join('')}).toEqual({noGc,typed,code:0,diagnostics:''});
    const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({noGc,typed,code:native.exitCode,stderr:native.stderr.toString()}).toEqual({noGc,typed,code:0,stderr:''});
-   const observation=parseHostObservation(JSON.parse(native.stdout.toString()));expect({noGc,typed,observation}).toMatchObject({observation:{kind:'normal'}});if(observation.kind==='normal')expect(observation.stdout).toBe(node.stdout.toString());
+   const observation=parseHostObservation(JSON.parse(native.stdout.toString()));expect({noGc,typed,observation}).toMatchObject({observation:{kind:'normal'}});if(observation.kind==='normal')expect(observation.stdout).toBe(oracleText);
   }
  }finally{await rm(root,{recursive:true,force:true});}
 },600_000);

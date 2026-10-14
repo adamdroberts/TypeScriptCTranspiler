@@ -1271,6 +1271,9 @@ class SourceValueFlow {
     private ownerMutation(owner:ObjectOwner):void {
         const creation=this.ownerCreations.get(owner);
         const activation=creation?this.enclosingActivation(creation):undefined;
+        // These owners have no represented acyclic creation boundary. Every
+        // opaque origin is admissible, so retain the canonical graph directly.
+        if(!creation||this.repeatedActivationContext(creation)){this.copy(this.opaqueMutation,owner.shape);return;}
         this.rule([this.opaqueMutation,...(activation?[activation.active,this.activationTiming(activation)]:[])],()=>{
             for(const atom of this.opaqueMutation.values){
                 if(creation&&(!activation||!this.activationTiming(activation).values.size)&&atom.tag==="unknown"&&atom.origin&&!this.dynamicContext(atom.origin)&&!this.repeatedActivationContext(creation)){
