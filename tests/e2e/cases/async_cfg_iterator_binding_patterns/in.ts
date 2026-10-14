@@ -47,5 +47,5 @@ dynamicPatterns()
     })
     .then(
         (result) => console.log("unexpected:", result),
-        (reason) => console.log("nullish:", reason),
+        (reason) => console.log("nullish:", reason instanceof TypeError),
     );
