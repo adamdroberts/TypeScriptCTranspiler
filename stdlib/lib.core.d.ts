@@ -2620,6 +2620,9 @@ interface Buffer {
     [n: number]: number;
 }
 interface BufferConstructor {
+    (data: string | number[] | Buffer | number, encoding?: BufferEncoding, ...ignored: any[]): Buffer;
+    new (data: string | number[] | Buffer | number, encoding?: BufferEncoding, ...ignored: any[]): Buffer;
+    readonly prototype: Buffer;
     from(data: string, encoding?: BufferEncoding, ...ignored: any[]): Buffer;
     from(data: number[], ...ignored: any[]): Buffer;
     from(data: Buffer, ...ignored: any[]): Buffer;

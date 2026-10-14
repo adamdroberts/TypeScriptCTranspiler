@@ -1,3 +1,5 @@
+Published ordinary Buffer constructor/static owners from canonical descriptors and removed direct static call bypasses.
+
 Replaced the obsolete private-field rejection expectation with accepted-value and brand observations.
 
 Decoded permissive Buffer hex/base64 through shared unit scanners and estimated byteLength independently.

@@ -1,7 +1,6 @@
 import {sourceNumericOperation, SOURCE_NUMERIC_OPERATION_FUNCTIONS, SOURCE_BINARY_NUMERIC_OPERATIONS, SOURCE_PREFIX_NUMERIC_OPERATIONS, SOURCE_UPDATE_NUMERIC_OPERATIONS} from "../source-numeric-operations";
 import { consoleOperations } from "../console-operations";
 import { cryptoDigestExports } from "../crypto-digest-owners";
-import { bufferStaticResults } from "../buffer-statics";
 import type { SourceEvalPlan, EvalSourceEntry, DirectEvalSourceEntry, IndirectEvalSourceEntry } from "../eval-source";
 import { classPrivateNames, classPrivateNamesInScope, externalPrivateNames, resolveClassPrivateName } from "./private-names";
 import { moduleRequestFromDeclaration, moduleRequestKey, type ModuleRequest } from "../module-request";
@@ -2096,15 +2095,6 @@ class Emitter {
             }
         }
         if (
-            this.isBufferConstructorExpression(recv) &&
-            (
-                this.isSideEffectFreeBufferStaticCall(method, call.arguments, seenConsts) ||
-                this.isSideEffectFreeBufferAllocationCall(method, call.arguments, seenConsts)
-            )
-        ) {
-            return true;
-        }
-        if (
             ts.isIdentifier(recv) &&
             method === "escape" &&
             call.arguments.length === 1 &&
@@ -2153,10 +2143,6 @@ class Emitter {
                     method === "setPrototypeOf" ||
                     method === "isExtensible"
                 )
-            ) ||
-            (
-                this.isBufferConstructorExpression(recv) &&
-                this.isSideEffectFreeBufferStaticCall(method, call.arguments, seenConsts)
             ) ||
             (
                 recv.text === "process" &&
@@ -2443,95 +2429,6 @@ class Emitter {
             Array.from(args).slice(1).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
             );
-    }
-
-    private isSideEffectFreeBufferStaticCall(
-        method: string,
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const ignoredAfter = (index: number): boolean =>
-            Array.from(args).slice(index).every((arg) =>
-                this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
-            );
-        switch (method) {
-            case "isBuffer":
-                return args.length >= 1 &&
-                    this.isSideEffectFreeTopLevelConstInitializer(args[0]!, seenConsts) &&
-                    ignoredAfter(1);
-            case "isEncoding":
-                return args.length >= 1 &&
-                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
-                    ignoredAfter(1);
-            case "byteLength":
-                return args.length >= 1 &&
-                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
-                    (
-                        !args[1] ||
-                        this.isSideEffectFreeUndefinedValue(args[1], seenConsts) ||
-                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "utf8" ||
-                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "utf-8" ||
-                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "latin1" ||
-                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "binary" ||
-                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "ascii"
-                    ) &&
-                    ignoredAfter(args[1] ? 2 : 1);
-            default:
-                return false;
-        }
-    }
-
-    private isSideEffectFreeBufferAllocationCall(
-        method: string,
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const nonNegativeFiniteNumber = (arg: ts.Expression): boolean => {
-            const value = this.sideEffectFreePrimitiveNumberValue(arg, seenConsts);
-            return value !== null && Number.isFinite(value) && value >= 0;
-        };
-        switch (method) {
-            case "from":
-                return args.length >= 1 &&
-                    args.length <= 2 &&
-                    this.isSideEffectFreeStringCoercion(args[0]!, seenConsts) &&
-                    (
-                        !args[1] ||
-                        this.isSideEffectFreeUndefinedValue(args[1], seenConsts) ||
-                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "utf8" ||
-                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "utf-8" ||
-                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "latin1" ||
-                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "binary" ||
-                        this.sideEffectFreeStringLiteralText(args[1], seenConsts) === "ascii"
-                    );
-            case "alloc":
-                return args.length >= 1 &&
-                    args.length <= 2 &&
-                    nonNegativeFiniteNumber(args[0]!) &&
-                    (!args[1] || this.isSideEffectFreePrimitiveNumberCoercion(args[1], seenConsts));
-            case "allocUnsafe":
-            case "allocUnsafeSlow":
-                return args.length === 1 && nonNegativeFiniteNumber(args[0]!);
-            default:
-                return false;
-        }
-    }
-
-    private isSideEffectFreeFreshBufferOperand(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isPropertyAccessExpression(unwrapped.expression) &&
-            this.isBufferConstructorExpression(unwrapped.expression.expression) &&
-            this.isSideEffectFreeBufferAllocationCall(unwrapped.expression.name.text, unwrapped.arguments, seenConsts)
-        ) {
-            return true;
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreeFreshBufferOperand(init, seenConsts);
     }
 
     private isSideEffectFreeCryptoCall(
@@ -31121,7 +31018,6 @@ class Emitter {
             this.isSideEffectFreeFreshSetOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshWeakMapOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshWeakSetOperand(expr, seenConsts) ||
-            this.isSideEffectFreeFreshBufferOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshEventOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshEventTargetOperand(expr, seenConsts) ||
             this.isSideEffectFreeFreshEventEmitterOperand(expr, seenConsts);
@@ -37724,9 +37620,6 @@ class Emitter {
         if (ts.isIdentifier(recvExpr) && this.isQueryStringModuleIdentifier(recvExpr)) {
             return this.emitQueryStringCall(call, memberName);
         }
-        if (this.isBufferConstructorExpression(recvExpr)) {
-            return this.emitBufferStatic(call, memberName);
-        }
         if (ts.isIdentifier(recvExpr) && recvExpr.text === "Map" && memberName === "groupBy") {
             return this.emitMapGroupBy(call);
         }
@@ -43861,14 +43754,6 @@ class Emitter {
                 unsupported(value, `${label}.disableEntropyCache must be a boolean literal in this subset`);
             }
         }
-    }
-
-    private emitBufferStatic(call: ts.CallExpression, name: string): EmitResult {
-        const argumentsList = this.emitSpreadCallArgumentList(call.arguments);
-        const resultKind = bufferStaticResults.get(name);
-        const resultType = resultKind === "buffer" ? T_BUFFER : resultKind === "number" ? T_NUMBER : resultKind === "boolean" ? T_BOOLEAN : T_VALUE;
-        return this.emitSequencedExpr(resultType, [{ value: argumentsList }],
-            ([actuals]) => this.coerce({ c: `tsc_buffer_static_call("${escapeCString(name)}", ${actuals})`, ty: T_VALUE }, resultType, call));
     }
 
     private emitFsStatsMethod(

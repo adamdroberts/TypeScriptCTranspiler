@@ -1,4 +1,5 @@
 import {sourceNumericOperation, type SourceNumericOperation, type SourcePrimitive} from "./source-numeric-operations";
+import {bufferStaticDescriptors} from "./buffer-statics";
 import ts from "typescript";
 import { callableSourceText } from "./callable-source-text";
 import { normalizeAssignmentTarget, unwrapTransparentExpression as unwrap } from "./emit/binding-tree";
@@ -2184,6 +2185,17 @@ class SourceValueFlow {
                     const getter=this.newCell();this.publish(getter,this.operation("promise-species"));
                     this.defineAccessor(fields,this.wellKnownSymbols.get("species")!,"get",getter);
                     this.ownPresence(fields,this.wellKnownSymbols.get("species")!).initial=true;
+                }
+                if (key === "Buffer") {
+                    for (const [name, descriptor] of bufferStaticDescriptors) {
+                        const owner: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell()}, value = this.newCell(), length = this.newCell(), text = this.newCell();
+                        this.copy(this.opaqueMutation, owner.shape);
+                        owner.prototype = this.callablePrototype("ordinary");
+                        this.publish(length, this.primitive(descriptor.length)); this.publish(text, this.primitive(name));
+                        this.defineField(owner, "length", length, false); this.defineField(owner, "name", text, false);
+                        this.publish(value, {tag:"builtin", name:`Buffer.${name}`, normalResult:descriptor.result === "boolean" ? "boolean" : descriptor.result === "buffer" ? "object" : "non-string", fields:owner});
+                        this.defineField(fields, name, value, false);
+                    }
                 }
                 if(key==="Iterator")this.defineField(fields,"prototype",this.iteratorPrototype());
                 if(runtimePrimitiveDescriptors.has(key))this.defineField(fields,"prototype",this.primitivePrototype(key),false);
@@ -4768,6 +4780,13 @@ class SourceValueFlow {
                             this.copy(generated.value,result!);
                         }
                     } else if (atom.tag === "builtin") {
+                        if (atom.name === "Buffer" || atom.name.startsWith("Buffer.")) {
+                            this.onActive(node, () => {
+                                this.opaqueEffect(node);
+                                for (const actual of argv ?? (invocation.sequence ? [this.allArgumentValues(invocation.sequence)] : []))
+                                    this.escapeCallableArgument(actual, node);
+                            });
+                        }
                         if(atom.name==="Promise"){
                             if(!invocation.construct){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));continue;}
                             this.copy(this.promiseConstruction(node,argument(0)??omittedArgument),result);continue;

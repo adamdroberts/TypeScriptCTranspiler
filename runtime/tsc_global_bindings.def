@@ -45,6 +45,7 @@ TSC_GLOBAL_INTRINSIC(AggregateError, tsc_error_constructor_value(TSC_ERROR_AGGRE
 TSC_GLOBAL_INTRINSIC(SuppressedError, tsc_error_constructor_value(TSC_ERROR_SUPPRESSED), OBJECT)
 TSC_GLOBAL_INTRINSIC(Math, tsc_builtin_math(), NOT_CALLABLE)
 TSC_GLOBAL_INTRINSIC(console, tsc_console_owner_value(), NOT_CALLABLE)
+TSC_GLOBAL_INTRINSIC(Buffer, tsc_buffer_constructor_value(), OBJECT)
 TSC_GLOBAL_INTRINSIC(JSON, tsc_builtin_json(), NOT_CALLABLE)
 TSC_GLOBAL_INTRINSIC(Reflect, tsc_builtin_reflect(), NOT_CALLABLE)
 TSC_GLOBAL_FUNCTION(eval, 1.0, TSC_GLOBAL_FUNCTION_EVAL, false, false, 0, UNKNOWN)

@@ -9250,12 +9250,12 @@ tsc_value_t tsc_buffer_prototype_value(void) {
 }
 
 typedef enum {
-#define TSC_BUFFER_STATIC_METHOD(name, result_kind) BUFFER_STATIC_##name,
+#define TSC_BUFFER_STATIC_METHOD(name, result_kind, arity) BUFFER_STATIC_##name,
 #include "tsc_buffer_statics.def"
 #undef TSC_BUFFER_STATIC_METHOD
 } buffer_static_operation_t;
-static const struct {const char* name;buffer_static_operation_t operation;} buffer_static_operations[]={
-#define TSC_BUFFER_STATIC_METHOD(name, result_kind) {#name,BUFFER_STATIC_##name},
+static const struct {const char* name;buffer_static_operation_t operation;size_t arity;} buffer_static_operations[]={
+#define TSC_BUFFER_STATIC_METHOD(name, result_kind, arity) {#name,BUFFER_STATIC_##name,arity},
 #include "tsc_buffer_statics.def"
 #undef TSC_BUFFER_STATIC_METHOD
 };
@@ -9360,6 +9360,51 @@ tsc_value_t tsc_buffer_static_call(const char* name,const tsc_array_t* arguments
         }
     }
     tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("Buffer static operation cannot be represented"));
+}
+
+typedef struct { tsc_value_t constructor; void* root; } buffer_constructor_intrinsic_t;
+static const char buffer_constructor_key;
+static tsc_value_t buffer_static_owner_apply(void* environment, tsc_value_t receiver, tsc_array_t* args) {
+    (void)receiver;
+    return tsc_buffer_static_call(environment, args);
+}
+static tsc_value_t buffer_constructor_apply(void* environment, tsc_value_t receiver, tsc_array_t* args) {
+    (void)environment; (void)receiver;
+    tsc_value_t first = buffer_argument(args, 0);
+    if (!value_is_box(first)) {
+        tsc_array_t* actuals = tsc_array_new(sizeof(tsc_value_t), 1);
+        tsc_array_push_value(actuals, first);
+        return tsc_buffer_static_call("allocUnsafe", actuals);
+    }
+    return tsc_buffer_static_call("from", args);
+}
+tsc_value_t tsc_buffer_constructor_value(void) {
+    buffer_constructor_intrinsic_t* state = tsc_realm_state_get(&buffer_constructor_key);
+    if (state) return state->constructor;
+    tsc_runtime_lock();
+    state = tsc_realm_state_get(&buffer_constructor_key);
+    if (!state) {
+        state = TSC_GC_MALLOC(sizeof(*state)); memset(state, 0, sizeof(*state));
+        state->constructor = tsc_value_function_named_kind(buffer_constructor_apply, buffer_constructor_apply, NULL,
+            3, tsc_str_from_lit("Buffer", 6), TSC_FUNCTION_IDENTITY_BUILTIN);
+        state->root = tsc_value_gc_root(state->constructor);
+        tsc_realm_state_set(&buffer_constructor_key, state);
+        tsc_function_identity_t* identity = value_ptr(state->constructor);
+        identity->construct_allocates_receiver = false;
+        tsc_value_t prototype = tsc_buffer_prototype_value();
+        tsc_function_identity_set_own_prototype(identity, prototype);
+        identity->func_prototype_writable = true;
+        (void)tsc_value_set_prototype_of(state->constructor, tsc_typed_array_constructor_value(TSC_ELEMENT_Uint8Array));
+        tsc_object_define(value_ptr(prototype), tsc_str_from_lit("constructor", 11), state->constructor, true, false, true);
+        for (size_t index = 0; index < sizeof(buffer_static_operations) / sizeof(*buffer_static_operations); ++index) {
+            tsc_str_t* name = tsc_str_from_cstr(buffer_static_operations[index].name);
+            tsc_value_t function = tsc_value_function_named_kind(buffer_static_owner_apply, NULL,
+                (void*)buffer_static_operations[index].name, buffer_static_operations[index].arity, name, TSC_FUNCTION_IDENTITY_GENERIC);
+            (void)tsc_value_set_prop(state->constructor, name, function);
+        }
+    }
+    tsc_runtime_unlock();
+    return state->constructor;
 }
 
 tsc_value_t tsc_value_buffer(tsc_buffer_t* b) {
