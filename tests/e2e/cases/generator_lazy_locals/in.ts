@@ -24,7 +24,7 @@ console.log("created:", events.length === 0 ? "<empty>" : events.join("|"));
 const first = iter.next();
 console.log("first:", first.done, first.value, "events:", events.join("|"));
 
-const mapped = (iter as any).map((value: number): number => value * 10);
+const mapped = Array.from(iter.map((value: number): number => value * 10));
 console.log("mapped:", mapped.join(", "));
 console.log("after map:", events.join("|"));
 
