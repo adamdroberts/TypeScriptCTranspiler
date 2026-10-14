@@ -1,3 +1,5 @@
+Corrected async iterator fixture protocol and observed primitive-result TypeError identity.
+
 Followed escaped callback containers, source prototypes and retained payloads through one reachability graph.
 
 Preserved projected Promise actuals and mutable owners, retaining opaque callback invocation effects.

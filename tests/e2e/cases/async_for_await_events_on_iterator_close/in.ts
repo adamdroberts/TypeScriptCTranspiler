@@ -57,12 +57,13 @@ primitiveIterator.return = (): number => 42;
 breakWithPrimitiveClose(primitiveIterator).then((value: string): void => {
     console.log("close-non-object-unexpected:", value);
 }, (reason: any): void => {
-    console.log("close-non-object:", reason);
+    console.log("close-non-object:", reason instanceof TypeError);
 });
 primitiveEmitter.emit("data", "primitive");
 
 let noReturnStep = 0;
 const noReturnIterator: any = {
+    [Symbol.asyncIterator](): any { return this; },
     next: (): Promise<any> => {
         if (noReturnStep++ === 0) return Promise.resolve({ done: false, value: "no-return" });
         return Promise.resolve({ done: true, value: undefined });

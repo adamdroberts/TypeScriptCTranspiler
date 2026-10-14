@@ -13,5 +13,5 @@ iterator.next = (): Promise<any> => Promise.resolve(42);
 consumeInvalidNext(iterator).then((value: string): void => {
     console.log("next-non-object-unexpected:", value);
 }, (reason: any): void => {
-    console.log("next-non-object:", reason);
+    console.log("next-non-object:", reason instanceof TypeError);
 });
