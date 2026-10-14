@@ -39,7 +39,7 @@ function badAlloc(): string {
     try {
         return Buffer.alloc(-1).toString();
     } catch (err) {
-        return String(err);
+        return String(err instanceof RangeError);
     }
 }
 
@@ -47,7 +47,7 @@ function badConcat(): string {
     try {
         return Buffer.concat([one], -1).toString();
     } catch (err) {
-        return String(err);
+        return String(err instanceof RangeError);
     }
 }
 
@@ -99,9 +99,9 @@ function badSwap(): string {
     }
 }
 
-console.log("base64:", invalidBase64());
+console.log("base64:", JSON.stringify(invalidBase64()));
 console.log("hex odd:", oddHex());
-console.log("hex digit:", badHex());
+console.log("hex digit:", JSON.stringify(badHex()));
 console.log("from encoding:", badFromEncoding());
 console.log("alloc:", badAlloc());
 console.log("concat:", badConcat());

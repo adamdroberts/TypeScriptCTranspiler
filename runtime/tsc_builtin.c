@@ -1130,16 +1130,23 @@ void base64_decode_group(tsc_buffer_t* out, size_t* pos, const int* q, int qlen)
     }
 }
 
-tsc_buffer_t* buffer_from_base64(const tsc_str_t* input) {
-    tsc_buffer_t* out = buffer_alloc_len((input->len / 4) * 3 + 3);
+static tsc_buffer_t* buffer_decode_base64(const tsc_str_t* input, bool permissive) {
+    size_t length = input->len;
+    const uint16_t* units = permissive ? tsc_str_utf16_units(input, &length) : NULL;
+    tsc_buffer_t* out = buffer_alloc_len((length / 4) * 3 + 3);
     size_t pos = 0;
     int q[4];
     int qlen = 0;
-    for (size_t i = 0; i < input->len; i++) {
-        unsigned char ch = (unsigned char)input->data[i];
+    for (size_t i = 0; i < length; i++) {
+        unsigned char ch = (unsigned char)(permissive ? units[i] : input->data[i]);
         if (isspace(ch)) continue;
+        if (permissive && ch == '=') break;
         int v = ch == '=' ? -2 : base64_value(ch);
-        if (v < 0 && v != -2) tsc_throw_str(tsc_str_from_cstr("Buffer.from base64 input contains non-base64 digit"));
+        if (permissive && (ch == '-' || ch == '_')) v = ch == '-' ? 62 : 63;
+        if (v < 0 && v != -2) {
+            if (permissive) continue;
+            tsc_throw_str(tsc_str_from_cstr("Buffer.from base64 input contains non-base64 digit"));
+        }
         q[qlen++] = v;
         if (qlen == 4) {
             base64_decode_group(out, &pos, q, qlen);
@@ -1149,6 +1156,10 @@ tsc_buffer_t* buffer_from_base64(const tsc_str_t* input) {
     if (qlen > 0) base64_decode_group(out, &pos, q, qlen);
     out->len = pos;
     return out;
+}
+
+tsc_buffer_t* buffer_from_base64(const tsc_str_t* input) {
+    return buffer_decode_base64(input, true);
 }
 
 tsc_str_t* str_from_base64_bytes(const uint8_t* data, size_t len) {
@@ -1175,14 +1186,17 @@ tsc_buffer_t* tsc_buffer_from_str(const tsc_str_t* input, const tsc_str_t* encod
         return b;
     }
     if (str_lit_eq(encoding, "hex")) {
-        if ((input->len % 2) != 0) tsc_throw_str(tsc_str_from_cstr("Buffer.from hex input must have even length"));
-        tsc_buffer_t* b = buffer_alloc_len(input->len / 2);
+        size_t input_length = 0;
+        const uint16_t* units = tsc_str_utf16_units(input, &input_length);
+        tsc_buffer_t* b = buffer_alloc_len(input_length / 2);
+        size_t length = 0;
         for (size_t i = 0; i < b->len; i++) {
-            int hi = hex_value((unsigned char)input->data[i * 2]);
-            int lo = hex_value((unsigned char)input->data[i * 2 + 1]);
-            if (hi < 0 || lo < 0) tsc_throw_str(tsc_str_from_cstr("Buffer.from hex input contains non-hex digit"));
-            b->data[i] = (uint8_t)((hi << 4) | lo);
+            int hi = hex_value((unsigned char)units[i * 2]);
+            int lo = hex_value((unsigned char)units[i * 2 + 1]);
+            if (hi < 0 || lo < 0) break;
+            b->data[length++] = (uint8_t)((hi << 4) | lo);
         }
+        b->len = length;
         return b;
     }
     if (buffer_encoding_is_base64(encoding)) {
@@ -1270,7 +1284,7 @@ tsc_str_t* tsc_btoa(const tsc_str_t* input) {
 }
 
 tsc_str_t* tsc_atob(const tsc_str_t* input) {
-    tsc_buffer_t* decoded = buffer_from_base64(input);
+    tsc_buffer_t* decoded = buffer_decode_base64(input, false);
     return tsc_buffer_to_string(decoded, tsc_str_from_lit("utf8", 4));
 }
 
@@ -1476,12 +1490,18 @@ double tsc_buffer_compare_ranges(const tsc_buffer_t* source, const tsc_buffer_t*
 
 
 double tsc_buffer_byte_length_str(const tsc_str_t* input, const tsc_str_t* encoding) {
+    encoding = encoding ? tsc_str_to_lower(encoding) : NULL;
     if (buffer_encoding_is_utf8(encoding)) return (double)input->len;
-    if (str_lit_eq(encoding, "hex")) return floor((double)input->len / 2.0);
-    if (buffer_encoding_is_base64(encoding)) return (double)buffer_from_base64(input)->len;
+    if (str_lit_eq(encoding, "hex")) return floor((double)tsc_str_utf16_length(input) / 2.0);
+    if (buffer_encoding_is_base64(encoding)) {
+        size_t length = 0;
+        const uint16_t* units = tsc_str_utf16_units(input, &length);
+        if (length > 0 && units[length - 1] == '=') --length;
+        if (length > 0 && units[length - 1] == '=') --length;
+        return floor((double)length * 3.0 / 4.0);
+    }
     if (buffer_encoding_is_latin1(encoding) || buffer_encoding_is_ascii(encoding)) return (double)tsc_str_utf16_length(input);
-    tsc_throw_str(tsc_str_from_cstr("Buffer.byteLength: only utf8, hex, base64, latin1, ascii, and binary encodings are supported"));
-    return 0.0;
+    return (double)input->len;
 }
 
 bool tsc_buffer_is_encoding(const tsc_str_t* encoding) {

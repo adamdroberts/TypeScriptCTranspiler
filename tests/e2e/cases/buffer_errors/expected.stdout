@@ -1,11 +1,11 @@
-base64: Buffer.from base64 input contains non-base64 digit
-hex odd: Buffer.from hex input must have even length
-hex digit: Buffer.from hex input contains non-hex digit
+base64: ""
+hex odd: ab
+hex digit: ""
 from encoding: true
-alloc: Buffer.alloc size must be a non-negative finite number
-concat: Buffer.concat totalLength must be a non-negative finite number
+alloc: true
+concat: true
 toString: true
-byteLength: Buffer.byteLength: only utf8, hex, base64, latin1, ascii, and binary encodings are supported
+byteLength: 4
 read8: true
 write8: true
 read wide: true
