@@ -2673,7 +2673,8 @@
       "kind": "implementation",
       "id": "src/source-value-flow.ts#arrayIterator",
       "targets": [
-        "sec-json.parse#ordered-text-parse-and-callable-reviver-root"
+        "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
+        "sec-createarrayiterator#canonical-array-iterator-source-records"
       ]
     },
     {
@@ -4634,7 +4635,8 @@
       "kind": "implementation",
       "id": "src/source-value-flow.ts#collectionIteratorNext",
       "targets": [
-        "sec-iteratornext#canonical-collection-and-iterator-source-records"
+        "sec-iteratornext#canonical-collection-and-iterator-source-records",
+        "sec-createarrayiterator#canonical-array-iterator-source-records"
       ]
     },
     {
@@ -4782,6 +4784,41 @@
       "id": "src/source-value-flow.ts#directIteratorElements",
       "targets": [
         "sec-getsetrecord#canonical-setlike-and-composition-source-records"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/array-iterator-source.property.test.ts",
+      "targets": [
+        "sec-createarrayiterator#canonical-array-iterator-source-records"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "array_iterator_source_depth",
+      "targets": [
+        "sec-createarrayiterator#canonical-array-iterator-source-records"
+      ],
+      "stressReview": {
+        "dimension": "retained Array iterator receiver source alias graph depth",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One shared generated alias graph verifies canonical Array iterator receiver records in native property and typed CLI; compact mode, domain, effect and abrupt partitions are independent of depth.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "array_iterator_source",
+      "targets": [
+        "sec-createarrayiterator#canonical-array-iterator-source-records"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#arrayIterationView",
+      "targets": [
+        "sec-createarrayiterator#canonical-array-iterator-source-records"
       ]
     }
   ]

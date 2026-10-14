@@ -54,6 +54,7 @@ export interface FsReadActualListWidthSpec {generator:"fs-read-actual-list-width
 export interface CollectionSourceAliasDepthSpec {generator:"collection-source-alias-depth";depth:number;}
 export interface PrimitivePropertyPrototypeDepthSpec {generator:"primitive-property-prototype-depth";depth:number;}
 export interface GeneratorMethodOwnerDepthSpec {generator:"generator-method-owner-depth";depth:number;}
+export interface ArrayIteratorSourceDepthSpec {generator:"array-iterator-source-depth";depth:number;}
 export interface SetCompositionSourceDepthSpec {generator:"set-composition-source-depth";depth:number;}
 export interface ObjectLiteralEffectDepthSpec {generator:"object-literal-effect-depth";depth:number;}
 export interface ModuleIteratorImportDepthSpec {generator:"module-iterator-import-depth";depth:number;}
@@ -237,6 +238,7 @@ export type GeneratedCaseSpec =
     | CollectionSourceAliasDepthSpec
     | PrimitivePropertyPrototypeDepthSpec
     | GeneratorMethodOwnerDepthSpec
+    | ArrayIteratorSourceDepthSpec
     | SetCompositionSourceDepthSpec
     | ObjectLiteralEffectDepthSpec
     | ModuleIteratorImportDepthSpec
@@ -294,6 +296,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         throw new Error(`invalid generated case spec ${filename}: expected an object`);
     }
     const spec = value as Record<string, unknown>;
+    if(spec.generator==='array-iterator-source-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid Array iterator source spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
     if(spec.generator==='set-composition-source-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid Set composition source spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
@@ -1836,6 +1842,7 @@ console.log("raw JSON text width:", valid);
         case "collection-source-alias-depth": return collectionSourceAliasInput(spec.depth);
         case "primitive-property-prototype-depth": return primitivePropertyPrototypeInput(spec.depth);
         case "generator-method-owner-depth": return generatorMethodOwnerInput(spec.depth);
+        case "array-iterator-source-depth": return arrayIteratorSourceInput(spec.depth);
         case "set-composition-source-depth": return setCompositionSourceInput(spec.depth);
         case "object-literal-effect-depth": return objectLiteralEffectInput(spec.depth);
         case "module-iterator-import-depth": return moduleIteratorImportInput(spec.depth).source;
@@ -1991,4 +1998,10 @@ export function setCompositionSourceInput(depth:number):string {
     const aliases=[`const owner0=new Set(['17;','19;']).union(new Set(['19;','23;']));`];
     for(let index=1;index<depth;index++)aliases.push(`const owner${index}=owner${index-1};`);
     return `export {};${aliases.join('\n')}let total=0;for(const source of owner${depth-1})total+=Number(eval(source));console.log('composition source:',total===59);\n`;
+}
+
+export function arrayIteratorSourceInput(depth:number):string {
+    const aliases=[`const owner0={0:'17;',2:'19;',length:3};`];
+    for(let index=1;index<depth;index++)aliases.push(`const owner${index}=owner${index-1};`);
+    return `export {};${aliases.join('\n')}let total=0;for(const entry of Array.prototype.entries.call(owner${depth-1})){if(entry[1]!==undefined)total+=Number(eval(entry[1]));}console.log('array iterator source:',total===36);\n`;
 }

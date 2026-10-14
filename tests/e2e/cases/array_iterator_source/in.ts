@@ -1,0 +1,1 @@
+export {};const owner={0:'17;',2:'19;',length:3};let total=0;for(const entry of Array.prototype.entries.call(owner)){if(entry[1]!==undefined)total+=Number(eval(entry[1]));}console.log('array iterator source:',total===36);

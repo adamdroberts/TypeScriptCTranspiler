@@ -1,3 +1,5 @@
+Represented Array keys, values and entries through canonical indexed views activated by ordinary next, retaining sparse domains and actual property effects.
+
 Corrected custom iterable regression Symbol.iterator returns and made delegated value String display explicit.
 
 Materialized Array keys/values/entries in prototype regression consumers and compared sort comparator failures by actual Error kind.

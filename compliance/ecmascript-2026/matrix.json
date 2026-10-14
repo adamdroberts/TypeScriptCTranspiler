@@ -5496,6 +5496,55 @@
         }
       ],
       "rationale": "Map and Set source values now retain one canonical entry-cell collection and ordinary prototype/member locations projected from the same native descriptor table. Construction and member calls consume actual argument Lists; primitive key matching and callback arguments use SameValueZero normalization. Array and collection traversal now share ordinary iterator owners, mutable next/return lookup and one done/value projection worklist. The array-only element projection predecessor is deleted. An independent Node counterexample reproduced the omitted target after Array Iterator next replacement; the ordinary record path retains that target. Unrepresented generator and Set composition source protocols remain conservative instead of inventing property absence. Callable Proxy forwarding and Get results retain target effects through the same source call worklist; unrepresented trap invariants publish opaque results and taint captured bindings through the shared callable graph. Opaque receiver/argument escape also taints private collection records. Shared source calls now normalize omitted, sloppy and strict this bindings through the existing ordinary primitive boxing producer. Proof clones normalize relative physical filenames while retaining original parsed-tree identity and bytes. collection-source-graph.property compares independent Node read/write/key/callback/empty/next-replacement/Proxy-target/trap/escape/opaque partitions and native finite source execution with one shared deep alias graph in both memory modes. collection_source_graph and collection_source_alias_depth verify typed CLI consumers; existing collection iterator, insertion, composition and source identity properties supply native regressions. Existing CType and declarations suffice; the new native descriptor definition is copied and included in the host implementation manifest. Complete versioned deletion/presence, correlated callback activation, collection/call purity and DCE, unrepresented iterable source protocols, agent retirement and eligible exhaustive ECMAScript 2026 coverage remain open."
+    },
+    {
+      "clause": "sec-createarrayiterator",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "canonical-array-iterator-source-records",
+          "title": "Canonical Array iterator source records",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "graph",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-createarrayiterator"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/array-iterator-source.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "array_iterator_source_depth"
+            ],
+            "e2e": [
+              "array_iterator_source"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "src/source-value-flow.ts#arrayIterator",
+              "src/source-value-flow.ts#arrayIterationView",
+              "src/source-value-flow.ts#collectionIteratorNext"
+            ]
+          },
+          "rationale": "Array keys, values and entries source owners now use one indexed view and the existing ordinary iterator record. Iterator creation retains the actual receiver without reading length or indices; next activates LengthOfArrayLike and indexed Get facts. Keys avoid indexed Get effects. Entries pair the actual index and source value through the shared collection pair builder. Dense represented positions retain finite keys; missing sparse keys retain the complete Number domain without enumerating logical holes, so their String source conversion stays conservative. Ordinary method metadata, ignored actuals, nonconstruction, borrowed array-like/String receivers, live writes and mutable next lookup use the existing source call/property graph. array-iterator-source.property compares generated mode/domain/effect/owner partitions with independent Node and native finite eval closure, sharing one deep alias graph with typed CLI. The old values-only List traversal is replaced. Exact cursor/completion versions, numeric sparse intervals, getter/throw correlation, typed-array witnesses, full native Array algorithms, host eligibility and eligible exhaustive target evidence remain open."
+        }
+      ],
+      "rationale": "Map and Set source values now retain one canonical entry-cell collection and ordinary prototype/member locations projected from the same native descriptor table. Construction and member calls consume actual argument Lists; primitive key matching and callback arguments use SameValueZero normalization. Array and collection traversal now share ordinary iterator owners, mutable next/return lookup and one done/value projection worklist. The array-only element projection predecessor is deleted. An independent Node counterexample reproduced the omitted target after Array Iterator next replacement; the ordinary record path retains that target. Unrepresented generator and Set composition source protocols remain conservative instead of inventing property absence. Callable Proxy forwarding and Get results retain target effects through the same source call worklist; unrepresented trap invariants publish opaque results and taint captured bindings through the shared callable graph. Opaque receiver/argument escape also taints private collection records. Shared source calls now normalize omitted, sloppy and strict this bindings through the existing ordinary primitive boxing producer. Proof clones normalize relative physical filenames while retaining original parsed-tree identity and bytes. collection-source-graph.property compares independent Node read/write/key/callback/empty/next-replacement/Proxy-target/trap/escape/opaque partitions and native finite source execution with one shared deep alias graph in both memory modes. collection_source_graph and collection_source_alias_depth verify typed CLI consumers; existing collection iterator, insertion, composition and source identity properties supply native regressions. Existing CType and declarations suffice; the new native descriptor definition is copied and included in the host implementation manifest. Complete versioned deletion/presence, correlated callback activation, collection/call purity and DCE, unrepresented iterable source protocols, agent retirement and eligible exhaustive ECMAScript 2026 coverage remain open."
     }
   ],
   "groups": [
@@ -5921,9 +5970,184 @@
       "rootClause": "sec-indexed-collections",
       "scope": "required",
       "tracking": "in-progress",
-      "semanticPartitions": ["Array", "typed arrays", "iterators", "sparse and exotic indexed properties"],
-      "localEvidence": {"property": ["tests/property/mutable-argument-list.property.test.ts", "tests/property/array-static-factory.property.test.ts", "tests/property/array-from-async.property.test.ts", "tests/property/source-collection-get.property.test.ts", "tests/property/array-static-owner.property.test.ts", "tests/property/array-member-owner.property.test.ts", "tests/property/array-algorithm-owner.property.test.ts", "tests/property/array-species-owner.property.test.ts", "tests/property/array-storage-owner.property.test.ts", "tests/property/integrity-owner.property.test.ts", "tests/property/array-constructor-owner.property.test.ts", "tests/property/buffer-static-arguments.property.test.ts", "tests/property/integer-indexed-owner.property.test.ts", "tests/property/typed-array-owner.property.test.ts", "tests/property/typed-array-factory.property.test.ts", "tests/property/typed-array-traversal.property.test.ts", "tests/property/typed-array-copy.property.test.ts", "tests/property/typed-array-sort.property.test.ts", "tests/property/typed-array-string.property.test.ts", "tests/property/array-join-source.property.test.ts", "tests/property/eval-source-flow.property.test.ts", "tests/property/indexed-range-source.property.test.ts", "tests/property/agent-source-domains.property.test.ts", "tests/property/numeric-index-source.property.test.ts", "tests/property/iterator-argument-source.property.test.ts", "tests/property/fs-byte-source.property.test.ts"], "generatedRegression": [], "stress": ["array_literal_stack_alloc_growth", "array_static_factory_item_width", "fs_read_actual_list_width"], "e2e": ["mutable_argument_list", "array_prototypes", "array_property_descriptors", "array_buffer_dataview", "array_from_async_protocol", "source_collection_get", "array_static_owner", "array_member_owner", "array_algorithm_owner", "array_species_owner", "array_storage_owner", "integrity_owner", "array_constructor_owner", "buffer_static_arguments", "fs_promises_file_handle_write_append_abort", "integer_indexed_receiver", "typed_array_ordinary", "typed_array_factories", "typed_array_traversal", "typed_array_copy", "typed_array_sort", "typed_array_string", "array_join_source", "indexed_range_source", "numeric_index_source", "iterator_argument_source", "fs_fd_sync_more"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#ArrayConstructor", "stdlib/lib.core.d.ts#Array", "stdlib/lib.core.d.ts#BufferConstructor", "stdlib/lib.core.d.ts#TypedArray", "stdlib/lib.core.d.ts#TypedArrayConstructor", "stdlib/lib.core.d.ts#ArrayLike", "stdlib/lib.core.d.ts#FS", "stdlib/lib.core.d.ts#FSByteView", "stdlib/lib.core.d.ts#FSReadSyncOptions", "stdlib/lib.core.d.ts#TextDecoder"], "implementation": ["src/source-value-flow.ts#listLength", "runtime/tsc_typed_array.c", "runtime/tsc_typed_array.def", "runtime/tsc_typed_array_methods.def", "runtime/tsc_numeric_storage.c", "runtime/tsc_object.c", "src/global-bindings.ts", "runtime/tsc_array.c", "runtime/tsc_value.c", "runtime/tsc_array.c#array_from_async_resume", "src/emit/index.ts#emitElementAccess", "src/emit/index.ts#emitDelete", "src/emit/types.ts#mapTsType", "runtime/tsc_value.c#tsc_value_get_computed_prop", "runtime/tsc_value.c#tsc_value_delete_computed_prop", "runtime/tsc_iterator.c#tsc_value_object_from_entries", "src/emit/index.ts#emitDynamicNamedPropertyCall", "src/emit/index.ts#expressionHasCanonicalSourceValue", "runtime/tsc_array.c#tsc_array_use_value_storage", "runtime/tsc_array_abi.h", "runtime/tsc_array.c#tsc_array_require_native_representation", "runtime/tsc_value.c#tsc_value_set_array_own_index", "runtime/tsc_value.c#tsc_value_length_of_array_like", "runtime/tsc_value.c#tsc_value_to_integer_or_infinity", "runtime/tsc_value.c#value_flatten_into", "runtime/tsc_value.c#tsc_value_method_push_items", "runtime/tsc_value.c#tsc_value_method_unshift_items", "runtime/tsc_value.c#tsc_value_method_copy_within", "runtime/tsc_value.c#tsc_value_method_reverse", "runtime/tsc_array.c#tsc_array_output_species", "runtime/tsc_array.c#tsc_array_output_create", "runtime/tsc_array.c#tsc_array_output_set_length", "runtime/tsc_array.c#tsc_array_own_indices", "runtime/tsc_value.c#array_define_length_desc", "runtime/tsc_object.c#value_set_receiver_own_data", "runtime/tsc_value.c#value_set_integrity_level", "runtime/tsc_value.c#value_test_integrity_level", "runtime/tsc_object.c#validate_proxy_own_keys_result", "src/emit/index.ts#emitNew", "runtime/tsc_array.c#array_constructor_generic", "runtime/tsc_array.c#tsc_array_constructor_value", "runtime/tsc_buffer_statics.def", "runtime/tsc_value.c#tsc_buffer_static_call", "src/buffer-statics.ts", "src/source-value-flow.ts#arrayPrototype", "src/source-value-flow.ts#lists", "src/source-value-flow.ts#joinTextInput", "src/source-value-flow.ts#arrayLikeLength", "src/source-value-flow.ts#arrayLikeLists", "src/source-value-flow.ts#indexedPropertyPositions", "src/source-value-flow.ts#indexedRead", "src/source-value-flow.ts#iterationMethod", "src/source-value-flow.ts#computedKeyDomain", "src/source-value-flow.ts#propertyDomainKeys", "src/source-value-flow.ts#argumentSequence", "src/source-value-flow.ts#argumentPosition", "src/source-value-flow.ts#allArgumentValues", "src/source-value-flow.ts#iteratorElements", "src/emit/index.ts#emitSpreadCallArgumentList", "src/emit/index.ts#emitActualArgumentList", "src/emit/index.ts#emitFsCall", "src/global-bindings.ts#runtimeFsFdOperations", "runtime/tsc_node.c#fs_read_fields", "runtime/tsc_node.c#tsc_fs_read_sync_values", "runtime/tsc_node.c#tsc_fs_fd_sync_values", "runtime/tsc_node.c#fs_fd_operations", "runtime/tsc_typed_array.c#tsc_value_byte_source", "runtime/tsc_internal.h#tsc_byte_source_t"]},
-      "knownGaps": ["Array and TypedArray join/locale methods now share one rooted captured-range kernel, private TypedArray length/brand validation and the actual Array toString alias, with local Node intersections, selected non-402 assertions, generated lengths and retained method/view evidence. Full TypedArray/Realm/JSON/integrity/host coverage, Buffer backing integration, SharedArrayBuffer/Atomics and eligible exhaustive evidence remain open.", "Array and TypedArray sorting now share one retained stable value List and numeric/lexicographic comparison boundary, with local Node ordering, stability, callback, mutation and generated-length evidence plus retained result stress. TypedArray string algorithms, full Buffer integration, SharedArrayBuffer/Atomics, complete Realm behavior and eligible exhaustive evidence remain open.", "TypedArray copy/mutation operations now use retained live witnesses and byte/element Lists with local Node overlap, raw-byte, coercion, species and generated-length evidence plus retained shared-view stress. Remaining sort/string algorithms, Buffer backing integration, SharedArrayBuffer/Atomics, complete Realm behavior and eligible exhaustive evidence remain open.", "TypedArray search/callback/reduction methods now share a captured-range traversal and live indexed Reads with species result validation, generated-length properties and retained accumulator stress. Remaining mutation/copy/sort/string algorithms, full Buffer integration, SharedArrayBuffer/Atomics, complete Realm behavior and eligible exhaustive evidence remain open.", "TypedArray.from/of now share eager iterable/item Lists, ordinary mapper calls and typed constructor-result validation, with local Node order/abrupt/mutation evidence and retained result stress. Complete TypedArray prototype algorithms, Buffer backing integration, SharedArrayBuffer/Atomics and eligible exhaustive evidence remain open.", "TypedArray constructors and integer-indexed owners now share one format collection, actual Lists and retained fixed/tracking ArrayBuffer witnesses, with local Node partitions, pinned constructor-order assertions and a deep view graph. Full TypedArray prototype/static methods, SharedArrayBuffer/Atomics, Buffer backing integration, complete Realm behavior and eligible exhaustive evidence remain open.", "Buffer static calls now lower through one complete boxed argument List and canonical operation collection. Native result projections are derived from that same collection, preserving existing byte and numeric API boundaries. Runtime validation follows evaluation of every argument, so computed numeric inputs and spread/extra arguments retain their source semantics. Concatenation keeps the source Array authoritative across validation and copy passes, including changing getters and Proxy reads, and uses the shared relational operation for loop bounds. The fixed compiler static cases and native pointer-array concatenation predecessors were deleted. Independent Node properties cover semantic partitions and one deep retained byte-owner graph; the original filesystem abort allocation trigger passes in both memory modes. Mutable Buffer static owners/constructor identity, complete byte codecs and general Uint8Array/TypedArray ownership remain open, as does full target conformance.", "Array constructor/static/prototype Realm References, actual results, sparse length/element Lists and immutable prototype metadata have local property/E2E evidence. Complete Array/Realm clauses still require reciprocal eligible evidence; no whole-clause support is promoted.", "TypedArray and full array exotic semantics remain unverified.", "Array join source analysis now projects one canonical Array prototype owner and the existing length/index List representation, followed by the shared ordered conversion and text-expression graphs. Literal and rest arrays inherit that owner; borrowed and bound join calls route through the same operation. Separator defaults, null/undefined elements, live indexed getters and element conversion effects retain ordinary owner/location facts. Join reads during its invocation rather than taking an argument snapshot, so unknown coercion writes remain unresolved. array-join-source.property compares conversion, forwarding, live mutation, abrupt Symbol and unknown-source partitions with Node over typed/erased native inputs in both memory modes, with one deep source List; array_join_source checks the typed CLI. The broad eval-source-flow property now passes, including returned eval/host completions, strict/direct/indirect source closure and its deep binding graph. The indexed-range source model described below repairs ordinary array-like join projection and sparse default Array Lists. Generic Iterator-derived Lists, unrepresented exotic/boxed owners and complete per-call/activation precision remain explicit admission gaps with the stable finite-source diagnostic. Callback-escape checks preserve conservative shared activation facts. Existing native join kernels, CType and declaration surfaces suffice. Reciprocal exact-clause evidence, host eligibility and exhaustive ECMAScript 2026 coverage remain open.", "Source array-like operations now use one indexed range: a ToLength result and a sorted collection of ordinary own/inherited index locations. The shared ordered conversion/text graph concatenates represented elements and separator gaps without expanding absent positions; the Array-only dense join predecessor is removed. Primitive String own positions, length/index getters, sparse prototypes and default Array holes use the same property graph. Host String allocation failure leaves the source proof unresolved rather than inventing an ECMAScript abrupt completion. CreateListFromArrayLike for apply/Reflect calls validates Object arguments and projects the same length and indexed reads without invoking an iterator; Function apply retains null/undefined and omitted argument-list behavior. Empty parsed Script collections now retain their required undefined completion. Actual spread checks the canonical default Array iterator identity, preserves getter-return unknown values and fails closed on custom or getter-based iterator protocols. The agent admission property now compares those contract partitions against an independent Node mutation of Array.prototype[Symbol.iterator], replacing its unsafe fresh-array spread expectation. indexed-range-source.property compares generated length/conversion/abrupt, sparse/inherited/read, reflective/nullable and iterator-escape partitions with Node over typed/erased native inputs in both memory modes, using one deep prototype graph. Large sparse extents are checked only in the source model; they are not a native execution claim. indexed_range_source checks the typed CLI; the broader source-flow, unknown-merge, effect/return and agent-domain properties guard neighboring semantics. Existing native kernels, CType and declarations suffice. Generic Iterator closure, exotic/boxed source owners, complete completion/activation precision, exact reciprocal clause evidence, host eligibility and exhaustive ECMAScript 2026 coverage remain open.", "Numeric computed reads now preserve an unbounded Number/BigInt domain through the existing scalar operation descriptors and retained update facts. One owner/prototype key worklist projects represented numeric locations plus absence, instead of requiring enumeration of every counter value. The same worklist supplies indexed-range positions; its private index-only traversal is removed. Scalar numeric key conversion no longer invents a user callback effect, while actual operand coercion, getter calls, owner/prototype mutation and unknown values retain the shared effect graph and stable finite-source diagnostic. numeric-index-source.property compares generated update, signed/fractional/non-finite/BigInt key, inherited/getter/absence and opaque-effect partitions with independent Node across direct/indirect/host source evaluation, typed/erased native inputs and both memory modes, with one deep owner graph. numeric_index_source checks the typed CLI. Existing runtime kernels, CType and declaration surfaces suffice. This is a prerequisite for Iterator-derived source domains; generic Iterator argument intake, complete exotic owners and activation precision, reciprocal exact-clause evidence, host eligibility and exhaustive ECMAScript 2026 coverage remain open.", "Iterator-derived source arguments now use a canonical persistent sequence graph and iterative positional projection. Unknown extents project represented iterator result values plus possible absence without enumerating lengths; bound prefixes and call forwarding retain their offsets. One aggregate value projection activates every spread even without a requested formal and carries possible argument objects into unknown-callee escape effects. Iterator methods and captured next calls use the shared receiver, getter, invocation and exception graph; terminal done results suppress value reads. Finite primitive property keys coexist with an unbounded numeric key domain, preserving saved counter reads that include hoisted undefined. Bound prototype projection excludes abrupt-only receiver facts rather than converting them into opaque normal prototypes. iterator-argument-source.property compares forwarding, protocol reads, trailing effects, actual throws and opaque escape partitions with independent Node across typed/erased native inputs and both memory modes, with one deep bound sequence; iterator_argument_source checks typed CLI closure. The non-iterable array-like spread partition is known abrupt and has no eval source. Existing runtime kernels, CType and declarations suffice. Generic rest materialization, generator/exotic source owners, Iterator completion ordering, activation precision and assertion-harness JSON/Error source facts remain open; the original pinned eval-spread request still fails closed. Reciprocal exact-clause evidence, host eligibility and exhaustive ECMAScript 2026 coverage remain open.", "Native filesystem read and scalar descriptor consumers now retain the complete canonical actual List before validation. One ordered field record normalizes read positions/options, dependent defaults, getter/throw order, strict integer fields, BigInt positions and zero-length completion. Buffer, typed-array and DataView owners share one byte-source witness derived from the native element collection and backing records; late resize/detach changes are revalidated before I/O. Shared storage uses staged reads and synchronized byte publication. TextDecoder consumes the same byte-source record and snapshots shared bytes through the existing synchronized kernel. The emitter-local read/descriptor argument selectors, separate native fixed-argument predecessors and duplicate codec byte-owner intake are deleted. Native descriptor publication and emitter dispatch project one operation collection. FSByteView/read option/position declarations and the existing general Array.from array-like intake expose the retained contracts. fs-byte-source.property compares owner/view offsets, complete actuals, inherited getter/default/abrupt ordering, wrong types, resizing, zero/detached completion, shared storage and descriptor effects with independent Node across typed/erased native profiles and both memory modes. The property and fs_read_actual_list_width CLI share one generated high-width input. fs_fd_sync_more and existing array/codec/shared-storage consumers guard neighboring behavior. Existing CType and ordinary Value/Iterator machinery suffice. Complete filesystem error-code/host-export behavior, codec streaming policies, native source-owner precision, mutable host-formatter AOT request proofs, Module/Realm/agent eligibility and exhaustive ECMAScript 2026 evidence remain open."]
+      "semanticPartitions": [
+        "Array",
+        "typed arrays",
+        "iterators",
+        "sparse and exotic indexed properties",
+        "Array iterator source modes share indexed views and ordinary next records"
+      ],
+      "localEvidence": {
+        "property": [
+          "tests/property/mutable-argument-list.property.test.ts",
+          "tests/property/array-static-factory.property.test.ts",
+          "tests/property/array-from-async.property.test.ts",
+          "tests/property/source-collection-get.property.test.ts",
+          "tests/property/array-static-owner.property.test.ts",
+          "tests/property/array-member-owner.property.test.ts",
+          "tests/property/array-algorithm-owner.property.test.ts",
+          "tests/property/array-species-owner.property.test.ts",
+          "tests/property/array-storage-owner.property.test.ts",
+          "tests/property/integrity-owner.property.test.ts",
+          "tests/property/array-constructor-owner.property.test.ts",
+          "tests/property/buffer-static-arguments.property.test.ts",
+          "tests/property/integer-indexed-owner.property.test.ts",
+          "tests/property/typed-array-owner.property.test.ts",
+          "tests/property/typed-array-factory.property.test.ts",
+          "tests/property/typed-array-traversal.property.test.ts",
+          "tests/property/typed-array-copy.property.test.ts",
+          "tests/property/typed-array-sort.property.test.ts",
+          "tests/property/typed-array-string.property.test.ts",
+          "tests/property/array-join-source.property.test.ts",
+          "tests/property/eval-source-flow.property.test.ts",
+          "tests/property/indexed-range-source.property.test.ts",
+          "tests/property/agent-source-domains.property.test.ts",
+          "tests/property/numeric-index-source.property.test.ts",
+          "tests/property/iterator-argument-source.property.test.ts",
+          "tests/property/fs-byte-source.property.test.ts",
+          "tests/property/array-iterator-source.property.test.ts"
+        ],
+        "generatedRegression": [],
+        "stress": [
+          "array_literal_stack_alloc_growth",
+          "array_static_factory_item_width",
+          "fs_read_actual_list_width",
+          "array_iterator_source_depth"
+        ],
+        "e2e": [
+          "mutable_argument_list",
+          "array_prototypes",
+          "array_property_descriptors",
+          "array_buffer_dataview",
+          "array_from_async_protocol",
+          "source_collection_get",
+          "array_static_owner",
+          "array_member_owner",
+          "array_algorithm_owner",
+          "array_species_owner",
+          "array_storage_owner",
+          "integrity_owner",
+          "array_constructor_owner",
+          "buffer_static_arguments",
+          "fs_promises_file_handle_write_append_abort",
+          "integer_indexed_receiver",
+          "typed_array_ordinary",
+          "typed_array_factories",
+          "typed_array_traversal",
+          "typed_array_copy",
+          "typed_array_sort",
+          "typed_array_string",
+          "array_join_source",
+          "indexed_range_source",
+          "numeric_index_source",
+          "iterator_argument_source",
+          "fs_fd_sync_more",
+          "array_iterator_source"
+        ],
+        "negativeDiagnostics": [],
+        "declarationSurface": [
+          "stdlib/lib.core.d.ts#ArrayConstructor",
+          "stdlib/lib.core.d.ts#Array",
+          "stdlib/lib.core.d.ts#BufferConstructor",
+          "stdlib/lib.core.d.ts#TypedArray",
+          "stdlib/lib.core.d.ts#TypedArrayConstructor",
+          "stdlib/lib.core.d.ts#ArrayLike",
+          "stdlib/lib.core.d.ts#FS",
+          "stdlib/lib.core.d.ts#FSByteView",
+          "stdlib/lib.core.d.ts#FSReadSyncOptions",
+          "stdlib/lib.core.d.ts#TextDecoder"
+        ],
+        "implementation": [
+          "src/source-value-flow.ts#listLength",
+          "runtime/tsc_typed_array.c",
+          "runtime/tsc_typed_array.def",
+          "runtime/tsc_typed_array_methods.def",
+          "runtime/tsc_numeric_storage.c",
+          "runtime/tsc_object.c",
+          "src/global-bindings.ts",
+          "runtime/tsc_array.c",
+          "runtime/tsc_value.c",
+          "runtime/tsc_array.c#array_from_async_resume",
+          "src/emit/index.ts#emitElementAccess",
+          "src/emit/index.ts#emitDelete",
+          "src/emit/types.ts#mapTsType",
+          "runtime/tsc_value.c#tsc_value_get_computed_prop",
+          "runtime/tsc_value.c#tsc_value_delete_computed_prop",
+          "runtime/tsc_iterator.c#tsc_value_object_from_entries",
+          "src/emit/index.ts#emitDynamicNamedPropertyCall",
+          "src/emit/index.ts#expressionHasCanonicalSourceValue",
+          "runtime/tsc_array.c#tsc_array_use_value_storage",
+          "runtime/tsc_array_abi.h",
+          "runtime/tsc_array.c#tsc_array_require_native_representation",
+          "runtime/tsc_value.c#tsc_value_set_array_own_index",
+          "runtime/tsc_value.c#tsc_value_length_of_array_like",
+          "runtime/tsc_value.c#tsc_value_to_integer_or_infinity",
+          "runtime/tsc_value.c#value_flatten_into",
+          "runtime/tsc_value.c#tsc_value_method_push_items",
+          "runtime/tsc_value.c#tsc_value_method_unshift_items",
+          "runtime/tsc_value.c#tsc_value_method_copy_within",
+          "runtime/tsc_value.c#tsc_value_method_reverse",
+          "runtime/tsc_array.c#tsc_array_output_species",
+          "runtime/tsc_array.c#tsc_array_output_create",
+          "runtime/tsc_array.c#tsc_array_output_set_length",
+          "runtime/tsc_array.c#tsc_array_own_indices",
+          "runtime/tsc_value.c#array_define_length_desc",
+          "runtime/tsc_object.c#value_set_receiver_own_data",
+          "runtime/tsc_value.c#value_set_integrity_level",
+          "runtime/tsc_value.c#value_test_integrity_level",
+          "runtime/tsc_object.c#validate_proxy_own_keys_result",
+          "src/emit/index.ts#emitNew",
+          "runtime/tsc_array.c#array_constructor_generic",
+          "runtime/tsc_array.c#tsc_array_constructor_value",
+          "runtime/tsc_buffer_statics.def",
+          "runtime/tsc_value.c#tsc_buffer_static_call",
+          "src/buffer-statics.ts",
+          "src/source-value-flow.ts#arrayPrototype",
+          "src/source-value-flow.ts#lists",
+          "src/source-value-flow.ts#joinTextInput",
+          "src/source-value-flow.ts#arrayLikeLength",
+          "src/source-value-flow.ts#arrayLikeLists",
+          "src/source-value-flow.ts#indexedPropertyPositions",
+          "src/source-value-flow.ts#indexedRead",
+          "src/source-value-flow.ts#iterationMethod",
+          "src/source-value-flow.ts#computedKeyDomain",
+          "src/source-value-flow.ts#propertyDomainKeys",
+          "src/source-value-flow.ts#argumentSequence",
+          "src/source-value-flow.ts#argumentPosition",
+          "src/source-value-flow.ts#allArgumentValues",
+          "src/source-value-flow.ts#iteratorElements",
+          "src/emit/index.ts#emitSpreadCallArgumentList",
+          "src/emit/index.ts#emitActualArgumentList",
+          "src/emit/index.ts#emitFsCall",
+          "src/global-bindings.ts#runtimeFsFdOperations",
+          "runtime/tsc_node.c#fs_read_fields",
+          "runtime/tsc_node.c#tsc_fs_read_sync_values",
+          "runtime/tsc_node.c#tsc_fs_fd_sync_values",
+          "runtime/tsc_node.c#fs_fd_operations",
+          "runtime/tsc_typed_array.c#tsc_value_byte_source",
+          "runtime/tsc_internal.h#tsc_byte_source_t",
+          "src/source-value-flow.ts#arrayIterator",
+          "src/source-value-flow.ts#arrayIterationView",
+          "src/source-value-flow.ts#collectionIteratorNext"
+        ]
+      },
+      "knownGaps": [
+        "Array and TypedArray join/locale methods now share one rooted captured-range kernel, private TypedArray length/brand validation and the actual Array toString alias, with local Node intersections, selected non-402 assertions, generated lengths and retained method/view evidence. Full TypedArray/Realm/JSON/integrity/host coverage, Buffer backing integration, SharedArrayBuffer/Atomics and eligible exhaustive evidence remain open.",
+        "Array and TypedArray sorting now share one retained stable value List and numeric/lexicographic comparison boundary, with local Node ordering, stability, callback, mutation and generated-length evidence plus retained result stress. TypedArray string algorithms, full Buffer integration, SharedArrayBuffer/Atomics, complete Realm behavior and eligible exhaustive evidence remain open.",
+        "TypedArray copy/mutation operations now use retained live witnesses and byte/element Lists with local Node overlap, raw-byte, coercion, species and generated-length evidence plus retained shared-view stress. Remaining sort/string algorithms, Buffer backing integration, SharedArrayBuffer/Atomics, complete Realm behavior and eligible exhaustive evidence remain open.",
+        "TypedArray search/callback/reduction methods now share a captured-range traversal and live indexed Reads with species result validation, generated-length properties and retained accumulator stress. Remaining mutation/copy/sort/string algorithms, full Buffer integration, SharedArrayBuffer/Atomics, complete Realm behavior and eligible exhaustive evidence remain open.",
+        "TypedArray.from/of now share eager iterable/item Lists, ordinary mapper calls and typed constructor-result validation, with local Node order/abrupt/mutation evidence and retained result stress. Complete TypedArray prototype algorithms, Buffer backing integration, SharedArrayBuffer/Atomics and eligible exhaustive evidence remain open.",
+        "TypedArray constructors and integer-indexed owners now share one format collection, actual Lists and retained fixed/tracking ArrayBuffer witnesses, with local Node partitions, pinned constructor-order assertions and a deep view graph. Full TypedArray prototype/static methods, SharedArrayBuffer/Atomics, Buffer backing integration, complete Realm behavior and eligible exhaustive evidence remain open.",
+        "Buffer static calls now lower through one complete boxed argument List and canonical operation collection. Native result projections are derived from that same collection, preserving existing byte and numeric API boundaries. Runtime validation follows evaluation of every argument, so computed numeric inputs and spread/extra arguments retain their source semantics. Concatenation keeps the source Array authoritative across validation and copy passes, including changing getters and Proxy reads, and uses the shared relational operation for loop bounds. The fixed compiler static cases and native pointer-array concatenation predecessors were deleted. Independent Node properties cover semantic partitions and one deep retained byte-owner graph; the original filesystem abort allocation trigger passes in both memory modes. Mutable Buffer static owners/constructor identity, complete byte codecs and general Uint8Array/TypedArray ownership remain open, as does full target conformance.",
+        "Array constructor/static/prototype Realm References, actual results, sparse length/element Lists and immutable prototype metadata have local property/E2E evidence. Complete Array/Realm clauses still require reciprocal eligible evidence; no whole-clause support is promoted.",
+        "TypedArray and full array exotic semantics remain unverified.",
+        "Array join source analysis now projects one canonical Array prototype owner and the existing length/index List representation, followed by the shared ordered conversion and text-expression graphs. Literal and rest arrays inherit that owner; borrowed and bound join calls route through the same operation. Separator defaults, null/undefined elements, live indexed getters and element conversion effects retain ordinary owner/location facts. Join reads during its invocation rather than taking an argument snapshot, so unknown coercion writes remain unresolved. array-join-source.property compares conversion, forwarding, live mutation, abrupt Symbol and unknown-source partitions with Node over typed/erased native inputs in both memory modes, with one deep source List; array_join_source checks the typed CLI. The broad eval-source-flow property now passes, including returned eval/host completions, strict/direct/indirect source closure and its deep binding graph. The indexed-range source model described below repairs ordinary array-like join projection and sparse default Array Lists. Generic Iterator-derived Lists, unrepresented exotic/boxed owners and complete per-call/activation precision remain explicit admission gaps with the stable finite-source diagnostic. Callback-escape checks preserve conservative shared activation facts. Existing native join kernels, CType and declaration surfaces suffice. Reciprocal exact-clause evidence, host eligibility and exhaustive ECMAScript 2026 coverage remain open.",
+        "Source array-like operations now use one indexed range: a ToLength result and a sorted collection of ordinary own/inherited index locations. The shared ordered conversion/text graph concatenates represented elements and separator gaps without expanding absent positions; the Array-only dense join predecessor is removed. Primitive String own positions, length/index getters, sparse prototypes and default Array holes use the same property graph. Host String allocation failure leaves the source proof unresolved rather than inventing an ECMAScript abrupt completion. CreateListFromArrayLike for apply/Reflect calls validates Object arguments and projects the same length and indexed reads without invoking an iterator; Function apply retains null/undefined and omitted argument-list behavior. Empty parsed Script collections now retain their required undefined completion. Actual spread checks the canonical default Array iterator identity, preserves getter-return unknown values and fails closed on custom or getter-based iterator protocols. The agent admission property now compares those contract partitions against an independent Node mutation of Array.prototype[Symbol.iterator], replacing its unsafe fresh-array spread expectation. indexed-range-source.property compares generated length/conversion/abrupt, sparse/inherited/read, reflective/nullable and iterator-escape partitions with Node over typed/erased native inputs in both memory modes, using one deep prototype graph. Large sparse extents are checked only in the source model; they are not a native execution claim. indexed_range_source checks the typed CLI; the broader source-flow, unknown-merge, effect/return and agent-domain properties guard neighboring semantics. Existing native kernels, CType and declarations suffice. Generic Iterator closure, exotic/boxed source owners, complete completion/activation precision, exact reciprocal clause evidence, host eligibility and exhaustive ECMAScript 2026 coverage remain open.",
+        "Numeric computed reads now preserve an unbounded Number/BigInt domain through the existing scalar operation descriptors and retained update facts. One owner/prototype key worklist projects represented numeric locations plus absence, instead of requiring enumeration of every counter value. The same worklist supplies indexed-range positions; its private index-only traversal is removed. Scalar numeric key conversion no longer invents a user callback effect, while actual operand coercion, getter calls, owner/prototype mutation and unknown values retain the shared effect graph and stable finite-source diagnostic. numeric-index-source.property compares generated update, signed/fractional/non-finite/BigInt key, inherited/getter/absence and opaque-effect partitions with independent Node across direct/indirect/host source evaluation, typed/erased native inputs and both memory modes, with one deep owner graph. numeric_index_source checks the typed CLI. Existing runtime kernels, CType and declaration surfaces suffice. This is a prerequisite for Iterator-derived source domains; generic Iterator argument intake, complete exotic owners and activation precision, reciprocal exact-clause evidence, host eligibility and exhaustive ECMAScript 2026 coverage remain open.",
+        "Iterator-derived source arguments now use a canonical persistent sequence graph and iterative positional projection. Unknown extents project represented iterator result values plus possible absence without enumerating lengths; bound prefixes and call forwarding retain their offsets. One aggregate value projection activates every spread even without a requested formal and carries possible argument objects into unknown-callee escape effects. Iterator methods and captured next calls use the shared receiver, getter, invocation and exception graph; terminal done results suppress value reads. Finite primitive property keys coexist with an unbounded numeric key domain, preserving saved counter reads that include hoisted undefined. Bound prototype projection excludes abrupt-only receiver facts rather than converting them into opaque normal prototypes. iterator-argument-source.property compares forwarding, protocol reads, trailing effects, actual throws and opaque escape partitions with independent Node across typed/erased native inputs and both memory modes, with one deep bound sequence; iterator_argument_source checks typed CLI closure. The non-iterable array-like spread partition is known abrupt and has no eval source. Existing runtime kernels, CType and declarations suffice. Generic rest materialization, generator/exotic source owners, Iterator completion ordering, activation precision and assertion-harness JSON/Error source facts remain open; the original pinned eval-spread request still fails closed. Reciprocal exact-clause evidence, host eligibility and exhaustive ECMAScript 2026 coverage remain open.",
+        "Native filesystem read and scalar descriptor consumers now retain the complete canonical actual List before validation. One ordered field record normalizes read positions/options, dependent defaults, getter/throw order, strict integer fields, BigInt positions and zero-length completion. Buffer, typed-array and DataView owners share one byte-source witness derived from the native element collection and backing records; late resize/detach changes are revalidated before I/O. Shared storage uses staged reads and synchronized byte publication. TextDecoder consumes the same byte-source record and snapshots shared bytes through the existing synchronized kernel. The emitter-local read/descriptor argument selectors, separate native fixed-argument predecessors and duplicate codec byte-owner intake are deleted. Native descriptor publication and emitter dispatch project one operation collection. FSByteView/read option/position declarations and the existing general Array.from array-like intake expose the retained contracts. fs-byte-source.property compares owner/view offsets, complete actuals, inherited getter/default/abrupt ordering, wrong types, resizing, zero/detached completion, shared storage and descriptor effects with independent Node across typed/erased native profiles and both memory modes. The property and fs_read_actual_list_width CLI share one generated high-width input. fs_fd_sync_more and existing array/codec/shared-storage consumers guard neighboring behavior. Existing CType and ordinary Value/Iterator machinery suffice. Complete filesystem error-code/host-export behavior, codec streaming policies, native source-owner precision, mutable host-formatter AOT request proofs, Module/Realm/agent eligibility and exhaustive ECMAScript 2026 evidence remain open.",
+        "Array keys, values and entries source owners now use one indexed view and the existing ordinary iterator record. Iterator creation retains the actual receiver without reading length or indices; next activates LengthOfArrayLike and indexed Get facts. Keys avoid indexed Get effects. Entries pair the actual index and source value through the shared collection pair builder. Dense represented positions retain finite keys; missing sparse keys retain the complete Number domain without enumerating logical holes, so their String source conversion stays conservative. Ordinary method metadata, ignored actuals, nonconstruction, borrowed array-like/String receivers, live writes and mutable next lookup use the existing source call/property graph. array-iterator-source.property compares generated mode/domain/effect/owner partitions with independent Node and native finite eval closure, sharing one deep alias graph with typed CLI. The old values-only List traversal is replaced. Exact cursor/completion versions, numeric sparse intervals, getter/throw correlation, typed-array witnesses, full native Array algorithms, host eligibility and eligible exhaustive target evidence remain open."
+      ]
     },
     {
       "id": "keyed-collections",
