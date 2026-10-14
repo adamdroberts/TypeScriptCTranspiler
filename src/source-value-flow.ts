@@ -17,7 +17,7 @@ import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, functionConstructorSourceKey, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
 import {declarativeSourceBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding, sourceBindingTarget} from "./source-bindings";
-import {runtimeAtomicsMethods,runtimeTypedArrayDescriptors,runtimeMathMethods,runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeUtilExports, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
+import {runtimeCallbackTimerDescriptors,runtimeAtomicsMethods,runtimeTypedArrayDescriptors,runtimeMathMethods,runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeUtilExports, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
     readonly roots?: readonly string[];
@@ -53,7 +53,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
-type Operation = "ordinary-has-instance" | "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
+type Operation = `callback-timer:${string}` | "ordinary-has-instance" | "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
     "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
@@ -230,6 +230,7 @@ class SourceValueFlow {
     private readonly promiseConstructions = new Map<ts.Node,Map<string,Cell>>();
     private readonly promiseResolvers = new Map<Cell,Map<Cell,readonly Cell[]>>();
     private readonly instanceSources = new Map<ts.Node,Map<string,Cell>>();
+    private readonly timerCallbacks = new Map<ts.Node,Map<string,{context:ts.Node;result:Cell}>>();
     private readonly primitiveBoxes = new Map<ts.Node,Map<string,Cell>>();
     private readonly booleanPrimitives = new Map<Cell,Cell>();
     private readonly primitiveDefaults = new Map<string,Cell>();
@@ -2086,6 +2087,7 @@ class SourceValueFlow {
         if (!cell) {
             cell = this.newCell();this.currentRealm.bindings.set(key,cell);
             if (!this.immutableGlobalBinding(key)) this.copy(this.globalMutation,cell);
+            if(runtimeCallbackTimerDescriptors.has(key))this.publish(cell,this.operation(`callback-timer:${key}`));
             if (key === "Function") this.publish(cell,this.intrinsic("constructor","ordinary"));
             if (key === "eval") this.publish(cell,this.realmOperation(this.currentRealm,"eval"));
             if (key === "require") this.publish(cell,this.operation("native-require"));
@@ -2949,6 +2951,9 @@ class SourceValueFlow {
         if(atom.tag === "object")return atom.owner;
         if(atom.tag === "function")return atom.owner.fields;
         if(atom.tag === "promise-resolver")return atom.fields;
+        if(atom.tag==="operation"&&atom.operation.startsWith("callback-timer:")){
+            let owner=this.intrinsicOwners.get(atom);if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);this.copy(this.opaqueMutation,owner.shape);const spelling=atom.operation.slice("callback-timer:".length),descriptor=runtimeCallbackTimerDescriptors.get(spelling)!,name=this.newCell(),length=this.newCell();this.publish(name,this.primitive(spelling));this.publish(length,this.primitive(descriptor.length));this.defineField(owner,"name",name,false);this.defineField(owner,"length",length,false);}return owner;
+        }
         if(atom.tag==="operation"&&atom.operation==="ordinary-has-instance"){
             let owner=this.intrinsicOwners.get(atom);if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);this.copy(this.opaqueMutation,owner.shape);const name=this.newCell(),length=this.newCell();this.publish(name,this.primitive("[Symbol.hasInstance]"));this.publish(length,this.primitive(1));this.defineField(owner,"name",name,false);this.defineField(owner,"length",length,false);}return owner;
         }
@@ -4449,6 +4454,23 @@ class SourceValueFlow {
                         if(converted.some(input=>{const proof=this.primitiveChoiceProof(input);return proof.primitiveComplete&&!proof.values.length})){this.publish(result,this.abrupt);continue;}
                         let value=this.numericValues.get(KIND_NUMBER);if(!value){value={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,value);}this.publish(result,value);
                         continue;
+                    }
+                    if(atom.tag==="operation"&&atom.operation.startsWith("callback-timer:")){
+                        const descriptor=runtimeCallbackTimerDescriptors.get(atom.operation.slice("callback-timer:".length))!,handler=this.exceptionHandlers.get(node);
+                        if(descriptor.action==="CLEAR"){
+                            if(argv?.length){const converted=this.coerceCell(argv[0]!,node,"number");this.watchText(rule,converted);}else if(!argv)this.onActive(node,()=>this.opaqueEffect(node));
+                            this.publish(result,this.primitive(undefined));continue;
+                        }
+                        if(!argv){this.publish(result,this.unknown);this.onActive(node,()=>this.opaqueEffect(node));if(handler)this.publish(handler,this.unknown);continue;}
+                        const callback=argument(0)??omittedArgument;this.watch(rule,callback);const kinds=this.primitiveKinds(callback);
+                        if(kinds&~KIND_FUNCTION){if(handler)this.publish(handler,this.nativeException(node));this.publish(result,this.abrupt);}
+                        if(!(kinds&KIND_FUNCTION))continue;
+                        const converted=descriptor.delay>=0&&argv[descriptor.delay]?this.coerceCell(argv[descriptor.delay]!,node,"number"):undefined;
+                        if(converted){this.watchText(rule,converted);const state=this.primitiveState(converted,rule,true);if(state.pending)continue;if(state.proof.primitiveComplete&&!state.proof.values.length){this.publish(result,this.abrupt);continue;}}
+                        let calls=this.timerCallbacks.get(node);if(!calls){calls=new Map();this.timerCallbacks.set(node,calls);}const identity=atom.operation+":"+signature;let retained=calls.get(identity);
+                        if(!retained){const context=ts.setTextRange(ts.factory.createEmptyStatement(),node);(context as ts.Node&{parent:ts.Node}).parent=node;retained={context,result:this.newCell()};calls.set(identity,retained);this.invoke(context,callback,this.empty,(descriptor.actuals<0?[]:argv.slice(descriptor.actuals)).map(cell=>({cell,spread:false})),retained.result);}
+
+                        if(descriptor.queue==="MICROTASK")this.publish(result,this.primitive(undefined));else{let value=this.numericValues.get(KIND_NUMBER);if(!value){value={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,value);}this.publish(result,value);}continue;
                     }
                     if(atom.tag==="operation"&&atom.operation==="ordinary-has-instance"){
                         this.copy(this.ordinaryInstanceSource(argument(0)??omittedArgument,invocation.receiver,node),result);continue;

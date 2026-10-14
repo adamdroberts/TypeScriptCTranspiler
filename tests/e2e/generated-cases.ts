@@ -58,6 +58,7 @@ export interface PrimitivePropertyReadDepthSpec {generator:"primitive-property-r
 export interface RestSourceLocationDepthSpec {generator:"rest-source-location-depth";depth:number;}
 export interface SourceAllocationDepthSpec {generator:"source-allocation-depth";depth:number;}
 export interface ListExtentCaptureDepthSpec {generator:"list-extent-capture-depth";depth:number;}
+export interface CallbackTimerSourceDepthSpec {generator:"callback-timer-source-depth";depth:number;}
 export interface HasInstanceDepthSpec {generator:"has-instance-depth";depth:number;}
 export interface RelationalSourceDepthSpec {generator:"relational-source-depth";depth:number;}
 export interface StrictTypeSourceDepthSpec {generator:"strict-type-source-depth";depth:number;}
@@ -319,6 +320,7 @@ export type GeneratedCaseSpec =
     | RestSourceLocationDepthSpec
     | SourceAllocationDepthSpec
     | ListExtentCaptureDepthSpec
+    | CallbackTimerSourceDepthSpec
     | HasInstanceDepthSpec
     | RelationalSourceDepthSpec
     | StrictTypeSourceDepthSpec
@@ -362,6 +364,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     }
     if(spec.generator==='list-extent-capture-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid List extent capture spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
+    if(spec.generator==='callback-timer-source-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid callback timer source spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
     }
     if(spec.generator==='has-instance-depth'){
@@ -2002,6 +2008,7 @@ console.log("raw JSON text width:", valid);
         case "rest-source-location-depth": return restSourceLocationInput(spec.depth);
         case "source-allocation-depth": return sourceAllocationInput(spec.depth);
         case "list-extent-capture-depth": return listExtentCaptureInput(spec.depth);
+        case "callback-timer-source-depth": return callbackTimerSourceInput(spec.depth);
         case "has-instance-depth": return hasInstanceInput(spec.depth);
         case "relational-source-depth": return relationalSourceInput(spec.depth);
         case "strict-type-source-depth": return strictTypeSourceInput(spec.depth);
@@ -2326,4 +2333,9 @@ export function relationalSourceInput(depth:number):string {
 
 export function hasInstanceInput(depth:number):string {
  return `{function InstanceTarget(){}const target:any=InstanceTarget;let object:any=Object.create(target.prototype),bound:any=target;for(let index=0;index<${depth};index++){object=Object.create(object);bound=bound.bind(null)}console.log('hasInstance depth:',object instanceof bound,Function.prototype[Symbol.hasInstance].call(bound,object));}\n`;
+}
+
+export function callbackTimerSourceInput(depth:number):string {
+ const owners=Array.from({length:depth},(_,index)=>`const timerSourceOwner${index}:any=${index?`{body:timerSourceOwner${index-1}.body,previous:timerSourceOwner${index-1}}`:`{body:'return 71;',previous:null}`};`);
+ return `{${owners.join('\n')}setTimeout((body:string)=>console.log('timer source:',Function(body)()),0,timerSourceOwner${depth-1}.body);}\n`;
 }

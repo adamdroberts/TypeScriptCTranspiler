@@ -1,3 +1,5 @@
+Shared native callback timer metadata and source callback/actual-List effects, closing finite agent templates.
+
 Implemented Symbol.hasInstance dispatch and shared bound-target OrdinaryHasInstance traversal.
 
 Preserved BigInt and String relational source semantics through ordered ToPrimitive conversion.
