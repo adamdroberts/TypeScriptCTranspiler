@@ -1,3 +1,5 @@
+- Register scoped conditional Value/lazy-arm evidence with one canonical expression-tree stress.
+
 - Conditional expressions preserve actual null/undefined Values through static arm selection and the shared lazy boxed boundary.
 
 - Register scoped comma evaluation evidence with one canonical expression-tree stress and the independently audited pinned comma scope.

@@ -33,6 +33,11 @@ export interface GroupingReferenceDepthSpec {
     depth: number;
 }
 
+export interface ConditionalValueExpressionDepthSpec {
+    generator: "conditional-value-expression-depth";
+    depth: number;
+}
+
 export interface CommaValueExpressionDepthSpec {
     generator: "comma-value-expression-depth";
     depth: number;
@@ -270,6 +275,7 @@ export type GeneratedCaseSpec =
     | DispatchCaptureWorklistWidthSpec
     | DnsLookupOptionAliasDepthSpec
     | GroupingReferenceDepthSpec
+    | ConditionalValueExpressionDepthSpec
     | CommaValueExpressionDepthSpec
     | StrictEqualityExpressionDepthSpec
     | ModuleNamespaceExportWidthSpec
@@ -601,7 +607,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "comma-value-expression-depth" || spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth" || spec.generator === "boxed-json-source-depth" || spec.generator === "dynamic-import-source-depth" || spec.generator === "return-projection-depth" || spec.generator === "util-format-source-depth" || spec.generator === "prototype-validation-depth" || spec.generator === "descriptor-projection-depth" || spec.generator === "map-insertion-depth" || spec.generator === "error-brand-depth" || spec.generator === "json-scalar-source-depth" || spec.generator === "parse-goal-source-depth" || spec.generator === "event-target-actuals-depth" || spec.generator === "os-user-info-option-depth") {
+    if (spec.generator === "conditional-value-expression-depth" || spec.generator === "comma-value-expression-depth" || spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth" || spec.generator === "boxed-json-source-depth" || spec.generator === "dynamic-import-source-depth" || spec.generator === "return-projection-depth" || spec.generator === "util-format-source-depth" || spec.generator === "prototype-validation-depth" || spec.generator === "descriptor-projection-depth" || spec.generator === "map-insertion-depth" || spec.generator === "error-brand-depth" || spec.generator === "json-scalar-source-depth" || spec.generator === "parse-goal-source-depth" || spec.generator === "event-target-actuals-depth" || spec.generator === "os-user-info-option-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
             throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
@@ -1039,6 +1045,18 @@ function groupingReferenceDepthSource(depth: number): string {
         `const returned = ${group("owner.value")}++;`,
         `const value = ${group("leaf()")};`,
         'console.log("grouping depth:", returned === 19 && owner.value === 20 && value.value === 7 && calls === 1);',
+    ].join("\n");
+}
+
+function conditionalValueExpressionDepthSource(depth: number): string {
+    let expression = "null";
+    for (let index = depth - 1; index >= 0; --index) expression = `(choose(${index}) ? unreachable() : ${expression})`;
+    return [
+        "let calls = 0, ordered = true;",
+        "function choose(index: number): boolean { ordered = ordered && index === calls; calls++; return false; }",
+        "function unreachable(): any { throw new Error('unselected conditional arm'); }",
+        `const result: any = ${expression};`,
+        `console.log("conditional value depth:", result === null && ordered && calls === ${depth});`,
     ].join("\n");
 }
 
@@ -2047,6 +2065,8 @@ console.log("raw JSON text width:", valid);
             return dnsLookupOptionAliasDepthSource(spec.depth);
         case "grouping-reference-depth":
             return groupingReferenceDepthSource(spec.depth);
+        case "conditional-value-expression-depth":
+            return conditionalValueExpressionDepthSource(spec.depth);
         case "comma-value-expression-depth":
             return commaValueExpressionDepthSource(spec.depth);
         case "strict-equality-expression-depth":

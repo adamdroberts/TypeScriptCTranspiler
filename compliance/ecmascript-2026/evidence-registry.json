@@ -5720,8 +5720,48 @@
     {
       "kind": "implementation",
       "id": "src/emit/index.ts#boxSourceValue",
+      "targets": ["sec-comma-operator-runtime-semantics-evaluation#ordered-operands-and-actual-right-value", "sec-conditional-operator-runtime-semantics-evaluation#selected-value-and-lazy-arms"]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/conditional-value.property.test.ts",
       "targets": [
-        "sec-comma-operator-runtime-semantics-evaluation#ordered-operands-and-actual-right-value"
+        "sec-conditional-operator-runtime-semantics-evaluation#selected-value-and-lazy-arms"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "conditional_value_expression_depth",
+      "targets": [
+        "sec-conditional-operator-runtime-semantics-evaluation#selected-value-and-lazy-arms"
+      ],
+      "stressReview": {
+        "dimension": "right-nested conditional expression tree depth",
+        "parameter": "depth",
+        "representativeHighDepth": 128,
+        "rationale": "One generated tree verifies condition order, lazy abrupt arms and actual null selection through the shared lowering; depth does not choose an implementation.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "conditional_nullish_value",
+      "targets": [
+        "sec-conditional-operator-runtime-semantics-evaluation#selected-value-and-lazy-arms"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitTernary",
+      "targets": [
+        "sec-conditional-operator-runtime-semantics-evaluation#selected-value-and-lazy-arms"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitConditionalValueArms",
+      "targets": [
+        "sec-conditional-operator-runtime-semantics-evaluation#selected-value-and-lazy-arms"
       ]
     }
   ]
