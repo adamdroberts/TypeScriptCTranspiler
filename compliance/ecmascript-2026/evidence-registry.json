@@ -455,7 +455,8 @@
         "sec-string.prototype.iswellformed#generic-tostring-and-lone-surrogate-scan",
         "sec-string.prototype.towellformed#generic-tostring-and-lone-surrogate-replacement",
         "sec-string.prototype.tostring#generic-this-string-value-tostring",
-        "sec-string.prototype.valueof#generic-this-string-value-valueof"
+        "sec-string.prototype.valueof#generic-this-string-value-valueof",
+        "sec-getvalue#ordinary-primitive-named-property-reads"
       ]
     },
     {
@@ -631,7 +632,8 @@
         "sec-string.prototype.iswellformed#generic-tostring-and-lone-surrogate-scan",
         "sec-string.prototype.towellformed#generic-tostring-and-lone-surrogate-replacement",
         "sec-string.prototype.tostring#generic-this-string-value-tostring",
-        "sec-string.prototype.valueof#generic-this-string-value-valueof"
+        "sec-string.prototype.valueof#generic-this-string-value-valueof",
+        "sec-getvalue#ordinary-primitive-named-property-reads"
       ]
     },
     {
@@ -736,7 +738,8 @@
       "targets": [
         "sec-string.prototype.charat#generic-tostring-index-and-code-unit-string",
         "sec-string.prototype.charcodeat#generic-tostring-index-and-code-unit-number",
-        "sec-string.prototype.codepointat#generic-tostring-index-and-utf16-decode"
+        "sec-string.prototype.codepointat#generic-tostring-index-and-utf16-decode",
+        "sec-getvalue#ordinary-primitive-named-property-reads"
       ]
     },
     {
@@ -4669,7 +4672,8 @@
       "kind": "property",
       "id": "tests/property/primitive-property-reference.property.test.ts",
       "targets": [
-        "sec-putvalue#primitive-base-current-realm-set"
+        "sec-putvalue#primitive-base-current-realm-set",
+        "sec-getvalue#ordinary-primitive-named-property-reads"
       ]
     },
     {
@@ -5098,6 +5102,34 @@
       "id": "src/source-value-flow.ts#initializeActive",
       "targets": [
         "sec-getvalue#canonical-binding-source-origin-capture"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/primitive-property-read.property.test.ts",
+      "targets": [
+        "sec-getvalue#ordinary-primitive-named-property-reads"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "primitive_property_read_depth",
+      "targets": [
+        "sec-getvalue#ordinary-primitive-named-property-reads"
+      ],
+      "stressReview": {
+        "dimension": "ordinary primitive String prototype graph depth",
+        "parameter": "depth",
+        "representativeHighDepth": 4096,
+        "rationale": "One shared generated prototype graph tests literal Get independently of primitive-domain/mutation/receiver partitions in native property and typed CLI.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_get_prop_cached",
+      "targets": [
+        "sec-getvalue#ordinary-primitive-named-property-reads"
       ]
     }
   ]

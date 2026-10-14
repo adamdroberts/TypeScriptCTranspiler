@@ -1,3 +1,5 @@
+Routed literal String named properties through the shared ordinary primitive Get path; removed String member whitelist and direct length-read predecessors.
+
 Unified lexical/global/imported source reads through canonical origin captures and reused earlier acyclic capture phases; ambient inputs retain invocation provenance before sealing.
 
 Projected generated direct eval free references through canonical caller binding edges and separated direct/indirect source completion domains; retained opaque admission and caller TDZ completion.

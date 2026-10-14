@@ -45463,21 +45463,11 @@ class Emitter {
         const recv: EmitResult = rawRecv.ty.kind === "function"
             ? { c: this.coerce(rawRecv, T_VALUE, pa.expression), ty: T_VALUE }
             : rawRecv;
-        if (recv.ty.kind === "number" || recv.ty.kind === "boolean" || recv.ty.kind === "bigint" || recv.ty.kind === "symbol") {
+        if (recv.ty.kind === "number" || recv.ty.kind === "boolean" || recv.ty.kind === "bigint" || recv.ty.kind === "symbol" || recv.ty.kind === "string") {
             const cache = this.freshTemp("_primitive_prop_cache");
             return {
                 c: `({ static tsc_prop_cache_t ${cache}; ` +
                     `tsc_value_get_prop_cached(${this.coerce(recv, T_VALUE, pa.expression)}, ${this.stringLit(pa.name.text)}, &${cache}); })`,
-                ty: T_VALUE,
-            };
-        }
-        if (recv.ty.kind === "string" && pa.name.text === "length") {
-            return { c: `tsc_str_length(${recv.c})`, ty: T_NUMBER };
-        }
-        if (recv.ty.kind === "string" && ORDINARY_STRING_PROTOTYPE_METHODS.has(pa.name.text)) {
-            const key = this.stringLit(pa.name.text);
-            return {
-                c: `tsc_value_get_prop(tsc_value_string(${recv.c}), ${key})`,
                 ty: T_VALUE,
             };
         }
