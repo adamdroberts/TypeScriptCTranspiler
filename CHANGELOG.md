@@ -1,3 +1,5 @@
+Captured canonical List extent locations and retained recursive activation timing through the shared call graph.
+
 Retained canonical allocation origins for ordinary source owners and preserved live object member reads through the emitter.
 
 Bound reviewed edition sources to canonical primary repository owners and separated their immutable evidence caches.

@@ -57,6 +57,7 @@ export interface GeneratorMethodOwnerDepthSpec {generator:"generator-method-owne
 export interface PrimitivePropertyReadDepthSpec {generator:"primitive-property-read-depth";depth:number;}
 export interface RestSourceLocationDepthSpec {generator:"rest-source-location-depth";depth:number;}
 export interface SourceAllocationDepthSpec {generator:"source-allocation-depth";depth:number;}
+export interface ListExtentCaptureDepthSpec {generator:"list-extent-capture-depth";depth:number;}
 export interface FunctionSourceOwnerDepthSpec {generator:"function-source-owner-depth";depth:number;}
 export interface EvalDeclarationDepthSpec {generator:"eval-declaration-depth";depth:number;}
 export interface EvalRealmAliasDepthSpec {generator:"eval-realm-alias-depth";depth:number;}
@@ -308,6 +309,7 @@ export type GeneratedCaseSpec =
     | SwitchCaseBlockAsyncCaptureWidthSpec
     | RestSourceLocationDepthSpec
     | SourceAllocationDepthSpec
+    | ListExtentCaptureDepthSpec
     | FunctionSourceOwnerDepthSpec
     | EvalDeclarationDepthSpec
     | EvalRealmAliasDepthSpec
@@ -338,6 +340,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     }
     if(spec.generator==='source-allocation-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid source allocation spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
+    if(spec.generator==='list-extent-capture-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid List extent capture spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
     }
     if(spec.generator==='function-source-owner-depth'){
@@ -1941,6 +1947,7 @@ console.log("raw JSON text width:", valid);
         case "primitive-property-read-depth": return primitivePropertyReadInput(spec.depth);
         case "rest-source-location-depth": return restSourceLocationInput(spec.depth);
         case "source-allocation-depth": return sourceAllocationInput(spec.depth);
+        case "list-extent-capture-depth": return listExtentCaptureInput(spec.depth);
         case "function-source-owner-depth": return functionSourceOwnerInput(spec.depth);
         case "eval-declaration-depth": return evalDeclarationInput(spec.depth);
         case "eval-realm-alias-depth": return evalRealmAliasInput(spec.depth);
@@ -2207,4 +2214,9 @@ export function functionSourceOwnerInput(depth:number):string {
 export function sourceAllocationInput(depth:number):string {
  const owners=Array.from({length:depth},(_,index)=>`const allocation${index}:any=${index?`{body:allocation${index-1}.body,previous:allocation${index-1}}`:`{body:'return 83;',previous:null}`};`);
  return `{Math.random();${owners.join('\n')}console.log('allocation:',Function(allocation${depth-1}.body)());}\n`;
+}
+
+export function listExtentCaptureInput(depth:number):string {
+ const aliases=Array.from({length:depth},(_,index)=>`const extentOwner${index}:any=${index?'extentOwner'+(index-1):'flag?["return 103;"]:["return 107;"]'};`);
+ return `function extentSelect(flag:boolean):any{${aliases.join('\n')}return Function.apply(null,[...extentOwner${depth-1}]);}console.log('extent:',extentSelect(true)(),extentSelect(false)());\nasync function* extentLater(){yield 1}extentLater().next();\n`;
 }

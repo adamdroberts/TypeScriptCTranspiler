@@ -292,6 +292,8 @@ class SourceValueFlow {
     private undefinedCallReceiver?:Cell;
     private readonly functionThisBindings=new Map<FunctionOwner,Map<Cell,Cell>>();
     private readonly functions = new Map<CallableDefinition, FunctionOwner>();
+    private readonly activationCalls=new Map<FunctionOwner,{targets:Set<FunctionOwner>;callers:Set<FunctionOwner>}>();
+    private readonly cyclicActivationTiming=new Map<FunctionOwner,Cell>();
     private readonly ownerAtoms = new WeakMap<ObjectOwner | FunctionOwner, Map<Atom["tag"], Atom>>();
     private readonly promiseAtoms = new WeakMap<Cell, WeakMap<Cell, Atom>>();
     private readonly restLocations = new Map<ts.ParameterDeclaration, {value: Cell; owner: ObjectOwner}>();
@@ -752,6 +754,26 @@ class SourceValueFlow {
     private opaqueEffect(context?: ts.Node): void {
         this.copy(this.executionOrigins(context),this.opaqueMutation);
     }
+    /** Close represented call cycles through one adjacency graph. An origin
+     * alone cannot distinguish successive recursive activations. */
+    private connectActivation(caller:FunctionOwner|null,callee:FunctionOwner):void {
+        if(!caller)return;
+        const from=this.activationEdges(caller),to=this.activationEdges(callee);
+        if(from.targets.has(callee))return;from.targets.add(callee);to.callers.add(caller);
+        this.copy(this.activationTiming(caller),this.activationTiming(callee));
+        const pending=[callee],reachable=new Set<FunctionOwner>();
+        while(pending.length){const owner=pending.pop()!;if(reachable.has(owner))continue;reachable.add(owner);for(const next of this.activationCalls.get(owner)?.targets??[])pending.push(next);}
+        if(!reachable.has(caller))return;
+        const reverse=[caller],returns=new Set<FunctionOwner>();
+        while(reverse.length){const owner=reverse.pop()!;if(returns.has(owner))continue;returns.add(owner);for(const prior of this.activationCalls.get(owner)?.callers??[])reverse.push(prior);}
+        for(const owner of reachable)if(returns.has(owner))this.publish(this.activationTiming(owner),this.primitive(true));
+    }
+    private activationEdges(owner:FunctionOwner):{targets:Set<FunctionOwner>;callers:Set<FunctionOwner>} {
+        let edges=this.activationCalls.get(owner);if(!edges){edges={targets:new Set(),callers:new Set()};this.activationCalls.set(owner,edges);}return edges;
+    }
+    private activationTiming(owner:FunctionOwner):Cell {
+        let timing=this.cyclicActivationTiming.get(owner);if(!timing){timing=this.newCell();this.cyclicActivationTiming.set(owner,timing);}return timing;
+    }
     private dynamicContext(node: ts.Node): boolean {
         const pending: ts.Node[] = [];
         let current: ts.Node | undefined = node, dynamic = false;
@@ -778,7 +800,7 @@ class SourceValueFlow {
         if (atom.tag !== "unknown" || !atom.origin || !context) return true;
         const effect = atom.origin;
         const activation=this.enclosingActivation(context);
-        if(activation&&activation.kind==="ordinary"&&!this.repeatedActivationContext(context)&&!this.dynamicContext(effect)){
+        if(activation&&activation.kind==="ordinary"&&!this.activationTiming(activation).values.size&&!this.repeatedActivationContext(context)&&!this.dynamicContext(effect)){
             const origins=[...activation.active.values];
             if(origins.length&&origins.every(origin=>origin.tag==="unknown"&&origin.origin&&origin.origin!==effect&&
                 !this.dynamicContext(origin.origin)&&!this.effectVisible(atom,origin.origin,true)))return false;
@@ -837,7 +859,7 @@ class SourceValueFlow {
         };
         const captured=project(from);
         const extend=()=>{while(pending.length){const source=pending.pop()!,target=project(source),atoms=new Map<Atom,Atom>();
-            this.rule([source,...(this.enclosingActivation(context)?[this.enclosingActivation(context)!.active]:[])],()=>{
+            this.rule([source,...(this.enclosingActivation(context)?[this.enclosingActivation(context)!.active,this.activationTiming(this.enclosingActivation(context)!)]:[])],()=>{
                 const transform=this.returnTransforms.get(source);
                 if(transform){const replay=transform.evaluate(transform.inputs.map(project));
                     if(replay!==source){this.copy(project(replay),target);extend();return;}}
@@ -1171,9 +1193,9 @@ class SourceValueFlow {
     private ownerMutation(owner:ObjectOwner):void {
         const creation=this.ownerCreations.get(owner);
         const activation=creation?this.enclosingActivation(creation):undefined;
-        this.rule([this.opaqueMutation,...(activation?[activation.active]:[])],()=>{
+        this.rule([this.opaqueMutation,...(activation?[activation.active,this.activationTiming(activation)]:[])],()=>{
             for(const atom of this.opaqueMutation.values){
-                if(creation&&atom.tag==="unknown"&&atom.origin&&!this.dynamicContext(atom.origin)&&!this.repeatedActivationContext(creation)){
+                if(creation&&(!activation||!this.activationTiming(activation).values.size)&&atom.tag==="unknown"&&atom.origin&&!this.dynamicContext(atom.origin)&&!this.repeatedActivationContext(creation)){
                     const points=activation?.kind==="ordinary"?[...activation.active.values].map(origin=>origin.tag==="unknown"?origin.origin:undefined):activation?[undefined]:[creation];
                     if(points.length&&points.every(point=>{
                         if(!point||this.dynamicContext(point))return false;
@@ -2614,7 +2636,7 @@ class SourceValueFlow {
         return keys===null||keys===undefined?keys:keys.map(Number).sort((left,right)=>left-right);
     }
     private propertyDomainKeys(receiver:Cell,context:ts.Node,rule:Rule,domain:"index"|"numeric"):readonly string[]|null|undefined {
-        const activation=this.enclosingActivation(context);if(activation)this.watch(rule,activation.active);
+        const activation=this.enclosingActivation(context);if(activation){this.watch(rule,activation.active);this.watch(rule,this.activationTiming(activation));}
         const keys=new Set<string>(),owners:ObjectOwner[]=[],visited=new Set<ObjectOwner>();
         const add=(key:SourcePropertyKey|null)=>{
             if(typeof key!=="string")return;
@@ -3148,7 +3170,8 @@ class SourceValueFlow {
                 if(current.accessors.has(this.wellKnownSymbols.get("iterator")!)||current.accessors.has(null))return [null];
                 for(const prototype of current.prototype?.values??[]){const parent=this.ordinaryOwner(prototype);if(parent)prototypes.push(parent);}
             }
-            const proof = this.primitiveChoiceProof(owner.listLength!);
+            const extent=this.captureRead(owner.listLength!,context,argumentsRead);
+            const proof = this.primitiveChoiceProof(extent);
             const literal=this.literalLists.get(owner);
             if(literal&&context&&argumentsRead&&!literal.holes.size){
                 let boundary:ts.Node=literal.node;
@@ -3159,7 +3182,7 @@ class SourceValueFlow {
                 // mutate its freshly defined own element locations.
                 if(boundary.parent===context){alternatives.push(...this.arguments(literal.parts,literal.node));continue;}
             }
-            if (!proof.primitiveComplete && this.primitiveReadiness(owner.listLength!).pending) continue;
+            if (!proof.primitiveComplete && this.primitiveReadiness(extent).pending) continue;
             if (this.opaqueShape(owner,context,argumentsRead) || !proof.primitiveComplete) {
                 alternatives.push(null);
                 continue;
@@ -4428,7 +4451,7 @@ class SourceValueFlow {
                             this.publish(result!,this.abrupt);
                             continue;
                         }
-                        this.onActive(node,()=>this.copy(this.executionOrigins(node),atom.owner.active));
+                        this.onActive(node,()=>{this.connectActivation(this.enclosingActivation(node),atom.owner);this.copy(this.executionOrigins(node),atom.owner.active);});
                         if (invocation.construct) {
                             const instance = this.owner(node);
                             instance.prototype ??= this.newCell();
@@ -4733,7 +4756,7 @@ class SourceValueFlow {
         });
     }
     private watchList(rule: Rule, cell: Cell,context?:ts.Node): void {
-        const activation=context?this.enclosingActivation(context):null;if(activation)this.watch(rule,activation.active);
+        const activation=context?this.enclosingActivation(context):null;if(activation){this.watch(rule,activation.active);this.watch(rule,this.activationTiming(activation));}
         this.watch(rule,this.iterationMethod(cell,context));
         const pending = [cell], visited = new Set<Cell>();
         while (pending.length) {
@@ -4741,7 +4764,7 @@ class SourceValueFlow {
             for (const atom of input.values) {
                 const owner=this.ordinaryOwner(atom);if(!owner)continue;
                 this.watch(rule, owner.shape);
-                if (owner.listLength) pending.push(owner.listLength);
+                if (owner.listLength) pending.push(this.captureRead(owner.listLength,context,true));
                 if(owner.prototype)pending.push(owner.prototype);
                 for (const field of owner.fields.values()) pending.push(field);
                 for(const accessor of owner.accessors.values())pending.push(accessor.get,accessor.set);
