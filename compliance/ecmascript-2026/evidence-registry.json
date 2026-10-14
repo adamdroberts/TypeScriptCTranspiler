@@ -2888,7 +2888,8 @@
       "targets": [
         "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
         "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
-        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context",
+        "sec-getvalue#caller-origin-property-source-captures"
       ]
     },
     {
@@ -4321,7 +4322,8 @@
         "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
         "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation",
         "sec-getvalue#canonical-binding-source-origin-capture",
-        "sec-return-statement-runtime-semantics-evaluation#composed-source-projection-provenance"
+        "sec-return-statement-runtime-semantics-evaluation#composed-source-projection-provenance",
+        "sec-getvalue#caller-origin-property-source-captures"
       ]
     },
     {
@@ -4540,7 +4542,8 @@
       "kind": "implementation",
       "id": "src/source-value-flow.ts#watchList",
       "targets": [
-        "sec-evaluatecall#finite-host-callable-location-source-projections"
+        "sec-evaluatecall#finite-host-callable-location-source-projections",
+        "sec-getvalue#caller-origin-property-source-captures"
       ]
     },
     {
@@ -5083,7 +5086,8 @@
       "kind": "property",
       "id": "tests/property/source-effect-origins.property.test.ts",
       "targets": [
-        "sec-getvalue#canonical-binding-source-origin-capture"
+        "sec-getvalue#canonical-binding-source-origin-capture",
+        "sec-getvalue#caller-origin-property-source-captures"
       ]
     },
     {
@@ -5111,7 +5115,8 @@
       "kind": "implementation",
       "id": "src/source-value-flow.ts#effectVisible",
       "targets": [
-        "sec-getvalue#canonical-binding-source-origin-capture"
+        "sec-getvalue#canonical-binding-source-origin-capture",
+        "sec-getvalue#caller-origin-property-source-captures"
       ]
     },
     {
@@ -5153,7 +5158,8 @@
       "kind": "property",
       "id": "tests/property/source-projection-provenance.property.test.ts",
       "targets": [
-        "sec-return-statement-runtime-semantics-evaluation#composed-source-projection-provenance"
+        "sec-return-statement-runtime-semantics-evaluation#composed-source-projection-provenance",
+        "sec-getvalue#caller-origin-property-source-captures"
       ]
     },
     {
@@ -5525,7 +5531,8 @@
       "id": "tests/property/function-source-owner.property.test.ts",
       "targets": [
         "sec-createdynamicfunction#exact-function-source-and-realm-records",
-        "sec-runtime-semantics-iteratorbindinginitialization#canonical-rest-source-own-locations"
+        "sec-runtime-semantics-iteratorbindinginitialization#canonical-rest-source-own-locations",
+        "sec-getvalue#caller-origin-property-source-captures"
       ]
     },
     {
@@ -5596,14 +5603,16 @@
       "kind": "property",
       "id": "tests/property/rest-source-location.property.test.ts",
       "targets": [
-        "sec-runtime-semantics-iteratorbindinginitialization#canonical-rest-source-own-locations"
+        "sec-runtime-semantics-iteratorbindinginitialization#canonical-rest-source-own-locations",
+        "sec-getvalue#caller-origin-property-source-captures"
       ]
     },
     {
       "kind": "stress",
       "id": "rest_source_location_depth",
       "targets": [
-        "sec-runtime-semantics-iteratorbindinginitialization#canonical-rest-source-own-locations"
+        "sec-runtime-semantics-iteratorbindinginitialization#canonical-rest-source-own-locations",
+        "sec-getvalue#caller-origin-property-source-captures"
       ],
       "stressReview": {
         "dimension": "rest source-owner alias graph depth",
@@ -5632,6 +5641,34 @@
       "id": "src/source-value-flow.ts#lists",
       "targets": [
         "sec-runtime-semantics-iteratorbindinginitialization#canonical-rest-source-own-locations"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/activation-property-capture.property.test.ts",
+      "targets": [
+        "sec-getvalue#caller-origin-property-source-captures"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "activation_property_capture",
+      "targets": [
+        "sec-getvalue#caller-origin-property-source-captures"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#propertyLocations",
+      "targets": [
+        "sec-getvalue#caller-origin-property-source-captures"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#propertyDomainKeys",
+      "targets": [
+        "sec-getvalue#caller-origin-property-source-captures"
       ]
     }
   ]

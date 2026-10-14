@@ -358,6 +358,7 @@ class SourceValueFlow {
     private readonly sourceStarts = new WeakMap<ts.Node, number>();
     private readonly executionGuards = new WeakMap<ts.Node, readonly {condition: Cell; truthy: boolean}[]>();
     private readonly capturePhases=new Map<ts.Node,Map<boolean,SourceCapturePhase>>();
+    private readonly propertyLocations=new Set<Cell>();
     private readonly readCaptures = new Map<Cell, Map<ts.Node | undefined, Map<boolean, Cell>>>();
     private readonly empty = this.newCell();
     private readonly globalMutation = this.newCell();
@@ -768,11 +769,20 @@ class SourceValueFlow {
         if (!source) {source = node.getSourceFile(); this.sourceFiles.set(node, source);}
         return source;
     }
+    private repeatedActivationContext(context:ts.Node):boolean {
+        for(let node:ts.Node|undefined=context;node&&!functionNode(node);node=node.parent)if(ts.isIterationStatement(node,false))return true;
+        return false;
+    }
     private effectVisible(atom: Atom, context?: ts.Node, argumentsRead = false): boolean {
         if (atom.tag !== "unknown" || !atom.origin || !context) return true;
         const effect = atom.origin;
-        // Source order proves capture only in an acyclic top-level activation.
-        // A later spelling in a function or loop may run before this read.
+        const activation=this.enclosingActivation(context);
+        if(activation&&activation.kind==="ordinary"&&!this.repeatedActivationContext(context)&&!this.dynamicContext(effect)){
+            const origins=[...activation.active.values];
+            if(origins.length&&origins.every(origin=>origin.tag==="unknown"&&origin.origin&&origin.origin!==effect&&
+                !this.dynamicContext(origin.origin)&&!this.effectVisible(atom,origin.origin,true)))return false;
+        }
+        // Unrepresented, repeated or overlapping activations remain opaque.
         if (this.dynamicContext(effect) || this.dynamicContext(context)) return true;
         if (this.sourceFile(effect) !== this.sourceFile(context)) {
             const before=this.scriptOrder.get(this.sourceFile(context)),after=this.scriptOrder.get(this.sourceFile(effect));
@@ -798,7 +808,7 @@ class SourceValueFlow {
         this.copy(this.captureRead(from,context,argumentsRead),into);
     }
     private captureRead(from: Cell, context?: ts.Node, argumentsRead = false): Cell {
-        if (!context || this.dynamicContext(context)) return from;
+        if (!context || this.dynamicContext(context) && !(this.enclosingActivation(context) && this.propertyLocations.has(from))) return from;
         let contexts = this.readCaptures.get(from);
         if (!contexts) {contexts = new Map(); this.readCaptures.set(from,contexts);}
         let phases = contexts.get(context);
@@ -826,7 +836,7 @@ class SourceValueFlow {
         };
         const captured=project(from);
         const extend=()=>{while(pending.length){const source=pending.pop()!,target=project(source),atoms=new Map<Atom,Atom>();
-            this.rule([source],()=>{
+            this.rule([source,...(this.enclosingActivation(context)?[this.enclosingActivation(context)!.active]:[])],()=>{
                 const transform=this.returnTransforms.get(source);
                 if(transform){const replay=transform.evaluate(transform.inputs.map(project));
                     if(replay!==source){this.copy(project(replay),target);extend();return;}}
@@ -1154,7 +1164,7 @@ class SourceValueFlow {
     private field(owner: ObjectOwner, key: SourcePropertyKey): Cell {
         let cell = owner.fields.get(key);
         if (!cell) {
-            cell = this.newCell(); owner.fields.set(key, cell); this.publish(owner.shape, this.primitive(key));
+            cell = this.newCell();this.propertyLocations.add(cell); owner.fields.set(key, cell); this.publish(owner.shape, this.primitive(key));
             const target = cell;
             this.rule([owner.shape],()=>{for (const value of owner.shape.values) if (value.tag === "unknown") this.publish(target,value);});
         }
@@ -2577,6 +2587,7 @@ class SourceValueFlow {
         return keys===null||keys===undefined?keys:keys.map(Number).sort((left,right)=>left-right);
     }
     private propertyDomainKeys(receiver:Cell,context:ts.Node,rule:Rule,domain:"index"|"numeric"):readonly string[]|null|undefined {
+        const activation=this.enclosingActivation(context);if(activation)this.watch(rule,activation.active);
         const keys=new Set<string>(),owners:ObjectOwner[]=[],visited=new Set<ObjectOwner>();
         const add=(key:SourcePropertyKey|null)=>{
             if(typeof key!=="string")return;
@@ -4695,6 +4706,7 @@ class SourceValueFlow {
         });
     }
     private watchList(rule: Rule, cell: Cell,context?:ts.Node): void {
+        const activation=context?this.enclosingActivation(context):null;if(activation)this.watch(rule,activation.active);
         this.watch(rule,this.iterationMethod(cell,context));
         const pending = [cell], visited = new Set<Cell>();
         while (pending.length) {

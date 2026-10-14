@@ -5877,6 +5877,55 @@
             ]
           },
           "rationale": "Literal and typed String named property reads now use the same ordinary boxed primitive Get boundary as Number, Boolean, BigInt and Symbol. The String method-name whitelist and direct native length-read predecessors are deleted; String own length/index properties still come from the shared primitive object model, while mutable prototype data/accessors retain actual primitive receivers and abrupt values. primitive-property-read.property compares named/inherited/mutable/missing/accessor/abrupt/Symbol/single-evaluation and typed length/method consumers with independent Node across typed and erased native inputs in both memory modes, sharing one representative deep String prototype graph with typed CLI. The original pinned GetValue primitive prototype source changes from stable unsupported String property rejection to native execution in strict and sloppy scenarios. Existing primitive Reference and String index properties retain neighboring evidence. Existing runtime Get/ToObject and declarations suffice. Full Realm/exotic/Reference contracts, source-effect precision, host eligibility and eligible exhaustive ECMAScript 2026 coverage remain open."
+        },
+        {
+          "id": "caller-origin-property-source-captures",
+          "title": "Caller-origin property source captures",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "graph",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-getvalue"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/activation-property-capture.property.test.ts",
+              "tests/property/source-effect-origins.property.test.ts",
+              "tests/property/source-return-origins.property.test.ts",
+              "tests/property/source-projection-provenance.property.test.ts",
+              "tests/property/function-source-owner.property.test.ts",
+              "tests/property/rest-source-location.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "rest_source_location_depth"
+            ],
+            "e2e": [
+              "activation_property_capture"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "src/source-value-flow.ts#propertyLocations",
+              "src/source-value-flow.ts#effectVisible",
+              "src/source-value-flow.ts#captureRead",
+              "src/source-value-flow.ts#watchList",
+              "src/source-value-flow.ts#propertyDomainKeys"
+            ]
+          },
+          "rationale": "Canonical property source locations now retain caller-origin capture phases. An ordinary synchronous nonloop read excludes an opaque effect only when every represented acyclic activation is provably before that effect; overlapping, unknown, recursive/repeated, generator and async timing remains conservative. Property cells enter the existing capture/projection graph, while dynamic identifier formals preserve their shared actual-input return substitution. Actual-List and indexed-domain rules subscribe to activation origins so new callers can widen uncertainty. The unconditional function-context temporal predecessor is replaced by shared origin edges without invocation-count or nesting cases. activation-property-capture.property compares direct, reflected and getter-returned Function source dispatch before later generator effects against independent Node across typed and erased native inputs in both memory modes. Compact source facts retain earlier, reused, same-argument/body, recursive, loop, async and generator opaque alternatives. One shared rest source-owner alias graph supplies representative high-depth native evidence; activation_property_capture checks the actual typed CLI failure in both memory modes. Existing source-effect, return-origin, projection-provenance, Function owner and rest own-location properties retain neighboring evidence. Existing CType, declarations and runtime kernels suffice. The original mixed constructor-source-flow property remains nonpassing for separate global-input absence and coarse allocation/effect precision. Complete activation/versioning, host eligibility and eligible exhaustive ECMAScript 2026 coverage remain unproven."
         }
       ],
       "rationale": "Scoped source-origin capture evidence; complete Reference and activation semantics remain open."

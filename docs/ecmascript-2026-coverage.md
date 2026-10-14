@@ -193,6 +193,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-getvalue` — GetValue ( _V_: a Reference Record or an ECMAScript language value, ): either a normal completion containing an ECMAScript language value or an abrupt completion
     - [ ] `canonical-binding-source-origin-capture` (algorithm, unbounded): Canonical binding source-origin capture.
     - [ ] `ordinary-primitive-named-property-reads` (algorithm, unbounded): Ordinary primitive named property reads.
+    - [ ] `caller-origin-property-source-captures` (algorithm, unbounded): Caller-origin property source captures.
   - [ ] `sec-putvalue` — PutValue ( _V_: a Reference Record or an ECMAScript language value, _W_: an ECMAScript language value, ): either a normal completion containing ~unused~ or an abrupt completion
     - [ ] `primitive-base-current-realm-set` (algorithm, unbounded): Primitive base boxing with original Set receiver.
   - [ ] `sec-getthisvalue` — GetThisValue ( _V_: a Reference Record, ): an ECMAScript language value: exact disposition and partitions missing.
