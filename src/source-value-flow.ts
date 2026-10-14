@@ -4955,6 +4955,10 @@ class SourceValueFlow {
                         primitiveComplete &&= complete || booleanPrefix || booleanResult || noNormal;
                         textComplete &&= complete || atom.operation === "prefix" || atom.operation === "coerce" || atom.operation === "numeric" && atom.numeric!.conversion !== "default";
                         if (noNormal) continue;
+                        if(atom.operation==="numeric"&&atom.numeric!.form==="equality"&&atom.numeric!.conversion==="none"){
+                            const types=atom.parts.map(part=>{const kinds=this.primitiveKinds(part);return kinds&KIND_FUNCTION?(kinds&~KIND_FUNCTION)|KIND_OBJECT:kinds;});
+                            if(types.length===2&&types.every(Boolean)&&!(types[0]!&types[1]!)){add(!!atom.numeric!.negate);continue;}
+                        }
                         if (!complete && booleanResult) {add(false); add(true); continue;}
                         if (!complete && booleanPrefix) { add(false); add(true); continue; }
                         // An incomplete operand cannot prove a finite result

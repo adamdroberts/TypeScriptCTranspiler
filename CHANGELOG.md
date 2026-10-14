@@ -1,3 +1,5 @@
+Proved strict comparisons across disjoint source type domains without activating impossible effects.
+
 Retained Promise source capabilities and resolver/thenable value paths through the shared graph.
 
 Retained primitive BigInt JSON source hooks and native abrupt paths through shared owners.
