@@ -4,8 +4,8 @@ P start 10
 first: false 10
 P after first
 P after second
-mapped: 11, 16, 21
-second: false 15
+mapped: 16, 21
+second: true undefined
 --- method generator ---
 method generator initialized
 M method start 7

@@ -29,7 +29,7 @@ const g = lazyParams("P", 10, 5);
 console.log("parameterized generator initialized");
 const first = g.next();
 console.log("first:", first.done, first.value);
-const mapped = (g as any).map((value: number): number => value + 1);
+const mapped = Array.from(g.map((value: number): number => value + 1));
 console.log("mapped:", mapped.join(", "));
 const second = g.next();
 console.log("second:", second.done, second.value);
