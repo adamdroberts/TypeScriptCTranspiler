@@ -4987,7 +4987,8 @@
       "kind": "property",
       "id": "tests/property/eval-caller-environment.property.test.ts",
       "targets": [
-        "sec-performeval#canonical-caller-environment-references"
+        "sec-performeval#canonical-caller-environment-references",
+        "sec-function-calls#actual-eval-intrinsic-realm-source-owners"
       ]
     },
     {
@@ -5036,14 +5037,16 @@
       "kind": "implementation",
       "id": "src/source-value-flow.ts#connectEvaluationReference",
       "targets": [
-        "sec-performeval#canonical-caller-environment-references"
+        "sec-performeval#canonical-caller-environment-references",
+        "sec-function-calls#actual-eval-intrinsic-realm-source-owners"
       ]
     },
     {
       "kind": "implementation",
       "id": "src/source-value-flow.ts#connectEvaluationEnvironment",
       "targets": [
-        "sec-performeval#canonical-caller-environment-references"
+        "sec-performeval#canonical-caller-environment-references",
+        "sec-function-calls#actual-eval-intrinsic-realm-source-owners"
       ]
     },
     {
@@ -5065,7 +5068,8 @@
       "id": "tests/property/lexical-source-capture.property.test.ts",
       "targets": [
         "sec-getvalue#canonical-binding-source-origin-capture",
-        "sec-return-statement-runtime-semantics-evaluation#composed-source-projection-provenance"
+        "sec-return-statement-runtime-semantics-evaluation#composed-source-projection-provenance",
+        "sec-function-calls#actual-eval-intrinsic-realm-source-owners"
       ]
     },
     {
@@ -5394,6 +5398,69 @@
       "targets": [
         "sec-newpromisereactionjob#canonical-enqueue-realm-record",
         "sec-newpromiseresolvethenablejob#canonical-enqueue-realm-record"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/eval-realm-owner.property.test.ts",
+      "targets": [
+        "sec-function-calls#actual-eval-intrinsic-realm-source-owners"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/function-prototype-realm.property.test.ts",
+      "targets": [
+        "sec-function-calls#actual-eval-intrinsic-realm-source-owners"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "eval_realm_alias_depth",
+      "targets": [
+        "sec-function-calls#actual-eval-intrinsic-realm-source-owners"
+      ],
+      "stressReview": {
+        "dimension": "Realm global/eval alias graph depth",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One shared generated alias graph checks foreign Realm native and current Realm CLI owner propagation independently of directness, mutation, caller binding and opaque semantic partitions.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#SourceRealmRecord",
+      "targets": [
+        "sec-function-calls#actual-eval-intrinsic-realm-source-owners"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#realmBinding",
+      "targets": [
+        "sec-function-calls#actual-eval-intrinsic-realm-source-owners"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#realmOperation",
+      "targets": [
+        "sec-function-calls#actual-eval-intrinsic-realm-source-owners"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#executionRealms",
+      "targets": [
+        "sec-function-calls#actual-eval-intrinsic-realm-source-owners"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_test262.c#tsc_test262_direct_eval_call",
+      "targets": [
+        "sec-function-calls#actual-eval-intrinsic-realm-source-owners"
       ]
     }
   ]

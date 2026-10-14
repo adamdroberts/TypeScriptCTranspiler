@@ -1,3 +1,5 @@
+Retained source Realm global and eval intrinsic owners, selecting direct/indirect AOT environments from actual intrinsic identity.
+
 Captured Promise reaction and thenable job Realms at actual enqueue through retained job records and the shared callback scheduling collection.
 
 Moved class constructor post-body completion checks into the restored caller context through the retained constructor environment.

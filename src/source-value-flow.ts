@@ -86,10 +86,10 @@ type ArgumentSequence = { readonly id: number; readonly context: ts.Node; readon
     { readonly kind: "prepend"; readonly source: ArgumentSequence; readonly prefix: readonly Cell[] });
 type Atom =
     | { readonly tag: "builtin"; readonly name: string; readonly normalResult: NonNullable<RuntimeGlobalBinding["normalResult"]>; readonly fields: ObjectOwner }
-    | { readonly tag: "intrinsic"; readonly domain: Domain; readonly kind: DynamicFunctionKind }
+    | { readonly tag: "intrinsic"; readonly domain: Domain; readonly kind: DynamicFunctionKind;readonly realm?:SourceRealmRecord }
     | { readonly tag: "function"; readonly owner: FunctionOwner }
     | { readonly tag: "object"; readonly owner: ObjectOwner }
-    | { readonly tag: "operation"; readonly operation: Operation }
+    | { readonly tag: "operation"; readonly operation: Operation; readonly realm?:SourceRealmRecord }
     | { readonly tag: "bound"; readonly target: Cell; readonly receiver: Cell; readonly prefix: readonly Cell[] | null; readonly fields: ObjectOwner }
     | { readonly tag: "primitive"; readonly value: Primitive }
     | { readonly tag: "non-string"; readonly kinds?: number }
@@ -104,7 +104,7 @@ type Atom =
     | { readonly tag: "text-operation"; readonly operation: "json-container"; readonly parts: readonly Cell[]; readonly keys:readonly string[]; readonly arrayLength:number|null; readonly level:number }
     | { readonly tag: "promise"; readonly value: Cell; readonly rejection: Cell }
     | { readonly tag: "generator"; readonly owner: FunctionOwner }
-    | { readonly tag: "global" } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record" };
+    | { readonly tag: "global";readonly realm:SourceRealmRecord } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record";readonly realm:SourceRealmRecord };
 class SourceFacts extends Set<Atom> {
     readonly sources = new Set<SourceFacts>();
     private readonly memberships = new Set<Atom>();
@@ -161,9 +161,11 @@ interface EvaluationRecord {
 interface EvaluationEnvironment {
     readonly source: ts.SourceFile;
     readonly direct: boolean;
-    readonly callers: Set<ts.Node>;
+    readonly realms:Cell;
+    readonly callers: Map<ts.Node,Set<SourceRealmRecord>>;
     readonly references: Map<ts.Identifier, {value: Cell; writes: Cell}>;
 }
+interface SourceRealmRecord {objectPrototype?:Cell;readonly bindings:Map<string,Cell>;owner?:ObjectOwner;host?:ObjectOwner;readonly global:Atom;readonly record:Atom;readonly operations:Map<Operation,Atom>;readonly intrinsics:Map<string,Atom>;}
 interface SourceCapturePhase {readonly kind:"capture";readonly context:ts.Node;readonly argumentsRead:boolean;}
 type SourceProjectionPhase = SourceCapturePhase | {readonly kind:"return"};
 
@@ -256,7 +258,6 @@ class SourceValueFlow {
     private readonly exceptionCells = new Set<Cell>();
     private readonly catchGuards = new Map<ts.CatchClause, Cell>();
     private readonly bindings = new Map<ts.Symbol, Cell>();
-    private readonly globals = new Map<string, Cell>();
     private readonly utilModules = new Map<boolean,{value:Cell;owner:ObjectOwner}>();
     private readonly utilExportValues = new Map<string,Cell>();
     private readonly globalLexicals = new Map<string, Cell>();
@@ -304,8 +305,6 @@ class SourceValueFlow {
     private readonly callResults = new Map<ts.Node,Map<string,Cell>>();
     private readonly invocations = new Map<Rule, Map<string, { kind: DynamicFunctionKind; args: readonly Cell[] | null }>>();
     private readonly evaluationInvocations = new Map<Rule, Map<string, EvaluationRecord>>();
-    private readonly intrinsicAtoms = new Map<string, Atom>();
-    private readonly operations = new Map<Operation, Atom>();
     private readonly primitives = new Map<string, Atom>();
     private readonly symbolPrimitives = new Map<symbol, Atom>();
     private readonly symbolIdentities = new Map<symbol, number>();
@@ -328,19 +327,21 @@ class SourceValueFlow {
     private readonly evaluationEnvironments = new Map<ts.SourceFile, EvaluationEnvironment>();
     private readonly evaluationSourceEnvironments = new Map<string, EvaluationEnvironment[]>();
     private readonly evaluationReferenceTargets = new Map<ts.Node, Map<string, ts.Identifier>>();
-    private readonly evaluationGlobalTargets = new WeakSet<ts.Identifier>();
+    private readonly evaluationGlobalTargets = new WeakMap<ts.Identifier,SourceRealmRecord>();
+    private readonly evaluationRealmTargets=new Map<ts.Node,Map<SourceRealmRecord,Map<string,ts.Identifier>>>();
     private readonly evaluationCallerTargets = new WeakSet<ts.Identifier>();
     private readonly dynamicSourceTexts = new Map<FunctionNode, string>();
     private readonly callablePrototypes = new Map<DynamicFunctionKind, Cell>();
     private ordinaryObjectPrototype?: Cell;
     private ordinaryArrayPrototype?: Cell;
-    private globalOwner?: ObjectOwner;
     private readonly generated = new Map<DynamicFunctionKind, Cell[]>();
-    private readonly global: Atom = { tag: "global" };
+    private readonly currentRealm = this.newRealm();
+    private readonly realmAllocations=new Map<ts.Node,SourceRealmRecord>();
+    private readonly global: Atom = this.currentRealm.global;
     private readonly host: Atom = { tag: "host" };
     private readonly agent: Atom = { tag: "agent" };
-    private readonly realm: Atom = { tag: "realm-record" };
     private nextCell = 0;
+    private readonly currentRealmCell=this.newCell();
     private readonly booleanResult = this.newCell();
     private readonly unknownString: Atom = {tag:"unknown-string"};
     private readonly opaqueMutation = this.newCell();
@@ -374,6 +375,7 @@ class SourceValueFlow {
     private readonly invalidEvaluations = new Set<string>();
     constructor(private readonly program: ts.Program, entries: SourceValueGraphEntries, private readonly domain?:string, sources?:ReadonlySet<ts.SourceFile>) {
         this.checker = program.getTypeChecker();
+        this.publish(this.currentRealmCell,this.currentRealm.record);
         for (const [index,filename] of (entries.roots??[]).entries()) {
             const file=program.getSourceFile(sourceUnitFileName(program,path.resolve(filename),"script"));
             if(file&&ecmaParseGoal(file)==="script"&&(!sources||sources.has(file)))this.scriptOrder.set(file,index);
@@ -408,7 +410,7 @@ class SourceValueFlow {
             const file = entry.entry ? program.getSourceFile(path.resolve(entry.entry)) : undefined;
             if (!file) continue;
             if (entry.kind === "direct" || entry.kind === "indirect") {
-                const environment: EvaluationEnvironment = {source:file,direct:entry.kind === "direct",callers:new Set(),references:new Map()};
+                const environment: EvaluationEnvironment = {source:file,direct:entry.kind === "direct",realms:this.newCell(),callers:new Map(),references:new Map()};
                 this.evaluationEnvironments.set(file,environment);
                 const environments=this.evaluationSourceEnvironments.get(entry.source)??[];
                 environments.push(environment);this.evaluationSourceEnvironments.set(entry.source,environments);
@@ -847,13 +849,13 @@ class SourceValueFlow {
     }
     private binding(node: ts.Identifier): Cell {
         const origin = declarativeSourceBindingSymbol(this.checker, node);
-        if(this.evaluationGlobalTargets.has(node))return this.globalLexicals.get(node.text)??this.globalBinding(node.text);
+        if(this.evaluationGlobalTargets.has(node)){const realm=this.evaluationGlobalTargets.get(node)!;return (realm===this.currentRealm?this.globalLexicals.get(node.text):undefined)??this.realmBinding(realm,node.text);}
         const environment=this.evaluationReferenceEnvironment(node);
         if(environment) {
             let reference=environment.references.get(node);
             if(!reference){
                 reference={value:this.newCell(),writes:this.newCell()};environment.references.set(node,reference);
-                for(const caller of environment.callers)this.connectEvaluationReference(environment,node,reference,caller);
+                for(const[caller,realms]of environment.callers)for(const realm of realms)this.connectEvaluationReference(environment,node,reference,caller,realm);
             }
             return reference.value;
         }
@@ -895,27 +897,34 @@ class SourceValueFlow {
         return cell;
     }
     private connectEvaluationReference(environment:EvaluationEnvironment,node:ts.Identifier,
-        reference:{value:Cell;writes:Cell},caller:ts.Node):void {
+        reference:{value:Cell;writes:Cell},caller:ts.Node,realm:SourceRealmRecord):void {
         // Contextual identifiers re-enter the same binding/with/property graph.
         // Intern them by caller and name so nested or recursive source edges
         // join canonical locations rather than extending an invocation path.
         const context=environment.direct?caller:caller.getSourceFile();
-        let targets=this.evaluationReferenceTargets.get(context);
-        if(!targets){targets=new Map();this.evaluationReferenceTargets.set(context,targets);}
+        let targets:Map<string,ts.Identifier>|undefined;
+        if(environment.direct){targets=this.evaluationReferenceTargets.get(context);if(!targets){targets=new Map();this.evaluationReferenceTargets.set(context,targets);}}
+        else {let realms=this.evaluationRealmTargets.get(context);if(!realms){realms=new Map();this.evaluationRealmTargets.set(context,realms);}targets=realms.get(realm);if(!targets){targets=new Map();realms.set(realm,targets);}}
         let target=targets.get(node.text);
         if(!target){target=ts.setTextRange(ts.factory.createIdentifier(node.text),caller);
             (target as ts.Identifier&{parent:ts.Node}).parent=context;targets.set(node.text,target);
-            if(!environment.direct)this.evaluationGlobalTargets.add(target);
+            if(!environment.direct)this.evaluationGlobalTargets.set(target,realm);
             else this.evaluationCallerTargets.add(target);
             const handler=this.exceptionHandlers.get(node);if(handler)this.exceptionHandlers.set(target,handler);}
         this.copy(this.cell(target),reference.value);
         this.rule([reference.writes],()=>this.writeBinding(target,reference.writes));
     }
-    private connectEvaluationEnvironment(source:string,caller:ts.Node,direct:boolean):void {
+    private executionRealms(node:ts.Node):Cell {
+        const environment=this.evaluationEnvironments.get(this.sourceFile(node));
+        if(environment)return environment.realms;
+        return this.currentRealmCell;
+    }
+    private connectEvaluationEnvironment(source:string,caller:ts.Node,direct:boolean,realm:SourceRealmRecord):void {
         for(const environment of this.evaluationSourceEnvironments.get(source)??[]) {
-            if(environment.direct!==direct||environment.callers.has(caller))continue;
-            environment.callers.add(caller);
-            for(const[node,reference]of environment.references)this.connectEvaluationReference(environment,node,reference,caller);
+            if(environment.direct!==direct)continue;
+            if(direct)this.copy(this.executionRealms(caller),environment.realms);else this.publish(environment.realms,realm.record);
+            let realms=environment.callers.get(caller);if(!realms){realms=new Set();environment.callers.set(caller,realms);}if(realms.has(realm))continue;realms.add(realm);
+            for(const[node,reference]of environment.references)this.connectEvaluationReference(environment,node,reference,caller,realm);
         }
     }
     private scriptDeclarationBinding(declaration: ts.Node, name: string): Cell | null {
@@ -1029,8 +1038,9 @@ class SourceValueFlow {
         }
         this.copy(value, this.binding(node));
         if(this.isAmbientIdentifier(node)){
-            this.publish(this.globalReceiver,this.global);
-            this.writeProperty(this.globalReceiver,node.text,value,true,"set",node);
+            const realm=this.evaluationGlobalTargets.get(node)??this.currentRealm;
+            const receiver=this.newCell();this.publish(receiver,realm.global);
+            this.writeProperty(receiver,node.text,value,true,"set",node);
         }
         // Presence and unscopables can change during execution. Keep both
         // object-record and declarative destinations in this may-flow graph;
@@ -1042,16 +1052,14 @@ class SourceValueFlow {
             }
         });
     }
-    private intrinsic(domain: Domain, kind: DynamicFunctionKind): Atom {
+    private intrinsic(domain: Domain, kind: DynamicFunctionKind,realm=this.currentRealm): Atom {
         const key = domain + ":" + kind;
-        let atom = this.intrinsicAtoms.get(key);
-        if (!atom) { atom = { tag: "intrinsic", domain, kind }; this.intrinsicAtoms.set(key, atom); }
+        let atom = realm.intrinsics.get(key);
+        if (!atom) { atom = { tag: "intrinsic", domain, kind,realm }; realm.intrinsics.set(key, atom); }
         return atom;
     }
     private operation(operation: Operation): Atom {
-        let atom = this.operations.get(operation);
-        if (!atom) { atom = { tag: "operation", operation }; this.operations.set(operation, atom); }
-        return atom;
+        return this.realmOperation(this.currentRealm,operation);
     }
     private text(text: string): Atom {
         return this.primitive(text);
@@ -1250,7 +1258,7 @@ class SourceValueFlow {
             }
             if(atom.tag==="global"){
                 if(key===null)this.copy(this.executionOrigins(context),this.globalMutation);
-                else if (typeof key === "string" && !this.immutableGlobalBinding(key)) this.copy(value,this.globalBinding(key));
+                else if (typeof key === "string" && !this.immutableGlobalBinding(key)) this.copy(value,this.realmBinding(atom.realm,key));
             }
             if(unknownGlobal&&(atom.tag==="unknown"||atom.tag==="opaque-object")){this.copy(this.executionOrigins(context),this.globalMutation);if(handler)this.publish(handler,this.unknown);}
         }});
@@ -1907,13 +1915,46 @@ class SourceValueFlow {
         if(namespace)this.defineField(owner,"default",this.utilModule(false));
         return value;
     }
+    private newRealm():SourceRealmRecord {
+        const realm={bindings:new Map(),operations:new Map(),intrinsics:new Map()} as unknown as SourceRealmRecord;
+        Object.assign(realm,{global:{tag:"global",realm},record:{tag:"realm-record",realm}});
+        return realm;
+    }
+    private realmObjectPrototype(realm:SourceRealmRecord):Cell {
+        if(realm===this.currentRealm)return this.objectPrototype();
+        if(!realm.objectPrototype){
+            realm.objectPrototype=this.newCell();const prototype=this.newCell();this.publish(prototype,this.primitive(null));
+            const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype,ordinary:true};
+            this.publish(owner.shape,this.unknown);this.copy(this.opaqueMutation,owner.shape);this.publish(realm.objectPrototype,{tag:"object",owner});
+        }
+        return realm.objectPrototype;
+    }
+    private realmBinding(realm:SourceRealmRecord,key:string):Cell {
+        if(realm===this.currentRealm)return this.globalBinding(key);
+        let cell=realm.bindings.get(key);if(cell)return cell;
+        cell=this.newCell();realm.bindings.set(key,cell);this.copy(this.globalMutation,cell);
+        if(key==="globalThis")this.publish(cell,realm.global);
+        else if(key==="$262")this.publish(cell,realm.record);
+        else if(key==="eval")this.publish(cell,this.realmOperation(realm,"eval"));
+        else if(key==="Function")this.publish(cell,this.intrinsic("constructor","ordinary",realm));
+        else if(key==="undefined")this.publish(cell,this.primitive(undefined));
+        else if(key==="NaN")this.publish(cell,this.primitive(NaN));
+        else if(key==="Infinity")this.publish(cell,this.primitive(Infinity));
+        else if(runtimeGlobalBindings.has(key))this.publish(cell,this.unknown);
+        return cell;
+    }
+    private realmOperation(realm:SourceRealmRecord,operation:Operation):Atom {
+        let atom=realm.operations.get(operation);
+        if(!atom){atom={tag:"operation",operation,realm};realm.operations.set(operation,atom);}
+        return atom;
+    }
     private globalBinding(key: string): Cell {
-        let cell = this.globals.get(key);
+        let cell = this.currentRealm.bindings.get(key);
         if (!cell) {
-            cell = this.newCell();this.globals.set(key,cell);
+            cell = this.newCell();this.currentRealm.bindings.set(key,cell);
             if (!this.immutableGlobalBinding(key)) this.copy(this.globalMutation,cell);
             if (key === "Function") this.publish(cell,this.intrinsic("constructor","ordinary"));
-            if (key === "eval") this.publish(cell,this.operation("eval"));
+            if (key === "eval") this.publish(cell,this.realmOperation(this.currentRealm,"eval"));
             if (key === "require") this.publish(cell,this.operation("native-require"));
             if (key === "print") this.publish(cell,this.operation("host-print"));
             if (key === "$262") this.publish(cell,this.host);
@@ -2674,8 +2715,12 @@ class SourceValueFlow {
         }
 
         if(atom.tag==="global"){
-            if(!this.globalOwner){this.globalOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};this.copy(this.globalMutation,this.globalOwner.shape);}
-            return this.globalOwner;
+            if(!atom.realm.owner){
+                atom.realm.owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.realmObjectPrototype(atom.realm)};
+                this.copy(this.globalMutation,atom.realm.owner.shape);
+                for(const key of runtimeGlobalBindings.keys())this.ownPresence(atom.realm.owner,key).initial=true;
+            }
+            return atom.realm.owner;
         }
         if(atom.tag === "object")return atom.owner;
         if(atom.tag === "function")return atom.owner.fields;
@@ -2715,18 +2760,22 @@ class SourceValueFlow {
             let owner=this.intrinsicOwners.get(atom);
             if(!owner){
                 owner={fields:new Map(),accessors:new Map(),shape:this.newCell()};this.intrinsicOwners.set(atom,owner);
-                if (atom.domain === "constructor") owner.prototype = atom.kind === "ordinary" ? this.callablePrototype("ordinary") : this.globalBinding("Function");
-                if (atom.domain === "prototype" && atom.kind !== "ordinary") owner.prototype = this.callablePrototype("ordinary");
+                if (atom.domain === "constructor"){owner.prototype=this.newCell();this.publish(owner.prototype,this.intrinsic("prototype","ordinary",atom.realm));}
+                if (atom.domain === "prototype" && atom.kind !== "ordinary"){owner.prototype=this.newCell();this.publish(owner.prototype!,this.intrinsic("prototype","ordinary",atom.realm));}
                 if (atom.domain === "prototype" && atom.kind === "ordinary") {
-                    owner.prototype = this.objectPrototype();
+                    owner.prototype = this.realmObjectPrototype(atom.realm??this.currentRealm);
                     this.publish(this.field(owner, "toString"), this.operation("function-text"));this.ownPresence(owner,"toString").initial=true;this.publish(this.presence(owner,"toString"),this.primitive(true));
-                    this.defineField(owner, "constructor", this.globalBinding("Function"));
+                    this.defineField(owner, "constructor", this.realmBinding(atom.realm??this.currentRealm,"Function"));
                 }
                 this.copy(this.opaqueMutation,owner.shape);
             }
             return owner;
         }
         if(atom.tag !== "host" && atom.tag !== "realm-record" && atom.tag !== "agent")return null;
+        if(atom.tag==="realm-record"){
+            if(!atom.realm.host){atom.realm.host={fields:new Map(),accessors:new Map(),shape:this.newCell()};}
+            return atom.realm.host;
+        }
         const key=atom.tag === "agent" ? "agent" : "host";
         let owner=this.hostOwners.get(key);
         if(!owner){
@@ -2765,7 +2814,7 @@ class SourceValueFlow {
         }
         const firstOwner = this.ordinaryOwner(atom), worklist = firstOwner ? [firstOwner] : [];
         if(atom.tag==="global" && typeof key === "string" && !firstOwner!.accessors.has(key)) {
-            const binding=this.globalBinding(key);this.copy(binding,this.field(firstOwner!,key));
+            const binding=this.realmBinding(atom.realm,key);this.copy(binding,this.field(firstOwner!,key));
             if(runtimeGlobalBindings.has(key)||binding.values.size)this.ownPresence(firstOwner!,key).initial=true;
         }
         const visited = new Set<ObjectOwner>();
@@ -2813,20 +2862,20 @@ class SourceValueFlow {
         }
         if (atom.tag === "intrinsic") {
             if (key === "constructor") {
-                if (atom.domain === "prototype") this.publish(result, this.intrinsic("constructor", atom.kind));
-                if (atom.domain === "constructor") this.publish(result, this.intrinsic("constructor", "ordinary"));
-                if (atom.domain === "instance" && atom.kind !== "ordinary") this.publish(result, this.intrinsic("prototype", atom.kind));
+                if (atom.domain === "prototype") this.publish(result, this.intrinsic("constructor", atom.kind,atom.realm));
+                if (atom.domain === "constructor") this.publish(result, this.intrinsic("constructor", "ordinary",atom.realm));
+                if (atom.domain === "instance" && atom.kind !== "ordinary") this.publish(result, this.intrinsic("prototype", atom.kind,atom.realm));
             }
-            if (key === "prototype" && atom.domain === "constructor") this.publish(result, this.intrinsic("prototype", atom.kind));
+            if (key === "prototype" && atom.domain === "constructor") this.publish(result, this.intrinsic("prototype", atom.kind,atom.realm));
             if (key === "prototype" && atom.domain === "prototype" && atom.kind.includes("generator"))
-                this.publish(result, this.intrinsic("instance", atom.kind));
+                this.publish(result, this.intrinsic("instance", atom.kind,atom.realm));
         }
         if (atom.tag === "host" || atom.tag === "realm-record") {
             if (key === "gc") this.publish(result, this.operation("host-gc"));
             if (key === "agent") this.publish(result, this.agent);
             if (key === "createRealm") this.publish(result, this.operation("realm"));
             if (key === "evalScript") this.publish(result, this.operation("eval-script"));
-            if (key === "global") this.publish(result, this.global);
+            if (key === "global") this.publish(result,atom.tag==="realm-record"?atom.realm.global:this.global);
         }
         if ((["function", "bound", "intrinsic", "operation"].includes(atom.tag) ||
             atom.tag === "builtin" && atom.normalResult !== "not-callable") && typeof key === "string" && CALLABLE_FORWARDING_OPERATIONS.has(key))
@@ -3682,11 +3731,11 @@ class SourceValueFlow {
             this.copyRead(binding,result,node);
             if (this.bindingMayBeUninitialized(node)) this.publish(result,this.primitive(undefined));
             for (const base of this.withBindingObjects(node)) this.copy(this.property(base, node.text, node), result);
-            if (ambient && !this.evaluationEnvironments.has(this.sourceFile(node)) && !this.globalLexicals.has(node.text)) {
+            if (ambient && !this.evaluationGlobalTargets.has(node) && !this.evaluationEnvironments.has(this.sourceFile(node)) && !this.globalLexicals.has(node.text)) {
                 if (node.text === "globalThis") this.publish(result, this.global);
                 this.copyRead(this.globalBinding(node.text),result,node);
             }
-            if(node.text!=="globalThis"&&binding===this.globals.get(node.text)) {
+            if(node.text!=="globalThis"&&binding===this.currentRealm.bindings.get(node.text)) {
                 this.publish(this.globalReceiver,this.global);
                 const owner=this.ordinaryOwner(this.global)!;let linked=false;
                 this.rule([owner.shape],()=>{
@@ -4502,11 +4551,14 @@ class SourceValueFlow {
                             }
                             this.watch(rule, invocation.receiver);
                         }
-                        if (atom.operation === "realm") this.publish(result!, this.realm);
+                        if (atom.operation === "realm") {let realm=this.realmAllocations.get(node);if(!realm){realm=this.newRealm();this.realmAllocations.set(node,realm);}this.publish(result!,realm.record);}
                         if (atom.operation === "eval" || atom.operation === "eval-script" || atom.operation === "agent-start") {
                             const first = argument(0);
                             const source = first ? atom.operation === "eval" ? first : this.stringHintCell(first, node) : null;
-                            const direct = atom.operation === "eval" && invocation.direct;
+                            const realms=this.executionRealms(node);this.watch(rule,realms);
+                            const directChoices=atom.operation==="eval"&&invocation.direct?[...new Set([...realms.values].map(value=>value.tag==="realm-record"&&value.realm===atom.realm))]:[false];
+                            if(!directChoices.length)continue;
+                            for(const direct of directChoices){
                             const key = result!.id + ":" + atom.operation + ":" + direct + ":" + (source?.id ?? (argv ? "omitted" : "unknown"));
                             evaluations.set(key, { node, operation: atom.operation, direct, source, unknown: !argv && !invocation.sequence });
                             if (noArguments) {this.publish(result!, this.abrupt); continue;}
@@ -4524,7 +4576,7 @@ class SourceValueFlow {
                                     const sharedKey=evaluationContextKey(String(text),undefined);
                                     const generated=[...(this.evaluations.get(contextKey)??[]),...(this.evaluations.get(sharedKey)??[])];
                                     if(!handled(atom,signature+":environment:"+contextKey))this.onActive(node,()=>{
-                                        if(atom.operation==="eval")this.connectEvaluationEnvironment(String(text),node,direct);
+                                        if(atom.operation==="eval")this.connectEvaluationEnvironment(String(text),node,direct,atom.realm??this.currentRealm);
                                         for(const origins of [...(this.evaluationOrigins.get(contextKey)??[]),...(this.evaluationOrigins.get(sharedKey)??[])])
                                             this.copy(this.executionOrigins(node),origins);
                                     });
@@ -4542,6 +4594,7 @@ class SourceValueFlow {
                                     else if ((value.tag !== "text-operation" || value.operation === "prefix" || value.operation === "numeric" && value.numeric!.conversion !== "default") && (value.tag !== "primitive" || typeof value.value !== "string")) this.publish(result!, value);
                                 }
                             } else if (argv && atom.operation === "eval") this.publish(result!, this.primitive(undefined));
+                            }
                         }
                         if (atom.operation === "prototype" && argv?.[0]) {
                             const input = argv[0]; this.watch(rule, input);
