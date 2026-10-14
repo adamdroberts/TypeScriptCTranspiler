@@ -5732,9 +5732,50 @@
             ]
           },
           "rationale": "Switch intake no longer rejects unmatched typed domains or assumes annotated finite domains cover runtime values. The ordinary emitter and shared generator/async CFG admit no-default CaseBlocks; unmatched selection continues normally and suspended case evaluation retains abrupt finalization. Termination analysis now consumes the canonical statement completion tree instead of the typed switch-domain predictor and duplicated CaseBlock exit walker. The rejection, finite-domain/type-key proof and exit predecessors are deleted. switch-normal-completion.property compares generated match/default/unmatched/type-erased/implicit-return and synchronous/generator/async/async-generator partitions with independent Node, sharing one representative suspended CaseBlock graph with the typed CLI. The original generator_lazy_switch_yield_case source and expected output remain unchanged; switch_exhaustive_missing now executes its original valid source instead of expecting a rejection. Existing selection and CaseBlock environment properties retain neighboring evidence. Runtime kernels, CType and declarations suffice. Complete selector/completion precision, source effect graphs, Module/Realm/agent eligibility and eligible exhaustive ECMAScript 2026 coverage remain open."
+        },
+        {
+          "id": "ordered-selection-fallthrough-and-completion",
+          "title": "Ordered selection, default placement, fallthrough and UpdateEmpty completion",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-runtime-semantics-caseblockevaluation"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/caseblock-completion.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "switch_normal_completion_depth"
+            ],
+            "e2e": [
+              "generator_lazy_switch_yield_case"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "src/emit/index.ts#emitSwitch",
+              "src/function-static-semantics.ts#statementBodyCompletions"
+            ]
+          },
+          "rationale": "One independent declarative clause/action model verifies selector order and stopping, before/after-default intake, default fallback, fallthrough, normal values, empty statements and abrupt break/continue/throw identity. The unchanged exact source executes in Node and through native eval in both memory modes. This complements the existing canonical statement/CFG stress and unmatched suspended completion property; no whole-clause or host eligibility claim follows."
         }
       ],
-      "rationale": "The unmatched-and-suspended-normal-completion partition verifies normal completion independently of annotated finite domains through the shared statement completion tree and ordinary/generator/async CFG. Its property compares match, default, unmatched, implicit-return and suspended selector paths with independent Node and one representative generated CaseBlock graph. The corresponding local evidence does not yet cover every CaseBlockEvaluation algorithm branch: exact before/after-default selection, fallthrough UpdateEmpty and abrupt completion evidence, source precision, eligible host and exhaustive target gates remain open. The pinned Switch scope audit is diagnostic evidence only until unchanged native scenarios and artifact integrity are verified."
+      "rationale": "The unmatched-and-suspended-normal-completion partition verifies normal completion independently of annotated finite domains through the shared statement completion tree and ordinary/generator/async CFG. Its property compares match, default, unmatched, implicit-return and suspended selector paths with independent Node and one representative generated CaseBlock graph. The independent ordered-selection-fallthrough-and-completion partition now supplements these normal paths with default placement, selector stopping, fallthrough, UpdateEmpty and abrupt marker evidence. Complete source/completion precision, environments/static semantics, eligible host and exhaustive target gates remain open. The pinned Switch scope audit is diagnostic evidence only until unchanged native scenarios and artifact integrity are verified."
     },
     {
       "clause": "sec-evaluate-property-access-with-expression-key",

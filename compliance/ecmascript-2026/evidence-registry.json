@@ -1784,7 +1784,8 @@
       "id": "src/emit/index.ts#emitSwitch",
       "targets": [
         "sec-runtime-semantics-caseclauseisselected#strict-equality-selection-and-abrupt-completion",
-        "sec-runtime-semantics-caseblockevaluation#unmatched-and-suspended-normal-completion"
+        "sec-runtime-semantics-caseblockevaluation#unmatched-and-suspended-normal-completion",
+        "sec-runtime-semantics-caseblockevaluation#ordered-selection-fallthrough-and-completion"
       ]
     },
     {
@@ -4902,7 +4903,8 @@
       "kind": "stress",
       "id": "switch_normal_completion_depth",
       "targets": [
-        "sec-runtime-semantics-caseblockevaluation#unmatched-and-suspended-normal-completion"
+        "sec-runtime-semantics-caseblockevaluation#unmatched-and-suspended-normal-completion",
+        "sec-runtime-semantics-caseblockevaluation#ordered-selection-fallthrough-and-completion"
       ],
       "stressReview": {
         "dimension": "suspended CaseBlock selector graph width",
@@ -4916,14 +4918,16 @@
       "kind": "e2e",
       "id": "generator_lazy_switch_yield_case",
       "targets": [
-        "sec-runtime-semantics-caseblockevaluation#unmatched-and-suspended-normal-completion"
+        "sec-runtime-semantics-caseblockevaluation#unmatched-and-suspended-normal-completion",
+        "sec-runtime-semantics-caseblockevaluation#ordered-selection-fallthrough-and-completion"
       ]
     },
     {
       "kind": "implementation",
       "id": "src/function-static-semantics.ts#statementBodyCompletions",
       "targets": [
-        "sec-runtime-semantics-caseblockevaluation#unmatched-and-suspended-normal-completion"
+        "sec-runtime-semantics-caseblockevaluation#unmatched-and-suspended-normal-completion",
+        "sec-runtime-semantics-caseblockevaluation#ordered-selection-fallthrough-and-completion"
       ]
     },
     {
@@ -5669,6 +5673,13 @@
       "id": "src/source-value-flow.ts#propertyDomainKeys",
       "targets": [
         "sec-getvalue#caller-origin-property-source-captures"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/caseblock-completion.property.test.ts",
+      "targets": [
+        "sec-runtime-semantics-caseblockevaluation#ordered-selection-fallthrough-and-completion"
       ]
     }
   ]

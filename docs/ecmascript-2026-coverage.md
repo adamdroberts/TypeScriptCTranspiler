@@ -916,6 +916,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-switch-statement-static-semantics-early-errors` — Static Semantics: Early Errors: exact disposition and partitions missing.
   - [ ] `sec-runtime-semantics-caseblockevaluation` — Runtime Semantics: CaseBlockEvaluation ( _input_: an ECMAScript language value, ): either a normal completion containing an ECMAScript language value or an abrupt completion
     - [ ] `unmatched-and-suspended-normal-completion` (algorithm, unbounded): Unmatched and suspended CaseBlock normal completion.
+    - [ ] `ordered-selection-fallthrough-and-completion` (algorithm, unbounded): Ordered selection, default placement, fallthrough and UpdateEmpty completion.
   - [ ] `sec-runtime-semantics-caseclauseisselected` — CaseClauseIsSelected ( _C_: a |CaseClause| Parse Node, _input_: an ECMAScript language value, ): either a normal completion containing a Boolean or an abrupt completion
     - [ ] `strict-equality-selection-and-abrupt-completion` (algorithm, unbounded): Case-expression evaluation and Strict Equality selection across ECMAScript Types, identities, suspension, and abrupt completion.
   - [ ] `sec-switch-statement-runtime-semantics-evaluation` — Runtime Semantics: Evaluation: exact disposition and partitions missing.
