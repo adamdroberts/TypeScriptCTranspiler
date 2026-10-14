@@ -13,7 +13,7 @@ const typed: any[] = ["deleted", "middle", "deleted"];
 delete typed[0];
 delete typed[2];
 Object.setPrototypeOf(typed, { 0: "first", 2: "last" });
-console.log("typed inherited:", typed.at(0), typed.at(-1));
+console.log("typed inherited:", Array.prototype.at.call(typed, 0), Array.prototype.at.call(typed, -1));
 
 const holes: any[] = ["deleted", "middle", "deleted"];
 delete holes[0];

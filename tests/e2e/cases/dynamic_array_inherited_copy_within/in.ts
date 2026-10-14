@@ -6,7 +6,7 @@ const inheritedResult: any = Array.prototype.copyWithin.call(inherited, 1, 0, 2)
 console.log(
     "inherited:",
     inheritedResult === inherited,
-    inherited.join("|"),
+    Array.prototype.join.call(inherited, "|"),
     Object.keys(inherited).join("|"),
     Object.hasOwn(inherited, "0"),
 );
@@ -60,7 +60,7 @@ delete typedSetter[1];
 const typedSetterProto: any = {};
 Object.defineProperty(typedSetterProto, "1", { configurable: true, set: setTyped });
 Object.setPrototypeOf(typedSetter, typedSetterProto);
-typedSetter.copyWithin(1, 0, 1);
+Array.prototype.copyWithin.call(typedSetter, 1, 0, 1);
 console.log(
     "typed setter:",
     typedSetterSeen,

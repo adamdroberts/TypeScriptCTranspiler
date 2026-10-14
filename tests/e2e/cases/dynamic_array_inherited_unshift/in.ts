@@ -6,7 +6,7 @@ const inheritedLength = Array.prototype.unshift.call(inherited, "first");
 console.log(
     "inherited:",
     inheritedLength,
-    inherited.join("|"),
+    Array.prototype.join.call(inherited, "|"),
     Object.keys(inherited).join("|"),
 );
 

@@ -7,7 +7,7 @@ console.log(
     "inherited:",
     inheritedLast,
     inherited.length,
-    inherited.join("|"),
+    Array.prototype.join.call(inherited, "|"),
     Object.keys(inherited).join("|"),
 );
 

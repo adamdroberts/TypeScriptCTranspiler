@@ -26,7 +26,7 @@ delete typed[1];
 const typedProto: any = {};
 Object.defineProperty(typedProto, "1", { configurable: true, set: setTyped });
 Object.setPrototypeOf(typed, typedProto);
-const typedResult = typed.fill("typed", 1, 2);
+const typedResult = Array.prototype.fill.call(typed, "typed", 1, 2);
 console.log(
     "typed:",
     typedResult === typed,

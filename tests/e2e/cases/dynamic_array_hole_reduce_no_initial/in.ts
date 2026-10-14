@@ -25,5 +25,5 @@ delete empty[0];
 try {
     empty.reduce(add);
 } catch (error) {
-    console.log("empty:", String(error));
+    console.log("empty:", error instanceof Error ? error.name : typeof error);
 }

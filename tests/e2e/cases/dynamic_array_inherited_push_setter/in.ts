@@ -31,7 +31,7 @@ Object.defineProperty(typedProto, "2", {
     set: setTyped,
 });
 Object.setPrototypeOf(typed, typedProto);
-const typedLength = typed.push("typed");
+const typedLength = Array.prototype.push.call(typed, "typed");
 console.log(
     "typed:",
     typedLength,

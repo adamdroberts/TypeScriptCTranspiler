@@ -38,7 +38,7 @@ console.log(
 const typedInherited: any[] = [3, 1, 0];
 delete typedInherited[2];
 Object.setPrototypeOf(typedInherited, { 2: 2 });
-const typedInheritedCopy = typedInherited.toSorted(descending);
+const typedInheritedCopy = Array.prototype.toSorted.call(typedInherited, descending);
 console.log(
     "typed inherited:",
     typedInheritedCopy.join("|"),

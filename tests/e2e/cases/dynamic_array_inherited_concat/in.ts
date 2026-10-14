@@ -19,7 +19,7 @@ Object.setPrototypeOf(typedLeft, { 0: "inherited-left" });
 const typedRight: any[] = ["c", "deleted"];
 delete typedRight[1];
 Object.setPrototypeOf(typedRight, { 1: "inherited-right" });
-const typedResult = typedLeft.concat(typedRight);
+const typedResult = Array.prototype.concat.call(typedLeft, typedRight);
 report("typed inherited:", typedResult);
 
 const holeLeft: any[] = ["deleted", "b"];

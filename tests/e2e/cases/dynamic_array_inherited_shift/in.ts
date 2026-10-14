@@ -3,11 +3,11 @@ delete inheritedValues[0];
 delete inheritedValues[1];
 const inherited: any = inheritedValues;
 Object.setPrototypeOf(inherited, { 0: "first", 1: "inherited" });
-const inheritedFirst = inherited.shift();
+const inheritedFirst = Array.prototype.shift.call(inherited);
 console.log(
     "inherited:",
     inheritedFirst,
-    inherited.join("|"),
+    Array.prototype.join.call(inherited, "|"),
     Object.keys(inherited).join("|"),
     Object.hasOwn(inherited, "0"),
 );

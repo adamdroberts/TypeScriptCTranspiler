@@ -1,3 +1,5 @@
+Corrected inherited Array regression consumers to borrow methods displaced by custom prototypes, and compare reduce errors by actual Error kind.
+
 Aligned retained generator expectations with independent Node evaluation order and captured values across suspension; source inputs and lowering are unchanged.
 
 Represented Set composition source results and ordered SetLike intake through shared collection records and direct iterator traversal; exact membership and branch activation remain conservative.
