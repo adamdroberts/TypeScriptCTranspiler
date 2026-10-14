@@ -1494,6 +1494,15 @@ class Emitter {
                 this.isSideEffectFreeTopLevelConstInitializer(expr.whenFalse, seenConsts);
         }
         if (ts.isPropertyAccessExpression(expr)) {
+            // A retained ordinary source owner can acquire accessors. Reuse
+            // its binding identity instead of recursively proving every
+            // predecessor initializer as an immutable property read.
+            const receiver=unwrapTransparentExpression(expr.expression);
+            if(ts.isIdentifier(receiver)){
+                const symbol=this.symbolForIdentifier(receiver),declaration=symbol?.valueDeclaration??symbol?.declarations?.[0];
+                if(declaration&&ts.isVariableDeclaration(declaration)&&declaration.initializer&&
+                    ts.isObjectLiteralExpression(unwrapTransparentExpression(declaration.initializer)))return false;
+            }
             if (expr.name.text === "length") {
                 return this.isSideEffectFreeLengthOperand(expr.expression, seenConsts);
             }

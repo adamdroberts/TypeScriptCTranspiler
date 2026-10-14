@@ -359,6 +359,7 @@ class SourceValueFlow {
     private readonly executionGuards = new WeakMap<ts.Node, readonly {condition: Cell; truthy: boolean}[]>();
     private readonly capturePhases=new Map<ts.Node,Map<boolean,SourceCapturePhase>>();
     private readonly propertyLocations=new Set<Cell>();
+    private readonly ownerCreations=new WeakMap<ObjectOwner,ts.Node>();
     private readonly readCaptures = new Map<Cell, Map<ts.Node | undefined, Map<boolean, Cell>>>();
     private readonly empty = this.newCell();
     private readonly globalMutation = this.newCell();
@@ -1158,8 +1159,34 @@ class SourceValueFlow {
     }
     private owner(node: ts.Node): ObjectOwner {
         let owner = this.objects.get(node);
-        if (!owner) { owner = { fields: new Map(), accessors: new Map(), shape: this.newCell() }; this.objects.set(node, owner); this.copy(this.opaqueMutation,owner.shape); }
+        if (!owner) {
+            owner = { fields: new Map(), accessors: new Map(), shape: this.newCell() }; this.objects.set(node, owner);
+            if(ts.isObjectLiteralExpression(node)||ts.isArrayLiteralExpression(node)||ts.isNewExpression(node))this.ownerCreations.set(owner,node);
+            this.ownerMutation(owner);
+        }
         return owner;
+    }
+    /** An effect cannot mutate an identity whose represented creation is
+     * strictly later. Repeated, suspended and unrepresented timing stays open. */
+    private ownerMutation(owner:ObjectOwner):void {
+        const creation=this.ownerCreations.get(owner);
+        const activation=creation?this.enclosingActivation(creation):undefined;
+        this.rule([this.opaqueMutation,...(activation?[activation.active]:[])],()=>{
+            for(const atom of this.opaqueMutation.values){
+                if(creation&&atom.tag==="unknown"&&atom.origin&&!this.dynamicContext(atom.origin)&&!this.repeatedActivationContext(creation)){
+                    const points=activation?.kind==="ordinary"?[...activation.active.values].map(origin=>origin.tag==="unknown"?origin.origin:undefined):activation?[undefined]:[creation];
+                    if(points.length&&points.every(point=>{
+                        if(!point||this.dynamicContext(point))return false;
+                        if(this.sourceFile(atom.origin!)!==this.sourceFile(point)){
+                            const before=this.scriptOrder.get(this.sourceFile(atom.origin!)),after=this.scriptOrder.get(this.sourceFile(point));
+                            return before!==undefined&&after!==undefined&&before<after;
+                        }
+                        return atom.origin!.getEnd()<=point.getStart();
+                    }))continue;
+                }
+                this.publish(owner.shape,atom);
+            }
+        });
     }
     private field(owner: ObjectOwner, key: SourcePropertyKey): Cell {
         let cell = owner.fields.get(key);

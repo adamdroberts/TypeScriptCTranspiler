@@ -1,3 +1,5 @@
+Retained canonical allocation origins for ordinary source owners and preserved live object member reads through the emitter.
+
 Bound reviewed edition sources to canonical primary repository owners and separated their immutable evidence caches.
 
 Generalized reviewed edition introductions to canonical primary file forests, retaining merged and explicitly unmerged target boundaries.
