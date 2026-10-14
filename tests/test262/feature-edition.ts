@@ -10,6 +10,11 @@ export interface FeatureIntroduction extends PinnedRepository {id:string;specSou
 export interface FeatureEditionReview {feature:string;evidence:Array<{source:string;introducedClauses:string[]}>;primarySource:string;reviewedBy:string;rationale:string;}
 export interface FeatureEditionReviews {schemaVersion:2;target:{commit:string;specSourceSha256:string};sources:FeatureIntroduction[];reviews:FeatureEditionReview[];}
 export function featureIntroductionId(source:Pick<FeatureIntroduction,'repository'|'commit'|'specSource'>):string{return JSON.stringify([source.repository,source.commit,source.specSource]);}
+export function featureIntroductionTreeId(source:Pick<FeatureIntroduction,'repository'|'commit'>):string{return JSON.stringify([source.repository,source.commit]);}
+function primaryRepository(repository:string,baseline:Baseline):boolean{
+ try{const source=new URL(repository),authority=new URL(baseline.ecma262.repository);return source.protocol==='https:'&&source.origin===authority.origin&&!source.username&&!source.password&&!source.search&&!source.hash&&/^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\.git$/.test(source.pathname)&&source.pathname.split('/')[1]===authority.pathname.split('/')[1]&&source.href===repository;}catch{return false;}
+}
+function primaryReviewSource(url:string,repositories:ReadonlySet<string>):boolean{return [...repositories].some(repository=>url.startsWith(repository.slice(0,-4)+'/pull/')&&/^\d+$/.test(url.slice((repository.slice(0,-4)+'/pull/').length)));}
 function primarySourcePath(filename:string):boolean{return typeof filename==='string'&&!path.posix.isAbsolute(filename)&&!filename.includes('\\')&&path.posix.normalize(filename)===filename&&!filename.split('/').some(part=>part==='.'||part==='..')&&/\.(html|emu)$/.test(filename);}
 function fail(detail:string):never{throw new Error('invalid feature edition review: '+detail);}
 function object(value:unknown,keys:readonly string[],label:string):void{
@@ -28,8 +33,8 @@ export function validateFeatureEditionReviews(baseline:Baseline,catalog:ClauseCa
  for(const source of document.sources){
   object(source,["id","repository","commit","tree","specSource","specSourceSha256","excerpts"],"introduction");
   fullSha(source.commit,'edition introduction commit');fullSha(source.tree,'edition introduction tree');digest(source.specSourceSha256,'introduction source');
-  if(source.id!==featureIntroductionId(source)||sources.has(source.id)||source.repository!==baseline.ecma262.repository||source.commit===baseline.ecma262.commit||!primarySourcePath(source.specSource)||!Array.isArray(source.excerpts)||!source.excerpts.length)fail('introduction identity');
-  const treeKey=JSON.stringify([source.repository,source.commit]),tree=trees.get(treeKey);if(tree&&tree!==source.tree)fail('inconsistent introduction tree');trees.set(treeKey,source.tree);
+  if(source.id!==featureIntroductionId(source)||sources.has(source.id)||!primaryRepository(source.repository,baseline)||source.commit===baseline.ecma262.commit||!primarySourcePath(source.specSource)||!Array.isArray(source.excerpts)||!source.excerpts.length)fail('introduction identity');
+  const treeKey=featureIntroductionTreeId(source),tree=trees.get(treeKey);if(tree&&tree!==source.tree)fail('inconsistent introduction tree');trees.set(treeKey,source.tree);
   const roots=new Set<string>();let previousEnd=0;
   for(const excerpt of source.excerpts){
    object(excerpt,["clause","byteStart","byteEnd","sha256","text"],"excerpt");if(typeof excerpt.clause!=="string"||typeof excerpt.text!=="string")fail("excerpt text");
@@ -48,14 +53,15 @@ export function validateFeatureEditionReviews(baseline:Baseline,catalog:ClauseCa
  for(const review of document.reviews){
   object(review,['feature','evidence','primarySource','reviewedBy','rationale'],'review');
   if([review.feature,review.primarySource,review.reviewedBy,review.rationale].some(value=>typeof value!=='string')||!Array.isArray(review.evidence)||!review.evidence.length)fail('review fields');
-  if(!review.feature||reviews.has(review.feature)||!review.reviewedBy.trim()||!review.rationale.trim()||!/^https:\/\/github\.com\/tc39\/ecma262\/pull\/\d+$/.test(review.primarySource))fail('review identity');
-  const represented=new Set<string>();
+  if(!review.feature||reviews.has(review.feature)||!review.reviewedBy.trim()||!review.rationale.trim())fail('review identity');
+  const represented=new Set<string>(),repositories=new Set<string>();
   for(const evidence of review.evidence){
    object(evidence,['source','introducedClauses'],'review evidence');strings(evidence.introducedClauses,'introduced clauses');const source=sources.get(evidence.source);
-   if(!source||represented.has(evidence.source))fail('unrepresented or duplicated evidence source');represented.add(evidence.source);
+   if(!source||represented.has(evidence.source))fail('unrepresented or duplicated evidence source');represented.add(evidence.source);repositories.add(source.repository);
    const roots=new Set(source.excerpts.map(excerpt=>excerpt.clause));if(evidence.introducedClauses.some(clause=>!roots.has(clause)))fail('unrepresented introduced clause');
    let clauses=used.get(source.id);if(!clauses){clauses=new Set();used.set(source.id,clauses);}for(const clause of evidence.introducedClauses)clauses.add(clause);
   }
+  if(!primaryReviewSource(review.primarySource,repositories))fail('review primary source authority');
   if(baseline.test262.ecma402FeatureTags.includes(review.feature))fail('ECMA-402 scope collision');
   if(registry&&(!registry.standard.has(review.feature)||registry.proposed.has(review.feature)||registry.harness.has(review.feature)))fail('reviewed tag is not a pinned standard feature');
   reviews.set(review.feature,review);
@@ -66,14 +72,18 @@ export async function loadFeatureEditionReviews(baseline:Baseline,catalog:Clause
  const filename=path.join(complianceDir,'feature-edition-reviews.json');digest(baseline.test262.featureEditionReviewSha256,'review collection');if(await sha256File(filename)!==baseline.test262.featureEditionReviewSha256)fail('review collection bytes');
  const document=await readJson<FeatureEditionReviews>(filename);return {document,reviews:validateFeatureEditionReviews(baseline,catalog,document,registry)};
 }
-export function introductionCheckout(source:FeatureIntroduction,cacheRoot=defaultCacheRoot):string{return path.join(cacheRoot,'edition-introductions',source.commit);}
+export function introductionCheckout(source:FeatureIntroduction,cacheRoot=defaultCacheRoot):string{return path.join(cacheRoot,'edition-introductions',sha256Text(featureIntroductionTreeId(source)));}
+export function featureIntroductionTrees(document:FeatureEditionReviews):FeatureIntroduction[]{
+ const trees=new Map<string,FeatureIntroduction>();for(const source of document.sources){const key=featureIntroductionTreeId(source),prior=trees.get(key);if(prior&&prior.tree!==source.tree)fail('inconsistent introduction tree');if(!prior)trees.set(key,source);}return [...trees.values()];
+}
 /** Full corpus verification independently rejoins authored excerpts with the
  * exact immutable primary Git tree and source bytes; missing evidence rejects. */
 export async function verifyFeatureIntroductions(document:FeatureEditionReviews,cacheRoot=defaultCacheRoot):Promise<void>{
- const verified=new Set<string>();
+ const verified=new Map<string,string>();
  for(const source of document.sources){
-  const checkout=introductionCheckout(source,cacheRoot),key=JSON.stringify([source.repository,source.commit,source.tree]);
-  if(!verified.has(key)){await verifyPinnedCheckout('ECMA-262',checkout,source);verified.add(key);}
+  const checkout=introductionCheckout(source,cacheRoot),key=featureIntroductionTreeId(source);
+  const tree=verified.get(key);if(tree&&tree!==source.tree)fail('inconsistent introduction tree');
+  if(!tree){await verifyPinnedCheckout('ECMA-262',checkout,source);verified.set(key,source.tree);}
   const data=await fs.readFile(path.join(checkout,source.specSource));if(sha256Text(data)!==source.specSourceSha256)fail('primary source bytes');
   for(const excerpt of source.excerpts)if(!data.subarray(excerpt.byteStart,excerpt.byteEnd).equals(Buffer.from(excerpt.text)))fail('primary clause forest bytes');
  }

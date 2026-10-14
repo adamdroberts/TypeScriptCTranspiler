@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import {introductionCheckout,loadFeatureEditionReviews,verifyFeatureIntroductions} from "./feature-edition";
+import {featureIntroductionTrees,introductionCheckout,loadFeatureEditionReviews,verifyFeatureIntroductions} from "./feature-edition";
 import type {ClauseCatalog} from "./spec-catalog";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -89,7 +89,7 @@ async function main(): Promise<void> {
         await fetchPinned(baseline.test262.repository, baseline.test262.commit, test262);
         await fetchPinned(baseline.ecma262.repository, baseline.ecma262.commit, ecma262);
         await fetchAndVerifyReleaseTag(ecma262, baseline.ecma262.tag, baseline.ecma262.commit);
-        for(const source of document.sources)await fetchPinned(source.repository,source.commit,introductionCheckout(source));
+        for(const source of featureIntroductionTrees(document))await fetchPinned(source.repository,source.commit,introductionCheckout(source));
     }
     await verifyFiles(test262, ecma262);
     await verifyFeatureIntroductions(document);

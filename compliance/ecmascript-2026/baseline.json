@@ -87,9 +87,11 @@
       "explicit-resource-management",
       "Atomics.pause",
       "joint-iteration",
-      "Temporal"
+      "Temporal",
+      "iterator-includes",
+      "iterator-chunking"
     ],
-    "featureEditionReviewSha256": "016827fdc5d9bd8d54b3f599a1863181d1ff4f784c15ac9b9acf67a022330b42"
+    "featureEditionReviewSha256": "220802731afcad96c47d8bc1456e79a29536b5bd8d9ffa4585a23526f08cf3d3"
   },
   "runnerContract": {
     "version": 4,

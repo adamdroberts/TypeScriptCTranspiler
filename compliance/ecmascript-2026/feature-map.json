@@ -1111,10 +1111,10 @@
     },
     {
       "tag": "iterator-chunking",
-      "disposition": "standard",
-      "tracking": "todo",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
       "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "rationale": "The exact official TC39 proposal source at b195c38f903f1feef4f6b9370faeafbccd64412a declares status proposal and stage 2.7. Its Iterator prototype method clauses are absent from the fixed es2026 source/catalog. The retained pull request updates proposal semantics; it is not a merge into the published ECMA-262 edition. The later Test262 standard label cannot move this proposal into the target. Exact primary repository/tree/source bytes are verified independently."
     },
     {
       "tag": "iterator-helpers",
@@ -1125,10 +1125,10 @@
     },
     {
       "tag": "iterator-includes",
-      "disposition": "standard",
-      "tracking": "todo",
+      "disposition": "post-edition",
+      "tracking": "ready-for-verification",
       "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "rationale": "The exact official TC39 proposal source at 84192447150bcf317cfb62a03f8a9d1e3bb84c09 declares status proposal and stage 2.7. Its Iterator prototype method clauses are absent from the fixed es2026 source/catalog. The retained pull request updates proposal semantics; it is not a merge into the published ECMA-262 edition. The later Test262 standard label cannot move this proposal into the target. Exact primary repository/tree/source bytes are verified independently."
     },
     {
       "tag": "iterator-sequencing",

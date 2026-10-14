@@ -2823,9 +2823,9 @@ The claim profile implements all normative-optional material, including inline a
 - `import-text` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `import.meta` — standard, tracking: `todo`; no clause mapping.
 - `intl-normative-optional` — ecma402-only, tracking: `ready-for-verification`; no clause mapping.
-- [ ] `iterator-chunking` — standard, tracking: `todo`; no clause mapping.
+- `iterator-chunking` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `iterator-helpers` — standard, tracking: `todo`; no clause mapping.
-- [ ] `iterator-includes` — standard, tracking: `todo`; no clause mapping.
+- `iterator-includes` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `iterator-sequencing` — standard, tracking: `todo`; no clause mapping.
 - `joint-iteration` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `json-modules` — standard, tracking: `ready-for-verification`; `sec-ParseJSON`, `sec-create-default-export-synthetic-module`, `sec-parse-json-module`, `sec-setsyntheticmoduleexport`, `sec-synthetic-module-records`.

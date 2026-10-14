@@ -135,6 +135,47 @@
         }
       ],
       "id": "[\"https://github.com/tc39/ecma262.git\",\"3d4a6e7124a6878cb5af3132af7e01e01a88317f\",\"temporal/instant.emu\"]"
+    },
+    {
+      "repository": "https://github.com/tc39/proposal-iterator-includes.git",
+      "commit": "84192447150bcf317cfb62a03f8a9d1e3bb84c09",
+      "tree": "6c6bc4911eebfc89b017314505e4a3aa3cc1d28e",
+      "specSource": "spec.emu",
+      "specSourceSha256": "a2aed008f10557e7501d144a940edc52556d72f769c61beaf4eb1dcad3151959",
+      "excerpts": [
+        {
+          "clause": "sec-iterator.prototype.includes",
+          "byteStart": 223,
+          "byteEnd": 1659,
+          "sha256": "494f8d970f6a4183e13064d863a97d7fd75458f58b02f529abdfbbbd5a3d97fd",
+          "text": "<emu-clause id=\"sec-iterator.prototype.includes\">\n  <h1>Iterator.prototype.includes ( _searchElement_ [ , _skippedElements_ ] )</h1>\n  <emu-alg>\n    1. Let _O_ be the *this* value.\n    1. If _O_ is not an Object, throw a *TypeError* exception.\n    1. Let _iterated_ be the Iterator Record { [[Iterator]]: _O_, [[NextMethod]]: *undefined*, [[Done]]: *false* }.\n    1. If _skippedElements_ is *undefined*, then\n      1. Let _toSkip_ be *+0*<sub>𝔽</sub>.\n    1. Else,\n      1. If _skippedElements_ is not one of *+∞<sub>𝔽</sub>*, *-∞<sub>𝔽</sub>*, or an integral Number, then\n        1. Let _error_ be ThrowCompletion(a newly created *TypeError* object).\n        1. Return ? IteratorClose(_iterated_, _error_).\n      1. Let _toSkip_ be _skippedElements_.\n    1. If _toSkip_ &lt; *-0*<sub>𝔽</sub>, then\n      1. Let _error_ be ThrowCompletion(a newly created *RangeError* object).\n      1. Return ? IteratorClose(_iterated_, _error_).\n    1. Let _skipped_ be *+0*<sub>𝔽</sub>.\n    1. Set _iterated_ to ? GetIteratorDirect(_O_).\n    1. Repeat,\n      1. Let _value_ be ? IteratorStepValue(_iterated_).\n      1. If _value_ is ~done~, return *false*.\n      1. If _skipped_ &lt; _toSkip_, then\n        1. Set _skipped_ to _skipped_ + *1*<sub>𝔽</sub>.\n      1. Else if SameValueZero(_value_, _searchElement_) is *true*, then\n        1. Return ? IteratorClose(_iterated_, NormalCompletion(*true*)).\n  </emu-alg>\n</emu-clause>"
+        }
+      ],
+      "id": "[\"https://github.com/tc39/proposal-iterator-includes.git\",\"84192447150bcf317cfb62a03f8a9d1e3bb84c09\",\"spec.emu\"]"
+    },
+    {
+      "repository": "https://github.com/tc39/proposal-iterator-chunking.git",
+      "commit": "b195c38f903f1feef4f6b9370faeafbccd64412a",
+      "tree": "7515c19527494ee6d3504772cbec76d18e1ddc34",
+      "specSource": "spec.emu",
+      "specSourceSha256": "34a50c0cfb1d42f50014ec605a6fc4da992785ded63bd39c781109592e5493f5",
+      "excerpts": [
+        {
+          "clause": "sec-iterator.prototype.chunks",
+          "byteStart": 223,
+          "byteEnd": 2134,
+          "sha256": "a21937db88577484fef42509159d216f8f2666f5ab408847de26fa149a9e910f",
+          "text": "<emu-clause id=\"sec-iterator.prototype.chunks\">\n  <h1>Iterator.prototype.chunks ( _chunkSize_ )</h1>\n  <p>This method performs the following steps when called:</p>\n  <emu-alg>\n    1. Let _O_ be the *this* value.\n    1. If _O_ is not an Object, throw a *TypeError* exception.\n    1. Let _iterated_ be the Iterator Record { [[Iterator]]: _O_, [[NextMethod]]: *undefined*, [[Done]]: *false* }.\n    1. If _chunkSize_ is not an integral Number, then\n      1. Let _error_ be ThrowCompletion(a newly created *TypeError* object).\n      1. Return ? IteratorClose(_iterated_, _error_).\n    1. If _chunkSize_ is not in the inclusive interval from *1*<sub>𝔽</sub> to 𝔽(2<sup>32</sup> - 1), then\n      1. Let _error_ be ThrowCompletion(a newly created *RangeError* object).\n      1. Return ? IteratorClose(_iterated_, _error_).\n    1. Set _iterated_ to ? GetIteratorDirect(_O_).\n    1. Let _closure_ be a new Abstract Closure with no parameters that captures _iterated_ and _chunkSize_ and performs the following steps when called:\n      1. Let _buffer_ be a new empty List.\n      1. Repeat,\n        1. Let _value_ be ? IteratorStepValue(_iterated_).\n        1. If _value_ is ~done~, then\n          1. If _buffer_ is not empty, then\n            1. Perform Completion(Yield(CreateArrayFromList(_buffer_))).\n          1. Return ReturnCompletion(*undefined*).\n        1. Append _value_ to _buffer_.\n        1. If the number of elements in _buffer_ is ℝ(_chunkSize_), then\n          1. Let _completion_ be Completion(Yield(CreateArrayFromList(_buffer_))).\n          1. IfAbruptCloseIterator(_completion_, _iterated_).\n          1. Set _buffer_ to a new empty List.\n    1. Let _result_ be CreateIteratorFromClosure(_closure_, *\"Iterator Helper\"*, %IteratorHelperPrototype%, « [[UnderlyingIterators]] »).\n    1. Set _result_.[[UnderlyingIterators]] to « _iterated_ ».\n    1. Return _result_.\n  </emu-alg>\n</emu-clause>"
+        },
+        {
+          "clause": "sec-iterator.prototype.windows",
+          "byteStart": 2136,
+          "byteEnd": 4549,
+          "sha256": "32998587a19f3699f9233164d9b88596ab30473ba03cb51d984e34181d5d2113",
+          "text": "<emu-clause id=\"sec-iterator.prototype.windows\">\n  <h1>Iterator.prototype.windows ( _windowSize_ [ , _undersized_ ] )</h1>\n  <p>This method performs the following steps when called:</p>\n  <emu-alg>\n    1. Let _O_ be the *this* value.\n    1. If _O_ is not an Object, throw a *TypeError* exception.\n    1. Let _iterated_ be the Iterator Record { [[Iterator]]: _O_, [[NextMethod]]: *undefined*, [[Done]]: *false* }.\n    1. If _windowSize_ is not an integral Number, then\n      1. Let _error_ be ThrowCompletion(a newly created *TypeError* object).\n      1. Return ? IteratorClose(_iterated_, _error_).\n    1. If _windowSize_ is not in the inclusive interval from *1*<sub>𝔽</sub> to 𝔽(2<sup>32</sup> - 1), then\n      1. Let _error_ be ThrowCompletion(a newly created *RangeError* object).\n      1. Return ? IteratorClose(_iterated_, _error_).\n    1. If _undersized_ is *undefined*, set _undersized_ to *\"only-full\"*.\n    1. If _undersized_ is neither *\"only-full\"* nor *\"allow-partial\"*, then\n      1. Let _error_ be ThrowCompletion(a newly created *TypeError* object).\n      1. Return ? IteratorClose(_iterated_, _error_).\n    1. Set _iterated_ to ? GetIteratorDirect(_O_).\n    1. Let _closure_ be a new Abstract Closure with no parameters that captures _iterated_, _windowSize_, and _undersized_ and performs the following steps when called:\n      1. Let _buffer_ be a new empty List.\n      1. Repeat,\n        1. Let _value_ be ? IteratorStepValue(_iterated_).\n        1. If _value_ is ~done~, then\n          1. If _undersized_ is *\"allow-partial\"*, _buffer_ is not empty, and the number of elements in _buffer_ &lt; ℝ(_windowSize_), then\n            1. Perform Completion(Yield(CreateArrayFromList(_buffer_))).\n          1. Return ReturnCompletion(*undefined*).\n        1. If the number of elements in _buffer_ is ℝ(_windowSize_), then\n          1. Remove the first element from _buffer_.\n        1. Append _value_ to _buffer_.\n        1. If the number of elements in _buffer_ is ℝ(_windowSize_), then\n          1. Let _completion_ be Completion(Yield(CreateArrayFromList(_buffer_))).\n          1. IfAbruptCloseIterator(_completion_, _iterated_).\n    1. Let _result_ be CreateIteratorFromClosure(_closure_, *\"Iterator Helper\"*, %IteratorHelperPrototype%, « [[UnderlyingIterators]] »).\n    1. Set _result_.[[UnderlyingIterators]] to « _iterated_ ».\n    1. Return _result_.\n  </emu-alg>\n</emu-clause>"
+        }
+      ],
+      "id": "[\"https://github.com/tc39/proposal-iterator-chunking.git\",\"b195c38f903f1feef4f6b9370faeafbccd64412a\",\"spec.emu\"]"
     }
   ],
   "reviews": [
@@ -212,6 +253,35 @@
       "primarySource": "https://github.com/tc39/ecma262/pull/3966",
       "reviewedBy": "tsc2c compliance review",
       "rationale": "Temporal is absent from the pinned es2026 specification and official annual edition. PR #3966 is an open, unmerged replacement for PR #3759; this review retains exact proposal-head source files as evidence of the feature boundary, not as published target semantics. Its namespace, Instant constructor and Date integration introduction forest is absent from the target catalog. The later Test262 standard registry label does not move proposal text into the fixed target edition."
+    },
+    {
+      "feature": "iterator-includes",
+      "evidence": [
+        {
+          "source": "[\"https://github.com/tc39/proposal-iterator-includes.git\",\"84192447150bcf317cfb62a03f8a9d1e3bb84c09\",\"spec.emu\"]",
+          "introducedClauses": [
+            "sec-iterator.prototype.includes"
+          ]
+        }
+      ],
+      "primarySource": "https://github.com/tc39/proposal-iterator-includes/pull/14",
+      "reviewedBy": "tsc2c compliance review",
+      "rationale": "The exact official TC39 proposal source at 84192447150bcf317cfb62a03f8a9d1e3bb84c09 declares status proposal and stage 2.7. Its Iterator prototype method clauses are absent from the fixed es2026 source/catalog. The retained pull request updates proposal semantics; it is not a merge into the published ECMA-262 edition. The later Test262 standard label cannot move this proposal into the target. Exact primary repository/tree/source bytes are verified independently."
+    },
+    {
+      "feature": "iterator-chunking",
+      "evidence": [
+        {
+          "source": "[\"https://github.com/tc39/proposal-iterator-chunking.git\",\"b195c38f903f1feef4f6b9370faeafbccd64412a\",\"spec.emu\"]",
+          "introducedClauses": [
+            "sec-iterator.prototype.chunks",
+            "sec-iterator.prototype.windows"
+          ]
+        }
+      ],
+      "primarySource": "https://github.com/tc39/proposal-iterator-chunking/pull/30",
+      "reviewedBy": "tsc2c compliance review",
+      "rationale": "The exact official TC39 proposal source at b195c38f903f1feef4f6b9370faeafbccd64412a declares status proposal and stage 2.7. Its Iterator prototype method clauses are absent from the fixed es2026 source/catalog. The retained pull request updates proposal semantics; it is not a merge into the published ECMA-262 edition. The later Test262 standard label cannot move this proposal into the target. Exact primary repository/tree/source bytes are verified independently."
     }
   ]
 }

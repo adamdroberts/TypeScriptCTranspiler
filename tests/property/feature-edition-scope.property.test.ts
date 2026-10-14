@@ -1,7 +1,7 @@
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import {featureDisposition,featureIntroductionId,loadFeatureEditionReviews,postEditionFeatureTags,requirePostEditionFeatureTags,validateFeatureEditionReviews,verifyFeatureIntroductions,type FeatureEditionReviews} from '../test262/feature-edition';
+import {featureDisposition,featureIntroductionId,featureIntroductionTrees,featureIntroductionTreeId,introductionCheckout,loadFeatureEditionReviews,postEditionFeatureTags,requirePostEditionFeatureTags,validateFeatureEditionReviews,verifyFeatureIntroductions,type FeatureEditionReviews} from '../test262/feature-edition';
 import {scopeFor} from '../test262/inventory';
 import {parseFeatureRegistry,type FeatureRegistry} from '../test262/metadata';
 import {complianceDir,defaultCacheRoot,loadBaseline,readJson,sha256Text,type Baseline} from '../test262/model';
@@ -33,6 +33,15 @@ test('one edition review forest classifies registry categories and rejects incom
  expect(validateFeatureEditionReviews(imported.baseline,imported.catalog,imported.document,tags).has('later')).toBe(true);
  const inconsistent=structuredClone(imported);inconsistent.document.sources[1]!.tree='8'.repeat(40);expect(()=>validateFeatureEditionReviews(inconsistent.baseline,inconsistent.catalog,inconsistent.document,tags)).toThrow('inconsistent introduction tree');
  const unsafe=structuredClone(imported);unsafe.document.sources[1]!.specSource='../feature.emu';unsafe.document.sources[1]!.id=featureIntroductionId(unsafe.document.sources[1]!);expect(()=>validateFeatureEditionReviews(unsafe.baseline,unsafe.catalog,unsafe.document,tags)).toThrow('introduction identity');
+ const primary=input(1),peer=structuredClone(primary.document.sources[0]!),peerText='<emu-clause id="peer-node"></emu-clause>';
+ peer.repository='https://github.com/tc39/proposal-test.git';peer.specSource='proposal/spec.emu';peer.id=featureIntroductionId(peer);peer.excerpts=[{clause:'peer-node',byteStart:0,byteEnd:Buffer.byteLength(peerText),text:peerText,sha256:sha256Text(peerText)}];primary.document.sources.push(peer);primary.document.reviews[0]!.evidence.push({source:peer.id,introducedClauses:['peer-node']});primary.document.reviews[0]!.primarySource='https://github.com/tc39/proposal-test/pull/1';
+ expect(validateFeatureEditionReviews(primary.baseline,primary.catalog,primary.document,tags).has('later')).toBe(true);
+ expect(introductionCheckout(peer)).not.toBe(introductionCheckout(primary.document.sources[0]!));
+ expect(featureIntroductionTrees(primary.document).some(source=>source.repository===peer.repository)).toBe(true);
+ for(const repository of ['http://github.com/tc39/proposal-test.git','https://github.com/else/proposal-test.git','https://tc39@github.com/tc39/proposal-test.git','https://github.com/tc39/proposal-test.git?query=1','file:///tmp/proposal-test.git']){
+  const invalid=structuredClone(primary);invalid.document.sources[1]!.repository=repository;invalid.document.sources[1]!.id=featureIntroductionId(invalid.document.sources[1]!);expect(()=>validateFeatureEditionReviews(invalid.baseline,invalid.catalog,invalid.document,tags)).toThrow('introduction identity');
+ }
+ const unrelated=structuredClone(primary);unrelated.document.reviews[0]!.primarySource='https://github.com/tc39/unrepresented/pull/1';expect(()=>validateFeatureEditionReviews(unrelated.baseline,unrelated.catalog,unrelated.document,tags)).toThrow('review primary source authority');
  const original=input(2);
  for(const alter of [
   (value:typeof original)=>{value.document.target.commit='7'.repeat(40)},
@@ -59,5 +68,6 @@ test('reviewed standard tag rejoins the exact primary introduction and pinned ta
  for(const review of reviews.values())expect(featureDisposition(review.feature,tags,new Set(baseline.test262.ecma402FeatureTags),reviews)).toBe('post-edition');
  await expect(verifyFeatureIntroductions(document,path.join(defaultCacheRoot,'missing-edition-evidence'))).rejects.toThrow('checkout is missing');
  const corrupt=structuredClone(document);corrupt.sources[0]!.specSourceSha256='0'.repeat(64);await expect(verifyFeatureIntroductions(corrupt)).rejects.toThrow('primary source bytes');
+ const corruptTree=structuredClone(document),seen=new Set<string>(),duplicate=corruptTree.sources.find(source=>{const key=featureIntroductionTreeId(source);if(seen.has(key))return true;seen.add(key);return false;});expect(duplicate).toBeDefined();duplicate!.tree='0'.repeat(40);await expect(verifyFeatureIntroductions(corruptTree)).rejects.toThrow('inconsistent introduction tree');
  const corruptExcerpt=structuredClone(document);corruptExcerpt.sources[0]!.excerpts[0]!.byteStart++;await expect(verifyFeatureIntroductions(corruptExcerpt)).rejects.toThrow('primary clause forest bytes');
 });
