@@ -22427,7 +22427,9 @@ class Emitter {
             const boxed = this.isJavaScriptSourceFile(identifier.getSourceFile()) ||
                 ts.isParameter(declaration) && (ts.isFunctionLike(owner) && hasCanonicalValueFormals(owner) || mapType(declaration, this.checker).kind === "value") ||
                 ts.isVariableDeclaration(declaration) && this.variableDeclarationStorageType(declaration, mapType(declaration, this.checker)).kind === "value";
-            if (!(this.sourceEnvironmentEnabled(owner.getSourceFile()) || protectedOwner && boxed) || this.test262ScriptGlobalBindingName(identifier)) return;
+            const functionVar = ts.isFunctionLike(owner) && ts.isVariableDeclaration(declaration) &&
+                this.functionVarDeclarationOwner(declaration) === owner;
+            if (!(functionVar || this.sourceEnvironmentEnabled(owner.getSourceFile()) || protectedOwner && boxed) || this.test262ScriptGlobalBindingName(identifier)) return;
             const symbol = this.symbolForIdentifier(identifier);
             if (!symbol || captures.has(symbol)) return;
             if (this.isModuleBindingSymbol(symbol)) return;
@@ -28995,6 +28997,18 @@ class Emitter {
                 continue;
             }
             if (!ts.isIdentifier(d.name)) {
+                if ((list.flags & ts.NodeFlags.BlockScoped) === 0 && this.functionVarDeclarationOwner(d)) {
+                    if (!d.initializer) unsupported(d, "var binding pattern requires an initializer");
+                    this.emitBindingInitialization(buf, d.name, this.coerce(this.emitExpr(d.initializer), T_VALUE, d.initializer),
+                        (target, identifier, value) => {
+                            const cell = this.currentFunctionCellForSymbol(this.symbolForIdentifier(identifier));
+                            if (!cell || !this.preallocatedVariableCells.some(scope => scope.has(cell)))
+                                unsupported(identifier, "var binding pattern requires a canonical function binding cell");
+                            target.line(`*${cell.cellName} = ${value};`);
+                            if (cell.rootCellName) target.line(`*${cell.rootCellName} = tsc_value_gc_root(*${cell.cellName});`);
+                        });
+                    continue;
+                }
                 if (this.isCommonJsModuleDestructureAliasDeclaration(d)) {
                     this.emitLocalCommonJsModuleDestructuring(buf, d, isConst);
                     continue;
@@ -29027,18 +29041,19 @@ class Emitter {
                 }
                 continue;
             }
+            const cell = this.currentFunctionCellForSymbol(sym);
             const envBinding = this.closureEnvBindingForSymbol(sym);
-            if (envBinding) {
+            if (envBinding && !cell) {
                 if (d.initializer) {
                     const value = this.emitExpr(d.initializer);
                     const coerced = this.coerce(value, envBinding.type, d.initializer);
                     buf.line(`*${envBinding.ptr} = ${coerced};`);
-                } else {
+                } else if ((list.flags & ts.NodeFlags.BlockScoped) !== 0) {
                     buf.line(`*${envBinding.ptr} = ${this.zeroValue(envBinding.type)};`);
                 }
                 continue;
             }
-            const stackObject = this.nonEscapingLocalObjectLiteral(d);
+            const stackObject = cell ? null : this.nonEscapingLocalObjectLiteral(d);
             if (stackObject) {
                 const storage = this.freshTemp(`_${name}_stack`);
                 const qual = isConst ? " const" : "";
@@ -29070,7 +29085,7 @@ class Emitter {
                 buf.line(`${stackObject.cls}_t*${qual} ${name} = &${storage};`);
                 continue;
             }
-            const stackArray = this.nonEscapingLocalArrayLiteral(d);
+            const stackArray = cell ? null : this.nonEscapingLocalArrayLiteral(d);
             if (stackArray) {
                 const elemType = stackArray.ty.elem!;
                 const storage = this.freshTemp(`_${name}_stack`);
@@ -29104,7 +29119,7 @@ class Emitter {
                 buf.line(`tsc_array_t*${qual} ${name} = &${storage};`);
                 continue;
             }
-            const stackNew = this.nonEscapingLocalNewClass(d);
+            const stackNew = cell ? null : this.nonEscapingLocalNewClass(d);
             if (stackNew) {
                 const sig = this.checker.getResolvedSignature(stackNew.init);
                 if (!sig) unsupported(stackNew.init, "unresolved constructor");
@@ -29134,7 +29149,6 @@ class Emitter {
                 buf.line(`${stackNew.cls}_t*${qual} ${name} = &${storage};`);
                 continue;
             }
-            const cell = this.currentFunctionCellForSymbol(sym);
             let ct: CType;
             let init = "";
             let r: EmitResult | null = null;

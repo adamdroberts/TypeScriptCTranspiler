@@ -1,3 +1,5 @@
+- Function var declarations reuse canonical invocation cells across blocks, destructuring, closures and suspension; repeated uninitialized declarations retain values.
+
 Preserved actual right-hand comma Values through source-aware boxing, including null and undefined.
 
 Reused canonical StatementList conflict validation across Block, function Body, Script and CaseBlock scopes.
