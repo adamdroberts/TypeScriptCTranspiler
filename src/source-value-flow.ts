@@ -316,7 +316,7 @@ class SourceValueFlow {
     private readonly moduleNamespaces = new Map<ts.SourceFile, {value: Cell; owner: ObjectOwner}>();
     private readonly moduleMetadata = new Map<ts.SourceFile, Cell>();
     private readonly importTargetCells = new Map<ts.CallExpression,Cell>();
-    private readonly moduleNamespacePending: {source: ts.SourceFile; symbol: ts.Symbol; owner: ObjectOwner}[] = [];
+    private readonly moduleNamespacePending: {source: ts.SourceFile; symbol: ts.Symbol|undefined; owner: ObjectOwner}[] = [];
     private readonly copies = new Map<Cell, Set<Cell>>();
     private readonly queue: Rule[] = [];
     private queueCursor = 0;
@@ -1118,7 +1118,7 @@ class SourceValueFlow {
         }
         return null;
     }
-    private moduleNamespace(source: ts.SourceFile, symbol: ts.Symbol): Cell {
+    private moduleNamespace(source: ts.SourceFile, symbol: ts.Symbol|undefined): Cell {
         const existing = this.moduleNamespaces.get(source); if (existing) return existing.value;
         const owner: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.newCell()};
         const value = this.newCell(); this.moduleNamespaces.set(source,{value,owner});
@@ -1126,11 +1126,12 @@ class SourceValueFlow {
         this.moduleNamespacePending.push({source,symbol,owner});
         return value;
     }
-    private initializeModuleNamespace(source: ts.SourceFile, symbol: ts.Symbol, owner: ObjectOwner): void {
+    private initializeModuleNamespace(source: ts.SourceFile, symbol: ts.Symbol|undefined, owner: ObjectOwner): void {
         if (source.flags & ts.NodeFlags.JsonFile) {
             const expression = source.statements[0];
             if (expression && ts.isExpressionStatement(expression)) this.defineField(owner,"default",this.cell(expression.expression));
         } else {
+            if(!symbol){this.publish(owner.shape,this.unknown);return;}
             for (const exported of this.checker.getExportsOfModule(symbol)) {
                 const target = sourceBindingTarget(this.checker, exported);
                 const declaration = target.symbol?.valueDeclaration ?? target.symbol?.declarations?.[0];
@@ -4485,8 +4486,9 @@ class SourceValueFlow {
                         const source=resolved?this.program.getSourceFile(sourceUnitFileName(this.program,resolved.resolvedFileName,"module")):undefined;
                         const symbol=source?this.checker.getSymbolAtLocation(source):undefined;
                         if(source&&sourceModuleFailure(source))this.publish(rejection,this.nativeException(context));
-                        else if(source&&symbol)this.copy(this.moduleNamespace(source,symbol),namespace);
+                        else if(source&&(symbol||source.flags&ts.NodeFlags.JsonFile))this.copy(this.moduleNamespace(source,symbol),namespace);
                         else if(resolved&&!source)this.publish(namespace,this.pendingSource);
+                        else if(!resolved&&(String(text).startsWith("./")||String(text).startsWith("../")||path.isAbsolute(String(text))))this.publish(rejection,this.nativeException(context));
                         else this.publish(namespace,this.unknown);
                     }
                 });

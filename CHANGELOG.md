@@ -1,3 +1,5 @@
+- Retain JSON dynamic-import source namespace owners without checker symbols and model finite missing relative targets as rejection.
+
 - Keep non-finite primitive String payloads unresolved in virtual source fields and presence.
 
 - Register scoped RegExp replacement intrinsic evidence with exact legacy metadata mapping and an independent retained capture worklist stress.
