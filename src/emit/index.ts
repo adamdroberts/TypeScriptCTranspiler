@@ -11,7 +11,7 @@ import ts from "typescript";
 import {moduleLinkRecord} from "../module-source-record";
 import { ecmaDirectivePrologueHasUseStrict, ecmaParseGoal } from "../ecmascript-source";
 import { sourceUnitFormat } from "../program";
-import { runtimeGlobalBindings, runtimeUtilExports, runtimeFsFdOperations, runtimePathPosixOperations } from "../global-bindings";
+import { runtimeGlobalBindings, runtimeUtilExports, runtimeFsExports, runtimeFsFdOperations, runtimePathPosixOperations } from "../global-bindings";
 import { canonicalParameterBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding } from "../source-bindings";
 import { timersPromiseOperations, callbackTimerOperations } from "../timers-promises-operations";
 import { directLexicalDeclarations, lexicalDeclarationsFromList, type ScopeLexicalDeclaration, type NamedScopeLexicalDeclaration } from "./lexical-declarations";
@@ -19529,7 +19529,7 @@ class Emitter {
     }
 
     private isFsModuleIdentifier(id: ts.Identifier): boolean {
-        return id.text === "fs" ||
+        return this.isUnshadowedGlobalIdentifier(id, "fs") ||
             this.isNamespaceImportFrom(id, ["fs", "node:fs"]) ||
             this.isDefaultImportFrom(id, ["fs", "node:fs"]);
     }
@@ -34922,88 +34922,13 @@ class Emitter {
         if (cryptoNamed) {
             return this.emitCryptoCall(call, cryptoNamed);
         }
-        const fsNamed = [
-            "readFileSync",
-            "writeFileSync",
-            "appendFileSync",
-            "existsSync",
-            "accessSync",
-            "readdirSync",
-            "opendirSync",
-            "statSync",
-            "lstatSync",
-            "statfsSync",
-            "realpathSync",
-            "readlinkSync",
-            "symlinkSync",
-            "linkSync",
-            "mkdtempSync",
-            "truncateSync",
-            "utimesSync",
-            "lutimesSync",
-            "chownSync",
-            "lchownSync",
-            "chmodSync",
-            "mkdirSync",
-            "unlinkSync",
-            "rmSync",
-            "rmdirSync",
-            "cpSync",
-            "copyFileSync",
-            "renameSync",
-            "openSync",
-            "closeSync",
-            "fsyncSync",
-            "fdatasyncSync",
-            "ftruncateSync",
-            "fstatSync",
-            "fchmodSync",
-            "fchownSync",
-            "futimesSync",
-            "readSync",
-            "writeSync",
-            "readvSync",
-            "writevSync",
-        ].find((exported) => this.isNamedImportFrom(calleeId, ["fs", "node:fs"], exported));
+        const fsImport = this.namedImportExportName(calleeId, ["fs", "node:fs"]);
+        const fsNamed = fsImport && runtimeFsExports.get("sync")!.has(fsImport) ? fsImport : null;
         if (fsNamed) {
             return this.emitFsCall(call, fsNamed);
         }
-        const fsPromisesNamed = [
-            "readFile",
-            "writeFile",
-            "appendFile",
-            "readdir",
-            "opendir",
-            "statfs",
-            "fstat",
-            "ftruncate",
-            "fsync",
-            "fdatasync",
-            "fchmod",
-            "fchown",
-            "futimes",
-            "stat",
-            "lstat",
-            "realpath",
-            "readlink",
-            "symlink",
-            "link",
-            "mkdtemp",
-            "truncate",
-            "utimes",
-            "lutimes",
-            "chown",
-            "lchown",
-            "chmod",
-            "access",
-            "mkdir",
-            "unlink",
-            "rm",
-            "rmdir",
-            "cp",
-            "copyFile",
-            "rename",
-        ].find((exported) => this.isNamedImportFrom(calleeId, ["fs/promises", "node:fs/promises"], exported));
+        const promisesImport = this.namedImportExportName(calleeId, ["fs/promises", "node:fs/promises"]);
+        const fsPromisesNamed = promisesImport && runtimeFsExports.get("promises")!.has(promisesImport) ? promisesImport : null;
         if (fsPromisesNamed) {
             return this.emitFsPromisesCall(call, fsPromisesNamed);
         }

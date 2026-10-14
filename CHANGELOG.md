@@ -1,3 +1,5 @@
+- Filesystem named exports and native fd dispatch share one operation collection; named Promise open is declared and lexical fs shadowing retains local receivers.
+
 - Align the unchanged fs_stat consumer with independent Node ordinary-object tags.
 
 - Typed Stats fields, methods, lazy dates and String conversion now share the ordinary returned owner and writable declaration surface.

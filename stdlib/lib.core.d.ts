@@ -2247,6 +2247,7 @@ declare module "node:fs" {
     export default defaultFs;
 }
 declare module "fs/promises" {
+    export const open: FSPromises["open"];
     export const readFile: FSPromises["readFile"];
     export const writeFile: FSPromises["writeFile"];
     export const appendFile: FSPromises["appendFile"];
@@ -2285,6 +2286,7 @@ declare module "fs/promises" {
     export default defaultPromises;
 }
 declare module "node:fs/promises" {
+    export const open: FSPromises["open"];
     export const readFile: FSPromises["readFile"];
     export const writeFile: FSPromises["writeFile"];
     export const appendFile: FSPromises["appendFile"];

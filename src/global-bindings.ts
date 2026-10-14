@@ -14,6 +14,22 @@ export const runtimeSetCompositionMethods:ReadonlyMap<string,string>=new Map(
         .matchAll(/^TSC_SET_COMPOSITION\((\w+), (\w+)\)$/gm)].map(([,operation,name])=>[name!,operation!] as const),
 );
 
+/** Filesystem operation identity is one collection across direct and imported receivers. */
+export const runtimeFsExports: ReadonlyMap<"sync" | "promises", ReadonlySet<string>> = (() => {
+    const channels = new Map<"sync" | "promises", Set<string>>([["sync", new Set()], ["promises", new Set()]]);
+    const definition = fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_fs_operations.def"), "utf8");
+    for (const line of definition.split(/\r?\n/)) {
+        if (!line.startsWith("TSC_FS_EXPORT")) continue;
+        const match = /^TSC_FS_EXPORT\((SYNC|PROMISES), (\w+)\)$/.exec(line);
+        if (!match) throw new Error("filesystem operation collection cannot be represented");
+        const channel = channels.get(match[1] === "SYNC" ? "sync" : "promises")!;
+        if (channel.has(match[2]!)) throw new Error("filesystem operation collection cannot be represented");
+        channel.add(match[2]!);
+    }
+    if ([...channels.values()].some(channel => channel.size === 0)) throw new Error("filesystem operation collection cannot be represented");
+    return channels;
+})();
+
 /** Host import publication uses the same collection as the native module. */
 export const runtimeUtilExports: ReadonlySet<string> = new Set(
     [...fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_util_exports.def"), "utf8")
@@ -22,7 +38,7 @@ export const runtimeUtilExports: ReadonlySet<string> = new Set(
 if (!runtimeUtilExports.size) throw new Error("missing native util export collection");
 
 export const runtimeFsFdOperations: ReadonlyMap<string,number> = new Map(
-    [...fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_fs_fd.def"), "utf8")
+    [...fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_fs_operations.def"), "utf8")
         .matchAll(/^TSC_FS_FD_OPERATION\((\w+), /gm)].map((match,index) => [match[1]!,index]),
 );
 if (!runtimeFsFdOperations.size) throw new Error("missing native filesystem descriptor collection");

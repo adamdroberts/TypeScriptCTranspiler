@@ -18610,11 +18610,11 @@ tsc_str_t* tsc_querystring_stringify(tsc_value_t obj_val, tsc_value_t sep_val, t
 
 #define TSC_FS_FD_OPERATION(name, has_length, call) \
     static int fs_fd_##name(int fd, off_t length) { return call; }
-#include "tsc_fs_fd.def"
+#include "tsc_fs_operations.def"
 #undef TSC_FS_FD_OPERATION
 static const struct { const char* name; bool has_length; int (*call)(int,off_t); } fs_fd_operations[] = {
 #define TSC_FS_FD_OPERATION(name, has_length, call) { #name, has_length, fs_fd_##name },
-#include "tsc_fs_fd.def"
+#include "tsc_fs_operations.def"
 #undef TSC_FS_FD_OPERATION
 };
 void tsc_fs_fd_sync_values(size_t operation, tsc_array_t* arguments) {

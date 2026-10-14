@@ -1,5 +1,0 @@
-/* Name, optional length role, normalized native call. */
-TSC_FS_FD_OPERATION(closeSync, false, close(fd))
-TSC_FS_FD_OPERATION(fsyncSync, false, fsync(fd))
-TSC_FS_FD_OPERATION(fdatasyncSync, false, fdatasync(fd))
-TSC_FS_FD_OPERATION(ftruncateSync, true, ftruncate(fd, length))
