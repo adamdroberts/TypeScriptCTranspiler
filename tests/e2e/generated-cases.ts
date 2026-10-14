@@ -55,6 +55,7 @@ export interface CollectionSourceAliasDepthSpec {generator:"collection-source-al
 export interface PrimitivePropertyPrototypeDepthSpec {generator:"primitive-property-prototype-depth";depth:number;}
 export interface GeneratorMethodOwnerDepthSpec {generator:"generator-method-owner-depth";depth:number;}
 export interface PrimitivePropertyReadDepthSpec {generator:"primitive-property-read-depth";depth:number;}
+export interface SourceProjectionProvenanceDepthSpec {generator:"source-projection-provenance-depth";depth:number;}
 export interface LexicalSourceCaptureDepthSpec {generator:"lexical-source-capture-depth";depth:number;}
 export interface EvalCallerEnvironmentDepthSpec {generator:"eval-caller-environment-depth";depth:number;}
 export interface PendingComputedKeyDepthSpec {generator:"pending-computed-key-depth";depth:number;}
@@ -297,6 +298,7 @@ export type GeneratedCaseSpec =
     | SwitchCaseBlockFunctionWorklistWidthSpec
     | SwitchCaseBlockGeneratorCaptureWidthSpec
     | SwitchCaseBlockAsyncCaptureWidthSpec
+    | SourceProjectionProvenanceDepthSpec
     | SwitchCaseBlockClassWorklistWidthSpec;
 
 export function parseGeneratedCaseSpec(raw: string, filename: string): GeneratedCaseSpec {
@@ -312,6 +314,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     const spec = value as Record<string, unknown>;
     if(spec.generator==='primitive-property-read-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid primitive property read spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
+    if(spec.generator==='source-projection-provenance-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid source projection provenance spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
     }
     if(spec.generator==='lexical-source-capture-depth'){
@@ -1885,6 +1891,7 @@ console.log("raw JSON text width:", valid);
         case "primitive-property-prototype-depth": return primitivePropertyPrototypeInput(spec.depth);
         case "generator-method-owner-depth": return generatorMethodOwnerInput(spec.depth);
         case "primitive-property-read-depth": return primitivePropertyReadInput(spec.depth);
+        case "source-projection-provenance-depth": return sourceProjectionProvenanceInput(spec.depth);
         case "lexical-source-capture-depth": return lexicalSourceCaptureInput(spec.depth);
         case "eval-caller-environment-depth": return evalCallerEnvironmentInput(spec.depth);
         case "pending-computed-key-depth": return pendingComputedKeyInput(spec.depth);
@@ -2096,4 +2103,15 @@ export function lexicalSourceCaptureInput(depth:number):string {
 /** Literal String reads share the ordinary primitive prototype graph. */
 export function primitivePropertyReadInput(depth:number):string {
     return `export {};{const prototype=String.prototype as any,previous=Object.getPrototypeOf(prototype);let seen=0;let parent:any={get probe(){'use strict';seen++;return typeof this==='string'&&this==='value'?71:0;}};for(let index=0;index<${depth};index++)parent=Object.create(parent);Object.setPrototypeOf(prototype,parent);const result=('value' as any).probe;Object.setPrototypeOf(prototype,previous);console.log('primitive read graph:',result===71&&seen===1); }\n`;
+}
+
+export function sourceProjectionProvenanceInput(depth:number):string {
+ const aliases=Array.from({length:depth},(_,index)=>`const source${index}:any=${index?'String(source'+(index-1)+')':"'37;'"};`);
+ return `{
+${aliases.join('\n')}
+function select(value:any):any{return String(value)}
+function twice(fn:(value:any)=>any,value:any):any{return fn(fn(value))}
+console.log('source:',eval(twice(select,source${depth-1})));
+}
+`;
 }

@@ -164,7 +164,8 @@ interface EvaluationEnvironment {
     readonly callers: Set<ts.Node>;
     readonly references: Map<ts.Identifier, {value: Cell; writes: Cell}>;
 }
-interface SourceCapturePhase {readonly context:ts.Node;readonly argumentsRead:boolean;}
+interface SourceCapturePhase {readonly kind:"capture";readonly context:ts.Node;readonly argumentsRead:boolean;}
+type SourceProjectionPhase = SourceCapturePhase | {readonly kind:"return"};
 
 const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
     ts.SyntaxKind.InKeyword, ts.SyntaxKind.InstanceOfKeyword,
@@ -245,6 +246,9 @@ class SourceValueFlow {
     private readonly propertyReads = new Map<Cell,Map<SourcePropertyKey,Map<ts.Node|undefined,Map<boolean,Cell>>>>();
     private readonly computedReads = new Map<Cell,Map<Cell,Map<ts.Node,Cell>>>();
     private readonly returnProjections = new Map<string,Cell>();
+    private readonly returnProjectionPhases = new Map<string,SourceProjectionPhase>();
+    private readonly projectedCellPhases = new WeakMap<Cell,ReadonlySet<SourceProjectionPhase>>();
+    private readonly projectedAtomPhases = new WeakMap<Atom,ReadonlySet<SourceProjectionPhase>>();
     private readonly bindingDefaults = new Map<Cell,Map<Cell,Cell>>();
     private readonly returnTransforms = new Map<Cell,{inputs:readonly Cell[];evaluate:(inputs:readonly Cell[])=>Cell}>();
     private readonly normalResults = new Map<Cell, Atom>();
@@ -349,8 +353,6 @@ class SourceValueFlow {
     private readonly sourceStarts = new WeakMap<ts.Node, number>();
     private readonly executionGuards = new WeakMap<ts.Node, readonly {condition: Cell; truthy: boolean}[]>();
     private readonly capturePhases=new Map<ts.Node,Map<boolean,SourceCapturePhase>>();
-    private readonly capturedCellPhases=new Map<Cell,ReadonlySet<SourceCapturePhase>>();
-    private readonly capturedAtomPhases=new WeakMap<Atom,ReadonlySet<SourceCapturePhase>>();
     private readonly readCaptures = new Map<Cell, Map<ts.Node | undefined, Map<boolean, Cell>>>();
     private readonly empty = this.newCell();
     private readonly globalMutation = this.newCell();
@@ -544,12 +546,17 @@ class SourceValueFlow {
     private projectReturn(root:Cell,inputs:ReadonlyMap<Cell,Cell>):Cell {
         if(!inputs.size)return root;
         const key=root.id+":"+[...inputs].map(([formal,input])=>formal.id+"="+input.id).join(","),prior=this.returnProjections.get(key);if(prior)return prior;
+        let phase=this.returnProjectionPhases.get(key);if(!phase){phase={kind:"return"};this.returnProjectionPhases.set(key,phase);}
         const projected=new Map<Cell,Cell>(),atoms=new Map<Atom,Atom>(),pending:Cell[]=[];
         // A projection may flow back into the source through a captured
         // location or recursive call. Its own targets are already projected;
         // registering that identity closes the copy graph instead of cloning
         // the same substitution through itself indefinitely.
-        const project=(source:Cell):Cell=>{let cell=projected.get(source);if(!cell){cell=this.newCell();projected.set(source,cell);projected.set(cell,cell);pending.push(source);}return cell;};
+        const project=(source:Cell):Cell=>{
+            const inherited=this.projectedCellPhases.get(source);if(inherited?.has(phase!))return source;
+            let cell=projected.get(source);if(!cell){cell=this.newCell();projected.set(source,cell);projected.set(cell,cell);
+                this.projectedCellPhases.set(cell,new Set([...(inherited??[]),phase!]));pending.push(source);}return cell;
+        };
         const result=project(root);this.returnProjections.set(key,result);
         const extend=()=>{while(pending.length){const source=pending.pop()!,target=projected.get(source)!;let read!:Rule;
             read=this.rule([source],()=>{
@@ -557,7 +564,9 @@ class SourceValueFlow {
                 if(transform){this.copy(transform.evaluate(transform.inputs.map(project)),target);extend();return;}
                 for(const atom of Set.prototype.values.call(source.values) as Iterable<Atom>){
                     let value=atom;
-                    if(atom.tag==="text-operation") {let previous=atoms.get(atom);if(!previous){previous={...atom,parts:atom.parts.map(project)};atoms.set(atom,previous);}value=previous;}
+                    if(atom.tag==="text-operation"&&!this.projectedAtomPhases.get(atom)?.has(phase!)) {let previous=atoms.get(atom);if(!previous){previous={...atom,parts:atom.parts.map(project)};atoms.set(atom,previous);
+                        this.projectedAtomPhases.set(previous,new Set([...(this.projectedAtomPhases.get(atom)??[]),phase!]));
+                    }value=previous;}
                     this.publish(target,value);
                 }
                 const actual=inputs.get(source),arguments_=actual?this.formalInputs.get(source):undefined;
@@ -784,22 +793,22 @@ class SourceValueFlow {
         if (!phases) {phases = new Map(); contexts.set(context,phases);}
         const previous = phases.get(argumentsRead); if (previous) return previous;
         let phaseKinds=this.capturePhases.get(context);if(!phaseKinds){phaseKinds=new Map();this.capturePhases.set(context,phaseKinds);}
-        let phase=phaseKinds.get(argumentsRead);if(!phase){phase={context,argumentsRead};phaseKinds.set(argumentsRead,phase);}
+        let phase=phaseKinds.get(argumentsRead);if(!phase){phase={kind:"capture",context,argumentsRead};phaseKinds.set(argumentsRead,phase);}
         const pending:Cell[]=[];
         const project=(source:Cell):Cell=>{
-            const inherited=this.capturedCellPhases.get(source);
+            const inherited=this.projectedCellPhases.get(source);
             // A later acyclic capture cannot undo the earlier filtering.
             // Reuse that canonical projection instead of composing an alias
             // path of equivalent phase filters through every saved binding.
             if(inherited?.has(phase!)||[...(inherited??[])].some(prior=>{
-                return prior.argumentsRead===argumentsRead && !this.dynamicContext(prior.context) &&
+                return prior.kind==="capture" && prior.argumentsRead===argumentsRead && !this.dynamicContext(prior.context) &&
                     this.sourceFile(prior.context)===this.sourceFile(context) && prior.context.getEnd()<=context.getStart();
             }))return source;
             let contexts=this.readCaptures.get(source);if(!contexts){contexts=new Map();this.readCaptures.set(source,contexts);}
             let phases=contexts.get(context);if(!phases){phases=new Map();contexts.set(context,phases);}
             let target=phases.get(argumentsRead);
             if(!target){target=this.newCell();phases.set(argumentsRead,target);
-                this.capturedCellPhases.set(target,new Set([...(inherited??[]),phase!]));
+                this.projectedCellPhases.set(target,new Set([...(inherited??[]),phase!]));
                 this.readCaptures.set(target,new Map([[context,new Map([[argumentsRead,target]])]]));pending.push(source);}
             return target;
         };
@@ -813,9 +822,9 @@ class SourceValueFlow {
                     if(!this.effectVisible(atom,context,argumentsRead))continue;
                     let value=atom;
                     if(atom.tag==="text-operation"){
-                        const inherited=this.capturedAtomPhases.get(atom);
+                        const inherited=this.projectedAtomPhases.get(atom);
                         if(!inherited?.has(phase!)){let prior=atoms.get(atom);if(!prior){prior={...atom,parts:atom.parts.map(project)};atoms.set(atom,prior);
-                            this.capturedAtomPhases.set(prior,new Set([...(inherited??[]),phase!]));}value=prior;}
+                            this.projectedAtomPhases.set(prior,new Set([...(inherited??[]),phase!]));}value=prior;}
                     }
                     this.publish(target,value);
                 }

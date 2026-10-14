@@ -2954,7 +2954,8 @@
         "sec-serializejsonobject#enumerable-key-order-and-child-output-worklist",
         "sec-serializejsonarray#indexed-length-null-substitution-and-child-output-worklist",
         "sec-return-statement-runtime-semantics-evaluation#recursive-capture-and-actual-source-return-graph",
-        "sec-evaluatecall#finite-host-callable-location-source-projections"
+        "sec-evaluatecall#finite-host-callable-location-source-projections",
+        "sec-return-statement-runtime-semantics-evaluation#composed-source-projection-provenance"
       ]
     },
     {
@@ -3492,7 +3493,8 @@
       "kind": "property",
       "id": "tests/property/return-projection-cycle.property.test.ts",
       "targets": [
-        "sec-return-statement-runtime-semantics-evaluation#recursive-capture-and-actual-source-return-graph"
+        "sec-return-statement-runtime-semantics-evaluation#recursive-capture-and-actual-source-return-graph",
+        "sec-return-statement-runtime-semantics-evaluation#composed-source-projection-provenance"
       ]
     },
     {
@@ -4167,12 +4169,13 @@
   ]
 },
 {
-  "kind": "property",
-  "id": "tests/property/source-callable-formals.property.test.ts",
-  "targets": [
-    "sec-evaluatecall#finite-host-callable-location-source-projections"
-  ]
-},
+      "kind": "property",
+      "id": "tests/property/source-callable-formals.property.test.ts",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections",
+        "sec-return-statement-runtime-semantics-evaluation#composed-source-projection-provenance"
+      ]
+    },
 {
   "kind": "e2e",
   "id": "source_proof_identity",
@@ -4313,7 +4316,8 @@
         "sec-evaluatecall#finite-host-callable-location-source-projections",
         "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
         "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation",
-        "sec-getvalue#canonical-binding-source-origin-capture"
+        "sec-getvalue#canonical-binding-source-origin-capture",
+        "sec-return-statement-runtime-semantics-evaluation#composed-source-projection-provenance"
       ]
     },
     {
@@ -5059,7 +5063,8 @@
       "kind": "property",
       "id": "tests/property/lexical-source-capture.property.test.ts",
       "targets": [
-        "sec-getvalue#canonical-binding-source-origin-capture"
+        "sec-getvalue#canonical-binding-source-origin-capture",
+        "sec-return-statement-runtime-semantics-evaluation#composed-source-projection-provenance"
       ]
     },
     {
@@ -5130,6 +5135,41 @@
       "id": "runtime/tsc_value.c#tsc_value_get_prop_cached",
       "targets": [
         "sec-getvalue#ordinary-primitive-named-property-reads"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/source-projection-provenance.property.test.ts",
+      "targets": [
+        "sec-return-statement-runtime-semantics-evaluation#composed-source-projection-provenance"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "source_projection_provenance_depth",
+      "targets": [
+        "sec-return-statement-runtime-semantics-evaluation#composed-source-projection-provenance"
+      ],
+      "stressReview": {
+        "dimension": "source alias and conversion graph depth feeding cyclic higher-order return projection",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One shared generated graph tests provenance composition independently of source conversion, actual substitution and opaque semantic partitions.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "function_closures",
+      "targets": [
+        "sec-return-statement-runtime-semantics-evaluation#composed-source-projection-provenance"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#SourceProjectionPhase",
+      "targets": [
+        "sec-return-statement-runtime-semantics-evaluation#composed-source-projection-provenance"
       ]
     }
   ]
