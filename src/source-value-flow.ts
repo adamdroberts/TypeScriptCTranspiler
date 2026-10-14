@@ -250,7 +250,8 @@ class SourceValueFlow {
     private readonly promiseOwners = new WeakMap<Atom,ObjectOwner>();
     private promisePrototypeValue?:Cell;
     private readonly promiseResolveOwners=new Map<ts.Node,ObjectOwner>();
-    private readonly escapedCallableCalls=new Map<ts.Node,Map<Cell,Cell>>();
+    private readonly sourceObjectOwners=new WeakSet<ObjectOwner>();
+    private readonly escapedCallableCalls=new Map<ts.Node,{visit:(input:Cell)=>void}>();
     private readonly promiseReactions = new Map<ts.Node,Map<string,Cell>>();
     private readonly sourceCells = new WeakMap<SourceFacts,Cell>();
     private readonly formalInputs = new Map<Cell,Set<Cell>>();
@@ -761,15 +762,42 @@ class SourceValueFlow {
     private opaqueEffect(context?: ts.Node): void {
         this.copy(this.executionOrigins(context),this.opaqueMutation);
     }
+    /** Opaque code can invoke callbacks reachable through represented data,
+     * accessors, prototypes and returned values. One call-site graph retains
+     * those edges and one unknown actual List, including cyclic containers. */
     private escapeCallableArgument(argument:Cell,context:ts.Node):void {
-        let calls=this.escapedCallableCalls.get(context);if(!calls){calls=new Map();this.escapedCallableCalls.set(context,calls);}
-        if(calls.has(argument))return;
-        const result=this.newCell(),target=this.newCell(),actuals=this.newCell();calls.set(argument,result);
-        this.publish(actuals,this.unknown);
-        this.rule([argument],()=>{for(const atom of argument.values){
-            if(atom.tag==="function"||atom.tag==="bound"||atom.tag==="intrinsic"||atom.tag==="operation"||atom.tag==="promise-resolver"||atom.tag==="builtin"&&atom.normalResult!=="not-callable"||this.ordinaryOwner(atom)?.proxy)this.publish(target,atom);
-        }});
-        this.invoke(context,target,actuals,[{cell:actuals,spread:true}],result);
+        let graph=this.escapedCallableCalls.get(context);
+        if(!graph){
+            const target=this.newCell(),actuals=this.newCell(),returned=this.newCell(),seen=new Set<Cell>(),pending:Cell[]=[];
+            this.publish(actuals,this.unknown);
+            const visit=(input:Cell):void=>{
+                if(seen.has(input))return;seen.add(input);pending.push(input);
+                while(pending.length){const current=pending.pop()!;let rule!:Rule;
+                    rule=this.rule([current],()=>{for(const atom of current.values){
+                        const owner=this.ordinaryOwner(atom);
+                        if(atom.tag==="promise"){visit(atom.value);visit(atom.rejection);}
+                        if(atom.tag==="function"||atom.tag==="bound"||atom.tag==="intrinsic"||atom.tag==="operation"||atom.tag==="promise-resolver"||atom.tag==="builtin"&&atom.normalResult!=="not-callable"||owner?.proxy)this.publish(target,atom);
+                        if(!owner||atom.tag!=="function"&&!this.sourceObjectOwners.has(owner)&&!this.ownerCreations.has(owner)&&!owner.collections&&!owner.collectionIterator)continue;
+                        this.watch(rule,owner.shape);
+                        for(const field of owner.fields.values())visit(field);
+                        for(const accessor of owner.accessors.values()){visit(accessor.get);visit(accessor.set);}
+                        if(owner.prototype)visit(owner.prototype);
+                        if(owner.proxy){visit(owner.proxy.target);visit(owner.proxy.handler);}
+                        for(const record of owner.collections?.values()??[]){
+                            this.watch(rule,record.changes);this.watch(rule,record.shape);
+                            for(const entry of record.entries.values()){visit(entry.key);visit(entry.value);}
+                        }
+                        if(owner.collectionIterator){
+                            visit(owner.collectionIterator.elements);visit(this.directIteratorElements(current,context));
+                            if(owner.collectionIterator.source&&owner.collectionIterator.operation!=="keys")visit(owner.collectionIterator.source);
+                        }
+                    }});
+                }
+            };
+            graph={visit};this.escapedCallableCalls.set(context,graph);
+            visit(returned);this.invoke(context,target,actuals,[{cell:actuals,spread:true}],returned);
+        }
+        graph.visit(argument);
     }
     /** Close represented call cycles through one adjacency graph. An origin
      * alone cannot distinguish successive recursive activations. */
@@ -1201,7 +1229,7 @@ class SourceValueFlow {
     private owner(node: ts.Node): ObjectOwner {
         let owner = this.objects.get(node);
         if (!owner) {
-            owner = { fields: new Map(), accessors: new Map(), shape: this.newCell() }; this.objects.set(node, owner);
+            owner = { fields: new Map(), accessors: new Map(), shape: this.newCell() }; this.objects.set(node, owner);this.sourceObjectOwners.add(owner);
             if(ts.isObjectLiteralExpression(node)||ts.isArrayLiteralExpression(node)||ts.isNewExpression(node))this.ownerCreations.set(owner,node);
             this.ownerMutation(owner);
         }
@@ -3274,11 +3302,13 @@ class SourceValueFlow {
         if((ts.isFunctionDeclaration(node)||ts.isFunctionExpression(node))&&owner.kind!=="async"){
             const parent=owner.kind==="ordinary"?this.objectPrototype():this.newCell();if(owner.kind!=="ordinary")this.publish(parent,this.intrinsic("instance",owner.kind));
             const prototypeOwner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:parent,ordinary:true},prototype=this.newCell();
+            this.sourceObjectOwners.add(prototypeOwner);
             this.copy(this.opaqueMutation,prototypeOwner.shape);this.publish(prototype,{tag:"object",owner:prototypeOwner});this.defineField(owner.fields,"prototype",prototype,false);
             if(owner.kind==="ordinary")this.defineField(prototypeOwner,"constructor",this.cell(node),false);
         }
         if (ts.isClassLike(node)) {
             const prototype: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.newCell()};
+            this.sourceObjectOwners.add(prototype);
             const prototypeValue = this.field(owner.fields, "prototype");
             this.publish(prototypeValue, {tag:"object",owner:prototype});this.ownPresence(owner.fields,"prototype").initial=true;this.publish(this.presence(owner.fields,"prototype"),this.primitive(true));
             this.defineField(prototype,"constructor",this.cell(node));
