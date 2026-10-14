@@ -53,7 +53,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
-type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
+type Operation = "ordinary-has-instance" | "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
     "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
@@ -196,9 +196,7 @@ function conversionOperands(node: ts.Node): readonly ts.Expression[] | null {
     if (ts.isElementAccessExpression(node)) return [node.argumentExpression];
     const operation = sourceNumericOperation(node);
     if (operation) return ts.isBinaryExpression(node) ? [node.left, node.right] : [(node as ts.PrefixUnaryExpression | ts.PostfixUnaryExpression).operand];
-    if (ts.isBinaryExpression(node) && BOOLEAN_BINARY_RESULTS.has(node.operatorToken.kind) &&
-        node.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken && node.operatorToken.kind !== ts.SyntaxKind.ExclamationEqualsEqualsToken)
-        return [node.left, node.right];
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind===ts.SyntaxKind.InKeyword)return [node.left,node.right];
     return null;
 }
 
@@ -231,6 +229,7 @@ class SourceValueFlow {
     private readonly atomicsWaitResults = new Map<ts.Node,Cell>();
     private readonly promiseConstructions = new Map<ts.Node,Map<string,Cell>>();
     private readonly promiseResolvers = new Map<Cell,Map<Cell,readonly Cell[]>>();
+    private readonly instanceSources = new Map<ts.Node,Map<string,Cell>>();
     private readonly primitiveBoxes = new Map<ts.Node,Map<string,Cell>>();
     private readonly booleanPrimitives = new Map<Cell,Cell>();
     private readonly primitiveDefaults = new Map<string,Cell>();
@@ -555,7 +554,7 @@ class SourceValueFlow {
                 }
                 if (ts.isCallExpression(node) || ts.isNewExpression(node) ||
                     ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node) || ts.isAwaitExpression(node) ||
-                    ts.isTemplateExpression(node) || ts.isExpression(node) && conversionOperands(node)) this.cell(node);
+                    ts.isTemplateExpression(node) || ts.isBinaryExpression(node)&&node.operatorToken.kind===ts.SyntaxKind.InstanceOfKeyword || ts.isExpression(node) && conversionOperands(node)) this.cell(node);
                 node.forEachChild(child => { worklist.push({node: child, handler}); });
             }
         }
@@ -2737,6 +2736,43 @@ class SourceValueFlow {
         const rule = this.rule([base], () => { for (const atom of base.values) this.read(atom, base, key, result, context && this.exceptionHandlers.get(context), rule, context,ownOnly); });
         return result;
     }
+    private instanceofSource(value:Cell,target:Cell,context:ts.Node):Cell {
+        let calls=this.instanceSources.get(context);if(!calls){calls=new Map();this.instanceSources.set(context,calls);}
+        const key="dispatch:"+value.id+":"+target.id,prior=calls.get(key);if(prior)return prior;
+        const result=this.newCell(),objects=this.newCell(),callee=this.newCell(),ordinary=this.newCell(),returned=this.newCell();calls.set(key,result);
+        const fail=()=>{this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));};
+        this.rule([target],()=>{for(const atom of target.values){if(this.ordinaryOwner(atom))this.publish(objects,atom);else if(atom.tag==="unknown"||atom.tag==="opaque-object"){this.publish(objects,atom);this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));this.onActive(context,()=>this.opaqueEffect(context));}else if(atom.tag!=="pending-source"&&atom.tag!=="abrupt")fail();}});
+        const method=this.property(objects,this.wellKnownSymbols.get("hasInstance")!,context),atoms=new Map<Atom,Cell>();
+        this.rule([method],()=>{for(const atom of method.values){
+            if(atom===this.primitive(undefined)||atom===this.primitive(null)){this.copy(objects,ordinary);continue;}
+            let input=atoms.get(atom);if(!input){input=this.newCell();atoms.set(atom,input);this.publish(input,atom);}const kinds=this.primitiveKinds(input);
+            if(kinds&KIND_FUNCTION)this.publish(callee,atom);if(kinds&~KIND_FUNCTION)fail();
+        }});
+        this.invoke(context,callee,objects,[{cell:value,spread:false}],returned);this.copy(this.booleanPrimitive(returned),result);
+        this.copy(this.ordinaryInstanceSource(value,ordinary,context),result);return result;
+    }
+    private ordinaryInstanceSource(value:Cell,target:Cell,context:ts.Node):Cell {
+        let calls=this.instanceSources.get(context);if(!calls){calls=new Map();this.instanceSources.set(context,calls);}
+        const key="ordinary:"+value.id+":"+target.id,prior=calls.get(key);if(prior)return prior;
+        const result=this.newCell(),callable=this.newCell(),atoms=new Map<Atom,Cell>();calls.set(key,result);
+        this.rule([target],()=>{for(const atom of target.values){let input=atoms.get(atom);if(!input){input=this.newCell();atoms.set(atom,input);this.publish(input,atom);}const kinds=this.primitiveKinds(input);
+            if(atom.tag==="bound"){this.copy(this.instanceofSource(value,atom.target,context),result);continue;}
+            if(kinds&KIND_FUNCTION)this.publish(callable,atom);if(atom.tag==="unknown"||atom.tag==="opaque-object")this.publish(result,this.primitive(true));if(kinds&~KIND_FUNCTION)this.publish(result,this.primitive(false));
+        }});
+        const selected=this.newCell();this.rule([value],()=>{for(const atom of value.values){if(this.ordinaryOwner(atom)||atom.tag==="unknown"||atom.tag==="opaque-object")this.copy(callable,selected);else if(atom.tag!=="pending-source"&&atom.tag!=="abrupt")this.publish(result,this.primitive(false));}});
+        const prototype=this.property(selected,"prototype",context);let rule!:Rule;
+        rule=this.rule([value,prototype],()=>{
+            for(const atom of prototype.values){if(!this.ordinaryOwner(atom)){if(atom.tag!=="pending-source"&&atom.tag!=="abrupt"){const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}continue;}
+                for(const input of value.values){const owner=this.ordinaryOwner(input);if(!owner){if(input.tag!=="pending-source"&&input.tag!=="abrupt")this.publish(result,this.primitive(false));continue;}
+                    const pending=[owner],visited=new Set<ObjectOwner>();while(pending.length){const current=pending.pop()!;if(visited.has(current))continue;visited.add(current);this.watch(rule,current.shape);
+                        if(current.proxy){this.proxyReadEffects(current,"prototype","get",context);this.onActive(context,()=>this.opaqueEffect(context));}
+                        if(current.prototype){this.watch(rule,current.prototype);for(const parent of current.prototype.values){if(this.ordinaryOwner(parent)===this.ordinaryOwner(atom))this.publish(result,this.primitive(true));const next=this.ordinaryOwner(parent);if(next)pending.push(next);}}
+                    }
+                    this.publish(result,this.primitive(false));
+                }
+            }
+        });return result;
+    }
     private promiseResolverCells(value:Cell,rejection:Cell):readonly Cell[] {
         let rejections=this.promiseResolvers.get(value);if(!rejections){rejections=new Map();this.promiseResolvers.set(value,rejections);}
         const prior=rejections.get(rejection);if(prior)return prior;
@@ -2913,6 +2949,9 @@ class SourceValueFlow {
         if(atom.tag === "object")return atom.owner;
         if(atom.tag === "function")return atom.owner.fields;
         if(atom.tag === "promise-resolver")return atom.fields;
+        if(atom.tag==="operation"&&atom.operation==="ordinary-has-instance"){
+            let owner=this.intrinsicOwners.get(atom);if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);this.copy(this.opaqueMutation,owner.shape);const name=this.newCell(),length=this.newCell();this.publish(name,this.primitive("[Symbol.hasInstance]"));this.publish(length,this.primitive(1));this.defineField(owner,"name",name,false);this.defineField(owner,"length",length,false);}return owner;
+        }
         if(atom.tag === "bound")return atom.fields;
         if(atom.tag === "builtin")return atom.fields;
         if(atom.tag==="operation"&&atom.operation.startsWith("atomics-member:")){
@@ -2965,6 +3004,7 @@ class SourceValueFlow {
                     owner.prototype = this.realmObjectPrototype(atom.realm??this.currentRealm);
                     this.publish(this.field(owner, "toString"), this.operation("function-text"));this.ownPresence(owner,"toString").initial=true;this.publish(this.presence(owner,"toString"),this.primitive(true));
                     this.defineField(owner, "constructor", this.realmBinding(atom.realm??this.currentRealm,"Function"));
+                    const method=this.newCell();this.publish(method,this.operation("ordinary-has-instance"));this.defineField(owner,this.wellKnownSymbols.get("hasInstance")!,method,false);
                 }
                 this.copy(this.opaqueMutation,owner.shape);
             }
@@ -3903,6 +3943,7 @@ class SourceValueFlow {
         if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken) {
             this.publish(result, {tag: "text-operation", operation: "prefix", operator: node.operator, parts: [this.cell(node.operand)]}); return;
         }
+        if(ts.isBinaryExpression(node)&&node.operatorToken.kind===ts.SyntaxKind.InstanceOfKeyword){this.copy(this.instanceofSource(this.cell(node.left),this.cell(node.right),node),result);return;}
         if (ts.isDeleteExpression(node) || ts.isBinaryExpression(node) && BOOLEAN_BINARY_RESULTS.has(node.operatorToken.kind)) {
             this.publish(result, this.primitive(true)); this.publish(result, this.primitive(false)); return;
         }
@@ -4408,6 +4449,9 @@ class SourceValueFlow {
                         if(converted.some(input=>{const proof=this.primitiveChoiceProof(input);return proof.primitiveComplete&&!proof.values.length})){this.publish(result,this.abrupt);continue;}
                         let value=this.numericValues.get(KIND_NUMBER);if(!value){value={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,value);}this.publish(result,value);
                         continue;
+                    }
+                    if(atom.tag==="operation"&&atom.operation==="ordinary-has-instance"){
+                        this.copy(this.ordinaryInstanceSource(argument(0)??omittedArgument,invocation.receiver,node),result);continue;
                     }
                     if(atom.tag==="promise-resolver"){
                         if(invocation.construct){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));continue;}

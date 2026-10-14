@@ -58,6 +58,7 @@ export interface PrimitivePropertyReadDepthSpec {generator:"primitive-property-r
 export interface RestSourceLocationDepthSpec {generator:"rest-source-location-depth";depth:number;}
 export interface SourceAllocationDepthSpec {generator:"source-allocation-depth";depth:number;}
 export interface ListExtentCaptureDepthSpec {generator:"list-extent-capture-depth";depth:number;}
+export interface HasInstanceDepthSpec {generator:"has-instance-depth";depth:number;}
 export interface RelationalSourceDepthSpec {generator:"relational-source-depth";depth:number;}
 export interface StrictTypeSourceDepthSpec {generator:"strict-type-source-depth";depth:number;}
 export interface PromiseCapabilitySourceDepthSpec {generator:"promise-capability-source-depth";depth:number;}
@@ -318,6 +319,7 @@ export type GeneratedCaseSpec =
     | RestSourceLocationDepthSpec
     | SourceAllocationDepthSpec
     | ListExtentCaptureDepthSpec
+    | HasInstanceDepthSpec
     | RelationalSourceDepthSpec
     | StrictTypeSourceDepthSpec
     | PromiseCapabilitySourceDepthSpec
@@ -360,6 +362,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     }
     if(spec.generator==='list-extent-capture-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid List extent capture spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
+    if(spec.generator==='has-instance-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid hasInstance spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
     }
     if(spec.generator==='relational-source-depth'){
@@ -1996,6 +2002,7 @@ console.log("raw JSON text width:", valid);
         case "rest-source-location-depth": return restSourceLocationInput(spec.depth);
         case "source-allocation-depth": return sourceAllocationInput(spec.depth);
         case "list-extent-capture-depth": return listExtentCaptureInput(spec.depth);
+        case "has-instance-depth": return hasInstanceInput(spec.depth);
         case "relational-source-depth": return relationalSourceInput(spec.depth);
         case "strict-type-source-depth": return strictTypeSourceInput(spec.depth);
         case "promise-capability-source-depth": return promiseCapabilitySourceInput(spec.depth);
@@ -2315,4 +2322,8 @@ export function strictTypeSourceInput(depth:number):string {
 export function relationalSourceInput(depth:number):string {
  const owners=Array.from({length:depth},(_,index)=>`const relationOwner${index}:any=${index?`{value:relationOwner${index-1}.value,previous:relationOwner${index-1}}`:`{value:7n,previous:null}`};`);
  return `{${owners.join('\n')}const left:any={valueOf(){return relationOwner${depth-1}.value}};console.log('relational source:',Function('return '+(left<9n)+';')());}\n`;
+}
+
+export function hasInstanceInput(depth:number):string {
+ return `{function InstanceTarget(){}const target:any=InstanceTarget;let object:any=Object.create(target.prototype),bound:any=target;for(let index=0;index<${depth};index++){object=Object.create(object);bound=bound.bind(null)}console.log('hasInstance depth:',object instanceof bound,Function.prototype[Symbol.hasInstance].call(bound,object));}\n`;
 }

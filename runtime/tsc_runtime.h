@@ -997,6 +997,8 @@ void tsc_dynamic_import_validate_resource(tsc_dynamic_import_attribute_type_t at
 bool tsc_value_is_truthy(tsc_value_t v);
 bool tsc_value_is_constructable(tsc_value_t v);
 bool tsc_value_instanceof(tsc_value_t object, tsc_value_t constructor);
+bool tsc_value_ordinary_has_instance(tsc_value_t constructor, tsc_value_t object);
+bool tsc_function_is_intrinsic_has_instance(tsc_value_t method);
 bool tsc_value_number_is_integer(tsc_value_t v);
 bool tsc_value_number_is_finite(tsc_value_t v);
 bool tsc_value_number_is_nan(tsc_value_t v);

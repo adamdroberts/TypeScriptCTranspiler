@@ -3619,26 +3619,39 @@ bool tsc_value_is_constructable(tsc_value_t v) {
     return o && o->is_proxy && tsc_value_is_constructable(o->proxy_target);
 }
 
-bool tsc_value_instanceof(tsc_value_t object, tsc_value_t constructor) {
-    if (!tsc_value_is_callable(constructor)) {
-        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("instanceof right operand is not callable"));
-    }
-    if (value_is_box(constructor) && value_tag(constructor) == TSC_VALUE_TAG_FUNCTION) {
-        tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
-        if (identity && identity->kind == TSC_FUNCTION_IDENTITY_BOUND) {
-            tsc_bound_function_env_t* bound = (tsc_bound_function_env_t*)identity->env;
-            return bound && tsc_value_instanceof(object, bound->target);
+static bool instance_dispatch(tsc_value_t object,tsc_value_t constructor,bool ordinary) {
+    void* volatile object_root=tsc_value_gc_root(object);
+    void* volatile constructor_root=tsc_value_gc_root(constructor);
+    for (;;) {
+        if(!ordinary){
+            if(!value_is_valid_prototype(constructor)||value_is_null_value(constructor))tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("instanceof right operand is not an object"));
+            tsc_value_t method=tsc_value_get_prop(constructor,tsc_symbol_property_key(tsc_symbol_has_instance()));
+            void* volatile method_root=tsc_value_gc_root(method);
+            if(!tsc_value_is_undefined(method)&&!value_is_null_value(method)){
+                if(!tsc_value_is_callable(method))tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("Symbol.hasInstance is not callable"));
+                if(!tsc_function_is_intrinsic_has_instance(method)){
+                    tsc_array_t* volatile actuals=tsc_array_new(sizeof(tsc_value_t),1);tsc_array_push_value(actuals,object);
+                    bool result=tsc_value_is_truthy(tsc_value_apply_function(method,constructor,tsc_value_array(actuals)));
+                    (void)object_root;(void)constructor_root;(void)method_root;return result;
+                }
+            }else if(!tsc_value_is_callable(constructor))tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("instanceof right operand is not callable"));
         }
+        if(!tsc_value_is_callable(constructor))return false;
+        if(value_is_box(constructor)&&value_tag(constructor)==TSC_VALUE_TAG_FUNCTION){
+            tsc_function_identity_t* identity=(tsc_function_identity_t*)value_ptr(constructor);
+            if(identity&&identity->kind==TSC_FUNCTION_IDENTITY_BOUND){
+                tsc_bound_function_env_t* bound=(tsc_bound_function_env_t*)identity->env;if(!bound)return false;
+                constructor=bound->target;constructor_root=tsc_value_gc_root(constructor);ordinary=false;continue;
+            }
+        }
+        if(!value_is_valid_prototype(object)||value_is_null_value(object))return false;
+        tsc_value_t prototype=tsc_value_get_prop(constructor,tsc_str_from_lit("prototype",9));
+        if(!value_is_valid_prototype(prototype)||value_is_null_value(prototype))tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("instanceof constructor has non-object prototype"));
+        return tsc_value_is_prototype_of(prototype,object);
     }
-    tsc_value_t prototype = tsc_value_get_prop(
-        constructor,
-        tsc_str_from_lit("prototype", 9)
-    );
-    if (!value_is_valid_prototype(prototype) || value_is_null_value(prototype)) {
-        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("instanceof constructor has non-object prototype"));
-    }
-    return tsc_value_is_prototype_of(prototype, object);
 }
+bool tsc_value_ordinary_has_instance(tsc_value_t constructor,tsc_value_t object){return instance_dispatch(object,constructor,true);}
+bool tsc_value_instanceof(tsc_value_t object,tsc_value_t constructor){return instance_dispatch(object,constructor,false);}
 
 static tsc_array_t* value_to_argument_list(tsc_value_t args, const char* message) {
     void* volatile arguments_root = tsc_value_gc_root(args);

@@ -43,6 +43,7 @@ interface SymbolConstructor {
     readonly toStringTag: symbol;
     readonly toPrimitive: unique symbol;
     readonly species: symbol;
+    readonly hasInstance: unique symbol;
 }
 declare var Symbol: SymbolConstructor;
 
@@ -868,6 +869,7 @@ interface DataViewConstructor {
 }
 declare var DataView: DataViewConstructor;
 interface Function {
+    [Symbol.hasInstance](value: any): boolean;
     (...args: any[]): any;
     readonly length: number;
     readonly name: string;

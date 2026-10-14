@@ -559,6 +559,16 @@ static bool function_prototype_restricted_set(void* env, tsc_value_t receiver, t
     return false;
 }
 
+static tsc_value_t function_prototype_has_instance(void* env,tsc_value_t receiver,tsc_array_t* args) {
+    (void)env;
+    return tsc_value_bool(tsc_value_ordinary_has_instance(receiver,args&&args->len?TSC_ARR(tsc_value_t,args,0):tsc_value_undefined()));
+}
+bool tsc_function_is_intrinsic_has_instance(tsc_value_t method) {
+    if(!value_is_box(method)||value_tag(method)!=TSC_VALUE_TAG_FUNCTION)return false;
+    const tsc_function_identity_t* identity=(const tsc_function_identity_t*)value_ptr(method);
+    return identity&&identity->kind==TSC_FUNCTION_IDENTITY_BUILTIN&&identity->code.generic==function_prototype_has_instance;
+}
+
 static void function_prototype_define_method(
     tsc_function_identity_t* prototype,
     const char* name,
@@ -649,6 +659,8 @@ static tsc_function_intrinsics_t* ensure_function_intrinsics(void) {
         function_prototype_define_method(intrinsics->prototype_identity, "bind", 4, 1.0, function_prototype_bind);
         function_prototype_define_method(intrinsics->prototype_identity, "call", 4, 1.0, function_prototype_call);
         function_prototype_define_method(intrinsics->prototype_identity, "toString", 8, 0.0, function_prototype_to_string);
+        tsc_object_define(intrinsics->prototype_identity->props,tsc_symbol_property_key(tsc_symbol_has_instance()),
+            tsc_value_function_builtin_named(function_prototype_has_instance,NULL,1.0,tsc_str_from_lit("[Symbol.hasInstance]",20)),false,false,false);
         const char* restricted_names[] = { "caller", "arguments" };
         const size_t restricted_lengths[] = { 6, 9 };
         for (size_t index = 0; index < 2; index++) {
