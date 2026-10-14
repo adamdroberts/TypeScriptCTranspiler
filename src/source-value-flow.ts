@@ -234,6 +234,7 @@ class SourceValueFlow {
     private readonly timerCallbacks = new Map<ts.Node,Map<string,{context:ts.Node;result:Cell}>>();
     private readonly primitiveBoxes = new Map<ts.Node,Map<string,Cell>>();
     private readonly primitiveStringFields = new WeakMap<ObjectOwner,Set<string>>();
+    private readonly ownerFieldEffects = new WeakMap<ObjectOwner,Cell>();
     private readonly booleanPrimitives = new Map<Cell,Cell>();
     private readonly primitiveDefaults = new Map<string,Cell>();
     private readonly defaultedPrimitiveInputs = new Map<Cell,Map<string,Cell>>();
@@ -1290,8 +1291,16 @@ class SourceValueFlow {
         let cell = owner.fields.get(key);
         if (!cell) {
             cell = this.newCell();this.propertyLocations.add(cell); owner.fields.set(key, cell); this.publish(owner.shape, this.primitive(key));
-            const target = cell;
-            this.rule([owner.shape],()=>{for (const value of owner.shape.values) if (value.tag === "unknown") this.publish(target,value);});
+            // Every field borrows the owner's opaque mutation graph. Keep
+            // origins in one filtered cell rather than copying them into
+            // each existing and subsequently created property location.
+            let effects=this.ownerFieldEffects.get(owner);
+            if(!effects){
+                effects=this.newCell();this.ownerFieldEffects.set(owner,effects);
+                const target=effects;
+                this.rule([owner.shape],()=>{for(const value of owner.shape.values)if(value.tag==="unknown")this.publish(target,value);});
+            }
+            this.copy(effects,cell);
         }
         return cell;
     }
@@ -1436,7 +1445,7 @@ class SourceValueFlow {
                 if(!store)continue;
                 const destinations=mode==="set"?[...receiver.values].map(value=>this.ordinaryOwner(value)).filter((value):value is ObjectOwner=>!!value):[owner];
                 for(const owner of destinations){
-                if(key===null){const origins=this.executionOrigins(context);this.copy(origins,owner.shape);for(const field of owner.fields.values())this.copy(origins,field);for(const record of owner.collections?.values()??[])this.copy(origins,record.shape);}
+                if(key===null){const origins=this.executionOrigins(context);this.copy(origins,owner.shape);for(const record of owner.collections?.values()??[])this.copy(origins,record.shape);}
                 else {
                     const presence=this.presence(owner,key);
                     if(context)this.ownPresence(owner,key).writes.set(context,{base,receiver,mode});

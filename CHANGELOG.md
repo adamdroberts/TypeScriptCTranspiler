@@ -1,3 +1,5 @@
+- Share opaque source field mutation origins through one owner effect cell and remove repeated per-field write propagation.
+
 - Register scoped RegExp split intrinsic evidence and exact historical/directory mappings with one capture/owner worklist stress.
 
 - Update dynamic matchAll consumers to materialize and observe the lazy iterator through Array.from.
