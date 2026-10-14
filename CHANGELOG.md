@@ -1,3 +1,5 @@
+Shared StatementList declaration-name collections and rejected CaseBlock lexical conflicts with selected sloppy FunctionDeclaration exceptions.
+
 Rejected duplicate Switch default productions through canonical static validation and preserved parentless raw directive reads.
 
 Corrected CaseBlockEvaluation evidence rationale to match its scoped completion property.

@@ -8,6 +8,7 @@ export interface ModuleStaticSemanticsFailure {
 interface NameEntry {
     readonly name: string;
     readonly node: ts.Node;
+    readonly declaration?: ts.Declaration;
 }
 
 export const strictModeBindingIdentifierNames = new Set([
@@ -83,6 +84,17 @@ function declarationBoundNames(statement: ts.Statement): NameEntry[] {
     return [];
 }
 
+/** Lexical BoundNames of one StatementList; nested scopes own their names. */
+export function statementListLexicallyDeclaredNames(statements: readonly ts.Statement[], functionsAreLexical: boolean): NameEntry[] {
+    const entries: NameEntry[] = [];
+    for (const statement of statements) {
+        if (ts.isVariableStatement(statement) && (statement.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0 ||
+            ts.isClassDeclaration(statement) || functionsAreLexical && ts.isFunctionDeclaration(statement))
+            entries.push(...declarationBoundNames(statement).map(entry => ({...entry, declaration: ts.isVariableStatement(statement) ? undefined : statement})));
+    }
+    return entries;
+}
+
 function importBoundNames(statement: ts.ImportDeclaration): NameEntry[] {
     const clause = statement.importClause;
     if (!clause) return [];
@@ -153,10 +165,14 @@ function duplicateName(entries: readonly NameEntry[]): NameEntry | null {
 /** VarDeclaredNames of ModuleItemList, including nested statement forms but
  * never crossing a function or class definition boundary. */
 export function moduleVarDeclaredNames(sourceFile: ts.SourceFile): NameEntry[] {
+    return statementListVarDeclaredNames(sourceFile.statements);
+}
+
+export function statementListVarDeclaredNames(statements: readonly ts.Statement[]): NameEntry[] {
     const entries: NameEntry[] = [];
     const worklist: ts.Node[] = [];
-    for (let index = sourceFile.statements.length - 1; index >= 0; index--) {
-        worklist.push(sourceFile.statements[index]!);
+    for (let index = statements.length - 1; index >= 0; index--) {
+        worklist.push(statements[index]!);
     }
     while (worklist.length > 0) {
         const node = worklist.pop()!;

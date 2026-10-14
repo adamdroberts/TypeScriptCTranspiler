@@ -1,7 +1,7 @@
 import ts from "typescript";
-import { bindingNameEntries, strictModeBindingIdentifierNames } from "./module-static-semantics";
-import { ecmaParseGoal, isStatementBody } from "./ecmascript-source";
-import { isContextualGrammarIdentifier, isStrictCodeContext } from "./function-static-semantics";
+import { bindingNameEntries, statementListLexicallyDeclaredNames, statementListVarDeclaredNames, strictModeBindingIdentifierNames } from "./module-static-semantics";
+import { ecmaDirectivePrologueHasUseStrict, ecmaParseGoal, isStatementBody } from "./ecmascript-source";
+import { isContextualGrammarIdentifier } from "./function-static-semantics";
 
 export interface ControlStaticSemanticsFailure {
     readonly node: ts.Node;
@@ -9,6 +9,7 @@ export interface ControlStaticSemanticsFailure {
 }
 
 interface ControlContext {
+    readonly strict: boolean;
     readonly allowReturn: boolean;
     readonly allowAwait: boolean;
     readonly breakableDepth: number;
@@ -81,6 +82,7 @@ export function earlyControlFlowStaticSemanticsFailure(
         return true;
     };
     const rootContext: ControlContext = {
+        strict: ecmaParseGoal(sourceFile) === "module" || ecmaDirectivePrologueHasUseStrict(sourceFile.statements, sourceFile),
         allowReturn: false,
         allowAwait: false,
         breakableDepth: 0,
@@ -93,12 +95,16 @@ export function earlyControlFlowStaticSemanticsFailure(
         { node: sourceFile, context: { ...rootContext, allowAwait: ecmaParseGoal(sourceFile) === "module" } },
     ];
     while (worklist.length > 0) {
-        const { node, context } = worklist.pop()!;
+        const entry = worklist.pop()!;
+        const node = entry.node;
+        const body = ts.isFunctionLike(node) ? (node as ts.SignatureDeclaration & {body?:ts.ConciseBody}).body : undefined;
+        const strict = entry.context.strict || ts.isClassLike(node) || !!body && ts.isBlock(body) && ecmaDirectivePrologueHasUseStrict(body.statements, sourceFile);
+        const context = strict === entry.context.strict ? entry.context : {...entry.context, strict};
         if (ts.isTaggedTemplateExpression(node) && ((node.flags | node.tag.flags) & ts.NodeFlags.OptionalChain))
             return { node, message: "optional chain is not permitted as a template tag" };
         if (ts.isNewExpression(node) && (node.expression.flags & ts.NodeFlags.OptionalChain))
             return { node, message: "optional chain is not permitted as a constructor target" };
-        if (ts.isDeleteExpression(node) && isStrictCodeContext(node)) {
+        if (ts.isDeleteExpression(node) && context.strict) {
             let target: ts.Expression = node.expression;
             while (ts.isParenthesizedExpression(target)) target = target.expression;
             if (ts.isIdentifier(target))
@@ -120,24 +126,24 @@ export function earlyControlFlowStaticSemanticsFailure(
         }
         const declarationName=ts.isVariableDeclaration(node) || ts.isFunctionDeclaration(node) ||
             ts.isFunctionExpression(node) || ts.isClassDeclaration(node) || ts.isClassExpression(node) ? node.name : undefined;
-        if(declarationName && isStrictCodeContext(node)) {
+        if(declarationName && context.strict) {
             const restricted=bindingNameEntries(declarationName).find(entry=>strictModeBindingIdentifierNames.has(entry.name));
             if(restricted)return {node:restricted.node,message:`binding identifier '${restricted.name}' is not permitted in strict mode`};
         }
         if (ts.isIdentifier(node) && /(?:\.[cm]?js|\.jsx)$/iu.test(node.getSourceFile().fileName) &&
             node.text !== "eval" && node.text !== "arguments" &&
-            strictModeBindingIdentifierNames.has(node.text) && isStrictCodeContext(node) && isContextualGrammarIdentifier(node))
+            strictModeBindingIdentifierNames.has(node.text) && context.strict && isContextualGrammarIdentifier(node))
             return {node, message:`identifier '${node.text}' is not permitted in strict mode`};
         if (ts.isVariableStatement(node) && (node.declarationList.flags & ts.NodeFlags.BlockScoped) &&
             node.parent && isStatementBody(node.parent, node))
             return {node, message:"lexical declaration is not permitted as a Statement"};
-        if (ts.isWithStatement(node) && isStrictCodeContext(node))
+        if (ts.isWithStatement(node) && context.strict)
             return {node, message:"with statement is not permitted in strict mode"};
         if(ts.isCatchClause(node)){
             const parameter=node.variableDeclaration?.name;
             const names=new Set<string>();
             if(parameter)for(const entry of bindingNameEntries(parameter)){
-                if(names.has(entry.name)||isStrictCodeContext(node)&&strictModeBindingIdentifierNames.has(entry.name))
+                if(names.has(entry.name)||context.strict&&strictModeBindingIdentifierNames.has(entry.name))
                     return {node:entry.node,message:"catch binding has invalid or duplicate BoundNames"};
                 names.add(entry.name);
             }
@@ -167,6 +173,7 @@ export function earlyControlFlowStaticSemanticsFailure(
                 worklist.push({
                     node: body,
                     context: {
+                        strict: context.strict,
                         allowReturn: true,
                         allowAwait: ts.canHaveModifiers(node) &&
                             (ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ?? false),
@@ -179,13 +186,13 @@ export function earlyControlFlowStaticSemanticsFailure(
                 });
             }
             for (const parameter of (node as ts.SignatureDeclaration).parameters)
-                worklist.push({ node: parameter, context: rootContext });
+                worklist.push({ node: parameter, context: {...rootContext, strict:context.strict} });
             const name = (node as ts.SignatureDeclaration & { name?: ts.PropertyName }).name;
             if (name && ts.isComputedPropertyName(name)) worklist.push({ node: name.expression, context });
             continue;
         }
         if (ts.isClassStaticBlockDeclaration(node)) {
-            worklist.push({ node: node.body, context: rootContext });
+            worklist.push({ node: node.body, context: {...rootContext, strict:true} });
             continue;
         }
         if (ts.isVariableDeclarationList(node) && (node.flags & ts.NodeFlags.Using) !== 0) {
@@ -226,7 +233,7 @@ export function earlyControlFlowStaticSemanticsFailure(
                     return { node: declaration, message: "resource declaration requires an initialized identifier binding" };
                 const name = declaration.name.text;
                 if (name === "let" || names.has(name) ||
-                    strictModeBindingIdentifierNames.has(name) && isStrictCodeContext(declaration))
+                    strictModeBindingIdentifierNames.has(name) && context.strict)
                     return { node: declaration.name, message: "resource declaration has invalid or duplicate BoundNames" };
                 names.add(name);
             }
@@ -301,6 +308,20 @@ export function earlyControlFlowStaticSemanticsFailure(
                 if (defaultClause) return {node: clause, message: "switch CaseBlock contains more than one default clause"};
                 defaultClause = clause;
             }
+            const statements = node.clauses.flatMap(clause => Array.from(clause.statements));
+            const lexicalNames = new Map<string, ts.Declaration | undefined>();
+            const ordinaryFunction = (declaration: ts.Declaration | undefined): boolean => {
+                return !!declaration && ts.isFunctionDeclaration(declaration) && !declaration.asteriskToken &&
+                    !(ts.getModifiers(declaration)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ?? false);
+            };
+            for (const entry of statementListLexicallyDeclaredNames(statements, true)) {
+                const previous = lexicalNames.get(entry.name);
+                if (lexicalNames.has(entry.name) && (context.strict || !ordinaryFunction(previous) || !ordinaryFunction(entry.declaration)))
+                    return {node: entry.node, message: `CaseBlock LexicallyDeclaredNames contains duplicate '${entry.name}'`};
+                lexicalNames.set(entry.name, entry.declaration);
+            }
+            for (const entry of statementListVarDeclaredNames(statements))
+                if (lexicalNames.has(entry.name)) return {node: entry.node, message: `CaseBlock LexicallyDeclaredNames and VarDeclaredNames both contain '${entry.name}'`};
         }
         const iteration = ts.isForStatement(node) ||
             ts.isForInStatement(node) ||

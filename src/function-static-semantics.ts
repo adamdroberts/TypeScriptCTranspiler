@@ -2,6 +2,7 @@ import ts from "typescript";
 import { ecmaParseGoal, ecmaDirectivePrologueHasUseStrict } from "./ecmascript-source";
 import {
     bindingNameEntries,
+    statementListLexicallyDeclaredNames,
     strictModeBindingIdentifierNames,
 } from "./module-static-semantics";
 
@@ -434,18 +435,7 @@ function directBodyLexicalNames(
     body: ts.ConciseBody | undefined,
 ): ReturnType<typeof bindingNameEntries> {
     if (!body || !ts.isBlock(body)) return [];
-    const entries: ReturnType<typeof bindingNameEntries> = [];
-    for (const statement of body.statements) {
-        if (ts.isVariableStatement(statement) &&
-            (statement.declarationList.flags & ts.NodeFlags.BlockScoped) !== 0) {
-            for (const declaration of statement.declarationList.declarations) {
-                entries.push(...bindingNameEntries(declaration.name));
-            }
-        } else if (ts.isClassDeclaration(statement) && statement.name) {
-            entries.push({ name: statement.name.text, node: statement.name });
-        }
-    }
-    return entries;
+    return statementListLexicallyDeclaredNames(body.statements, false);
 }
 
 function functionLikeFailure(
