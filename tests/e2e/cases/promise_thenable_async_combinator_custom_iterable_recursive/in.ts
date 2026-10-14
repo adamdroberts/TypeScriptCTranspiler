@@ -8,7 +8,7 @@ class ThenableBag {
     }
 
     [Symbol.iterator](): IterableIterator<any> {
-        return this.items as unknown as IterableIterator<any>;
+        return this.items[Symbol.iterator]();
     }
 }
 

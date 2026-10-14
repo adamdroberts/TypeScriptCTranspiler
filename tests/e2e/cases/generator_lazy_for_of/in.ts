@@ -47,7 +47,7 @@ class NumberBag {
     }
 
     [Symbol.iterator](): IterableIterator<number> {
-        return this.items as unknown as IterableIterator<number>;
+        return this.items[Symbol.iterator]();
     }
 }
 

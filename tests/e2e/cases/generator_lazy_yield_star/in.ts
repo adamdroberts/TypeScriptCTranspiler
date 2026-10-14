@@ -4,7 +4,7 @@ class NumberBag {
         this.items = items;
     }
     [Symbol.iterator](): IterableIterator<number> {
-        return this.items as unknown as IterableIterator<number>;
+        return this.items[Symbol.iterator]();
     }
 }
 
@@ -51,7 +51,7 @@ console.log("Generator initialized lazily");
 console.log("--- 2. Stepping through next() ---");
 let step = g.next();
 while (!step.done) {
-    console.log("Yielded value:", step.value);
+    console.log("Yielded value:", String(step.value));
     step = g.next();
 }
 console.log("Generator done. Return value:", step.value);
