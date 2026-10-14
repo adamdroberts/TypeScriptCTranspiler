@@ -4734,6 +4734,55 @@
       "targets": [
         "sec-generatorstart#completed-result-method-realm"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/set-composition-source.property.test.ts",
+      "targets": [
+        "sec-getsetrecord#canonical-setlike-and-composition-source-records"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "set_composition_source_depth",
+      "targets": [
+        "sec-getsetrecord#canonical-setlike-and-composition-source-records"
+      ],
+      "stressReview": {
+        "dimension": "retained Set composition result source alias graph depth",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One shared generated alias graph verifies canonical Set composition result records in native property and typed CLI; compact operation, effect, metadata and abrupt partitions are independent of depth.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "set_composition_source",
+      "targets": [
+        "sec-getsetrecord#canonical-setlike-and-composition-source-records"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#setLikeRecord",
+      "targets": [
+        "sec-getsetrecord#canonical-setlike-and-composition-source-records"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#setComposition",
+      "targets": [
+        "sec-getsetrecord#canonical-setlike-and-composition-source-records"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#directIteratorElements",
+      "targets": [
+        "sec-getsetrecord#canonical-setlike-and-composition-source-records"
+      ]
     }
   ]
 }

@@ -1,0 +1,24 @@
+import {expect,test}from'bun:test';import ts from'typescript';import{mkdtemp,writeFile,rm,mkdir}from'node:fs/promises';import{tmpdir}from'node:os';import{join}from'node:path';import{buildProgram,resolvePackageRoot}from'../../src/program';import{sourceExpressionTexts}from'../../src/source-value-flow';import{compile}from'../../src/compile';
+import {setCompositionSourceInput}from'../e2e/generated-cases';
+const operations=['union','intersection','difference','symmetricDifference','isSubsetOf','isSupersetOf','isDisjointFrom'];
+async function facts(entry:string,source:string){await writeFile(entry,'export {};'+source+'console.log(query);');const built=buildProgram({entry,packageRoot:resolvePackageRoot()}),work:ts.Node[]=[built.entrySourceFile];let query:ts.Expression|undefined;while(work.length){const n=work.pop()!;if(ts.isCallExpression(n)&&n.getText().startsWith('console.log'))query=n.arguments[0];n.forEachChild(c=>{work.push(c)})}return sourceExpressionTexts(built.program,[query!],{roots:[entry]}).get(query!)??null;}
+const partitions=[...operations.map(op=>op.startsWith('is')?`const query=String(new Set(['17;','19;']).${op}(new Set(['19;','23;'])));`:`let query='empty';for(const value of new Set(['17;','19;']).${op}(new Set(['19;','23;'])))query=value;`),
+ `let query='17;';new Set(['x']).intersection({get size(){query='53;';return 0},get has(){query='59;';return function(){query='61;';return true}},get keys(){query='67;';return function(){query='71;';return ['x'][Symbol.iterator]()}}});`,
+ `let query='17;';try{new Set().union({size:NaN,get has(){query='53;';return ()=>true},keys(){return [][Symbol.iterator]()}})}catch(e){}`,
+ `let query='17;';try{new Set().union({size:0,has:0,get keys(){query='53;';return ()=>[][Symbol.iterator]()}})}catch(e){}`,
+ `let query='17;';try{Set.prototype.union.call({}, {get size(){query='53;';return 0},has(){return false},keys(){return [][Symbol.iterator]()}})}catch(e){}`,
+ `let query='17;';new Set().union({size:0,has(){return false},keys(){return {next(){query='59;';return {done:true,get value(){query='61;';return 'x'}}}}}});`,
+ `const query=Set.prototype.union.name+':'+Set.prototype.union.length;`,
+ `let query='normal';try{new Set.prototype.union(new Set())}catch(error){query=error instanceof TypeError?'type':'other';}`,
+ `let query='17;';const marker={};try{new Set().union({get size(){throw marker},get has(){query='53;';return ()=>true},keys(){return [][Symbol.iterator]()}})}catch(error){if(error!==marker)query='wrong';}`,
+ `let query='empty';for(const value of Reflect.apply(Set.prototype.union,new Set(['17;']),[new Set(['19;'])]))query=value;`,
+ `let query='empty';const set=new Set(['17;']);for(const value of set.union({size:1,has(){return false},keys(){set.add('53;');return ['19;'][Symbol.iterator]()}}))query=value;`,
+];
+test('Set composition source records preserve protocol effects and finite result supersets',async()=>{const root=await mkdtemp(join(tmpdir(),'tsc2c-set-composition-source-'));try{for(const[i,source]of partitions.entries()){const proof=await facts(join(root,i+'.mjs'),source),node=Bun.spawnSync(['node','-e',source+'require("node:fs").writeSync(1,String(query));'],{stdout:'pipe',stderr:'pipe'});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(proof).not.toBeNull();expect(proof!).toContain(node.stdout.toString());}
+ expect(await facts(join(root,'opaque.mjs'),`let query='empty';for(const value of new Set(['17;']).union(opaque))query=value;`)).toBeNull();
+ expect(await facts(join(root,'opaque-callback.mjs'),`let query='empty';for(const value of new Set(['17;']).intersection({size:1,has(){return opaque()},keys(){return ['19;'][Symbol.iterator]()}}))query=value;`)).toBeNull();
+}finally{await rm(root,{recursive:true,force:true})}});
+
+test('composition-derived finite sources execute through the shared AOT graph',async()=>{const root=await mkdtemp(join(tmpdir(),'tsc2c-set-source-native-'));try{for(const noGc of [false,true]){
+ const source=setCompositionSourceInput(noGc?3:512),entry=join(root,'main-'+noGc+'.mts'),output=entry+'-program';await writeFile(entry,source);const node=Bun.spawnSync(['node','--input-type=module','-e',ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});const diagnostics:string[]=[],r=await compile({entry,output,buildDir:output+'-build',noGc,diagnosticWriter:m=>diagnostics.push(m)});expect({code:r.exitCode,diagnostics}).toEqual({code:0,diagnostics:[]});const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:native.exitCode,stderr:native.stderr.toString(),stdout:native.stdout.toString()}).toEqual({code:0,stderr:'',stdout:node.stdout.toString()});
+}}finally{await rm(root,{recursive:true,force:true})}},900000);

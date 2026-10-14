@@ -1,3 +1,5 @@
+Represented Set composition source results and ordered SetLike intake through shared collection records and direct iterator traversal; exact membership and branch activation remain conservative.
+
 Corrected retained generator fixture consumers and expectations for Iterator helper materialization, actual iterator objects, missing throw methods and canonical delegation C operations.
 
 Restored the borrowed synchronous generator method Realm before completed iterator-result allocation, preserving yielded and delegated record ownership.

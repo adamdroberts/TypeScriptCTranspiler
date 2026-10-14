@@ -43,7 +43,7 @@ test('canonical collection records contain independent Node read, iteration and 
   const proof=await facts(join(directory,'receiver.js'),source),node=Bun.spawnSync(['node','-e',source+'require("node:fs").writeSync(1,String(query));'],{stdout:'pipe',stderr:'pipe'});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(proof).toContain(node.stdout.toString());
  }
  expect(await facts(join(directory,'opaque.mjs'),'export {};const map=new Map([["key","17;"]]);opaque(map);const query=map.get("key");')).toBeNull();
- expect(await facts(join(directory,'composition.mjs'),'export {};let query="empty";for(const value of new Set(["17;"]).union(new Set(["19;"])))query=value;')).toBeNull();
+ const composition=await facts(join(directory,'composition.mjs'),'export {};let query="empty";for(const value of new Set(["17;"]).union(new Set(["19;"])))query=value;');expect(composition).toContain('19;');
  const proxyPartitions=[
   'const map=new Map([["key","17;"]]);const callback=new Proxy(function(value){value.set("key","53;")},{});callback(map);const query=map.get("key");',
   'let query="17;";const callback=new Proxy(function(){query="67;"},{});new Map([["key","value"]]).forEach(callback);',
