@@ -58,6 +58,7 @@ export interface PrimitivePropertyReadDepthSpec {generator:"primitive-property-r
 export interface RestSourceLocationDepthSpec {generator:"rest-source-location-depth";depth:number;}
 export interface SourceAllocationDepthSpec {generator:"source-allocation-depth";depth:number;}
 export interface ListExtentCaptureDepthSpec {generator:"list-extent-capture-depth";depth:number;}
+export interface ModuleRejectionOriginDepthSpec {generator:"module-rejection-origin-depth";depth:number;}
 export interface PromiseStaticSourceDepthSpec {generator:"promise-static-source-depth";depth:number;}
 export interface CallbackTimerSourceDepthSpec {generator:"callback-timer-source-depth";depth:number;}
 export interface HasInstanceDepthSpec {generator:"has-instance-depth";depth:number;}
@@ -321,6 +322,7 @@ export type GeneratedCaseSpec =
     | RestSourceLocationDepthSpec
     | SourceAllocationDepthSpec
     | ListExtentCaptureDepthSpec
+    | ModuleRejectionOriginDepthSpec
     | PromiseStaticSourceDepthSpec
     | CallbackTimerSourceDepthSpec
     | HasInstanceDepthSpec
@@ -366,6 +368,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     }
     if(spec.generator==='list-extent-capture-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid List extent capture spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
+    if(spec.generator==='module-rejection-origin-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid Module rejection origin spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
     }
     if(spec.generator==='promise-static-source-depth'){
@@ -2014,6 +2020,7 @@ console.log("raw JSON text width:", valid);
         case "rest-source-location-depth": return restSourceLocationInput(spec.depth);
         case "source-allocation-depth": return sourceAllocationInput(spec.depth);
         case "list-extent-capture-depth": return listExtentCaptureInput(spec.depth);
+        case "module-rejection-origin-depth": return "import('./rejection-origin-0.mjs').then(()=>console.log('Module rejection:',false),error=>console.log('Module rejection:',error instanceof RangeError));\n";
         case "promise-static-source-depth": return promiseStaticSourceInput(spec.depth);
         case "callback-timer-source-depth": return callbackTimerSourceInput(spec.depth);
         case "has-instance-depth": return hasInstanceInput(spec.depth);
@@ -2157,6 +2164,7 @@ export function moduleFailureDepthInput(depth:number,phase:'load'|'link'='load')
 }
 export function generateE2eCaseFiles(raw:string,filename:string):Readonly<Record<string,string>>{
     const spec=parseGeneratedCaseSpec(raw,filename);
+    if(spec.generator==='module-rejection-origin-depth')return moduleRejectionOriginInput(spec.depth).files;
     if(spec.generator==='lexical-source-capture-depth')return lexicalSourceCaptureFiles;
     if(spec.generator==='module-async-cycle-depth')return moduleAsyncCycleInput(spec.depth).files;
     if(spec.generator==='module-iterator-import-depth')return moduleIteratorImportInput(spec.depth).files;
@@ -2350,4 +2358,10 @@ export function callbackTimerSourceInput(depth:number):string {
 export function promiseStaticSourceInput(depth:number):string {
  const owners=Array.from({length:depth},(_,index)=>`const staticPromiseOwner${index}:any=${index?`{body:staticPromiseOwner${index-1}.body,previous:staticPromiseOwner${index-1}}`:`{body:'return 79;',previous:null}`};`);
  return `{${owners.join('\n')}Promise.try((body:string)=>body,staticPromiseOwner${depth-1}.body).then(body=>console.log('static Promise source:',Function(body)()));}\n`;
+}
+
+export function moduleRejectionOriginInput(depth:number):{source:string;files:Record<string,string>} {
+ const files:Record<string,string>={'rejection-origin-leaf.mjs':"await Promise.resolve().then(()=>Promise.reject(new RangeError()));\n"};
+ for(let index=0;index<depth;index++)files[`rejection-origin-${index}.mjs`]=`import './${index+1<depth?'rejection-origin-'+(index+1):'rejection-origin-leaf'}.mjs';\n`;
+ return {files,source:"import './rejection-origin-0.mjs';\n"};
 }

@@ -13053,8 +13053,6 @@ class Emitter {
             out.line("        if (setjmp(_test262_event_frame.jb) == 0) {");
             out.line("            tsc_run_event_loop();");
             if(agentEntries.length)out.line("            tsc_test262_agents_finish();");
-            for (const modId of evaluationRoots)
-                out.line(`            { tsc_promise_t* completion = mod_runtime_evaluation(${this.moduleRuntimeIndex(modId)}); if (tsc_promise_is_rejected(completion)) tsc_throw_value(tsc_promise_reason(completion)); if (tsc_promise_is_pending(completion)) return 13; }`);
             out.line("            tsc_try_pop();");
             out.line("        } else {");
             out.line("            tsc_try_pop();");
@@ -13062,6 +13060,10 @@ class Emitter {
             out.line("            return 0;");
             out.line("        }");
             out.line("    }");
+            for(const modId of evaluationRoots){
+                const index=this.moduleRuntimeIndex(modId),origin=`_test262_source_origins[tsc_module_error_source_index(mod_runtime_graph(), ${index})]`;
+                out.line(`    { tsc_promise_t* completion = mod_runtime_evaluation(${index}); if (tsc_promise_is_rejected(completion)) { tsc_test262_write_throw("${scenario}", ${origin}, tsc_promise_reason(completion)); return 0; } if (tsc_promise_is_pending(completion)) return 13; }`);
+            }
             out.line(`    tsc_test262_write_normal("${scenario}", ${observation.async ? "true" : "false"});`);
         } else {
             for (const modId of this.graph.topoOrder) {
