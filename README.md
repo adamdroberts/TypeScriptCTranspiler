@@ -15,7 +15,7 @@ Substantial working subset, backed by native end-to-end regressions including a 
 | Phase | Feature | Status |
 |-------|---------|--------|
 | 0 | Bootstrap (gcc driver, build dir, CLI, `--no-gc` fallback) | ✅ |
-| 1 | Typed core — primitives, operators, control flow, `switch` (with exhaustiveness), `??`, `?.`, `for-in`, `void`, comma operator, tagged templates including `String.raw` | ✅ |
+| 1 | Typed core — primitives, operators, control flow, `switch` (including unmatched normal completion), `??`, `?.`, `for-in`, `void`, comma operator, tagged templates including `String.raw` | ✅ |
 | 2a | Typed arrays — literal (with spread `[...a, b]`), indexing, `.length`, push/pop/shift/unshift, every non-mutating method (`at`, `slice`, `concat`, `join`, `keys`/`values`/`entries`, `flat`/`flatMap`, `toReversed`/`toSorted`/`toSpliced`/`with`, `lastIndexOf`/`indexOf`/`includes`, `reduce`/`reduceRight`, `findLast`/`findLastIndex`), every mutating method (`sort`/`reverse`/`splice`/`copyWithin`/`fill`), and statics (`Array.from`/`Array.of`/`Array.isArray`) | ✅ |
 | 2b | Classes — fields, ctor, methods, `new`, `this`, `extends`, `super()`, static fields/methods, **static initialization blocks**, abstract/access/readonly modifiers, generic classes (erased), computed member names | ✅ |
 | 2c | Higher-order array methods (`forEach`/`map`/`filter`/`reduce`/`reduceRight`/`find`/`findIndex`/`findLast`/`findLastIndex`/`some`/`every`) with **inline arrows OR named function references OR closure callback values**, receiver array callback arguments | ✅ |
