@@ -1,3 +1,5 @@
+Corrected retained generator fixture consumers and expectations for Iterator helper materialization, actual iterator objects, missing throw methods and canonical delegation C operations.
+
 Restored the borrowed synchronous generator method Realm before completed iterator-result allocation, preserving yielded and delegated record ownership.
 
 Routed primitive property writes and updates through the captured Reference and shared ToObject/Set path, preserving original receivers and current-Realm prototypes.

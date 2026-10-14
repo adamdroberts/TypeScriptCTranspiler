@@ -28,7 +28,7 @@ let thrownValue: any;
 try {
     thrown.throw("finalizer-throw");
 } catch (error: any) {
-    thrownValue = error;
+    thrownValue = error instanceof TypeError;
 }
 console.log("finally-yield-star-throw:", thrownFirst.done, thrownFirst.value, thrownSecond.done, thrownSecond.value, thrownValue);
 

@@ -43,7 +43,7 @@ const step2 = g1.next();
 console.log("Step 2 done:", step2.done, "value:", step2.value);
 
 console.log("--- 3. Materializing the rest with an array method (map) ---");
-const mapped = (g1 as any).map((x: number) => x * 2);
+const mapped = Array.from(g1.map((x: number) => x * 2));
 console.log("Mapped results:", mapped.join(", "));
 
 console.log("--- 4. Checking completed state and return value ---");
