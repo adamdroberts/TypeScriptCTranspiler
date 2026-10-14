@@ -13704,13 +13704,27 @@ static tsc_value_t fs_stats_check_mode(void* env,tsc_value_t receiver,tsc_array_
     tsc_value_t kind=args&&args->len?TSC_ARR(tsc_value_t,args,0):tsc_value_undefined();
     return tsc_value_bool(tsc_value_eq(mode,kind));
 }
+static void fs_stats_publish_date(tsc_value_t receiver, tsc_str_t* name, tsc_value_t value) {
+    if (!tsc_value_is_object(receiver) ||
+        !tsc_value_define_property_desc(receiver,name,value,true,true,true,true,true,true,true))
+        tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("Stats date publication requires a writable object"));
+}
+static tsc_value_t fs_stats_date_set(void* env,tsc_value_t receiver,tsc_array_t* args) {
+    const fs_stats_member_t* member=env;
+    tsc_value_t value=args&&args->len?TSC_ARR(tsc_value_t,args,0):tsc_value_undefined();
+    fs_stats_publish_date(receiver,tsc_str_from_cstr(member->name),value);
+    return tsc_value_undefined();
+}
 static tsc_value_t fs_stats_member_apply(void* env,tsc_value_t receiver,tsc_array_t* args) {
     (void)args;const fs_stats_member_t* member=env;
     if(member->date) {
+        void* volatile receiver_root=tsc_value_gc_root(receiver);
         tsc_str_t* name=tsc_str_from_cstr(member->name);
         tsc_str_t* milliseconds=tsc_str_concat(name,tsc_str_from_lit("Ms",2));
-        tsc_value_t value=tsc_value_date(tsc_date_from_ms(tsc_value_to_number(tsc_value_get_prop(receiver,milliseconds))));
-        (void)tsc_value_define_property_desc(receiver,name,value,true,true,true,true,true,true,true);
+        tsc_value_t value=tsc_value_date(tsc_date_from_value(tsc_value_get_prop(receiver,milliseconds)));
+        void* volatile value_root=tsc_value_gc_root(value);
+        fs_stats_publish_date(receiver,name,value);
+        (void)receiver_root;(void)value_root;
         return value;
     }
     tsc_value_t method=tsc_value_get_prop(receiver,tsc_str_from_lit("_checkModeProperty",18));
@@ -13729,10 +13743,14 @@ tsc_value_t tsc_value_fs_stats(tsc_fs_stats_t* stats) {
         for(size_t index=0;index<sizeof(fs_stats_members)/sizeof(fs_stats_members[0]);++index) {
             const fs_stats_member_t* member=&fs_stats_members[index];if(!member->kind&&!member->date)continue;
             tsc_str_t* name=tsc_str_from_cstr(member->name);
-            method=tsc_value_function_named_kind(fs_stats_member_apply,NULL,(void*)member,0,member->date?tsc_str_concat(tsc_str_from_lit("get ",4),name):name,TSC_FUNCTION_IDENTITY_BUILTIN);
+            method=tsc_value_function_named_kind(fs_stats_member_apply,NULL,(void*)member,0,member->date?tsc_str_from_lit("get",3):name,TSC_FUNCTION_IDENTITY_BUILTIN);
             if(member->date) {
                 tsc_value_t descriptor=tsc_value_object(tsc_object_new());
-                tsc_value_set_prop(descriptor,tsc_str_from_lit("get",3),method);tsc_value_set_prop(descriptor,tsc_str_from_lit("configurable",12),tsc_value_bool(true));
+                tsc_value_set_prop(descriptor,tsc_str_from_lit("get",3),method);
+                method=tsc_value_function_named_kind(fs_stats_date_set,NULL,(void*)member,1,tsc_str_from_lit("set",3),TSC_FUNCTION_IDENTITY_BUILTIN);
+                tsc_value_set_prop(descriptor,tsc_str_from_lit("set",3),method);
+                tsc_value_set_prop(descriptor,tsc_str_from_lit("enumerable",10),tsc_value_bool(true));
+                tsc_value_set_prop(descriptor,tsc_str_from_lit("configurable",12),tsc_value_bool(true));
                 (void)tsc_value_define_property_descriptor(realm->prototype,name,descriptor);
             } else (void)tsc_value_define_property_desc(realm->prototype,name,method,true,true,true,true,true,true,true);
         }
