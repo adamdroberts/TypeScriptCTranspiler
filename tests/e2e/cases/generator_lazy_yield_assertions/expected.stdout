@@ -1,11 +1,11 @@
 created
 start
-next1: {"done":false,"value":"as"}
+next1: {"value":"as","done":false}
 as: OK
-next2: {"done":false,"value":"type"}
+next2: {"value":"type","done":false}
 type: 42
-next3: {"done":false,"value":"satisfies"}
+next3: {"value":"satisfies","done":false}
 satisfies: box
-next4: {"done":false,"value":"nonnull"}
+next4: {"value":"nonnull","done":false}
 nonnull: value
-next5: {"done":true,"value":"done"}
+next5: {"value":"done","done":true}

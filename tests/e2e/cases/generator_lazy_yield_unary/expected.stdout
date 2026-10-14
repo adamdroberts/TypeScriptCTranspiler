@@ -1,15 +1,15 @@
 created
 start
-next1: {"done":false,"value":"first"}
+next1: {"value":"first","done":false}
 not: false
-next2: {"done":false,"value":"second"}
+next2: {"value":"second","done":false}
 pos: 42
-next3: {"done":false,"value":"third"}
+next3: {"value":"third","done":false}
 neg: -10
-next4: {"done":false,"value":"fourth"}
+next4: {"value":"fourth","done":false}
 tilde: -6
-next5: {"done":false,"value":"fifth"}
+next5: {"value":"fifth","done":false}
 typeof: string
-next6: {"done":false,"value":"sixth"}
+next6: {"value":"sixth","done":false}
 void: undefined
-next7: {"done":true,"value":"done"}
+next7: {"value":"done","done":true}

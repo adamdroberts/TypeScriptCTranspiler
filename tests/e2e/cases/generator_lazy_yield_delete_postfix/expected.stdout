@@ -1,11 +1,11 @@
-next1: {"done":false,"value":"object"}
+next1: {"value":"object","done":false}
 delete: true
-next2: {"done":false,"value":"counter"} false y
+next2: {"value":"counter","done":false} false y
 post-prop: 4
-next3: {"done":false,"value":"array"} 5
+next3: {"value":"array","done":false} 5
 post-index: 20
-next4: {"done":false,"value":"prefix-counter"} 10,19,30
+next4: {"value":"prefix-counter","done":false} 10,19,30
 prefix-prop: 8
-next5: {"done":false,"value":"prefix-array"} 8
+next5: {"value":"prefix-array","done":false} 8
 prefix-index: 3
-next6: {"done":true,"value":"done"} 3,3,5
+next6: {"value":"done","done":true} 3,3,5

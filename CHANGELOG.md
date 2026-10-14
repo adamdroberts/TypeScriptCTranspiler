@@ -1,3 +1,5 @@
+Aligned generator result property order and completed delegated-return expectations with independent unchanged Script execution.
+
 Corrected retained generator captured tag/member/unary/return expectations using independent unchanged Script observations.
 
 Materialized the parameterized generator Iterator helper and corrected its remaining-value and terminal-next observations from independent Node.
