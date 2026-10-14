@@ -1,3 +1,5 @@
+Selected exact generated Function source records and connected free names to the actual constructor Realm global environment.
+
 Projected generated eval var/function declarations into actual Realm and caller variable binding destinations through one declaration graph.
 
 Retained source Realm global and eval intrinsic owners, selecting direct/indirect AOT environments from actual intrinsic identity.

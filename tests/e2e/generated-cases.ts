@@ -55,6 +55,7 @@ export interface CollectionSourceAliasDepthSpec {generator:"collection-source-al
 export interface PrimitivePropertyPrototypeDepthSpec {generator:"primitive-property-prototype-depth";depth:number;}
 export interface GeneratorMethodOwnerDepthSpec {generator:"generator-method-owner-depth";depth:number;}
 export interface PrimitivePropertyReadDepthSpec {generator:"primitive-property-read-depth";depth:number;}
+export interface FunctionSourceOwnerDepthSpec {generator:"function-source-owner-depth";depth:number;}
 export interface EvalDeclarationDepthSpec {generator:"eval-declaration-depth";depth:number;}
 export interface EvalRealmAliasDepthSpec {generator:"eval-realm-alias-depth";depth:number;}
 export interface PromiseReactionDepthSpec {generator:"promise-reaction-depth";depth:number;}
@@ -303,6 +304,7 @@ export type GeneratedCaseSpec =
     | SwitchCaseBlockFunctionWorklistWidthSpec
     | SwitchCaseBlockGeneratorCaptureWidthSpec
     | SwitchCaseBlockAsyncCaptureWidthSpec
+    | FunctionSourceOwnerDepthSpec
     | EvalDeclarationDepthSpec
     | EvalRealmAliasDepthSpec
     | PromiseReactionDepthSpec
@@ -324,6 +326,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     const spec = value as Record<string, unknown>;
     if(spec.generator==='primitive-property-read-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid primitive property read spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
+    if(spec.generator==='function-source-owner-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid Function source owner spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
     }
     if(spec.generator==='eval-declaration-depth'){
@@ -1921,6 +1927,7 @@ console.log("raw JSON text width:", valid);
         case "primitive-property-prototype-depth": return primitivePropertyPrototypeInput(spec.depth);
         case "generator-method-owner-depth": return generatorMethodOwnerInput(spec.depth);
         case "primitive-property-read-depth": return primitivePropertyReadInput(spec.depth);
+        case "function-source-owner-depth": return functionSourceOwnerInput(spec.depth);
         case "eval-declaration-depth": return evalDeclarationInput(spec.depth);
         case "eval-realm-alias-depth": return evalRealmAliasInput(spec.depth);
         case "promise-reaction-depth": return promiseReactionInput(spec.depth);
@@ -2171,4 +2178,9 @@ export function evalRealmAliasInput(depth:number,foreign=false):string {
 export function evalDeclarationInput(depth:number):string {
  const declarations=Array.from({length:depth},(_,index)=>`var source${index}=${index?'source'+(index-1):"'79;'"};`).join('');
  return `{(0,eval)(${JSON.stringify(declarations)});console.log('declaration:',eval((globalThis as any).source${depth-1}));}\n`;
+}
+
+export function functionSourceOwnerInput(depth:number):string {
+ const aliases=Array.from({length:depth},(_,index)=>`const owner${index}:any=${index?'owner'+(index-1):'Function(\"return \'61;\'\")'};`);
+ return `{${aliases.join('\n')}const opaque:any=Function('return missing()');console.log('Function:',eval(owner${depth-1}()));}\n`;
 }

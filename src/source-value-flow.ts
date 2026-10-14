@@ -14,7 +14,7 @@ import * as path from "node:path";
 import { createHash } from "node:crypto";
 import {nativePrimitiveFormat} from "./util-format-source";
 import { staticStringExpressionTexts } from "./module-specifiers";
-import { functionKindForDeclaration, functionConstructorDisplaySource, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
+import { functionKindForDeclaration, functionConstructorDisplaySource, functionConstructorSourceKey, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
 import {declarativeSourceBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding, sourceBindingTarget} from "./source-bindings";
 import {runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeUtilExports, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
@@ -338,7 +338,7 @@ class SourceValueFlow {
     private readonly callablePrototypes = new Map<DynamicFunctionKind, Cell>();
     private ordinaryObjectPrototype?: Cell;
     private ordinaryArrayPrototype?: Cell;
-    private readonly generated = new Map<DynamicFunctionKind, Cell[]>();
+    private readonly generated = new Map<string,{entry:FunctionConstructorEntry;value:Cell;environment:EvaluationEnvironment|null}>();
     private readonly currentRealm = this.newRealm();
     private readonly realmAllocations=new Map<ts.Node,SourceRealmRecord>();
     private readonly global: Atom = this.currentRealm.global;
@@ -445,14 +445,15 @@ class SourceValueFlow {
             values.push(completion); this.evaluations.set(contextKey, values);
         }
         for (const entry of entries.functions ?? []) {
-            const file = entry.entry ? program.getSourceFile(path.resolve(entry.entry)) : undefined;
-            const statement = file?.statements[0];
-            if (!statement || !ts.isExpressionStatement(statement)) continue;
-            const values = this.generated.get(entry.kind ?? "ordinary") ?? [];
-            let definition: ts.Expression = statement.expression;
-            while (ts.isParenthesizedExpression(definition)) definition = definition.expression;
-            if (functionNode(definition)) this.dynamicSourceTexts.set(definition, functionConstructorDisplaySource(entry));
-            values.push(this.cell(statement.expression)); this.generated.set(entry.kind ?? "ordinary", values);
+            const key=functionConstructorSourceKey(entry),file=entry.entry?program.getSourceFile(path.resolve(entry.entry)):undefined;
+            const statement=file?.statements[0],value=this.newCell();
+            if(!file||!statement||!ts.isExpressionStatement(statement)){this.publish(value,this.abrupt);this.generated.set(key,{entry,value,environment:null});continue;}
+            let definition:ts.Expression=statement.expression;
+            while(ts.isParenthesizedExpression(definition))definition=definition.expression;
+            const environment:EvaluationEnvironment={source:file,direct:false,realms:this.newCell(),callers:new Map(),references:new Map(),declarations:new Map()};
+            this.evaluationEnvironments.set(file,environment);
+            if(functionNode(definition))this.dynamicSourceTexts.set(definition,functionConstructorDisplaySource(entry));
+            this.copy(this.cell(statement.expression),value);this.generated.set(key,{entry,value,environment});
         }
         for (const file of program.getSourceFiles()) {
             if (sources && !sources.has(file)) continue;
@@ -949,12 +950,16 @@ class SourceValueFlow {
         if(environment)return environment.realms;
         return this.currentRealmCell;
     }
+    private connectGeneratedEnvironment(environment:EvaluationEnvironment,caller:ts.Node,realm:SourceRealmRecord):boolean {
+        if(environment.direct)this.copy(this.executionRealms(caller),environment.realms);else this.publish(environment.realms,realm.record);
+        let realms=environment.callers.get(caller);if(!realms){realms=new Set();environment.callers.set(caller,realms);}if(realms.has(realm))return false;realms.add(realm);
+        for(const[node,reference]of environment.references)this.connectEvaluationReference(environment,node,reference,caller,realm);
+        return true;
+    }
     private connectEvaluationEnvironment(source:string,caller:ts.Node,direct:boolean,realm:SourceRealmRecord):void {
         for(const environment of this.evaluationSourceEnvironments.get(source)??[]) {
             if(environment.direct!==direct)continue;
-            if(direct)this.copy(this.executionRealms(caller),environment.realms);else this.publish(environment.realms,realm.record);
-            let realms=environment.callers.get(caller);if(!realms){realms=new Set();environment.callers.set(caller,realms);}if(realms.has(realm))continue;realms.add(realm);
-            for(const[node,reference]of environment.references)this.connectEvaluationReference(environment,node,reference,caller,realm);
+            if(!this.connectGeneratedEnvironment(environment,caller,realm))continue;
             if(direct&&isStrictCodeContext(caller))continue;
             for(const[name,declaration]of environment.declarations){
                 const binding=this.binding(declaration.node);
@@ -4281,9 +4286,24 @@ class SourceValueFlow {
                     const evolvingPrimitiveResult = constructorArguments !== undefined || atom.tag === "builtin" && (atom.normalResult === "primitive-string" || atom.name === "Symbol" || NUMERIC_CONVERSIONS.has(atom.name));
                     if (!evolvingPrimitiveResult && (atom.tag !== "operation" || PROPERTY_MUTATIONS.has(atom.operation)) && handled(atom, signature)) continue;
                     if (atom.tag === "intrinsic" && atom.domain === "constructor") {
-                        const generated = this.generated.get(atom.kind);
-                        if (!generated) this.publish(result!,this.pendingSource);
-                        for (const value of generated ?? []) this.copy(value, result!);
+                        const proofs=constructorArguments?.map(input=>this.primitiveChoiceProof(input));
+                        if(!proofs||proofs.some(proof=>!proof.textComplete)){
+                            let admitted=false;
+                            for(const generated of this.generated.values()){
+                                if((generated.entry.kind??"ordinary")!==atom.kind)continue;
+                                admitted=true;if(generated.environment)this.connectGeneratedEnvironment(generated.environment,node,atom.realm??this.currentRealm);
+                                this.copy(generated.value,result!);
+                            }
+                            if(!admitted)this.publish(result!,this.pendingSource);
+                            continue;
+                        }
+                        for(const tuple of this.primitiveTuples(proofs.map(proof=>proof.values))){
+                            const source={kind:atom.kind,parameters:tuple.slice(0,-1).map(String).join(","),body:String(tuple.at(-1)??""),...(this.domain?{domain:this.domain}:{})};
+                            const generated=this.generated.get(functionConstructorSourceKey(source));
+                            if(!generated){this.publish(result!,this.pendingSource);continue;}
+                            if(generated.environment)this.connectGeneratedEnvironment(generated.environment,node,atom.realm??this.currentRealm);
+                            this.copy(generated.value,result!);
+                        }
                     } else if (atom.tag === "builtin") {
                         if(atom.name==="Map"||atom.name==="Set"){
                             if(!invocation.construct){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));}

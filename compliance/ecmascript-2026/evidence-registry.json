@@ -2897,7 +2897,8 @@
       "targets": [
         "sec-json.parse#ordered-text-parse-and-callable-reviver-root",
         "sec-createjsonparserecord#token-interval-and-original-value-record-tree",
-        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context"
+        "sec-internalizejsonproperty#live-postorder-values-and-unmodified-source-context",
+        "sec-createdynamicfunction#exact-function-source-and-realm-records"
       ]
     },
     {
@@ -5516,6 +5517,76 @@
       "id": "src/source-value-flow.ts#binding",
       "targets": [
         "sec-evaldeclarationinstantiation#canonical-generated-declaration-destinations"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/function-source-owner.property.test.ts",
+      "targets": [
+        "sec-createdynamicfunction#exact-function-source-and-realm-records"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/function-source-text.property.test.ts",
+      "targets": [
+        "sec-createdynamicfunction#exact-function-source-and-realm-records"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/function-body-completion-source.property.test.ts",
+      "targets": [
+        "sec-createdynamicfunction#exact-function-source-and-realm-records"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/runtime-code-aot.property.test.ts",
+      "targets": [
+        "sec-createdynamicfunction#exact-function-source-and-realm-records"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "function_source_owner_depth",
+      "targets": [
+        "sec-createdynamicfunction#exact-function-source-and-realm-records"
+      ],
+      "stressReview": {
+        "dimension": "generated Function source-owner alias graph depth",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One shared generated alias graph checks exact source-owner propagation independently of parameter, Realm, completion and opaque semantic partitions.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#generated",
+      "targets": [
+        "sec-createdynamicfunction#exact-function-source-and-realm-records"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#connectGeneratedEnvironment",
+      "targets": [
+        "sec-createdynamicfunction#exact-function-source-and-realm-records"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#invoke",
+      "targets": [
+        "sec-createdynamicfunction#exact-function-source-and-realm-records"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/function-constructor-source.ts#functionConstructorSourceKey",
+      "targets": [
+        "sec-createdynamicfunction#exact-function-source-and-realm-records"
       ]
     }
   ]
