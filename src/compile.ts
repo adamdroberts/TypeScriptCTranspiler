@@ -136,6 +136,7 @@ const RUNTIME_SOURCES = [
     "tsc_console_owner.c",
     "tsc_weak_collection.c",
     "tsc_fs_dirent.c",
+    "tsc_fs_owner.c",
     "tsc_promise.c"
 ];
 const NODE_EMBED_RUNTIME_SOURCES = ["tsc_node_embed.cc"];

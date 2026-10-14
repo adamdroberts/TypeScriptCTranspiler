@@ -18,7 +18,7 @@ import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, functionConstructorSourceKey, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
 import {declarativeSourceBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding, sourceBindingTarget} from "./source-bindings";
-import {runtimeDynamicFunctionDescriptors,runtimeGeneratorMethods,runtimeCallbackTimerDescriptors,runtimeAtomicsMethods,runtimeTypedArrayDescriptors,runtimeMathMethods,runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeUtilExports, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
+import {runtimeDynamicFunctionDescriptors,runtimeGeneratorMethods,runtimeCallbackTimerDescriptors,runtimeAtomicsMethods,runtimeTypedArrayDescriptors,runtimeMathMethods,runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeUtilExports, runtimeFsExports, runtimeFsConstants, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
     readonly roots?: readonly string[];
@@ -276,6 +276,8 @@ class SourceValueFlow {
     private readonly evaluationDeclarationBindings=new Map<Cell,{origins:Set<ts.Node>;fallback?:Cell}>();
     private readonly utilModules = new Map<boolean,{value:Cell;owner:ObjectOwner}>();
     private readonly utilExportValues = new Map<string,Cell>();
+    private readonly fsModules = new Map<string,{value:Cell;owner:ObjectOwner}>();
+    private readonly fsExportValues = new Map<string,Cell>();
     private readonly globalLexicals = new Map<string, Cell>();
     private readonly collectionKeys=new Map<Cell,Cell>();
     private readonly collectionPrototypes=new Map<CollectionKind,Cell>();
@@ -977,6 +979,16 @@ class SourceValueFlow {
                 for(const[caller,realms]of environment.callers)for(const realm of realms)this.connectEvaluationReference(environment,node,reference,caller,realm);
             }
             return reference.value;
+        }
+        for(const declaration of origin?.declarations??[]){
+            let current:ts.Node|undefined=declaration;while(current&&!ts.isImportDeclaration(current)&&!ts.isSourceFile(current))current=current.parent;
+            if(!current||!ts.isImportDeclaration(current)||!ts.isStringLiteralLike(current.moduleSpecifier))continue;
+            const specifier=current.moduleSpecifier.text,promises=["fs/promises","node:fs/promises"].includes(specifier);
+            if(!promises&&!["fs","node:fs"].includes(specifier))continue;
+            if(current.importClause?.isTypeOnly||ts.isImportSpecifier(declaration)&&declaration.isTypeOnly)continue;
+            if(ts.isImportSpecifier(declaration))return this.fsExport(promises,(declaration.propertyName??declaration.name).text);
+            if(ts.isNamespaceImport(declaration))return this.fsModule(promises,true);
+            if(ts.isImportClause(declaration)&&declaration.name)return this.fsModule(promises,false);
         }
         for(const declaration of origin?.declarations??[]){
             let current:ts.Node|undefined=declaration;
@@ -2084,6 +2096,35 @@ class SourceValueFlow {
         const binding = runtimeGlobalBindings.get(key);
         return binding?.kind === "value" && !binding.writable && !binding.configurable;
     }
+    private fsExport(promises:boolean,name:string):Cell {
+        const key=promises+":"+name,prior=this.fsExportValues.get(key);if(prior)return prior;
+        const value=this.newCell();this.fsExportValues.set(key,value);
+        if(!promises&&name==="promises")this.copy(this.fsModule(true,false),value);
+        else if(promises&&name==="constants")this.copy(this.fsExport(false,name),value);
+        else if(name==="constants") {
+            const prototype=this.newCell();this.publish(prototype,this.primitive(null));
+            const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype,ordinary:true};this.publish(value,{tag:"object",owner});
+            for(const name of runtimeFsConstants){const constant=this.newCell();this.publish(constant,this.nonString);this.defineField(owner,name,constant,false);}
+        }
+        else {
+            const fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};
+            this.copy(this.opaqueMutation,fields.shape);
+            this.publish(value,{tag:"builtin",name:"fs:"+key,normalResult:"unknown",fields});
+        }
+        return value;
+    }
+    private fsModule(promises:boolean,namespace:boolean):Cell {
+        const key=promises+":"+namespace,prior=this.fsModules.get(key);if(prior)return prior.value;
+        const prototype=namespace?this.newCell():this.objectPrototype();if(namespace)this.publish(prototype,this.primitive(null));
+        const value=this.newCell(),owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype,ordinary:true};
+        this.fsModules.set(key,{value,owner});this.publish(value,{tag:"object",owner});
+        if(!namespace)this.copy(this.opaqueMutation,owner.shape);
+        for(const name of runtimeFsExports.get(promises?"promises":"sync")!)this.defineField(owner,name,this.fsExport(promises,name));
+        this.defineField(owner,"constants",this.fsExport(false,"constants"));
+        if(!promises){this.defineField(owner,"promises",this.fsExport(false,"promises"));this.defineField(owner,"Dirent",this.fsExport(false,"Dirent"));}
+        if(namespace)this.defineField(owner,"default",this.fsModule(promises,false));
+        return value;
+    }
     private utilExport(name:string):Cell {
         const prior=this.utilExportValues.get(name);if(prior)return prior;
         const value=this.newCell();this.utilExportValues.set(name,value);
@@ -2144,6 +2185,7 @@ class SourceValueFlow {
             cell = this.newCell();this.currentRealm.bindings.set(key,cell);
             if (!this.immutableGlobalBinding(key)) this.copy(this.globalMutation,cell);
             if(runtimeCallbackTimerDescriptors.has(key))this.publish(cell,this.operation(`callback-timer:${key}`));
+            if (key === "fs") this.copy(this.fsModule(false,false),cell);
             if (key === "Function") this.publish(cell,this.intrinsic("constructor","ordinary"));
             if (key === "eval") this.publish(cell,this.realmOperation(this.currentRealm,"eval"));
             if (key === "require") this.publish(cell,this.operation("native-require"));
@@ -4780,7 +4822,7 @@ class SourceValueFlow {
                             this.copy(generated.value,result!);
                         }
                     } else if (atom.tag === "builtin") {
-                        if (atom.name === "Buffer" || atom.name.startsWith("Buffer.")) {
+                        if (atom.name === "Buffer" || atom.name.startsWith("Buffer.") || atom.name.startsWith("fs:")) {
                             this.onActive(node, () => {
                                 this.opaqueEffect(node);
                                 for (const actual of argv ?? (invocation.sequence ? [this.allArgumentValues(invocation.sequence)] : []))

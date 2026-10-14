@@ -2084,6 +2084,7 @@ interface FSFileHandle {
     [Symbol.asyncDispose](...ignored: any[]): Promise<void>;
 }
 interface FSPromises {
+    readonly constants: FSConstants;
     readFile(path: FSPathLike, options: FSPromisesReadFileBufferOptions, ...ignored: any[]): Promise<Buffer>;
     readFile(path: FSPathLike, options?: FSPromisesReadFileStringOptions, ...ignored: any[]): Promise<string>;
     open(path: FSPathLike, flags?: string | number, mode?: number, ...ignored: any[]): Promise<FSFileHandle>;
@@ -2247,6 +2248,7 @@ declare module "node:fs" {
     export default defaultFs;
 }
 declare module "fs/promises" {
+    export const constants: FSConstants;
     export const open: FSPromises["open"];
     export const readFile: FSPromises["readFile"];
     export const writeFile: FSPromises["writeFile"];
@@ -2286,6 +2288,7 @@ declare module "fs/promises" {
     export default defaultPromises;
 }
 declare module "node:fs/promises" {
+    export const constants: FSConstants;
     export const open: FSPromises["open"];
     export const readFile: FSPromises["readFile"];
     export const writeFile: FSPromises["writeFile"];

@@ -1,0 +1,6 @@
+tsc_fs_promises_ftruncate_async
+tsc_fs_promises_fsync_async
+tsc_fs_promises_fdatasync_async
+tsc_fs_promises_fchmod_async
+tsc_fs_promises_fchown_async
+tsc_fs_promises_futimes_async

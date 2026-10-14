@@ -20,7 +20,7 @@ export const runtimeFsExports: ReadonlyMap<"sync" | "promises", ReadonlySet<stri
     const definition = fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_fs_operations.def"), "utf8");
     for (const line of definition.split(/\r?\n/)) {
         if (!line.startsWith("TSC_FS_EXPORT")) continue;
-        const match = /^TSC_FS_EXPORT\((SYNC|PROMISES), (\w+)\)$/.exec(line);
+        const match = /^TSC_FS_EXPORT\((SYNC|PROMISES), (\w+), (\d+)\)$/.exec(line);
         if (!match) throw new Error("filesystem operation collection cannot be represented");
         const channel = channels.get(match[1] === "SYNC" ? "sync" : "promises")!;
         if (channel.has(match[2]!)) throw new Error("filesystem operation collection cannot be represented");
@@ -29,6 +29,12 @@ export const runtimeFsExports: ReadonlyMap<"sync" | "promises", ReadonlySet<stri
     if ([...channels.values()].some(channel => channel.size === 0)) throw new Error("filesystem operation collection cannot be represented");
     return channels;
 })();
+
+export const runtimeFsConstants: ReadonlySet<string> = new Set(
+    [...fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_fs_operations.def"), "utf8")
+        .matchAll(/^TSC_FS_CONSTANT\((\w+), [^)]+\)$/gm)].map(match => match[1]!),
+);
+if (!runtimeFsConstants.size) throw new Error("filesystem operation collection cannot be represented");
 
 /** Host import publication uses the same collection as the native module. */
 export const runtimeUtilExports: ReadonlySet<string> = new Set(

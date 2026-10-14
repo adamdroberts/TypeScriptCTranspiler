@@ -1857,6 +1857,12 @@ void tsc_cross_post_settle(tsc_promise_t* p, tsc_value_t value, bool is_error);
 void tsc_dispatch_task_scheduled(void);
 
 /* ------------- fs (sync and bounded async subset) ------------- */
+tsc_value_t tsc_fs_module_value(bool promises,bool namespace_import);
+tsc_value_t tsc_fs_export_value(bool promises,tsc_str_t* name);
+tsc_value_t tsc_fs_native_entries_value(tsc_array_t* entries,bool buffer,bool dirents);
+int tsc_fs_open_flags_value(tsc_value_t value);
+void tsc_fs_write_file_buffer_flags_sync(const tsc_str_t* path,const tsc_buffer_t* data,int flags,double mode,bool flush);
+tsc_promise_t* tsc_fs_promises_write_file_buffer_flags_async(const tsc_str_t* path,const tsc_buffer_t* data,int flags,double mode,bool flush,tsc_value_t signal,tsc_value_t opened_options);
 tsc_str_t* tsc_fs_read_file_sync(const tsc_str_t* path);
 tsc_buffer_t* tsc_fs_read_file_buffer_sync(const tsc_str_t* path);
 tsc_promise_t* tsc_fs_promises_read_file_async(const tsc_str_t* path, bool want_buffer, tsc_value_t signal);

@@ -1,0 +1,4 @@
+tsc_fs_fstat_sync
+tsc_fs_fchmod_sync
+tsc_fs_fchown_sync
+tsc_fs_futimes_sync

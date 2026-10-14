@@ -17,6 +17,15 @@ struct tsc_fs_dirent {
 #include <sys/statvfs.h>
 #include <float.h>
 
+static int fs_write_mode_flags(bool append,bool exclusive,bool update) {
+    int flags=update?O_RDWR:O_WRONLY;
+    if(!update)flags|=O_CREAT;
+    if(!append&&!update)flags|=O_TRUNC;
+    if(append)flags|=O_APPEND;
+    if(exclusive)flags|=O_EXCL;
+    return flags;
+}
+
 /* ---------------- crypto ---------------- */
 
 static const EVP_MD* crypto_digest_lookup(const tsc_str_t* algorithm) {
@@ -8429,6 +8438,16 @@ static bool tsc_fs_open_flags_from_string(const tsc_str_t* flags_str, int* out_f
     return valid;
 }
 
+int tsc_fs_open_flags_value(tsc_value_t value) {
+    if(!value_is_box(value)) {
+        double number=tsc_value_as_num(value);
+        if(!isfinite(number)||floor(number)!=number||number<0||number>INT_MAX)tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("filesystem flags must be an unsigned integer"));
+        return (int)number;
+    }
+    int flags;
+    if(value_tag(value)!=TSC_VALUE_TAG_STRING||!tsc_fs_open_flags_from_string(value_ptr(value),&flags))tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("filesystem flag cannot be represented"));
+    return flags;
+}
 static void tsc_fs_open_async_remove(tsc_fs_open_async_t* task) {
     tsc_fs_open_async_t** cursor = &g_tsc_fs_open_async;
     while (*cursor) {
@@ -8604,7 +8623,7 @@ static void tsc_fs_file_handle_stat_async_cb(tsc_uv_fs_t* req) {
     tsc_fs_stats_t* stats = tsc_fs_stats_new();
     tsc_fs_stats_fill_uv(stats, statbuf);
     uv_fs_req_cleanup(req);
-    tsc_promise_fulfill_in_place_ptr(task->promise, stats);
+    tsc_promise_fulfill_in_place(task->promise, stats?tsc_value_fs_stats(stats):tsc_value_undefined());
     tsc_fs_file_handle_stat_async_remove(task);
 }
 
@@ -9802,7 +9821,7 @@ static void tsc_fs_read_file_async_finish(tsc_fs_read_file_async_t* task, bool s
                 tsc_buffer_t* out = tsc_buffer_alloc((double)task->len, 0.0);
                 if (task->len > 0) memcpy(out->data, task->bytes, task->len);
                 if (task->path) {
-                    tsc_promise_fulfill_in_place_ptr(task->promise, out);
+                    tsc_promise_fulfill_in_place(task->promise, tsc_value_buffer(out));
                 } else {
                     tsc_promise_fulfill_in_place(task->promise, tsc_value_buffer(out));
                 }
@@ -10524,11 +10543,13 @@ typedef struct tsc_fs_write_file_async {
     tsc_uv_buf_t write_buf;
     bool append;
     bool exclusive;
-    bool update;
     bool flush;
     bool flush_done;
     double file_mode;
     tsc_value_t signal;
+    void* signal_root;
+    tsc_value_t opened_options;
+    void* opened_options_root;
     bool aborted;
     bool req_pending;
     tsc_str_t* error;
@@ -10701,6 +10722,16 @@ static void tsc_fs_write_file_async_open_cb(tsc_uv_fs_t* req) {
         return;
     }
     task->fd = (int)result;
+    if(!tsc_value_is_undefined(task->opened_options)) {
+        TSC_TRY_FRAME(frame);tsc_try_push(&frame);
+        if(setjmp(frame.jb)==0) {
+            task->signal=tsc_value_get_prop(task->opened_options,tsc_str_from_lit("signal",6));task->signal_root=tsc_value_gc_root(task->signal);
+            (void)tsc_value_get_prop(task->opened_options,tsc_str_from_lit("encoding",8));
+            tsc_try_pop();
+            if(tsc_abort_signal_is_aborted(task->signal)){task->aborted=true;tsc_promise_reject_in_place(task->promise,tsc_value_get_prop(task->signal,tsc_str_from_lit("reason",6)));}
+            else tsc_abort_signal_add_callback(task->signal,tsc_fs_write_file_async_abort,task);
+        } else {task->aborted=true;tsc_promise_reject_in_place(task->promise,tsc_current_error_value());}
+    }
     if (task->aborted) {
         tsc_fs_write_file_async_close_or_finish(task, false);
         return;
@@ -10714,12 +10745,11 @@ static tsc_promise_t* tsc_fs_promises_write_file_async(
     size_t len,
     const tsc_str_t* string_data,
     const tsc_buffer_t* buffer_data,
-    bool append,
-    bool exclusive,
-    bool update,
+    int flags,
     double file_mode,
     bool flush,
-    tsc_value_t signal
+    tsc_value_t signal,
+    tsc_value_t opened_options
 ) {
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_write_file_async_t* task = (tsc_fs_write_file_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_write_file_async_t));
@@ -10731,21 +10761,18 @@ static tsc_promise_t* tsc_fs_promises_write_file_async(
     task->buffer_data = buffer_data;
     task->bytes = bytes;
     task->len = len;
-    task->append = append;
-    task->exclusive = exclusive;
-    task->update = update;
+    task->append = (flags & O_APPEND) != 0;
+    task->exclusive = (flags & O_EXCL) != 0;
     task->flush = flush;
     task->file_mode = file_mode;
     task->signal = signal;
+    task->signal_root=tsc_value_gc_root(signal);
+    task->opened_options=opened_options;
+    task->opened_options_root=tsc_value_gc_root(opened_options);
     task->next = g_tsc_fs_write_file_async;
     g_tsc_fs_write_file_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
 
-    int flags = update ? O_RDWR : O_WRONLY;
-    if (!update) flags |= O_CREAT;
-    if (!append && !update) flags |= O_TRUNC;
-    if (append) flags |= O_APPEND;
-    if (exclusive) flags |= O_EXCL;
     mode_t mode = (isnan(file_mode) || isinf(file_mode) || file_mode < 0.0)
         ? (mode_t)0666
         : (mode_t)file_mode;
@@ -10757,7 +10784,7 @@ static tsc_promise_t* tsc_fs_promises_write_file_async(
         tsc_fs_write_file_async_finish(task, false);
     } else {
         task->req_pending = true;
-        tsc_abort_signal_add_callback(signal, tsc_fs_write_file_async_abort, task);
+        if(tsc_value_is_undefined(opened_options))tsc_abort_signal_add_callback(signal, tsc_fs_write_file_async_abort, task);
     }
     return promise;
 }
@@ -10772,7 +10799,7 @@ tsc_promise_t* tsc_fs_promises_write_file_string_async(
     bool flush,
     tsc_value_t signal
 ) {
-    return tsc_fs_promises_write_file_async(path, (const uint8_t*)data->data, data->len, data, NULL, append, exclusive, update, file_mode, flush, signal);
+    return tsc_fs_promises_write_file_async(path, (const uint8_t*)data->data, data->len, data, NULL, fs_write_mode_flags(append, exclusive, update), file_mode, flush, signal,tsc_value_undefined());
 }
 
 tsc_promise_t* tsc_fs_promises_write_file_buffer_async(
@@ -10785,7 +10812,11 @@ tsc_promise_t* tsc_fs_promises_write_file_buffer_async(
     bool flush,
     tsc_value_t signal
 ) {
-    return tsc_fs_promises_write_file_async(path, data->data, data->len, NULL, data, append, exclusive, update, file_mode, flush, signal);
+    return tsc_fs_promises_write_file_async(path, data->data, data->len, NULL, data, fs_write_mode_flags(append, exclusive, update), file_mode, flush, signal,tsc_value_undefined());
+}
+
+tsc_promise_t* tsc_fs_promises_write_file_buffer_flags_async(const tsc_str_t* path,const tsc_buffer_t* data,int flags,double mode,bool flush,tsc_value_t signal,tsc_value_t opened_options) {
+    return tsc_fs_promises_write_file_async(path,data->data,data->len,NULL,data,flags,mode,flush,signal,opened_options);
 }
 
 tsc_fs_dirent_t* fs_dirent_from_uv(const char* dir_path, const char* name, int type);
@@ -10825,7 +10856,7 @@ static void tsc_fs_readdir_async_finish(tsc_fs_readdir_async_t* task, bool succe
         if (success) {
             if (task->want_dirents) tsc_fs_dirents_encode_names(task->entries, task->result_encoding);
             else if (task->result_encoding) tsc_fs_readdir_encode_names(task->entries, task->result_encoding);
-            tsc_promise_fulfill_in_place_ptr(task->promise, task->entries);
+            tsc_promise_fulfill_in_place(task->promise, tsc_fs_native_entries_value(task->entries,task->want_buffer,task->want_dirents));
         } else {
             tsc_promise_reject_in_place(
                 task->promise,
@@ -10985,7 +11016,7 @@ static void tsc_fs_readdir_recursive_async_finish(tsc_fs_readdir_recursive_async
         if (success) {
             if (task->want_dirents) tsc_fs_dirents_encode_names(task->entries, task->result_encoding);
             else if (task->result_encoding) tsc_fs_readdir_encode_names(task->entries, task->result_encoding);
-            tsc_promise_fulfill_in_place_ptr(task->promise, task->entries);
+            tsc_promise_fulfill_in_place(task->promise, tsc_fs_native_entries_value(task->entries,task->want_buffer,task->want_dirents));
         } else {
             tsc_promise_reject_in_place(
                 task->promise,
@@ -11331,7 +11362,7 @@ static void tsc_fs_stats_libuv_finish(
         if (error) {
             tsc_promise_reject_in_place(task->promise, tsc_value_string(error));
         } else {
-            tsc_promise_fulfill_in_place_ptr(task->promise, stats);
+            tsc_promise_fulfill_in_place(task->promise, stats?tsc_value_fs_stats(stats):tsc_value_undefined());
         }
     }
     free(task->path);
@@ -13480,7 +13511,7 @@ static void tsc_fs_realpath_libuv_finish(
         if (error) {
             tsc_promise_reject_in_place(task->promise, tsc_value_string(error));
         } else if (ptr_value) {
-            tsc_promise_fulfill_in_place_ptr(task->promise, ptr_value);
+            tsc_promise_fulfill_in_place(task->promise, tsc_value_buffer(ptr_value));
         } else {
             tsc_promise_fulfill_in_place(task->promise, value);
         }
@@ -13968,33 +13999,20 @@ tsc_buffer_t* tsc_fs_read_file_buffer_sync(const tsc_str_t* path) {
     return tsc_buffer_from_str(tsc_fs_read_file_sync(path), NULL);
 }
 
-void fs_write_bytes_opts_mode(const tsc_str_t* path, const uint8_t* data, size_t len, bool append, bool exclusive, bool update, double file_mode, bool flush, const char* label) {
-    char* p = cstr_dup(path);
-    bool existed = access(p, F_OK) == 0;
-    if (exclusive && existed) {
-        free(p);
-        tsc_throw_str(tsc_str_from_cstr("fs.writeFileSync: file already exists"));
-        return;
-    }
-    const char* open_mode = update ? "rb+" : (append ? "ab" : "wb");
-    FILE* f = fopen(p, open_mode);
-    if (!f) { free(p); tsc_throw_str(tsc_str_from_cstr(label)); return; }
-    fwrite(data, 1, len, f);
-    if (flush && (fflush(f) != 0 || fsync(fileno(f)) != 0)) {
-        fclose(f);
-        free(p);
-        tsc_throw_str(tsc_str_from_cstr("fs.writeFileSync: could not flush file"));
-        return;
-    }
-    fclose(f);
-    if (file_mode >= 0.0 && !existed) {
-        if (chmod(p, (mode_t)file_mode) != 0) {
-            free(p);
-            tsc_throw_str(tsc_str_from_cstr("fs.writeFileSync: could not set mode"));
-            return;
-        }
-    }
-    free(p);
+static void fs_write_bytes_flags(const tsc_str_t* path,const uint8_t* data,size_t length,int flags,double file_mode,bool flush,const char* label) {
+    char* name=cstr_dup(path);mode_t mode=file_mode<0?(mode_t)0666:(mode_t)file_mode;
+    int fd=open(name,flags,mode);free(name);
+    if(fd<0)tsc_throw_str(tsc_str_from_cstr(errno==EEXIST?"fs.writeFileSync: file already exists":label));
+    size_t offset=0;
+    while(offset<length){ssize_t written=write(fd,data+offset,length-offset);if(written<0&&errno==EINTR)continue;if(written<=0){close(fd);tsc_throw_str(tsc_str_from_cstr("fs.writeFileSync: could not write file"));}offset+=(size_t)written;}
+    if(flush&&fsync(fd)!=0){close(fd);tsc_throw_str(tsc_str_from_cstr("fs.writeFileSync: could not flush file"));}
+    if(close(fd)!=0)tsc_throw_str(tsc_str_from_cstr("fs.writeFileSync: could not close file"));
+}
+void fs_write_bytes_opts_mode(const tsc_str_t* path,const uint8_t* data,size_t length,bool append,bool exclusive,bool update,double mode,bool flush,const char* label) {
+    fs_write_bytes_flags(path,data,length,fs_write_mode_flags(append,exclusive,update),mode,flush,label);
+}
+void tsc_fs_write_file_buffer_flags_sync(const tsc_str_t* path,const tsc_buffer_t* data,int flags,double mode,bool flush) {
+    fs_write_bytes_flags(path,data->data,data->len,flags,mode,flush,"fs.writeFileSync: could not open");
 }
 
 void fs_write_bytes_opts(const tsc_str_t* path, const uint8_t* data, size_t len, bool append, bool exclusive, const char* label) {
@@ -14161,7 +14179,7 @@ static void tsc_fs_stats_async_worker(void* env) {
     if (task->error) {
         tsc_promise_reject_in_place(task->promise, tsc_value_string(task->error));
     } else {
-        tsc_promise_fulfill_in_place_ptr(task->promise, task->stats);
+        tsc_promise_fulfill_in_place(task->promise, task->stats?tsc_value_fs_stats(task->stats):tsc_value_undefined());
     }
 }
 

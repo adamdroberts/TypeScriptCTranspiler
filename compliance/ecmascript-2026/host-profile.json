@@ -134,6 +134,7 @@
     "src/console-operations.ts",
     "src/crypto-digest-owners.ts",
     "runtime/tsc_fs_dirent.c",
+    "runtime/tsc_fs_owner.c",
     "runtime/tsc_fs_dirent.def",
     "runtime/tsc_fs_operations.def",
     "runtime/tsc_crypto_digest.def",

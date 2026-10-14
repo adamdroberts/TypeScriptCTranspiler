@@ -3568,7 +3568,7 @@
     },
     {
       "kind": "implementation",
-      "id": "src/emit/index.ts#emitFsCall",
+      "id": "runtime/tsc_fs_owner.c#fs_apply",
       "targets": [
         "sec-runtime-semantics-argumentlistevaluation#retained-native-actual-lists-before-consumer-validation"
       ]
