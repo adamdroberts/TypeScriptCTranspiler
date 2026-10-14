@@ -6,7 +6,7 @@ function report(label: string, fn: () => any): void {
     try {
         console.log(label + ":", fn());
     } catch (err) {
-        console.log(label + ":", String(err));
+        console.log(label + ":", err instanceof TypeError);
     }
 }
 

@@ -1,3 +1,5 @@
+- Function call/apply CLI validation asserts TypeError identity and retains independent Node output instead of depending on error-message wording.
+
 - Function var declarations reuse canonical invocation cells across blocks, destructuring, closures and suspension; repeated uninitialized declarations retain values.
 
 Preserved actual right-hand comma Values through source-aware boxing, including null and undefined.
