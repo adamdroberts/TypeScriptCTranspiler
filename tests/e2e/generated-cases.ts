@@ -58,6 +58,7 @@ export interface PrimitivePropertyReadDepthSpec {generator:"primitive-property-r
 export interface RestSourceLocationDepthSpec {generator:"rest-source-location-depth";depth:number;}
 export interface SourceAllocationDepthSpec {generator:"source-allocation-depth";depth:number;}
 export interface ListExtentCaptureDepthSpec {generator:"list-extent-capture-depth";depth:number;}
+export interface AtomicsSourceOwnerDepthSpec {generator:"atomics-source-owner-depth";depth:number;}
 export interface TypedArrayMetadataDepthSpec {generator:"typed-array-metadata-depth";depth:number;}
 export interface MathSourceOwnerDepthSpec {generator:"math-source-owner-depth";depth:number;}
 export interface ActivationCaptureOwnerDepthSpec {generator:"activation-capture-owner-depth";depth:number;}
@@ -313,6 +314,7 @@ export type GeneratedCaseSpec =
     | RestSourceLocationDepthSpec
     | SourceAllocationDepthSpec
     | ListExtentCaptureDepthSpec
+    | AtomicsSourceOwnerDepthSpec
     | TypedArrayMetadataDepthSpec
     | MathSourceOwnerDepthSpec
     | ActivationCaptureOwnerDepthSpec
@@ -350,6 +352,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     }
     if(spec.generator==='list-extent-capture-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid List extent capture spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
+    if(spec.generator==='atomics-source-owner-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid Atomics source owner spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
     }
     if(spec.generator==='typed-array-metadata-depth'){
@@ -1966,6 +1972,7 @@ console.log("raw JSON text width:", valid);
         case "rest-source-location-depth": return restSourceLocationInput(spec.depth);
         case "source-allocation-depth": return sourceAllocationInput(spec.depth);
         case "list-extent-capture-depth": return listExtentCaptureInput(spec.depth);
+        case "atomics-source-owner-depth": return atomicsSourceOwnerInput(spec.depth);
         case "typed-array-metadata-depth": return typedArrayMetadataInput(spec.depth);
         case "math-source-owner-depth": return mathSourceOwnerInput(spec.depth);
         case "activation-capture-owner-depth": return activationCaptureOwnerInput(spec.depth);
@@ -2255,4 +2262,9 @@ export function activationCaptureOwnerInput(depth:number):string {
 export function typedArrayMetadataInput(depth:number):string {
  const owners=Array.from({length:depth},(_,index)=>`const elementOwner${index}:any=${index?`{width:elementOwner${index-1}.width,previous:elementOwner${index-1}}`:`{width:Int32Array.BYTES_PER_ELEMENT,previous:null}`};`);
  return `{${owners.join('\n')}console.log('element source:',Function('return '+elementOwner${depth-1}.width+';')());}\n`;
+}
+
+export function atomicsSourceOwnerInput(depth:number):string {
+ const owners=Array.from({length:depth},(_,index)=>`const atomicOwner${index}:any=${index?`{body:atomicOwner${index-1}.body,previous:atomicOwner${index-1}}`:`{body:'return 31;',previous:null}`};`);
+ return `{const atomicView=new Int32Array(new SharedArrayBuffer(4));${owners.join('\n')}Atomics.load(atomicView,0);console.log('atomic source:',Function(atomicOwner${depth-1}.body)());}\n`;
 }

@@ -1,3 +1,5 @@
+Shared native Atomics operation owners and ordered scalar conversions with source analysis.
+
 Projected native TypedArray element-width metadata into shared source owners.
 
 Reused equivalent earlier capture phases within represented activations, closing retained source owner graphs.

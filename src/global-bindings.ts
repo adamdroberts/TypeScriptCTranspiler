@@ -70,6 +70,17 @@ export const runtimeTypedArrayDescriptors:ReadonlyMap<string,{width:number;kind:
 );
 if(!runtimeTypedArrayDescriptors.size)throw new Error("missing native TypedArray descriptors");
 
+/** Atomics callable identities share the native operation collection. */
+export const runtimeAtomicsMethods:ReadonlyMap<string,{operation:string;length:number}>=new Map(
+    fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_atomics.def"),"utf8")
+        .split(/\r?\n/).filter(line=>line.startsWith("TSC_ATOMICS_MEMBER")).map(line=>{
+            const row=/^TSC_ATOMICS_MEMBER\((\w+), (\w+), (\d+)\)$/.exec(line);
+            if(!row)throw new Error("invalid native Atomics method descriptor");
+            return [row[1]!,{operation:row[2]!,length:Number(row[3])}] as const;
+        }),
+);
+if(!runtimeAtomicsMethods.size)throw new Error("missing native Atomics method descriptors");
+
 export const runtimeObjectPrototypeMethods: ReadonlyMap<string, NonNullable<RuntimeGlobalBinding["normalResult"]>> = new Map(
     fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_object_prototype_methods.def"), "utf8")
         .split(/\r?\n/).filter(line => line.startsWith("TSC_OBJECT_PROTOTYPE_METHOD"))
