@@ -1,3 +1,7 @@
+Subscribed inline array-like source forwarding to the canonical nested List worklist, repairing omitted reflected worker sources. Ordinary CLI agent references now use the installed host owner; independent Node properties and retained agent CLI regressions verify the scoped repair. Full source/host eligibility remains open.
+
+Aligned async regression C checks with the shared iterator and binding storage operations. Nullish iterator binding now checks its actual TypeError owner; independent Node and both native memory profiles verify the retained semantics.
+
 Unified Module entry collection across preflight, link validation and emission, retaining binding identity and nested var declarations. Deferred linking errors now reject before graph bodies run through the common phase worklist; independent Node/native properties and shared load/link stress verify the repair. Broader host resolution and eligibility remain open.
 
 Retained Module parse and early-error failures as source-load completions in the shared request graph. Dynamic imports now reject before dependency bodies run, while startup errors remain eager and evaluation failures retain their existing cache. Independent Node/native properties and one shared generated module graph verify the repair; deferred linking and full host eligibility remain open.

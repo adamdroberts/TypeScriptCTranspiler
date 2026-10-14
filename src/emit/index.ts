@@ -12382,7 +12382,9 @@ class Emitter {
     }
 
     private test262HostGlobalBindingName(id: ts.Identifier): string | null {
-        return this.options.test262Observation &&
+        const installed = !!this.options.test262Observation ||
+            !!this.options.sourceEval?.agentEntries?.length;
+        return installed &&
             TEST262_HOST_GLOBAL_NAMES.has(id.text) &&
             this.isOutOfBandIdentifier(id)
             ? id.text

@@ -2090,7 +2090,10 @@ class SourceValueFlow {
         if(literal.length===1&&literal[0]&&!literal[0].holes.size){
             let boundary:ts.Node=literal[0].node;
             while(boundary.parent&&(ts.isParenthesizedExpression(boundary.parent)||ts.isAsExpression(boundary.parent)||ts.isTypeAssertionExpression(boundary.parent)||ts.isNonNullExpression(boundary.parent)||ts.isSatisfiesExpression(boundary.parent)))boundary=boundary.parent;
-            if(boundary.parent===context)return [...empty,...this.arguments(literal[0].parts,literal[0].node)];
+            if(boundary.parent===context){
+                this.watchList(rule,receiver,literal[0].node);
+                return [...empty,...this.arguments(literal[0].parts,literal[0].node)];
+            }
         }
         const state=this.primitiveState(this.arrayLikeLength(receiver,context),rule,true);
         if(state.pending&&!state.unresolved)return [...empty];

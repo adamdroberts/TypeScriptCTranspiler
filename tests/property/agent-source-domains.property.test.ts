@@ -12,6 +12,8 @@ const worker='globalThis.body=readSource();$262.agent.report("ok");$262.agent.le
 const calls=['start(body)','start.apply(undefined,[body])','Reflect.apply(start,undefined,[...[body]])','start(...[...[body]])'];
 test('execution domains and fresh actual Lists preserve finite sources while exposed aliases fail closed',()=>{
  for(const call of calls){
+  const closed=finiteEvalScriptSourceGraph([{path:'main.js',source:`const body=${JSON.stringify(worker)};const start=$262.agent.start;for(let i=0;i<2;i++){${call};}`}]);
+  expect(closed.error).toBeNull();expect(closed.agentSources).toEqual([worker]);
   const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:`globalThis.body=${JSON.stringify(worker)};const start=$262.agent.start;for(let i=0;i<2;i++){opaque();${call};}`}]);
   const iterates=call.includes('...');
   if(iterates)expect(graph.error).toContain('agent.start source is not a finite static string expression');
@@ -32,7 +34,13 @@ test('execution domains and fresh actual Lists preserve finite sources while exp
  const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:`$262.evalScript(${JSON.stringify(inner)});$262.agent.start(${JSON.stringify(body)});`}]);
  expect(graph.error).toBeNull();
  for(const entries of [graph.scriptSources,graph.directEvalSources,graph.indirectEvalSources])expect(new Set(entries.map(entry=>entry.domain??'main'))).toEqual(new Set(['main',sourceAgentDomain(body)]));
-});
+ const lists=[`const list0=[${JSON.stringify(worker)}];`];
+ for(let index=1;index<512;index++)lists.push(`const list${index}=[...list${index-1}];`);
+ const deep=lists.join('\n')+'Reflect.apply($262.agent.start,undefined,[...list511]);';
+ const node=Bun.spawnSync(['node','-e','globalThis.$262={agent:{start:source=>require("node:fs").writeSync(1,source)}};'+deep],{stdout:'pipe',stderr:'pipe'});
+ expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(node.stdout.toString()).toBe(worker);
+ const deepGraph=finiteEvalScriptSourceGraph([{path:'main.js',source:deep}]);expect(deepGraph.error).toBeNull();expect(deepGraph.agentSources).toEqual([worker]);
+},1_200_000);
 
 test('imported worker sources and nested eval/Function bodies retain their execution domain',async()=>{
  const root=await mkdtemp(join(tmpdir(),'tsc2c-agent-source-domains-'));
@@ -54,6 +62,12 @@ test('imported worker sources and nested eval/Function bodies retain their execu
    expect({noGc,typed,code:result.exitCode,diagnostics:diagnostics.join('')}).toEqual({noGc,typed,code:0,diagnostics:''});
    const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({noGc,typed,code:native.exitCode,stderr:native.stderr.toString()}).toEqual({noGc,typed,code:0,stderr:''});
    const observation=parseHostObservation(JSON.parse(native.stdout.toString()));expect({noGc,typed,observation}).toMatchObject({observation:{kind:'normal'}});if(observation.kind==='normal')expect(observation.stdout).toBe(node.stdout.toString());
+   if(typed){
+    const cliOutput=join(directory,'cli-program'),cli=await compile({entry,output:cliOutput,buildDir:join(directory,'cli-build'),noGc,diagnosticWriter:message=>diagnostics.push(message)});
+    expect({noGc,code:cli.exitCode,diagnostics:diagnostics.join('')}).toEqual({noGc,code:0,diagnostics:''});
+    const execution=Bun.spawnSync([cliOutput],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+    expect({noGc,code:execution.exitCode,stderr:execution.stderr.toString()}).toEqual({noGc,code:0,stderr:''});expect(execution.stdout.toString()).toBe(node.stdout.toString());
+   }
   }
  }finally{await rm(root,{recursive:true,force:true});}
 },600_000);

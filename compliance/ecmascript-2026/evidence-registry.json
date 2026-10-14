@@ -4476,6 +4476,48 @@
         "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
         "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/agent-source-domains.property.test.ts",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "agent_source_domains",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
+    },
+    {
+      "kind": "e2e",
+      "id": "agent_class_name_storage",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#arrayLikeLists",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#watchList",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#test262HostGlobalBindingName",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections"
+      ]
     }
   ]
 }
