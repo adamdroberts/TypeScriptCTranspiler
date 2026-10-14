@@ -50,7 +50,10 @@ console.log("named function identities");
 `.replaceAll("STRICT", String(strict)).replace("ENVIRONMENT_CHECK", environment
                 ? 'const evaluated = function own() { return eval("own"); }; check(evaluated() === evaluated);'
                 : "");
-            const oracle = Bun.spawnSync(["node", "-e", source.replaceAll("NATIVE_GC", "false")], { stdout: "pipe", stderr: "pipe" });
+            const oracleOutput = path.join(root, `oracle-${environment}-${strict}.stdout`);
+            const oracle = Bun.spawnSync(["node", "-e", source.replaceAll("NATIVE_GC", "false")], { stdout: Bun.file(oracleOutput), stderr: "pipe" });
+            const oracleStdout = await fs.readFile(oracleOutput, "utf8");
+            expect(oracleStdout).toBe("named function identities\n");
             expect({ code: oracle.exitCode, stderr: oracle.stderr.toString() }).toEqual({ code: 0, stderr: "" });
             for (const noGc of [false, true]) {
                 const name = `${environment}-${strict}-${noGc}`, entry = path.join(root, name + ".js"), output = path.join(root, name);
@@ -64,7 +67,7 @@ console.log("named function identities");
                 expect({ code: native.exitCode, stderr: native.stderr.toString() }).toEqual({ code: 0, stderr: "" });
                 const observation = parseHostObservation(JSON.parse(native.stdout.toString()));
                 expect(observation.kind).toBe("normal");
-                if (observation.kind === "normal") expect(observation.stdout).toBe(oracle.stdout.toString());
+                if (observation.kind === "normal") expect(observation.stdout).toBe(oracleStdout);
             }
         }
     } finally { await fs.rm(root, { recursive: true, force: true }); }

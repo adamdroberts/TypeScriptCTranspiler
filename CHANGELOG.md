@@ -1,3 +1,5 @@
+- Function-body environment properties capture and validate the independent Node success marker before native comparison.
+
 - Stats lazy date accessors now expose setters and descriptor attributes, preserve Date conversion, and reject failed object publication.
 
 - Function call/apply CLI validation asserts TypeError identity and retains independent Node output instead of depending on error-message wording.
