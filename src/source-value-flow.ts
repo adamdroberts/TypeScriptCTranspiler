@@ -109,15 +109,15 @@ type Atom =
     | { readonly tag: "generator"; readonly owner: FunctionOwner; readonly fields:ObjectOwner;readonly yielded:Cell;readonly returned:Cell }
     | { readonly tag: "global";readonly realm:SourceRealmRecord } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record";readonly realm:SourceRealmRecord };
 class SourceFacts extends Set<Atom> {
-    readonly sources = new Set<SourceFacts>();
+    // One monotone dependency collection distinguishes complete value flow
+    // from origin-only effects without copying every origin into each field.
+    readonly sources = new Map<SourceFacts,"value"|"origin">();
     private readonly memberships = new Set<Atom>();
     override *[Symbol.iterator](): SetIterator<Atom> {
-        const pending:SourceFacts[] = [this], visited = new Set<SourceFacts>(), values = new Set<Atom>();
-        while (pending.length) {
-            const facts = pending.pop()!;
-            if (visited.has(facts)) continue; visited.add(facts);
-            for (const value of Set.prototype.values.call(facts) as SetIterator<Atom>) if (!values.has(value)) {values.add(value); yield value;}
-            for (const source of facts.sources) pending.push(source);
+        const pending:{facts:SourceFacts;origins:boolean}[]=[{facts:this,origins:false}],visited=new Map<SourceFacts,number>(),values=new Set<Atom>();
+        while(pending.length){const {facts,origins}=pending.pop()!,bit=origins?1:2,prior=visited.get(facts)??0;if(prior&bit)continue;visited.set(facts,prior|bit);
+            for(const value of Set.prototype.values.call(facts) as SetIterator<Atom>)if((!origins||value.tag==="unknown")&&!values.has(value)){values.add(value);yield value;}
+            for(const [source,kind]of facts.sources)pending.push({facts:source,origins:origins||kind==="origin"});
         }
     }
     override has(atom: Atom): boolean {
@@ -131,7 +131,7 @@ class SourceFacts extends Set<Atom> {
                 // remains valid throughout this graph's monotone solution.
                 this.memberships.add(atom); return true;
             }
-            for (const source of facts.sources) pending.push(source);
+            for(const [source,kind]of facts.sources)if(kind==="value"||atom.tag==="unknown")pending.push(source);
         }
         return false;
     }
@@ -317,7 +317,7 @@ class SourceValueFlow {
     private readonly moduleMetadata = new Map<ts.SourceFile, Cell>();
     private readonly importTargetCells = new Map<ts.CallExpression,Cell>();
     private readonly moduleNamespacePending: {source: ts.SourceFile; symbol: ts.Symbol|undefined; owner: ObjectOwner}[] = [];
-    private readonly copies = new Map<Cell, Set<Cell>>();
+    private readonly capturedOrigins=new WeakMap<Cell,Map<SourceCapturePhase,Cell>>();
     private readonly queue: Rule[] = [];
     private queueCursor = 0;
     private readonly initializers: Array<{ node: ts.Node; result: Cell }> = [];
@@ -613,7 +613,7 @@ class SourceValueFlow {
                 }
                 const actual=inputs.get(source),arguments_=actual?this.formalInputs.get(source):undefined;
                 if(actual)this.copy(actual,target);
-                for(const facts of source.values.sources){const origin=this.sourceCells.get(facts)!;if(arguments_?.has(origin))continue;this.copy(project(origin),target);}
+                for(const [facts,kind]of source.values.sources){const origin=this.sourceCells.get(facts)!;if(arguments_?.has(origin))continue;this.copy(kind==="value"?project(origin):origin,target,kind);}
                 extend();
             });
         }};
@@ -735,17 +735,18 @@ class SourceValueFlow {
         if (rule.inputs.has(cell)) return;
         rule.inputs.add(cell); cell.users.add(rule); this.schedule(rule);
     }
-    private copy(from: Cell, into: Cell): void {
-        let destinations = this.copies.get(from);
-        if (!destinations) { destinations = new Set(); this.copies.set(from, destinations); }
-        if (destinations.has(into)) return;
-        destinations.add(into);
-        into.values.sources.add(from.values);
-        let parents = this.primitiveProofParents.get(from);
-        if (!parents) {parents = new Set(); this.primitiveProofParents.set(from,parents);}
-        parents.add(into);
-        this.primitiveChanges.add(into);
-        for (const user of into.users) this.schedule(user);
+    private copy(from:Cell,into:Cell,kind:"value"|"origin"="value"):void {
+        const previous=into.values.sources.get(from.values);if(previous==="value"||previous===kind)return;
+        into.values.sources.set(from.values,kind);
+        let parents=this.primitiveProofParents.get(from);if(!parents){parents=new Set();this.primitiveProofParents.set(from,parents);}parents.add(into);
+        this.primitiveChanges.add(into);for(const user of into.users)this.schedule(user);
+    }
+    private captureOrigins(from:Cell,phase:SourceCapturePhase):Cell {
+        let phases=this.capturedOrigins.get(from);if(!phases){phases=new Map();this.capturedOrigins.set(from,phases);}let result=phases.get(phase);if(result)return result;
+        result=this.newCell();phases.set(phase,result);const target=result,activation=this.enclosingActivation(phase.context);
+        this.rule([from,...(activation?[activation.active,this.activationTiming(activation)]:[])],()=>{
+            for(const atom of from.values)if(atom.tag==="unknown"&&this.effectVisible(atom,phase.context,phase.argumentsRead))this.publish(target,atom);
+        });return target;
     }
     /** Activation origins use the same monotone Cell graph as values. A
      * recursive call shares its caller's origins rather than growing a path. */
@@ -940,7 +941,7 @@ class SourceValueFlow {
                     }
                     this.publish(target,value);
                 }
-                for(const facts of source.values.sources)this.copy(project(this.sourceCells.get(facts)!),target);
+                for(const [facts,kind]of source.values.sources){const origin=this.sourceCells.get(facts)!;this.copy(kind==="value"?project(origin):this.captureOrigins(origin,phase!),target);}
                 extend();});
         }};
         extend();return captured;
@@ -1333,8 +1334,7 @@ class SourceValueFlow {
             let effects=this.ownerFieldEffects.get(owner);
             if(!effects){
                 effects=this.newCell();this.ownerFieldEffects.set(owner,effects);
-                const target=effects;
-                this.rule([owner.shape],()=>{for(const value of owner.shape.values)if(value.tag==="unknown")this.publish(target,value);});
+                this.copy(owner.shape,effects,"origin");
             }
             this.copy(effects,cell);
         }

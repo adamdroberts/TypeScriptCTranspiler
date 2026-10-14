@@ -1,3 +1,5 @@
+- Retain source mutation origins on canonical filtered dependency edges and share capture-phase origin projections.
+
 - Share unfiltered source owner mutations through the canonical origin graph and use a file-backed activation oracle.
 
 - Register scoped GetSubstitution evidence with exact pinned metadata reconciliation and a live named-capture template worklist stress.
