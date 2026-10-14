@@ -109,13 +109,13 @@ try { replace.call(generic, "a", "X"); } catch (error) { print("large-list:" + (
 test("RegExp replacement shares RegExpExec results, capture Lists and GetSubstitution", async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-regexp-replace-"));
     const source = script.replace("PLAN_JSON", JSON.stringify(JSON.stringify(plans)));
-    const expected: string[] = [];
-    new Function("print", source)((value: unknown) => expected.push(String(value)));
-    // JSC preallocates a capture vector from LengthOfArrayLike and fails its
-    // resource limit. The pinned algorithm reads capture 1 before appending to
-    // the List, so the sentinel is observable without any large allocation.
-    expected[expected.length - 1] = "large-list:true:first-capture";
     try {
+        const oracle=path.join(temporary,"oracle.cjs"), stdout=oracle+".stdout";
+        await fs.writeFile(oracle,'globalThis.print=value=>require("node:fs").writeSync(1,String(value)+"\\n");\n'+source);
+        const reference=Bun.spawnSync(["node",oracle],{stdout:Bun.file(stdout),stderr:"pipe",timeout:120_000});
+        expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:""});
+        const expected=(await fs.readFile(stdout,"utf8")).trimEnd().split("\n");
+        expect(expected.at(-1)).toBe("large-list:true:first-capture");
         const entry = path.join(temporary, "subject.js"); await fs.writeFile(entry, source);
         for (const noGc of [false, true]) {
             const executable = path.join(temporary, noGc ? "no-gc" : "gc");

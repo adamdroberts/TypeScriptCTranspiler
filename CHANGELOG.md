@@ -1,3 +1,5 @@
+- Use exact independent Node replacement-property output, removing the manual large-capture oracle rewrite.
+
 - Share opaque source field mutation origins through one owner effect cell and remove repeated per-field write propagation.
 
 - Register scoped RegExp split intrinsic evidence and exact historical/directory mappings with one capture/owner worklist stress.
