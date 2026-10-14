@@ -1412,7 +1412,7 @@ static tsc_value_t tsc_child_stream_set_encoding(void* env, tsc_value_t this_arg
 }
 
 static void tsc_child_stream_refresh_props(tsc_child_stream_t* stream) {
-    if (!stream || !stream->event.value) return;
+    if (!stream || !stream->event.object) return;
     bool readable = !stream->writable && stream->fd >= 0 && !stream->ended && !stream->destroyed;
     tsc_value_set_prop(
         stream->event.value,

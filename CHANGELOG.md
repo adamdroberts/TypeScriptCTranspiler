@@ -1,3 +1,5 @@
+Required actual child stream owners before refreshing optional stdio properties.
+
 Projected every child-process argv Array through the canonical native element bridge after ordinary mutation.
 
 Published ordinary Buffer constructor/static owners from canonical descriptors and removed direct static call bypasses.
