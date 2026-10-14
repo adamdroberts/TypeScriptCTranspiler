@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import ts from 'typescript';
 import {compile} from '../../src/compile';
-import {moduleLoadFailureDepthInput} from '../e2e/generated-cases';
+import {moduleFailureDepthInput} from '../e2e/generated-cases';
 import {createEcmaSourceFile} from '../../src/ecmascript-source';
 import {retainModuleParseFailure,sourceModuleFailure,moduleSourceOriginal} from '../../src/module-source-record';
 
@@ -29,10 +29,10 @@ async function files(directory:string,depth:number):Promise<string>{
  await fs.writeFile(path.join(directory,'parent.mjs'),"import './side.mjs';import './declaration.mjs';globalThis.loadEffects+='parent';eval(runtimeUnknownSource);export const value=19;\n");
  await fs.writeFile(path.join(directory,'cycle.mjs'),"import './parent.mjs';import './other.mjs';globalThis.loadEffects+='cycle';export const value=23;\n");
  await fs.writeFile(path.join(directory,'other.mjs'),"import './cycle.mjs';globalThis.loadEffects+='other';export const value=29;\n");
- const deep=moduleLoadFailureDepthInput(depth);for(const [file,source]of Object.entries(deep.files))await fs.writeFile(path.join(directory,file),source);
- const requests=[...invalid.map(([kind])=>'./'+kind+'.mjs'),'./parent.mjs','./cycle.mjs','./load-chain-0.mjs'];
+ const deep=moduleFailureDepthInput(depth);for(const [file,source]of Object.entries(deep.files))await fs.writeFile(path.join(directory,file),source);
+ const requests=[...invalid.map(([kind])=>'./'+kind+'.mjs'),'./parent.mjs','./cycle.mjs','./failure-chain-0.mjs'];
  const checks=requests.map(request=>`try{await import(${JSON.stringify(request)});console.log('missing',${JSON.stringify(request)})}catch(error){console.log('rejected',${JSON.stringify(request)},error.name,globalThis.loadEffects==='')}`).join('\n');
- return `globalThis.loadEffects='';globalThis.loadDepthEffect=false;async function main(){${checks}console.log('depth-effects',!globalThis.loadDepthEffect);try{await import('./bad.json',{with:{type:'json'}});console.log('missing-json')}catch(error){console.log('json-rejected',error.name,globalThis.loadEffects==='')}const one=await import('./declaration.mjs').catch(error=>error);const two=await import('./declaration.mjs').catch(error=>error);console.log('cached',one===two);console.log('healthy',(await import('./side.mjs')).value,globalThis.loadEffects==='side')}main().catch(error=>{console.log('unexpected',String(error))});\n`;
+ return `globalThis.loadEffects='';globalThis.failureDepthEffect=false;async function main(){${checks}console.log('depth-effects',!globalThis.failureDepthEffect);try{await import('./bad.json',{with:{type:'json'}});console.log('missing-json')}catch(error){console.log('json-rejected',error.name,globalThis.loadEffects==='')}const one=await import('./declaration.mjs').catch(error=>error);const two=await import('./declaration.mjs').catch(error=>error);console.log('cached',one===two);console.log('healthy',(await import('./side.mjs')).value,globalThis.loadEffects==='side')}main().catch(error=>{console.log('unexpected',String(error))});\n`;
 }
 test('deferred Module failures reject before all static bodies and preserve load failure completions against Node',async()=>{
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-module-load-'));

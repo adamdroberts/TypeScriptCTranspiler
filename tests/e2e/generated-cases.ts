@@ -51,7 +51,7 @@ export interface DynamicImportSourceDepthSpec {
     depth: number;
 }
 export interface FsReadActualListWidthSpec {generator:"fs-read-actual-list-width";width:number;}
-export interface ModuleLoadFailureDepthSpec {generator:"module-load-failure-depth";depth:number;}
+export interface ModuleFailureDepthSpec {generator:"module-failure-depth";depth:number;phase:"load"|"link";}
 export interface OsUserInfoOptionDepthSpec { generator:"os-user-info-option-depth"; depth:number; }
 export interface EventTargetActualsDepthSpec { generator:"event-target-actuals-depth"; depth:number; }
 export interface ParseGoalSourceDepthSpec { generator:"parse-goal-source-depth"; depth:number; }
@@ -227,7 +227,7 @@ export type GeneratedCaseSpec =
     | ModuleNamespaceExportWidthSpec
     | ModuleRequestWidthSpec
     | DynamicImportSourceDepthSpec
-    | ModuleLoadFailureDepthSpec
+    | ModuleFailureDepthSpec
     | OsUserInfoOptionDepthSpec
     | EventTargetActualsDepthSpec
     | ParseGoalSourceDepthSpec
@@ -282,6 +282,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         throw new Error(`invalid generated case spec ${filename}: expected an object`);
     }
     const spec = value as Record<string, unknown>;
+    if(spec.generator==='module-failure-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<2||!['load','link'].includes(String(spec.phase)))throw new Error(`invalid generated Module failure spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth,phase:spec.phase as 'load'|'link'};
+    }
     if (spec.generator === "regexp-pattern-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
@@ -339,7 +343,7 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
             depth,
         };
     }
-    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth" || spec.generator === "boxed-json-source-depth" || spec.generator === "dynamic-import-source-depth" || spec.generator === "return-projection-depth" || spec.generator === "util-format-source-depth" || spec.generator === "prototype-validation-depth" || spec.generator === "descriptor-projection-depth" || spec.generator === "map-insertion-depth" || spec.generator === "error-brand-depth" || spec.generator === "json-scalar-source-depth" || spec.generator === "parse-goal-source-depth" || spec.generator === "event-target-actuals-depth" || spec.generator === "os-user-info-option-depth" || spec.generator === "module-load-failure-depth") {
+    if (spec.generator === "strict-equality-expression-depth" || spec.generator === "grouping-reference-depth" || spec.generator === "json-reviver-depth" || spec.generator === "json-namespace-owner-depth" || spec.generator === "json-parse-source-owner-depth" || spec.generator === "descriptor-source-owner-depth" || spec.generator === "json-composite-source-depth" || spec.generator === "json-reviver-source-record-depth" || spec.generator === "boxed-json-source-depth" || spec.generator === "dynamic-import-source-depth" || spec.generator === "return-projection-depth" || spec.generator === "util-format-source-depth" || spec.generator === "prototype-validation-depth" || spec.generator === "descriptor-projection-depth" || spec.generator === "map-insertion-depth" || spec.generator === "error-brand-depth" || spec.generator === "json-scalar-source-depth" || spec.generator === "parse-goal-source-depth" || spec.generator === "event-target-actuals-depth" || spec.generator === "os-user-info-option-depth") {
         const depth = spec.depth;
         if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
             throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
@@ -1793,8 +1797,8 @@ console.log("raw JSON text width:", valid);
                 `const stressView=Buffer.alloc(4);let stressSeen=0;const stressOptions={get offset(){stressSeen++;return 0},get length(){stressSeen++;return 4},get position(){stressSeen++;return 0}};\n` +
                 `const stressBytes=stressRead(stressFD,stressView,stressOptions,...Array.from({length:${spec.width}},()=>++stressSeen));\n` +
                 `console.log('bytes:',stressBytes,'seen:',stressSeen,'text:',stressView.toString());stressClose(stressFD);stressRemove(stressPath);\n`;
-        case "module-load-failure-depth":
-            return moduleLoadFailureDepthInput(spec.depth).source;
+        case "module-failure-depth":
+            return moduleFailureDepthInput(spec.depth,spec.phase).source;
         case "os-user-info-option-depth":
             return `import {userInfo as optionDepthUserInfo} from 'node:os';let optionDepthReads=0;let optionDepthOwner:any={get encoding(){optionDepthReads++;return 'buffer'}};\n` +
                 `for(let index=0;index<${spec.depth};index++)optionDepthOwner=Object.create(optionDepthOwner);\n` +
@@ -1901,12 +1905,12 @@ console.log("raw JSON text width:", valid);
 }
 
 /** One retained static request graph is shared by property and CLI stress. */
-export function moduleLoadFailureDepthInput(depth:number):{source:string;files:Readonly<Record<string,string>>}{
-    const files:Record<string,string>={"load-failed.mjs":"var value;function value(){}\n"};
-    for(let index=0;index<depth;index++)files[`load-chain-${index}.mjs`]=`import './${index+1<depth?`load-chain-${index+1}`:'load-failed'}.mjs';globalThis.loadDepthEffect=true;\n`;
-    return {files,source:`const loadDepthState:any=globalThis;loadDepthState.loadDepthEffect=false;async function loadDepthMain(){try{await import('./load-chain-0.mjs');console.log('load-depth:',false)}catch(error){console.log('load-depth:',error instanceof SyntaxError&&!loadDepthState.loadDepthEffect)}}loadDepthMain();\n`};
+export function moduleFailureDepthInput(depth:number,phase:'load'|'link'='load'):{source:string;files:Readonly<Record<string,string>>}{
+    const files:Record<string,string>=phase==='load'?{'failure-leaf.mjs':'var value;function value(){}\n'}:{'failure-leaf.mjs':"export {missing} from './failure-valid.mjs';\n",'failure-valid.mjs':'export const value=17;globalThis.failureDepthEffect=true;\n'};
+    for(let index=0;index<depth;index++)files[`failure-chain-${index}.mjs`]=`import './${index+1<depth?`failure-chain-${index+1}`:'failure-leaf'}.mjs';globalThis.failureDepthEffect=true;\n`;
+    return {files,source:`const failureDepthState:any=globalThis;failureDepthState.failureDepthEffect=false;async function failureDepthMain(){try{await import('./failure-chain-0.mjs');console.log('${phase}-depth:',false)}catch(error){console.log('${phase}-depth:',error instanceof SyntaxError&&!failureDepthState.failureDepthEffect)}}failureDepthMain();\n`};
 }
 export function generateE2eCaseFiles(raw:string,filename:string):Readonly<Record<string,string>>{
     const spec=parseGeneratedCaseSpec(raw,filename);
-    return spec.generator==='module-load-failure-depth'?moduleLoadFailureDepthInput(spec.depth).files:{};
+    return spec.generator==='module-failure-depth'?moduleFailureDepthInput(spec.depth,spec.phase).files:{};
 }

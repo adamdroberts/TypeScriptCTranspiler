@@ -152,7 +152,7 @@ function duplicateName(entries: readonly NameEntry[]): NameEntry | null {
 
 /** VarDeclaredNames of ModuleItemList, including nested statement forms but
  * never crossing a function or class definition boundary. */
-function moduleVarDeclaredNames(sourceFile: ts.SourceFile): NameEntry[] {
+export function moduleVarDeclaredNames(sourceFile: ts.SourceFile): NameEntry[] {
     const entries: NameEntry[] = [];
     const worklist: ts.Node[] = [];
     for (let index = sourceFile.statements.length - 1; index >= 0; index--) {

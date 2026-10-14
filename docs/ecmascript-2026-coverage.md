@@ -748,6 +748,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-import-call-runtime-semantics-evaluation` — Runtime Semantics: Evaluation
     - [ ] `ordered-immediate-source-effects-and-promise-rejection` (algorithm, unbounded): ImportCall retains operand conversion, option enumeration and Promise rejection source effects.
     - [ ] `deferred-source-load-failures-before-evaluation` (algorithm, unbounded): Deferred source loading failures reject before graph evaluation.
+    - [ ] `canonical-entry-link-validation-before-evaluation` (algorithm, unbounded): Canonical Module entry linking rejects before graph evaluation.
   - [ ] `sec-evaluate-import-call` — EvaluateImportCall ( _specifierExpression_: a Parse Node, optional _optionsExpression_: a Parse Node, ): either a normal completion containing a Promise or an abrupt completion: exact disposition and partitions missing.
   - [ ] `sec-ContinueDynamicImport` — ContinueDynamicImport ( _promiseCapability_: a PromiseCapability Record, _moduleCompletion_: either a normal completion containing a Module Record or a throw completion, ): ~unused~: exact disposition and partitions missing.
   - [ ] `sec-tagged-templates` — Tagged Templates: exact disposition and partitions missing.
@@ -1022,7 +1023,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-LoadRequestedModules` — LoadRequestedModules ( optional _hostDefined_: anything, ): a Promise: exact disposition and partitions missing.
   - [ ] `sec-InnerModuleLoading` — InnerModuleLoading ( _state_: a GraphLoadingState Record, _module_: a Module Record, ): ~unused~: exact disposition and partitions missing.
   - [ ] `sec-ContinueModuleLoading` — ContinueModuleLoading ( _state_: a GraphLoadingState Record, _moduleCompletion_: either a normal completion containing a Module Record or a throw completion, ): ~unused~: exact disposition and partitions missing.
-  - [ ] `sec-moduledeclarationlinking` — Link ( ): either a normal completion containing ~unused~ or a throw completion: exact disposition and partitions missing.
+  - [ ] `sec-moduledeclarationlinking` — Link ( ): either a normal completion containing ~unused~ or a throw completion
+    - [ ] `canonical-entry-link-validation-before-evaluation` (algorithm, unbounded): Canonical Module entry linking rejects before graph evaluation.
   - [ ] `sec-InnerModuleLinking` — InnerModuleLinking ( _module_: a Module Record, _stack_: a List of Cyclic Module Records, _index_: a non-negative integer, ): either a normal completion containing a non-negative integer or a throw completion: exact disposition and partitions missing.
   - [ ] `sec-moduleevaluation` — Evaluate ( ): a Promise: exact disposition and partitions missing.
   - [ ] `sec-innermoduleevaluation` — InnerModuleEvaluation ( _module_: a Module Record, _stack_: a List of Cyclic Module Records, _index_: a non-negative integer, ): either a normal completion containing a non-negative integer or a throw completion: exact disposition and partitions missing.

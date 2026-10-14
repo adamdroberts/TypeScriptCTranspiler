@@ -1,1 +1,1 @@
-{"generator":"module-load-failure-depth","depth":512}
+{"generator":"module-failure-depth","depth":512,"phase":"load"}

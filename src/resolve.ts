@@ -1,5 +1,6 @@
 import ts from "typescript";
-import {sourceModuleFailure,moduleSourceOriginal,type ModuleSourceFailure} from "./module-source-record";
+import {moduleNamespaceBinding,resolveModuleExport} from "./module-export-resolution";
+import {sourceModuleFailure,moduleSourceOriginal,moduleLinkRecord,type ModuleSourceFailure} from "./module-source-record";
 import * as path from "node:path";
 import { sourceUnitFileName } from "./program";
 import { mangleQualifiedIdent } from "./emit/mangle";
@@ -28,6 +29,7 @@ import {
 export interface ModuleInfo {
     sf: ts.SourceFile;
     sourceFailure?: ModuleSourceFailure;
+    linkFailure?: ModuleSourceFailure;
     moduleId: string;
     /** moduleIds this module imports from (direct deps). */
     imports: string[];
@@ -129,8 +131,30 @@ export function buildModuleGraph(
     }
     const provisional:ModuleGraph={modules,fileToModuleId,emitOrder:[],topoOrder:[],entryModuleId:"",initializationModuleIds:[]};
     const failed=moduleLoadFailures(provisional);
+    const records=new Map([...modules].map(([id,info])=>[id,moduleLinkRecord(info.sf,id)]));
+    const imported=(record:ReturnType<typeof moduleLinkRecord>,request:ModuleRequest)=>{
+        const target=modules.get(record.path)!.resolvedModuleRequests.get(moduleRequestKey(request));return target?records.get(target)??null:null;
+    };
     for(const [id,info]of modules){
-        if(options_.staticRequestsOnly||failed.has(id))continue;
+        if(failed.has(id))continue;
+        const record=records.get(id)!,failure=(message:string)=>{info.linkFailure={node:moduleSourceOriginal(info.sf),source:moduleSourceOriginal(info.sf),message};};
+        for(const [name,entry]of record.indirectExports){
+            if(!info.resolvedModuleRequests.has(moduleRequestKey(entry.moduleRequest))&&!entry.moduleRequest.specifier.startsWith('.'))continue;
+            const resolution=resolveModuleExport(record,name,imported);
+            if(resolution===null||resolution==='ambiguous'){failure(`cannot resolve indirect export ${JSON.stringify(name)}`);break;}
+        }
+        if(info.linkFailure)continue;
+        for(const entry of record.imports){
+            if(entry.importName===moduleNamespaceBinding)continue;
+            const target=imported(record,entry.moduleRequest);
+            if(!target&&!entry.moduleRequest.specifier.startsWith('.'))continue;
+            const resolution=target?resolveModuleExport(target,entry.importName,imported):null;
+            if(resolution===null||resolution==='ambiguous'){failure(`cannot resolve imported binding ${JSON.stringify(entry.importName)}`);break;}
+        }
+    }
+    const unavailable=moduleLoadFailures(provisional);
+    for(const [id,info]of modules){
+        if(options_.staticRequestsOnly||unavailable.has(id))continue;
         const moduleAliases=commonJsModuleAliases(info.sf),requireAliases=commonJsRequireAliases(info.sf,moduleAliases),dynamicSpecifiers=new Set<string>();
         for(const statement of info.sf.statements){
             for(const call of dynamicImportCalls(statement)){
@@ -705,7 +729,7 @@ function commonJsFactoryWrapperInvocationForFunction(fn: ts.FunctionExpression |
 export function moduleLoadFailures(graph:ModuleGraph):ReadonlyMap<string,ModuleSourceFailure>{
     const result=new Map<string,ModuleSourceFailure>(),parents=new Map<string,Set<string>>(),pending:string[]=[];
     for(const [id,info]of graph.modules){
-        if(info.sourceFailure){result.set(id,info.sourceFailure);pending.push(id);}
+        if(info.sourceFailure||info.linkFailure){result.set(id,(info.sourceFailure??info.linkFailure)!);pending.push(id);}
         for(const dependency of info.resolvedModuleRequests.values()){
             let owners=parents.get(dependency);if(!owners){owners=new Set();parents.set(dependency,owners);}owners.add(id);
         }

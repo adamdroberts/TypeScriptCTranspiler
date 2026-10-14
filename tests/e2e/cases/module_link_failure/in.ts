@@ -1,0 +1,1 @@
+const state:any=globalThis;state.linkFailureEffect=false;async function main():Promise<void>{try{await import('./bad.mjs');console.log('missing')}catch(error){console.log('link:',error instanceof SyntaxError,!state.linkFailureEffect)}console.log('healthy:',(await import('./a.mjs')).value,state.linkFailureEffect)}main();

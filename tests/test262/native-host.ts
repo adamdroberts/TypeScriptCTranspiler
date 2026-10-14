@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import {moduleLinkRecord,type ModuleLinkRecord} from "../../src/module-source-record";
 import {moduleNamespaceBinding,resolveModuleExport,type ModuleExportResolution} from "../../src/module-export-resolution";
 import { earlyPrivateStaticSemanticsFailure } from "../../src/emit/private-names";
 import * as fs from "node:fs/promises";
@@ -17,7 +18,6 @@ import {
 } from "../../src/module-request";
 import { evaluationSourceRequests, sourceFileIsStrict, evalSourceIsValid, evalSourceKey, type EvalSourceRequest } from "../../src/eval-source";
 import {
-    bindingNames,
     earlyModuleStaticSemanticsFailure,
 } from "../../src/module-static-semantics";
 import {
@@ -49,24 +49,7 @@ export interface ParseFailure {
     diagnostics: string;
 }
 
-interface ModuleImportEntry {
-    readonly moduleRequest: ModuleRequest;
-    readonly importName: string | typeof moduleNamespaceBinding;
-}
-
-interface ModuleIndirectExportEntry {
-    readonly moduleRequest: ModuleRequest;
-    readonly importName: string | typeof moduleNamespaceBinding;
-}
-
-interface ModuleRecord {
-    readonly path: string;
-    readonly requestedModules: ModuleRequest[];
-    readonly imports: ModuleImportEntry[];
-    readonly localExports: Map<string, string>;
-    readonly indirectExports: Map<string, ModuleIndirectExportEntry>;
-    readonly starExports: ModuleRequest[];
-}
+type ModuleRecord=ModuleLinkRecord;
 
 export interface FiniteEvalScriptSourceGraph {
     readonly agentSources: readonly string[];
@@ -270,144 +253,9 @@ function resolveRequestModulePath(importer: string, specifier: string): string |
     }
 }
 
-function moduleName(name: ts.ModuleExportName): string {
-    return name.text;
-}
-
-function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
-    return ts.canHaveModifiers(node) && (ts.getModifiers(node)?.some((modifier) => modifier.kind === kind) ?? false);
-}
-
-function moduleRecord(source: string, filename: string): { record: ModuleRecord | null; error: string | null } {
-    const sourceFile = createEcmaSourceFile(
-        filename,
-        source,
-        ts.ScriptTarget.ESNext,
-        true,
-        ts.ScriptKind.JS,
-    );
-    const requestedModules = new Map<string, ModuleRequest>();
-    const declarationRequests = new Map<ts.ImportDeclaration | ts.ExportDeclaration, ModuleRequest>();
-    const imports: ModuleImportEntry[] = [];
-    const importedLocals = new Map<string, ModuleImportEntry>();
-    const localExports = new Map<string, string>();
-    const indirectExports = new Map<string, ModuleIndirectExportEntry>();
-    const starExports: ModuleRequest[] = [];
-    let error: string | null = null;
-
-    const addRequested = (declaration: ts.ImportDeclaration | ts.ExportDeclaration): ModuleRequest | null => {
-        const parsed = moduleRequestFromDeclaration(declaration);
-        if (!parsed) return null;
-        if (parsed.request === null) {
-            const location = sourceFile.getLineAndCharacterOfPosition(declaration.getStart(sourceFile));
-            error ??= `${filename}:${location.line + 1}:${location.character + 1}: ${parsed.error}`;
-            return null;
-        }
-        const key = moduleRequestKey(parsed.request);
-        const canonical = requestedModules.get(key) ?? parsed.request;
-        requestedModules.set(key, canonical);
-        declarationRequests.set(declaration, canonical);
-        return canonical;
-    };
-    const addImport = (localName: string, entry: ModuleImportEntry): void => {
-        imports.push(entry);
-        importedLocals.set(localName, entry);
-    };
-    const addExplicitExport = (
-        exportName: string,
-        localName: string | null,
-        indirect: ModuleIndirectExportEntry | null,
-    ): void => {
-        if (localExports.has(exportName) || indirectExports.has(exportName)) {
-            error ??= `duplicate explicit export ${JSON.stringify(exportName)}`;
-            return;
-        }
-        if (indirect) indirectExports.set(exportName, indirect);
-        else localExports.set(exportName, localName!);
-    };
-
-    // Imported local bindings are collected first because a later `export { x }`
-    // is normalized to the same indirect binding as `export { x } from ...`.
-    for (const statement of sourceFile.statements) {
-        if (ts.isImportDeclaration(statement)) {
-            const moduleRequest = addRequested(statement);
-            if (!moduleRequest || !statement.importClause) continue;
-            if (statement.importClause.name) {
-                addImport(statement.importClause.name.text, { moduleRequest, importName: "default" });
-            }
-            const bindings = statement.importClause.namedBindings;
-            if (bindings && ts.isNamespaceImport(bindings)) {
-                addImport(bindings.name.text, { moduleRequest, importName: moduleNamespaceBinding });
-            } else if (bindings) {
-                for (const element of bindings.elements) {
-                    addImport(element.name.text, {
-                        moduleRequest,
-                        importName: moduleName(element.propertyName ?? element.name),
-                    });
-                }
-            }
-        } else if (ts.isExportDeclaration(statement)) {
-            addRequested(statement);
-        }
-    }
-
-    for (const statement of sourceFile.statements) {
-        if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
-            addExplicitExport("default", "*default*", null);
-            continue;
-        }
-        if (ts.isExportDeclaration(statement)) {
-            const moduleRequest = declarationRequests.get(statement) ?? null;
-            if (!statement.exportClause) {
-                if (moduleRequest) starExports.push(moduleRequest);
-                continue;
-            }
-            if (ts.isNamespaceExport(statement.exportClause)) {
-                if (moduleRequest) {
-                    addExplicitExport(moduleName(statement.exportClause.name), null, {
-                        moduleRequest,
-                        importName: moduleNamespaceBinding,
-                    });
-                }
-                continue;
-            }
-            for (const element of statement.exportClause.elements) {
-                const exportName = moduleName(element.name);
-                const importOrLocalName = moduleName(element.propertyName ?? element.name);
-                if (moduleRequest) {
-                    addExplicitExport(exportName, null, { moduleRequest, importName: importOrLocalName });
-                } else {
-                    const imported = importedLocals.get(importOrLocalName);
-                    addExplicitExport(exportName, imported ? null : importOrLocalName, imported ?? null);
-                }
-            }
-            continue;
-        }
-        if (!hasModifier(statement, ts.SyntaxKind.ExportKeyword)) continue;
-        const isDefault = hasModifier(statement, ts.SyntaxKind.DefaultKeyword);
-        if (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) {
-            const localName = statement.name?.text ?? "*default*";
-            addExplicitExport(isDefault ? "default" : localName, localName, null);
-        } else if (ts.isVariableStatement(statement)) {
-            for (const declaration of statement.declarationList.declarations) {
-                for (const localName of bindingNames(declaration.name)) {
-                    addExplicitExport(localName, localName, null);
-                }
-            }
-        }
-    }
-
-    return {
-        record: error ? null : {
-            path: filename,
-            requestedModules: [...requestedModules.values()],
-            imports,
-            localExports,
-            indirectExports,
-            starExports,
-        },
-        error,
-    };
+function moduleRecord(source:string,filename:string):{record:ModuleRecord|null;error:string|null}{
+    const parsed=createEcmaSourceFile(filename,source,ts.ScriptTarget.ESNext,true,ts.ScriptKind.JS,'module');
+    return {record:moduleLinkRecord(parsed,filename),error:null};
 }
 
 function jsonModuleRecord(source: string, filename: string): { record: ModuleRecord | null; error: string | null } {
@@ -420,14 +268,7 @@ function jsonModuleRecord(source: string, filename: string): { record: ModuleRec
         };
     }
     return {
-        record: {
-            path: filename,
-            requestedModules: [],
-            imports: [],
-            localExports: new Map([["default", "*default*"]]),
-            indirectExports: new Map(),
-            starExports: [],
-        },
+        record: moduleLinkRecord(createEcmaSourceFile(filename,source,ts.ScriptTarget.ESNext,true,ts.ScriptKind.JSON),filename),
         error: null,
     };
 }

@@ -175,6 +175,21 @@ tsc_value_t tsc_module_import_meta(tsc_module_graph_t* graph, size_t index) {
     return tsc_value_object(record->import_meta);
 }
 
+/* The same request worklist validates loading in preorder and linking in
+ * dependency postorder. Neither phase executes a source body. */
+static tsc_module_record_t* module_dependency_failure(tsc_module_graph_t* graph,size_t index,bool linking){
+    bool* visited=TSC_GC_MALLOC(graph->count*sizeof(bool));memset(visited,0,graph->count*sizeof(bool));
+    tsc_array_t* frames=tsc_array_new(sizeof(module_frame_t),1);module_frame_t first={.record=&graph->records[index]};tsc_array_push_raw(frames,&first);
+    while(frames->len){
+        module_frame_t* frame=&TSC_ARR(module_frame_t,frames,frames->len-1);tsc_module_record_t* record=frame->record;
+        if(!frame->entered){size_t current=(size_t)(record-graph->records);if(visited[current]){frames->len--;continue;}visited[current]=true;frame->entered=true;
+            if(!linking&&record->definition->load_error)return record;}
+        if(frame->next<record->definition->request_count){size_t dependency=record->definition->requests[frame->next++];module_frame_t child={.record=&graph->records[dependency]};tsc_array_push_raw(frames,&child);continue;}
+        if(linking&&record->definition->link_error)return record;frames->len--;
+    }
+    return NULL;
+}
+
 tsc_promise_t* tsc_module_evaluate(tsc_module_graph_t* graph, size_t index) {
     if (index >= graph->count) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("module is outside its retained graph"));
     tsc_module_record_t* root = &graph->records[index];
@@ -182,21 +197,23 @@ tsc_promise_t* tsc_module_evaluate(tsc_module_graph_t* graph, size_t index) {
     /* Finish source loading for the complete static graph before any body.
      * Parse failures are host load completions, rather than cached evaluation failures. */
     if(root->status==MODULE_LINKED){
-        bool* visited=TSC_GC_MALLOC(graph->count*sizeof(bool));memset(visited,0,graph->count*sizeof(bool));
-        tsc_array_t* pending=tsc_array_new(sizeof(size_t),1);tsc_array_push_raw(pending,&index);
-        while(pending->len){
-            size_t next=TSC_ARR(size_t,pending,--pending->len);if(visited[next])continue;visited[next]=true;
-            tsc_module_record_t* current=&graph->records[next];
-            if(current->definition->load_error){
-                tsc_value_t error=tsc_value_error(tsc_error_new_named(tsc_str_from_lit("SyntaxError",11),tsc_str_from_cstr(current->definition->load_error)));
-                void* volatile error_root=tsc_value_gc_root(error);root->error_source=current;
-                tsc_promise_t* rejected=tsc_promise_reject(error);(void)error_root;return rejected;
-            }
-            for(size_t edge=current->definition->request_count;edge;--edge){size_t dependency=current->definition->requests[edge-1];tsc_array_push_raw(pending,&dependency);}
+        tsc_module_record_t* failed=module_dependency_failure(graph,index,false);
+        if(failed){
+            tsc_value_t error=tsc_value_error(tsc_error_new_named(tsc_str_from_lit("SyntaxError",11),tsc_str_from_cstr(failed->definition->load_error)));
+            void* volatile error_root=tsc_value_gc_root(error);root->error_source=failed;
+            tsc_promise_t* rejected=tsc_promise_reject(error);(void)error_root;return rejected;
         }
     }
     if (root->top_level) return root->top_level;
     root->top_level = tsc_promise_pending();
+    if(root->status==MODULE_LINKED){
+        tsc_module_record_t* failed=module_dependency_failure(graph,index,true);
+        if(failed){
+            tsc_value_t error=tsc_value_error(tsc_error_new_named(tsc_str_from_lit("SyntaxError",11),tsc_str_from_cstr(failed->definition->link_error)));
+            void* volatile error_root=tsc_value_gc_root(error);root->error_source=failed;
+            tsc_promise_reject_in_place(root->top_level,error);(void)error_root;return root->top_level;
+        }
+    }
     if (root->status == MODULE_EVALUATED) {
         if (root->has_error) tsc_promise_reject_in_place(root->top_level, root->error);
         else tsc_promise_fulfill_in_place(root->top_level, tsc_value_undefined());

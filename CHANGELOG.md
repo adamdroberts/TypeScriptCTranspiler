@@ -1,3 +1,5 @@
+Unified Module entry collection across preflight, link validation and emission, retaining binding identity and nested var declarations. Deferred linking errors now reject before graph bodies run through the common phase worklist; independent Node/native properties and shared load/link stress verify the repair. Broader host resolution and eligibility remain open.
+
 Retained Module parse and early-error failures as source-load completions in the shared request graph. Dynamic imports now reject before dependency bodies run, while startup errors remain eager and evaluation failures retain their existing cache. Independent Node/native properties and one shared generated module graph verify the repair; deferred linking and full host eligibility remain open.
 
 Preserved captured copy and derived source facts through one identity memo and worklist. Formatter dependencies retain causal effect origins; undefined-only binding defaults and memoized property reads replay on that graph. Independent Node/default properties and native source regressions verify finite requests before opaque loads; known prior CommonJS effect precision remains open.

@@ -9,6 +9,7 @@ import { exportedModuleNames, moduleNamespaceBinding, resolveModuleExport, type 
 import { definitionEvaluationChildren, moduleHasTopLevelAwait } from "./module-evaluation";
 import {classDefinitionPlan} from './class-definition';
 import ts from "typescript";
+import {moduleLinkRecord} from "../module-source-record";
 import { ecmaDirectivePrologueHasUseStrict, ecmaParseGoal } from "../ecmascript-source";
 import { sourceUnitFormat } from "../program";
 import { runtimeGlobalBindings, runtimeUtilExports, runtimeFsFdOperations } from "../global-bindings";
@@ -12837,7 +12838,7 @@ class Emitter {
             const info = this.graph.modules.get(modId)!;
             const count = info.moduleRequests.filter(request => info.resolvedModuleRequests.has(moduleRequestKey(request))).length;
             const execute = this.isCommonJsSourceFile(info.sf) ? `mod_graph_execute_${modId}` : `mod_evaluate_${modId}`;
-            out.line(`    { ${execute}, ${count ? `mod_requests_${modId}` : "NULL"}, ${count}, ${this.modAsyncInits.has(modId)}, ${info.sourceFailure ? `"${escapeCString(info.sourceFailure.message)}"` : "NULL"} },`);
+            out.line(`    { ${execute}, ${count ? `mod_requests_${modId}` : "NULL"}, ${count}, ${this.modAsyncInits.has(modId)}, ${info.sourceFailure ? `"${escapeCString(info.sourceFailure.message)}"` : "NULL"}, ${info.linkFailure ? `"${escapeCString(info.linkFailure.message)}"` : "NULL"} },`);
         }
         out.line("};");
         out.line("static tsc_module_graph_t* mod_runtime_graph(void) {");
@@ -13227,7 +13228,7 @@ class Emitter {
         const initBuf = new CBuf();
         initBuf.indent = 1;
         this.modInits.set(modId, initBuf);
-        if(this.graph.modules.get(modId)!.sourceFailure){
+        if(this.graph.modules.get(modId)!.sourceFailure||this.graph.modules.get(modId)!.linkFailure){
             if(this.isJsonSourceFile(sf)){
                 const binding=this.collectJsonModuleBinding(sf,modId)!;
                 this.agentStorage.declare("tsc_value_t",binding.cName);
@@ -19170,98 +19171,10 @@ class Emitter {
     /** Project syntax into the same normalized record used by host preflight.
      * Import aliases are edges, and the checker is consulted only for local
      * storage declarations. Record identity is the AOT Module id. */
-    private moduleExportRecord(info: ModuleInfo): EmitterModuleExportRecord {
-        const existing = this.moduleExportRecords.get(info.moduleId);
-        if (existing) return existing;
-        const localExports = new Map<string, string>();
-        const indirectExports = new Map<string, { moduleRequest: ModuleRequest; importName: string | typeof moduleNamespaceBinding }>();
-        const starExports: ModuleRequest[] = [];
-        const bindings = new Map<string, ts.Node>();
-        const record = { path: info.moduleId, info, localExports, indirectExports, starExports, bindings };
-        this.moduleExportRecords.set(info.moduleId, record);
-        if (this.isJsonSourceFile(info.sf)) {
-            localExports.set("default", "*default*");
-            bindings.set("*default*", info.sf);
-            return record;
-        }
-        const imports = new Map<string, { moduleRequest: ModuleRequest; importName: string | typeof moduleNamespaceBinding }>();
-        const retainNamespace = (request: ModuleRequest, declaration: ts.NamespaceImport | ts.NamespaceExport): void => {
-            const targetId = info.resolvedModuleRequests.get(moduleRequestKey(request));
-            const target = targetId ? this.graph.modules.get(targetId) : undefined;
-            if (target) this.moduleNamespaceDeclarations.set(target.moduleId, declaration);
-        };
-        const hasModifier = (node: ts.Node, kind: ts.SyntaxKind): boolean =>
-            !!(ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined)?.some(modifier => modifier.kind === kind);
-        for (const statement of info.sf.statements) {
-            if (!ts.isImportDeclaration(statement) || !ts.isStringLiteralLike(statement.moduleSpecifier)) continue;
-            const clause = statement.importClause;
-            if (!clause || clause.isTypeOnly) continue;
-            const moduleRequest = this.moduleRequestForDeclaration(statement);
-            if (!moduleRequest) continue;
-            if (clause.name) imports.set(clause.name.text, { moduleRequest, importName: "default" });
-            if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
-                imports.set(clause.namedBindings.name.text, { moduleRequest, importName: moduleNamespaceBinding });
-                retainNamespace(moduleRequest, clause.namedBindings);
-            } else if (clause.namedBindings) {
-                for (const element of clause.namedBindings.elements) {
-                    if (!element.isTypeOnly) imports.set(element.name.text, { moduleRequest, importName: (element.propertyName ?? element.name).text });
-                }
-            }
-        }
-        const exportLocal = (exportName: string, localName: string): void => {
-            const imported = imports.get(localName);
-            if (imported) indirectExports.set(exportName, imported);
-            else localExports.set(exportName, localName);
-        };
-        for (const statement of info.sf.statements) {
-            if (this.isAmbientDeclaration(statement)) continue;
-            if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
-                localExports.set("default", "*default*");
-                bindings.set("*default*", statement);
-            } else if (ts.isExportDeclaration(statement) && !statement.isTypeOnly) {
-                const request = this.moduleRequestForDeclaration(statement);
-                if (!statement.exportClause) {
-                    if (request !== null) starExports.push(request);
-                } else if (ts.isNamespaceExport(statement.exportClause)) {
-                    if (request !== null) {
-                        indirectExports.set(statement.exportClause.name.text, { moduleRequest: request, importName: moduleNamespaceBinding });
-                        retainNamespace(request, statement.exportClause);
-                    }
-                } else {
-                    for (const element of statement.exportClause.elements) {
-                        if (element.isTypeOnly) continue;
-                        const localName = (element.propertyName ?? element.name).text;
-                        if (request !== null) indirectExports.set(element.name.text, { moduleRequest: request, importName: localName });
-                        else {
-                            exportLocal(element.name.text, localName);
-                            const symbol = this.checker.getExportSpecifierLocalTargetSymbol(element);
-                            const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
-                            if (!imports.has(localName) && declaration) bindings.set(localName, declaration);
-                        }
-                    }
-                }
-            } else if (ts.isVariableStatement(statement)) {
-                const pending: (ts.VariableDeclaration | ts.BindingElement)[] = [...statement.declarationList.declarations];
-                while (pending.length) {
-                    const declaration = pending.pop()!;
-                    if (ts.isIdentifier(declaration.name)) {
-                        bindings.set(declaration.name.text, declaration);
-                        if (hasModifier(statement, ts.SyntaxKind.ExportKeyword)) exportLocal(declaration.name.text, declaration.name.text);
-                    } else {
-                        for (const element of declaration.name.elements) if (!ts.isOmittedExpression(element)) pending.push(element);
-                    }
-                }
-            } else if (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isEnumDeclaration(statement)) {
-                if (statement.name) bindings.set(statement.name.text, statement);
-                if (hasModifier(statement, ts.SyntaxKind.ExportKeyword)) {
-                    if (hasModifier(statement, ts.SyntaxKind.DefaultKeyword)) {
-                        const name = statement.name?.text ?? "*default*";
-                        localExports.set("default", name);
-                        bindings.set(name, statement);
-                    } else if (statement.name) exportLocal(statement.name.text, statement.name.text);
-                }
-            }
-        }
+    private moduleExportRecord(info:ModuleInfo):EmitterModuleExportRecord {
+        const prior=this.moduleExportRecords.get(info.moduleId);if(prior)return prior;
+        const entries=moduleLinkRecord(info.sf,info.moduleId),record={...entries,info};this.moduleExportRecords.set(info.moduleId,record);
+        for(const [request,declaration]of entries.namespaceDeclarations){const targetId=info.resolvedModuleRequests.get(request);if(targetId)this.moduleNamespaceDeclarations.set(targetId,declaration);}
         return record;
     }
 

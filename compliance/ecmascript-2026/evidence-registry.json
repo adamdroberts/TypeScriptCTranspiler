@@ -3156,7 +3156,9 @@
         "sec-getexportednames#visited-module-record-name-collection",
         "sec-smr-getexportednames#visited-module-record-name-collection",
         "sec-ModuleRequestsEqual#decoded-specifier-and-attribute-collection-identity",
-        "sec-GetImportedModule#retained-request-to-module-record-identity"
+        "sec-GetImportedModule#retained-request-to-module-record-identity",
+        "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
       ]
     },
     {
@@ -3235,7 +3237,9 @@
       "targets": [
         "sec-resolveexport#local-indirect-star-default-ambiguity-and-cycles",
         "sec-ModuleRequestsEqual#decoded-specifier-and-attribute-collection-identity",
-        "sec-GetImportedModule#retained-request-to-module-record-identity"
+        "sec-GetImportedModule#retained-request-to-module-record-identity",
+        "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
       ]
     },
     {
@@ -3290,7 +3294,9 @@
         "sec-GetImportedModule#retained-request-to-module-record-identity",
         "sec-parsemodule#deferred-source-load-failures-before-evaluation",
         "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
-        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation"
+        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation",
+        "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
       ]
     },
     {
@@ -4135,12 +4141,14 @@
       ]
     },
 {
-  "kind": "property",
-  "id": "tests/property/source-proof-identity.property.test.ts",
-  "targets": [
-    "sec-evaluatecall#finite-host-callable-location-source-projections"
-  ]
-},
+      "kind": "property",
+      "id": "tests/property/source-proof-identity.property.test.ts",
+      "targets": [
+        "sec-evaluatecall#finite-host-callable-location-source-projections",
+        "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
+      ]
+    },
 {
   "kind": "property",
   "id": "tests/property/source-callable-formals.property.test.ts",
@@ -4285,7 +4293,9 @@
       "kind": "implementation",
       "id": "src/source-value-flow.ts#captureRead",
       "targets": [
-        "sec-evaluatecall#finite-host-callable-location-source-projections"
+        "sec-evaluatecall#finite-host-callable-location-source-projections",
+        "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
       ]
     },
     {
@@ -4315,7 +4325,9 @@
       "targets": [
         "sec-parsemodule#deferred-source-load-failures-before-evaluation",
         "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
-        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation"
+        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation",
+        "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
       ]
     },
     {
@@ -4376,7 +4388,9 @@
       "targets": [
         "sec-parsemodule#deferred-source-load-failures-before-evaluation",
         "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
-        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation"
+        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation",
+        "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
       ]
     },
     {
@@ -4394,7 +4408,9 @@
       "targets": [
         "sec-parsemodule#deferred-source-load-failures-before-evaluation",
         "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
-        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation"
+        "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation",
+        "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
       ]
     },
     {
@@ -4404,6 +4420,61 @@
         "sec-parsemodule#deferred-source-load-failures-before-evaluation",
         "sec-FinishLoadingImportedModule#deferred-source-load-failures-before-evaluation",
         "sec-import-call-runtime-semantics-evaluation#deferred-source-load-failures-before-evaluation"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/module-link-failure.property.test.ts",
+      "targets": [
+        "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "module_link_failure_depth",
+      "targets": [
+        "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
+      ],
+      "stressReview": {
+        "dimension": "static ModuleRequest graph depth before a deferred linking failure",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One phase-aware generated request graph verifies dependency-first linking and body suppression independently of depth and import/export shape.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "module_link_failure",
+      "targets": [
+        "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/module-source-record.ts#moduleLinkRecord",
+      "targets": [
+        "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/module-static-semantics.ts#moduleVarDeclaredNames",
+      "targets": [
+        "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_module.c#module_dependency_failure",
+      "targets": [
+        "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
+        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
       ]
     }
   ]

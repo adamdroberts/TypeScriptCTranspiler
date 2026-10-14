@@ -313,6 +313,9 @@ class SourceValueFlow {
     private readonly sourceFiles = new WeakMap<ts.Node, ts.SourceFile>();
     private readonly sourceStarts = new WeakMap<ts.Node, number>();
     private readonly executionGuards = new WeakMap<ts.Node, readonly {condition: Cell; truthy: boolean}[]>();
+    private readonly capturePhases=new Map<ts.Node,Map<boolean,object>>();
+    private readonly capturedCellPhases=new Map<Cell,ReadonlySet<object>>();
+    private readonly capturedAtomPhases=new WeakMap<Atom,ReadonlySet<object>>();
     private readonly readCaptures = new Map<Cell, Map<ts.Node | undefined, Map<boolean, Cell>>>();
     private readonly empty = this.newCell();
     private readonly globalMutation = this.newCell();
@@ -724,12 +727,16 @@ class SourceValueFlow {
         let phases = contexts.get(context);
         if (!phases) {phases = new Map(); contexts.set(context,phases);}
         const previous = phases.get(argumentsRead); if (previous) return previous;
+        let phaseKinds=this.capturePhases.get(context);if(!phaseKinds){phaseKinds=new Map();this.capturePhases.set(context,phaseKinds);}
+        let phase=phaseKinds.get(argumentsRead);if(!phase){phase={};phaseKinds.set(argumentsRead,phase);}
         const pending:Cell[]=[];
         const project=(source:Cell):Cell=>{
+            const inherited=this.capturedCellPhases.get(source);if(inherited?.has(phase!))return source;
             let contexts=this.readCaptures.get(source);if(!contexts){contexts=new Map();this.readCaptures.set(source,contexts);}
             let phases=contexts.get(context);if(!phases){phases=new Map();contexts.set(context,phases);}
             let target=phases.get(argumentsRead);
             if(!target){target=this.newCell();phases.set(argumentsRead,target);
+                this.capturedCellPhases.set(target,new Set([...(inherited??[]),phase!]));
                 this.readCaptures.set(target,new Map([[context,new Map([[argumentsRead,target]])]]));pending.push(source);}
             return target;
         };
@@ -742,7 +749,11 @@ class SourceValueFlow {
                 for(const atom of Set.prototype.values.call(source.values) as Iterable<Atom>){
                     if(!this.effectVisible(atom,context,argumentsRead))continue;
                     let value=atom;
-                    if(atom.tag==="text-operation"){let prior=atoms.get(atom);if(!prior){prior={...atom,parts:atom.parts.map(project)};atoms.set(atom,prior);}value=prior;}
+                    if(atom.tag==="text-operation"){
+                        const inherited=this.capturedAtomPhases.get(atom);
+                        if(!inherited?.has(phase!)){let prior=atoms.get(atom);if(!prior){prior={...atom,parts:atom.parts.map(project)};atoms.set(atom,prior);
+                            this.capturedAtomPhases.set(prior,new Set([...(inherited??[]),phase!]));}value=prior;}
+                    }
                     this.publish(target,value);
                 }
                 for(const facts of source.values.sources)this.copy(project(this.sourceCells.get(facts)!),target);

@@ -4128,6 +4128,56 @@
             ]
           },
           "rationale": "Module source parsing now retains an archived original source and one inert failed view in the canonical source-unit collection. Static ModuleRequest edges settle before body discovery; one reverse worklist identifies ancestors that cannot load, and the checker/source analysis omit their non-evaluable bodies. Startup roots retain eager syntax diagnostics. Native Module definitions carry source-load failure metadata, and one visited request worklist completes loading before any dependency body executes. Parse failures reject each load through an actual SyntaxError completion without entering the successful Module/evaluation cache; ordinary evaluation failure caching remains on its existing path. module-load-failure.property compares independent Node grammar/control/private/strict/declaration and JSON errors, eager/deferred role, cycles, side-effect suppression, repeated-load identity and healthy loading in both memory modes. One shared generated static graph supplies the property and module_load_failure_depth CLI stress; module_load_failure verifies the typed consumer. Generated resource bytes enter the E2E input manifest and materialize in an isolated source directory. Existing CType and language declarations suffice; the runtime definition and host implementation manifest include the shared failure path. The retained pinned dynamic-import catch test now executes normally. Complete deferred link/resolution errors, finite iterator-derived import specifier admission, all host module formats/Realm behavior and eligible exhaustive ECMAScript 2026 conformance remain open; host capability flags are unchanged."
+        },
+        {
+          "id": "canonical-entry-link-validation-before-evaluation",
+          "title": "Canonical Module entry linking rejects before graph evaluation",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-import-call-runtime-semantics-evaluation"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/module-link-failure.property.test.ts",
+              "tests/property/module-load-failure.property.test.ts",
+              "tests/property/module-request-emitter.property.test.ts",
+              "tests/property/source-proof-identity.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "module_link_failure_depth"
+            ],
+            "e2e": [
+              "module_link_failure"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "src/module-source-record.ts#moduleLinkRecord",
+              "src/module-static-semantics.ts#moduleVarDeclaredNames",
+              "src/resolve.ts#buildModuleGraph",
+              "src/resolve.ts#moduleLoadFailures",
+              "runtime/tsc_module.c#module_dependency_failure",
+              "runtime/tsc_module.c#tsc_module_evaluate",
+              "src/emit/index.ts#moduleExportRecord",
+              "src/source-value-flow.ts#captureRead"
+            ]
+          },
+          "rationale": "Module imports, local/indirect/star exports, binding nodes and namespace declarations now come from one canonical source entry collection shared by native preflight, graph validation and emission. Type-only/ambient syntax erases through the existing source predicate; nested var bindings reuse the declaration-name worklist. The separate preflight and emitter entry builders are deleted. Captured Cell and operation-atom projections now retain applied phase provenance, so a cyclic value copied between source-order contexts cannot generate an endless clone sequence. The retained full linking property exposed this source-solver cycle and now verifies its termination without dropping the input. Shared ResolveExport binding identity distinguishes same-target star paths from null or ambiguous bindings. Static request records retain link failures and their ancestors without lowering non-evaluable bodies; native loading and dependency-first linking now use one phase-parameterized visited frame worklist before any body. Parse failures stay fresh load completions; the selected native host caches linking rejection for the same target, matching independent Node. module-link-failure.property compares missing/ambiguous/cyclic bindings, local imported reexports, namespace/default/nested var identities, eager/deferred phases, repeated rejection and healthy loading; module-load-failure and request/evaluation/source neighbors verify the shared path. One phase-aware generated request graph replaces the load-only generator and supplies both properties and CLI stress. module_link_failure verifies typed consumers in both memory modes. Existing declarations and CType suffice; the runtime definition retains separate load and link metadata. The formerly failing pinned ambiguous ImportCall now completes normally. Complete host specifier resolution/attributes, finite iterator-derived import admission, all host formats/Realm/agent behavior, reciprocal full-clause evidence and eligible exhaustive ECMAScript 2026 coverage remain open; capability flags are unchanged."
         }
       ],
       "rationale": "One reactive owner/call/continuation representation retains immediate import and Promise source effects independently of key-list size or owner depth."
@@ -5091,6 +5141,63 @@
         }
       ],
       "rationale": "Local failure-completion evidence remains distinct from full Module and host eligibility."
+    },
+    {
+      "clause": "sec-moduledeclarationlinking",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "canonical-entry-link-validation-before-evaluation",
+          "title": "Canonical Module entry linking rejects before graph evaluation",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-moduledeclarationlinking"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/module-link-failure.property.test.ts",
+              "tests/property/module-load-failure.property.test.ts",
+              "tests/property/module-request-emitter.property.test.ts",
+              "tests/property/source-proof-identity.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "module_link_failure_depth"
+            ],
+            "e2e": [
+              "module_link_failure"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "src/module-source-record.ts#moduleLinkRecord",
+              "src/module-static-semantics.ts#moduleVarDeclaredNames",
+              "src/resolve.ts#buildModuleGraph",
+              "src/resolve.ts#moduleLoadFailures",
+              "runtime/tsc_module.c#module_dependency_failure",
+              "runtime/tsc_module.c#tsc_module_evaluate",
+              "src/emit/index.ts#moduleExportRecord",
+              "src/source-value-flow.ts#captureRead"
+            ]
+          },
+          "rationale": "Module imports, local/indirect/star exports, binding nodes and namespace declarations now come from one canonical source entry collection shared by native preflight, graph validation and emission. Type-only/ambient syntax erases through the existing source predicate; nested var bindings reuse the declaration-name worklist. The separate preflight and emitter entry builders are deleted. Captured Cell and operation-atom projections now retain applied phase provenance, so a cyclic value copied between source-order contexts cannot generate an endless clone sequence. The retained full linking property exposed this source-solver cycle and now verifies its termination without dropping the input. Shared ResolveExport binding identity distinguishes same-target star paths from null or ambiguous bindings. Static request records retain link failures and their ancestors without lowering non-evaluable bodies; native loading and dependency-first linking now use one phase-parameterized visited frame worklist before any body. Parse failures stay fresh load completions; the selected native host caches linking rejection for the same target, matching independent Node. module-link-failure.property compares missing/ambiguous/cyclic bindings, local imported reexports, namespace/default/nested var identities, eager/deferred phases, repeated rejection and healthy loading; module-load-failure and request/evaluation/source neighbors verify the shared path. One phase-aware generated request graph replaces the load-only generator and supplies both properties and CLI stress. module_link_failure verifies typed consumers in both memory modes. Existing declarations and CType suffice; the runtime definition retains separate load and link metadata. The formerly failing pinned ambiguous ImportCall now completes normally. Complete host specifier resolution/attributes, finite iterator-derived import admission, all host formats/Realm/agent behavior, reciprocal full-clause evidence and eligible exhaustive ECMAScript 2026 coverage remain open; capability flags are unchanged."
+        }
+      ],
+      "rationale": "Scoped linking evidence does not promote complete Module or host conformance."
     }
   ],
   "groups": [

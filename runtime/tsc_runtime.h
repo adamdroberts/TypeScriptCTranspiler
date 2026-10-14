@@ -1338,6 +1338,7 @@ typedef struct {
     size_t request_count;
     bool has_tla;
     const char* load_error;
+    const char* link_error;
 } tsc_module_definition_t;
 tsc_module_graph_t* tsc_module_graph_new(const tsc_module_definition_t* definitions, size_t count);
 tsc_value_t tsc_module_import_meta(tsc_module_graph_t* graph, size_t index);
