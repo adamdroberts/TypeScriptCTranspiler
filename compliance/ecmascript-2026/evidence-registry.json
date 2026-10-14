@@ -26,7 +26,7 @@
     {
       "kind": "implementation",
       "id": "src/emit/index.ts#emitSequencedExpr",
-      "targets": ["sec-isstrictlyequal#ecmascript-type-partition"]
+      "targets": ["sec-isstrictlyequal#ecmascript-type-partition", "sec-comma-operator-runtime-semantics-evaluation#ordered-operands-and-actual-right-value"]
     },
     {
       "kind": "implementation",
@@ -5680,6 +5680,48 @@
       "id": "tests/property/caseblock-completion.property.test.ts",
       "targets": [
         "sec-runtime-semantics-caseblockevaluation#ordered-selection-fallthrough-and-completion"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/comma-value.property.test.ts",
+      "targets": [
+        "sec-comma-operator-runtime-semantics-evaluation#ordered-operands-and-actual-right-value"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "comma_value_expression_depth",
+      "targets": [
+        "sec-comma-operator-runtime-semantics-evaluation#ordered-operands-and-actual-right-value"
+      ],
+      "stressReview": {
+        "dimension": "right-nested comma operand tree depth",
+        "parameter": "depth",
+        "representativeHighDepth": 128,
+        "rationale": "One generated source tree verifies ordered left effects and actual null publication at the shared sequencing boundary; depth does not select a lowering shape.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "comma_operator",
+      "targets": [
+        "sec-comma-operator-runtime-semantics-evaluation#ordered-operands-and-actual-right-value"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#emitBinary",
+      "targets": [
+        "sec-comma-operator-runtime-semantics-evaluation#ordered-operands-and-actual-right-value"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#boxSourceValue",
+      "targets": [
+        "sec-comma-operator-runtime-semantics-evaluation#ordered-operands-and-actual-right-value"
       ]
     }
   ]

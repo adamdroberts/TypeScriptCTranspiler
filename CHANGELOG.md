@@ -1,3 +1,5 @@
+- Register scoped comma evaluation evidence with one canonical expression-tree stress and the independently audited pinned comma scope.
+
 - Function-body environment properties capture and validate the independent Node success marker before native comparison.
 
 - Stats lazy date accessors now expose setters and descriptor attributes, preserve Date conversion, and reject failed object publication.
