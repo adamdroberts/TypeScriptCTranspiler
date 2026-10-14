@@ -123,6 +123,33 @@ export const runtimePromiseMethods:ReadonlyMap<string,{length:number;static:bool
         .map(([,name,length,isStatic])=>[name!,{length:Number(length),static:isStatic==="true"}] as const),
 );
 
+/** Both generator prototypes publish the same native completion collection. */
+export const runtimeGeneratorMethods:ReadonlyMap<string,{length:number;completion:"NORMAL"|"RETURN"|"THROW"}>=(()=>{
+    const source=fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_iterator.c"),"utf8");
+    const table=/static const struct \{ const char\* name; tsc_completion_kind_t kind; \} methods\[\] = \{([\s\S]*?)\};/.exec(source);
+    const length=/\(void\*\)&methods\[index\]\.kind,\s*(\d+),\s*name/.exec(source);
+    if(!table||!length)throw new Error("invalid native generator method publication");
+    const methods=new Map<string,{length:number;completion:"NORMAL"|"RETURN"|"THROW"}>();
+    const rest=table[1]!.replace(/\{ "(\w+)", TSC_COMPLETION_(NORMAL|RETURN|THROW) \}/g,(_row,name:string,completion:"NORMAL"|"RETURN"|"THROW")=>{
+        if(methods.has(name))throw new Error("duplicate native generator method publication");
+        methods.set(name,{length:Number(length[1]),completion});return "";
+    });
+    if(!methods.size||rest.replace(/[\s,]/g,""))throw new Error("invalid native generator method publication");
+    return methods;
+})();
+
+/** Dynamic callable names and tags retain native descriptor identity. */
+export const runtimeDynamicFunctionDescriptors:ReadonlyMap<string,{name:string;generator:boolean;asynchronous:boolean}>=(()=>{
+    const source=fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_core.c"),"utf8"),table=/dynamic_function_descriptors\[\] = \{([\s\S]*?)\};/.exec(source);
+    if(!table)throw new Error("invalid native dynamic function descriptor collection");
+    const result=new Map<string,{name:string;generator:boolean;asynchronous:boolean}>();
+    const rest=table[1]!.replace(/\{ TSC_DYNAMIC_FUNCTION_(\w+), "(\w+)", "[^"]+", TSC_INTRINSIC_DEFAULT_\w+, (true|false), (true|false) \}/g,(_row,_kind:string,name:string,generator:string,asynchronous:string)=>{
+        const gen=generator==="true",async=asynchronous==="true",kind=async?gen?"async-generator":"async":gen?"generator":"ordinary";
+        if(result.has(kind))throw new Error("duplicate native dynamic function descriptor");result.set(kind,{name,generator:gen,asynchronous:async});return "";
+    });
+    if(!result.size||rest.replace(/[\s,]/g,""))throw new Error("invalid native dynamic function descriptor collection");return result;
+})();
+
 /** The native ToPropertyDescriptor reads are the canonical ordered fields. */
 export const runtimeDescriptorFields: readonly {name:string;kind:"boolean"|"value"|"callable"}[] =
     [...fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_value.c"),"utf8")

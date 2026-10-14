@@ -1,3 +1,5 @@
+Retained generator source owners, payloads and native descriptor-backed completion members.
+
 Corrected async iterator fixture protocol and observed primitive-result TypeError identity.
 
 Followed escaped callback containers, source prototypes and retained payloads through one reachability graph.

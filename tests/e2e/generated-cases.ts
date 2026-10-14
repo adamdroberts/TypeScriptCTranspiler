@@ -64,6 +64,7 @@ export interface AsyncReturnAdoptionDepthSpec {generator:"async-return-adoption-
 export interface AwaitResolutionDepthSpec {generator:"await-resolution-depth";depth:number;}
 export interface PromiseReturnProjectionDepthSpec {generator:"promise-return-projection-depth";depth:number;}
 export interface EscapedCallbackGraphDepthSpec {generator:"escaped-callback-graph-depth";depth:number;}
+export interface GeneratorSourceOwnerDepthSpec {generator:"generator-source-owner-depth";depth:number;}
 export interface CallbackTimerSourceDepthSpec {generator:"callback-timer-source-depth";depth:number;}
 export interface HasInstanceDepthSpec {generator:"has-instance-depth";depth:number;}
 export interface RelationalSourceDepthSpec {generator:"relational-source-depth";depth:number;}
@@ -332,6 +333,7 @@ export type GeneratedCaseSpec =
     | AwaitResolutionDepthSpec
     | PromiseReturnProjectionDepthSpec
     | EscapedCallbackGraphDepthSpec
+    | GeneratorSourceOwnerDepthSpec
     | CallbackTimerSourceDepthSpec
     | HasInstanceDepthSpec
     | RelationalSourceDepthSpec
@@ -400,6 +402,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     }
     if(spec.generator==='escaped-callback-graph-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid escaped callback graph spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
+    if(spec.generator==='generator-source-owner-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid generator source owner spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
     }
     if(spec.generator==='callback-timer-source-depth'){
@@ -2050,6 +2056,7 @@ console.log("raw JSON text width:", valid);
         case "await-resolution-depth": return awaitResolutionInput(spec.depth);
         case "promise-return-projection-depth": return promiseReturnProjectionInput(spec.depth);
         case "escaped-callback-graph-depth": return escapedCallbackGraphInput(spec.depth);
+        case "generator-source-owner-depth": return generatorSourceOwnerInput(spec.depth);
         case "callback-timer-source-depth": return callbackTimerSourceInput(spec.depth);
         case "has-instance-depth": return hasInstanceInput(spec.depth);
         case "relational-source-depth": return relationalSourceInput(spec.depth);
@@ -2406,6 +2413,11 @@ export function promiseReturnProjectionInput(depth:number):string {
 export function escapedCallbackGraphInput(depth:number):string {
  const owners=Array.from({length:depth},(_,index)=>`const escapedCallbackOwner${index}:any=${index?`{previous:escapedCallbackOwner${index-1}}`:`{callback,previous:null}`};`);
  return `{function callback(body:any):void{console.log('container callback:',Function(body)())}callback('return 307;');${owners.join('\n')}escapedCallbackOwner0.loop=escapedCallbackOwner${depth-1};const methods:any={call(root:any){let cursor:any=root;while(cursor.previous!==null)cursor=cursor.previous;cursor.callback('return 311;')}};const match:any=/.*/.exec('call');const selected:any=methods[match[0]];selected(escapedCallbackOwner${depth-1});}\n`;
+}
+
+export function generatorSourceOwnerInput(depth:number):string {
+ const owners=Array.from({length:depth},(_,index)=>`const generatorSourceOwner${index}:any=${index?`{iterator:generatorSourceOwner${index-1}.iterator,previous:generatorSourceOwner${index-1}}`:`{iterator:source(),previous:null}`};`);
+ return `{function* source():Generator<any,any,any>{yield 'return 317;'}${owners.join('\n')}console.log('generator source:',Function(generatorSourceOwner${depth-1}.iterator.next().value)());}\n`;
 }
 
 export function moduleRejectionOriginInput(depth:number):{source:string;files:Record<string,string>} {
