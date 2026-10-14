@@ -55,6 +55,7 @@ export interface CollectionSourceAliasDepthSpec {generator:"collection-source-al
 export interface PrimitivePropertyPrototypeDepthSpec {generator:"primitive-property-prototype-depth";depth:number;}
 export interface GeneratorMethodOwnerDepthSpec {generator:"generator-method-owner-depth";depth:number;}
 export interface PrimitivePropertyReadDepthSpec {generator:"primitive-property-read-depth";depth:number;}
+export interface PromiseReactionDepthSpec {generator:"promise-reaction-depth";depth:number;}
 export interface ConstructorCompletionDepthSpec {generator:"constructor-completion-depth";depth:number;}
 export interface JobQueueDepthSpec {generator:"job-queue-depth";depth:number;}
 export interface SourceProjectionProvenanceDepthSpec {generator:"source-projection-provenance-depth";depth:number;}
@@ -300,6 +301,7 @@ export type GeneratedCaseSpec =
     | SwitchCaseBlockFunctionWorklistWidthSpec
     | SwitchCaseBlockGeneratorCaptureWidthSpec
     | SwitchCaseBlockAsyncCaptureWidthSpec
+    | PromiseReactionDepthSpec
     | ConstructorCompletionDepthSpec
     | JobQueueDepthSpec
     | SourceProjectionProvenanceDepthSpec
@@ -318,6 +320,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     const spec = value as Record<string, unknown>;
     if(spec.generator==='primitive-property-read-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid primitive property read spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
+    if(spec.generator==='promise-reaction-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid Promise reaction spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
     }
     if(spec.generator==='constructor-completion-depth'){
@@ -1903,6 +1909,7 @@ console.log("raw JSON text width:", valid);
         case "primitive-property-prototype-depth": return primitivePropertyPrototypeInput(spec.depth);
         case "generator-method-owner-depth": return generatorMethodOwnerInput(spec.depth);
         case "primitive-property-read-depth": return primitivePropertyReadInput(spec.depth);
+        case "promise-reaction-depth": return promiseReactionInput(spec.depth);
         case "constructor-completion-depth": return constructorCompletionInput(spec.depth);
         case "job-queue-depth": return jobQueueInput(spec.depth);
         case "source-projection-provenance-depth": return sourceProjectionProvenanceInput(spec.depth);
@@ -2136,4 +2143,8 @@ export function jobQueueInput(depth:number):string {
 
 export function constructorCompletionInput(depth:number):string {
  return `const owner:any=eval('(class extends Object{constructor(){}})');let graph:any=null;for(let index=0;index<${depth};++index)graph={owner,next:graph};let valid=true;while(graph){try{new graph.owner();valid=false}catch(error){if(!(error instanceof ReferenceError))valid=false}graph=graph.next}console.log('constructor:',valid);\n`;
+}
+
+export function promiseReactionInput(depth:number):string {
+ return `let chain:Promise<number>=Promise.resolve(0);for(let index=0;index<${depth};++index){const payload={index};chain=chain.then(value=>{if(value!==payload.index)throw new Error('reaction order');return value+1})}chain.then(value=>console.log('reactions:',value));\n`;
 }

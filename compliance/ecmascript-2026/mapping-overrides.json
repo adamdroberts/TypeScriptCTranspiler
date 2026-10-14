@@ -26,7 +26,9 @@
       "field": "es5id",
       "match": "prefix",
       "value": "10.2.1_",
-      "clauses": ["sec-functiondeclarationinstantiation"],
+      "clauses": [
+        "sec-functiondeclarationinstantiation"
+      ],
       "reason": "The historical function activation instantiation section maps to FunctionDeclarationInstantiation, including ordered parameter binding initialization and body declaration ownership.",
       "reviewedBy": "tsc2c compliance review"
     },
@@ -50,12 +52,23 @@
       "reason": "The ES6 WithStatement Evaluation algorithm identifier maps to its current normative evaluation algorithm, independently of scenario filenames and inventory size.",
       "reviewedBy": "tsc2c compliance review"
     },
-    {"field": "es5id", "match": "prefix", "value": "12.10.1-", "clauses": ["sec-with-statement-static-semantics-early-errors"], "reason": "The ES5 WithStatement strict-mode-restrictions section maps to the current WithStatement strict-context early error, including inherited direct-eval strictness, independently of scenario filenames.", "reviewedBy": "tsc2c compliance review"},
+    {
+      "field": "es5id",
+      "match": "prefix",
+      "value": "12.10.1-",
+      "clauses": [
+        "sec-with-statement-static-semantics-early-errors"
+      ],
+      "reason": "The ES5 WithStatement strict-mode-restrictions section maps to the current WithStatement strict-context early error, including inherited direct-eval strictness, independently of scenario filenames.",
+      "reviewedBy": "tsc2c compliance review"
+    },
     {
       "field": "es5id",
       "match": "prefix",
       "value": "S11.13.1_",
-      "clauses": ["sec-assignment-operators-runtime-semantics-evaluation"],
+      "clauses": [
+        "sec-assignment-operators-runtime-semantics-evaluation"
+      ],
       "reason": "Legacy ES5 section 11.13.1 denotes simple Assignment Operator evaluation and PutValue; its semantic metadata boundary maps independently of fixture names and inventory size.",
       "reviewedBy": "tsc2c compliance review"
     },
@@ -63,7 +76,9 @@
       "field": "es5id",
       "match": "prefix",
       "value": "9.3.1_",
-      "clauses": ["sec-tonumber-applied-to-the-string-type"],
+      "clauses": [
+        "sec-tonumber-applied-to-the-string-type"
+      ],
       "reason": "The pinned legacy ES5 9.3.1 metadata family denotes String-input ToNumber grammar and rounding; the metadata prefix maps the semantic section independently of filenames and test inventory size.",
       "reviewedBy": "tsc2c compliance review"
     },
@@ -71,7 +86,9 @@
       "field": "es5id",
       "match": "prefix",
       "value": "15.5.3.2_",
-      "clauses": ["sec-string.fromcharcode"],
+      "clauses": [
+        "sec-string.fromcharcode"
+      ],
       "reason": "The pinned legacy ES5 15.5.3.2 metadata family denotes String.fromCharCode; the semantic metadata prefix is independent of filenames and scenario inventory size.",
       "reviewedBy": "tsc2c compliance review"
     },
@@ -79,7 +96,9 @@
       "field": "es5id",
       "match": "prefix",
       "value": "9.7_",
-      "clauses": ["sec-touint16"],
+      "clauses": [
+        "sec-touint16"
+      ],
       "reason": "The pinned legacy ES5 9.7 metadata family exercises the current ToUint16 abstract operation even though the files are colocated with one consumer.",
       "reviewedBy": "tsc2c compliance review"
     },
@@ -87,7 +106,9 @@
       "field": "es6id",
       "match": "exact",
       "value": "21.1.2.1",
-      "clauses": ["sec-string.fromcharcode"],
+      "clauses": [
+        "sec-string.fromcharcode"
+      ],
       "reason": "The exact legacy ES6 anchor 21.1.2.1 is the current String.fromCharCode intrinsic clause.",
       "reviewedBy": "tsc2c compliance review"
     },
@@ -95,7 +116,9 @@
       "field": "es6id",
       "match": "exact",
       "value": "21.1.2.2",
-      "clauses": ["sec-string.fromcodepoint"],
+      "clauses": [
+        "sec-string.fromcodepoint"
+      ],
       "reason": "The exact legacy ES6 anchor 21.1.2.2 is the current String.fromCodePoint intrinsic clause.",
       "reviewedBy": "tsc2c compliance review"
     },
@@ -103,7 +126,9 @@
       "field": "es5id",
       "match": "prefix",
       "value": "15.5.5.5.2-",
-      "clauses": ["sec-string-exotic-objects-getownproperty-p"],
+      "clauses": [
+        "sec-string-exotic-objects-getownproperty-p"
+      ],
       "reason": "The pinned historical 15.5.5.2 metadata section explicitly denotes the String exotic [[GetOwnProperty]] algorithm; the semantic-boundary prefix maps that section independently of filenames and scenario inventory size.",
       "reviewedBy": "tsc2c compliance review"
     },
@@ -111,7 +136,9 @@
       "field": "es6id",
       "match": "exact",
       "value": "26.1.2",
-      "clauses": ["sec-reflect.construct"],
+      "clauses": [
+        "sec-reflect.construct"
+      ],
       "reason": "The exact legacy ES6 anchor 26.1.2 is the current Reflect.construct intrinsic clause; the semantic metadata maps independently of its filename or surrounding fixture inventory.",
       "reviewedBy": "tsc2c compliance review"
     },
@@ -119,7 +146,9 @@
       "field": "es6id",
       "match": "exact",
       "value": "14.2",
-      "clauses": ["sec-arrow-function-definitions"],
+      "clauses": [
+        "sec-arrow-function-definitions"
+      ],
       "reason": "The exact ES6 Arrow Function Definitions section is the current Arrow Function Definitions parent clause.",
       "reviewedBy": "tsc2c compliance review"
     },
@@ -127,7 +156,9 @@
       "field": "es6id",
       "match": "exact",
       "value": "14.2.1",
-      "clauses": ["sec-arrow-function-definitions-static-semantics-early-errors"],
+      "clauses": [
+        "sec-arrow-function-definitions-static-semantics-early-errors"
+      ],
       "reason": "The exact ES6 Arrow Function Definitions static-semantics section is the current ArrowFunction Early Errors clause.",
       "reviewedBy": "tsc2c compliance review"
     },
@@ -157,7 +188,9 @@
       "field": "es6id",
       "match": "exact",
       "value": "16.1",
-      "clauses": ["sec-forbidden-extensions"],
+      "clauses": [
+        "sec-forbidden-extensions"
+      ],
       "reason": "The exact ES6 forbidden-extensions section is the current Forbidden Extensions clause, including the restriction on own caller and arguments properties of ArrowFunction objects.",
       "reviewedBy": "tsc2c compliance review"
     },
@@ -259,6 +292,16 @@
         "sec-reflect.setprototypeof"
       ],
       "reason": "The legacy ES6 Reflect.setPrototypeOf intrinsic section maps to its pinned normative target/prototype validation and SetPrototypeOf operation independently of filenames and scenario inventory size.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es6id",
+      "match": "exact",
+      "value": "25.4.2.2",
+      "clauses": [
+        "sec-newpromiseresolvethenablejob"
+      ],
+      "reason": "The exact ES6 PromiseResolveThenableJob algorithm is the current NewPromiseResolveThenableJob operation, including resolving functions and abrupt then-call completion.",
       "reviewedBy": "tsc2c compliance review"
     }
   ],

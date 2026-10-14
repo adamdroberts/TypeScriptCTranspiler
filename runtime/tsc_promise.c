@@ -61,19 +61,24 @@ typedef struct {
     tsc_realm_t* realm;
 } tsc_promise_thenable_job_t;
 
+static void promise_enqueue_callback(tsc_promise_callback_t callback) {
+    if (callback.enqueue) callback.enqueue(callback.fn, callback.env);
+    else tsc_queue_microtask(callback.fn, callback.env);
+}
+
 void tsc_promise_trigger_callbacks(tsc_promise_t* p) {
     if (!p || !p->callbacks) return;
     for (size_t i = 0; i < p->callbacks_len; i++) {
-        tsc_queue_microtask(p->callbacks[i].fn, p->callbacks[i].env);
+        promise_enqueue_callback(p->callbacks[i]);
     }
     p->callbacks = NULL;
     p->callbacks_len = 0;
     p->callbacks_cap = 0;
 }
 
-void tsc_promise_add_callback(tsc_promise_t* p, void (*fn)(void*), void* env) {
-    if (!p || !fn) return;
-    if(p->state!=TSC_PROMISE_PENDING){tsc_queue_microtask(fn,env);return;}
+static void promise_add_callback(tsc_promise_t* p, tsc_promise_callback_t callback) {
+    if (!p || !callback.fn) return;
+    if(p->state!=TSC_PROMISE_PENDING){promise_enqueue_callback(callback);return;}
     if (p->callbacks_len == p->callbacks_cap) {
         size_t next = p->callbacks_cap ? p->callbacks_cap * 2 : 4;
         tsc_promise_callback_t* entries = (tsc_promise_callback_t*)TSC_GC_REALLOC(p->callbacks, next * sizeof(tsc_promise_callback_t));
@@ -81,7 +86,11 @@ void tsc_promise_add_callback(tsc_promise_t* p, void (*fn)(void*), void* env) {
         p->callbacks = entries;
         p->callbacks_cap = next;
     }
-    p->callbacks[p->callbacks_len++] = (tsc_promise_callback_t){ fn, env };
+    p->callbacks[p->callbacks_len++] = callback;
+}
+
+void tsc_promise_add_callback(tsc_promise_t* p, void (*fn)(void*), void* env) {
+    promise_add_callback(p, (tsc_promise_callback_t){.fn=fn,.env=env});
 }
 
 typedef struct {
@@ -176,18 +185,18 @@ static void promise_thenable_job(void* env) {
     (void)tsc_realm_swap(previous_realm);
 }
 
-static tsc_realm_t* promise_thenable_realm(tsc_value_t then) {
+static tsc_realm_t* promise_job_callback_realm(tsc_value_t callback) {
     TSC_TRY_FRAME(frame);
     tsc_try_push(&frame);
     if (setjmp(frame.jb) == 0) {
-        tsc_realm_t* realm = tsc_value_function_realm(then);
+        tsc_realm_t* realm = tsc_value_function_realm(callback);
         tsc_try_pop();
         return realm;
     }
-    /* NewPromiseResolveThenableJob ignores GetFunctionRealm's abrupt
-     * completion, including a revoked callable Proxy. The job still calls it. */
+    /* Promise jobs retain the current Realm when GetFunctionRealm is abrupt,
+     * including for a revoked callable Proxy. The job still calls it. */
     tsc_try_pop();
-    return NULL;
+    return tsc_realm_current();
 }
 
 static void promise_resolution_resolve(tsc_promise_resolution_t* record, tsc_value_t value) {
@@ -212,7 +221,7 @@ static void promise_resolution_resolve(tsc_promise_resolution_t* record, tsc_val
                 *job = (tsc_promise_thenable_job_t){ .promise = record->promise,
                     .thenable = value, .thenable_gc_root = value_gc_root,
                     .then_method = then, .then_method_gc_root = then_gc_root };
-                job->realm = promise_thenable_realm(then);
+                job->realm = promise_job_callback_realm(then);
                 tsc_queue_microtask(promise_thenable_job, job);
             }
             (void)then_gc_root;
@@ -744,21 +753,46 @@ typedef struct {
     void *on_fulfilled_root, *on_rejected_root;
 } tsc_promise_reaction_t;
 
+typedef struct {
+    tsc_promise_capability_t* capability;
+    tsc_value_t handler, argument;
+    void *handler_root, *argument_root;
+    tsc_realm_t* realm;
+    bool rejected;
+} tsc_promise_reaction_job_t;
+
 static void promise_reaction_job(void* env) {
-    tsc_promise_reaction_t* reaction = env;
-    const bool rejected = tsc_promise_is_rejected(reaction->receiver);
-    tsc_value_t handler = rejected ? reaction->on_rejected : reaction->on_fulfilled;
-    tsc_value_t value = rejected ? tsc_promise_reason(reaction->receiver) : tsc_promise_value(reaction->receiver);
-    void* volatile value_root = tsc_value_gc_root(value);
-    if (!tsc_value_is_callable(handler)) {
-        promise_call_resolving(rejected ? reaction->capability->reject : reaction->capability->resolve, value);
-        (void)value_root;
-        return;
+    tsc_promise_reaction_job_t* job = env;
+    tsc_realm_t* previous_realm = job->realm ? tsc_realm_swap(job->realm) : NULL;
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) != 0) {
+        tsc_try_pop();
+        if (previous_realm) (void)tsc_realm_swap(previous_realm);
+        tsc_rethrow();
     }
-    tsc_promise_call_completion_t* completion = promise_call_completion(handler, promise_single_arg(value));
-    promise_call_resolving(completion->abrupt ? reaction->capability->reject : reaction->capability->resolve,
-        completion->value);
-    (void)value_root;
+    if (!tsc_value_is_callable(job->handler)) {
+        promise_call_resolving(job->rejected ? job->capability->reject : job->capability->resolve, job->argument);
+    } else {
+        tsc_promise_call_completion_t* completion = promise_call_completion(job->handler, promise_single_arg(job->argument));
+        promise_call_resolving(completion->abrupt ? job->capability->reject : job->capability->resolve,
+            completion->value);
+    }
+    tsc_try_pop();
+    if (previous_realm) (void)tsc_realm_swap(previous_realm);
+}
+
+static void promise_enqueue_reaction(void (*fn)(void*), void* env) {
+    tsc_promise_reaction_t* reaction = env;
+    bool rejected = tsc_promise_is_rejected(reaction->receiver);
+    tsc_value_t handler = rejected ? reaction->on_rejected : reaction->on_fulfilled;
+    tsc_value_t argument = rejected ? tsc_promise_reason(reaction->receiver) : tsc_promise_value(reaction->receiver);
+    tsc_promise_reaction_job_t* job = TSC_GC_MALLOC(sizeof(*job));
+    *job = (tsc_promise_reaction_job_t){.capability=reaction->capability,
+        .handler=handler,.argument=argument,.handler_root=tsc_value_gc_root(handler),
+        .argument_root=tsc_value_gc_root(argument),.rejected=rejected};
+    job->realm = tsc_value_is_callable(handler) ? promise_job_callback_realm(handler) : NULL;
+    tsc_queue_microtask(fn, job);
 }
 
 static tsc_value_t promise_prototype_then(void* env, tsc_value_t receiver, tsc_array_t* args) {
@@ -773,8 +807,7 @@ static tsc_value_t promise_prototype_then(void* env, tsc_value_t receiver, tsc_a
         .on_fulfilled = promise_argument(args, 0), .on_rejected = promise_argument(args, 1) };
     reaction->on_fulfilled_root = tsc_value_gc_root(reaction->on_fulfilled);
     reaction->on_rejected_root = tsc_value_gc_root(reaction->on_rejected);
-    if (tsc_promise_is_pending(promise)) tsc_promise_add_callback(promise, promise_reaction_job, reaction);
-    else tsc_queue_microtask(promise_reaction_job, reaction);
+    promise_add_callback(promise, (tsc_promise_callback_t){.fn=promise_reaction_job,.env=reaction,.enqueue=promise_enqueue_reaction});
     return capability->promise;
 }
 

@@ -6021,6 +6021,112 @@
         }
       ],
       "rationale": "Scoped caller context constructor completion evidence; complete Construct and Realm contracts remain open."
+    },
+    {
+      "clause": "sec-newpromisereactionjob",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "canonical-enqueue-realm-record",
+          "title": "Canonical enqueue Realm record",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "graph",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-newpromisereactionjob"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/promise-job-realm.property.test.ts",
+              "tests/property/promise-resolution.property.test.ts",
+              "tests/property/promise-try.property.test.ts",
+              "tests/property/await-promise-resolve.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "promise_reaction_depth"
+            ],
+            "e2e": [],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "runtime/tsc_promise.c#promise_enqueue_callback",
+              "runtime/tsc_promise.c#promise_enqueue_reaction",
+              "runtime/tsc_promise.c#promise_reaction_job",
+              "runtime/tsc_promise.c#promise_job_callback_realm",
+              "runtime/tsc_promise.c#promise_thenable_job",
+              "runtime/tsc_internal.h#tsc_promise_callback_t"
+            ]
+          },
+          "rationale": "Promise callback scheduling now projects each reaction into one retained job record at actual enqueue, carrying selected handler, argument, completion kind, capability and Realm. Pending and already settled reactions use the same callback collection enqueue hook. GetFunctionRealm abrupt completion captures the current enqueue Realm; the shared helper also replaces thenable fallback deferral to drain time. Reaction execution enters its recorded Realm and restores the previous Realm across normal and abrupt capability completion. The predecessor raw reaction callback and uncaptured thenable fallback are deleted. promise-job-realm.property compares independent Node settled fulfillment/rejection, pending registration versus settlement, revocation before/after enqueue, thenable fallback, body abrupt ownership, empty handler identity and caller restoration across typed and erased native inputs in both memory modes. One shared generated deep retained reaction graph also checks typed CLI. Existing resolution, Promise.try and await properties retain neighboring completion/species evidence. Existing CType, declarations and public callback interfaces suffice; the private callback record adds an enqueue projection. Complete host job policy, callback context/agent contracts, source precision, host eligibility and eligible exhaustive ECMAScript 2026 coverage remain open."
+        }
+      ],
+      "rationale": "Scoped Promise job Realm evidence; complete job and Realm contracts remain open."
+    },
+    {
+      "clause": "sec-newpromiseresolvethenablejob",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "canonical-enqueue-realm-record",
+          "title": "Canonical enqueue Realm record",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "graph",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-newpromiseresolvethenablejob"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/promise-job-realm.property.test.ts",
+              "tests/property/promise-resolution.property.test.ts",
+              "tests/property/promise-try.property.test.ts",
+              "tests/property/await-promise-resolve.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "promise_reaction_depth"
+            ],
+            "e2e": [],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "runtime/tsc_promise.c#promise_enqueue_callback",
+              "runtime/tsc_promise.c#promise_enqueue_reaction",
+              "runtime/tsc_promise.c#promise_reaction_job",
+              "runtime/tsc_promise.c#promise_job_callback_realm",
+              "runtime/tsc_promise.c#promise_thenable_job",
+              "runtime/tsc_internal.h#tsc_promise_callback_t"
+            ]
+          },
+          "rationale": "Promise callback scheduling now projects each reaction into one retained job record at actual enqueue, carrying selected handler, argument, completion kind, capability and Realm. Pending and already settled reactions use the same callback collection enqueue hook. GetFunctionRealm abrupt completion captures the current enqueue Realm; the shared helper also replaces thenable fallback deferral to drain time. Reaction execution enters its recorded Realm and restores the previous Realm across normal and abrupt capability completion. The predecessor raw reaction callback and uncaptured thenable fallback are deleted. promise-job-realm.property compares independent Node settled fulfillment/rejection, pending registration versus settlement, revocation before/after enqueue, thenable fallback, body abrupt ownership, empty handler identity and caller restoration across typed and erased native inputs in both memory modes. One shared generated deep retained reaction graph also checks typed CLI. Existing resolution, Promise.try and await properties retain neighboring completion/species evidence. Existing CType, declarations and public callback interfaces suffice; the private callback record adds an enqueue projection. Complete host job policy, callback context/agent contracts, source precision, host eligibility and eligible exhaustive ECMAScript 2026 coverage remain open."
+        }
+      ],
+      "rationale": "Scoped captured thenable job Realm evidence; complete Promise job contracts remain open."
     }
   ],
   "groups": [
@@ -6234,7 +6340,7 @@
         "Unmatched ordinary and suspended CaseBlocks retain normal completion through one canonical statement tree", "composed source projection provenance"
       ],
       "localEvidence": {
-        "property": ["tests/property/source-projection-provenance.property.test.ts", "tests/property/lexical-source-capture.property.test.ts", "tests/property/source-callable-formals.property.test.ts", 
+        "property": ["tests/property/source-projection-provenance.property.test.ts", "tests/property/lexical-source-capture.property.test.ts", "tests/property/source-callable-formals.property.test.ts",
           "tests/property/symbol-key-source.property.test.ts",
           "tests/property/function-body-completion-source.property.test.ts",
           "tests/property/protected-binding-storage.property.test.ts",
@@ -6269,14 +6375,14 @@
         "generatedRegression": [
           "async-binding-default-depth"
         ],
-        "stress": ["source_projection_provenance_depth", 
+        "stress": ["source_projection_provenance_depth",
           "async-binding-default-depth",
           "switch_clause_worklist_width",
           "json_parse_source_owner_depth",
           "return_projection_depth",
           "switch_normal_completion_depth"
         ],
-        "e2e": ["function_closures", 
+        "e2e": ["function_closures",
           "eval_symbol_key_source",
           "eval_function_body_completion_source",
           "protected_native_static_bindings",
@@ -6315,7 +6421,7 @@
           "resource_context_syntax_diagnostic"
         ],
         "declarationSurface": [],
-        "implementation": ["src/source-value-flow.ts#SourceProjectionPhase", "src/source-value-flow.ts#captureRead", 
+        "implementation": ["src/source-value-flow.ts#SourceProjectionPhase", "src/source-value-flow.ts#captureRead",
           "src/emit/index.ts#protectedWorklist",
           "src/control-static-semantics.ts#invalid rest binding grammar",
           "src/control-static-semantics.ts#catchPatternNames",
@@ -7130,10 +7236,10 @@
         "promises and jobs",
         "async functions and generators",
         "disposable resources",
-        "sync generator completion allocates results after restoring the method Realm"
+        "sync generator completion allocates results after restoring the method Realm", "Promise job enqueue Realm records"
       ],
       "localEvidence": {
-        "property": [
+        "property": ["tests/property/promise-job-realm.property.test.ts", "tests/property/promise-try.property.test.ts", "tests/property/await-promise-resolve.property.test.ts",
           "tests/property/for-in-owner.property.test.ts",
           "tests/property/resumable-resource.property.test.ts",
           "tests/property/array-from-async.property.test.ts",
@@ -7161,7 +7267,7 @@
           "async-leading-await-chain",
           "async-binding-default-depth"
         ],
-        "stress": [
+        "stress": ["promise_reaction_depth",
           "async-leading-await-chain",
           "eval_dynamic_import_source_depth",
           "return_projection_depth",
@@ -7196,7 +7302,7 @@
           "stdlib/lib.core.d.ts#IteratorObject",
           "stdlib/lib.core.d.ts#IteratorConstructor"
         ],
-        "implementation": [
+        "implementation": ["runtime/tsc_promise.c#promise_enqueue_callback", "runtime/tsc_promise.c#promise_enqueue_reaction", "runtime/tsc_promise.c#promise_reaction_job", "runtime/tsc_promise.c#promise_job_callback_realm", "runtime/tsc_promise.c#promise_thenable_job", "runtime/tsc_internal.h#tsc_promise_callback_t",
           "src/emit/index.ts#ownerVariableBindings",
           "src/emit/index.ts#emitOrdinarySyncIteration",
           "runtime/tsc_iterator.c#tsc_for_in_iterator_open",
@@ -7249,6 +7355,7 @@
         ]
       },
       "knownGaps": [
+        "Promise callback scheduling now projects each reaction into one retained job record at actual enqueue, carrying selected handler, argument, completion kind, capability and Realm. Pending and already settled reactions use the same callback collection enqueue hook. GetFunctionRealm abrupt completion captures the current enqueue Realm; the shared helper also replaces thenable fallback deferral to drain time. Reaction execution enters its recorded Realm and restores the previous Realm across normal and abrupt capability completion. The predecessor raw reaction callback and uncaptured thenable fallback are deleted. promise-job-realm.property compares independent Node settled fulfillment/rejection, pending registration versus settlement, revocation before/after enqueue, thenable fallback, body abrupt ownership, empty handler identity and caller restoration across typed and erased native inputs in both memory modes. One shared generated deep retained reaction graph also checks typed CLI. Existing resolution, Promise.try and await properties retain neighboring completion/species evidence. Existing CType, declarations and public callback interfaces suffice; the private callback record adds an enqueue projection. Complete host job policy, callback context/agent contracts, source precision, host eligibility and eligible exhaustive ECMAScript 2026 coverage remain open.",
         "General generators, async generators, remaining async CFGs, and full iterator close semantics are incomplete.",
         "Ordinary Iterator constructor/from, eager consumers, lazy helpers and concat have local differential evidence for captured records, close/error partitions, metadata setters, raw wrapper forwarding, activation worklists, captured method Realm restoration and retained graphs. Complete cross-realm intrinsic behavior, activation through arbitrary user Call graphs and exhaustive eligible Test262 evidence remain open.",
         "The unequal-branch async regression fixtures now use one deterministic virtual deadline collection with FIFO registration order and Promise-driven advancement. Independent Node runs of the former real-timer input produced different log orders from the same source, so its exact stdout golden was not stable evidence of branch sequencing. The shared helper permits await reactions to register nested deadlines before advancing the clock; declaration, method and callable consumers preserve the existing expected branch results and ordering without wall-clock ties. Node and native execution compare the repaired consumers in both memory modes; promise-resolution.property guards real job, adoption and reaction semantics. These fixtures remain regression detectors, not a cardinality proof or a timer/conformance claim. Real timer behavior remains covered separately by its owner, deadline, signal and activation properties. Runtime and language implementation are unchanged. Eligible exhaustive ECMAScript 2026 coverage, exact reciprocal clause evidence and remaining host/semantic gaps remain open.",

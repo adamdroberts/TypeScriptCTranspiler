@@ -5300,6 +5300,101 @@
       "targets": [
         "sec-ecmascript-function-objects-construct-argumentslist-newtarget#caller-context-postbody-completion"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/promise-job-realm.property.test.ts",
+      "targets": [
+        "sec-newpromisereactionjob#canonical-enqueue-realm-record",
+        "sec-newpromiseresolvethenablejob#canonical-enqueue-realm-record"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/promise-resolution.property.test.ts",
+      "targets": [
+        "sec-newpromisereactionjob#canonical-enqueue-realm-record",
+        "sec-newpromiseresolvethenablejob#canonical-enqueue-realm-record"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/promise-try.property.test.ts",
+      "targets": [
+        "sec-newpromisereactionjob#canonical-enqueue-realm-record",
+        "sec-newpromiseresolvethenablejob#canonical-enqueue-realm-record"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/await-promise-resolve.property.test.ts",
+      "targets": [
+        "sec-newpromisereactionjob#canonical-enqueue-realm-record",
+        "sec-newpromiseresolvethenablejob#canonical-enqueue-realm-record"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "promise_reaction_depth",
+      "targets": [
+        "sec-newpromisereactionjob#canonical-enqueue-realm-record",
+        "sec-newpromiseresolvethenablejob#canonical-enqueue-realm-record"
+      ],
+      "stressReview": {
+        "dimension": "retained Promise reaction graph depth",
+        "parameter": "depth",
+        "representativeHighDepth": 2048,
+        "rationale": "One shared generated graph verifies retained callback arguments and FIFO completion independently of job Realm, settlement timing and abrupt semantic partitions.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_promise.c#promise_enqueue_callback",
+      "targets": [
+        "sec-newpromisereactionjob#canonical-enqueue-realm-record",
+        "sec-newpromiseresolvethenablejob#canonical-enqueue-realm-record"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_promise.c#promise_enqueue_reaction",
+      "targets": [
+        "sec-newpromisereactionjob#canonical-enqueue-realm-record",
+        "sec-newpromiseresolvethenablejob#canonical-enqueue-realm-record"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_promise.c#promise_reaction_job",
+      "targets": [
+        "sec-newpromisereactionjob#canonical-enqueue-realm-record",
+        "sec-newpromiseresolvethenablejob#canonical-enqueue-realm-record"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_promise.c#promise_job_callback_realm",
+      "targets": [
+        "sec-newpromisereactionjob#canonical-enqueue-realm-record",
+        "sec-newpromiseresolvethenablejob#canonical-enqueue-realm-record"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_promise.c#promise_thenable_job",
+      "targets": [
+        "sec-newpromisereactionjob#canonical-enqueue-realm-record",
+        "sec-newpromiseresolvethenablejob#canonical-enqueue-realm-record"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_internal.h#tsc_promise_callback_t",
+      "targets": [
+        "sec-newpromisereactionjob#canonical-enqueue-realm-record",
+        "sec-newpromiseresolvethenablejob#canonical-enqueue-realm-record"
+      ]
     }
   ]
 }

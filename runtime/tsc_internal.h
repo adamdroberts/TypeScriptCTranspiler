@@ -399,6 +399,7 @@ typedef enum {
 typedef struct {
     void (*fn)(void*);
     void* env;
+    void (*enqueue)(void (*fn)(void*), void* env);
 } tsc_promise_callback_t;
 
 struct tsc_promise {
