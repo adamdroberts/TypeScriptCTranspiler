@@ -2891,13 +2891,17 @@ class SourceValueFlow {
         this.rule([returned],()=>{for(const atom of returned.values){
             if(atom.tag==="pending-source"){this.publish(value,atom);continue;}
             if(atom.tag==="abrupt")continue;
-            if(atom.tag==="promise"){this.copy(atom.value,value);this.copy(atom.rejection,rejection);continue;}
             const owner=this.ordinaryOwner(atom);
             if(!owner){this.publish(value,atom);continue;}
             if(seen.has(atom))continue;seen.add(atom);
             const input=cell(atom),then=this.property(input,"then",callback),target=this.newCell();
+            let intrinsicThen=false;
             this.rule([then],()=>{for(const method of then.values){
                 if(method.tag==="abrupt"||method.tag==="pending-source")continue;
+                if(atom.tag==="promise"&&method.tag==="operation"&&method.operation==="promise-member:then"){
+                    if(!intrinsicThen){intrinsicThen=true;const ready=this.promiseSpeciesReady(input,callback);
+                        this.rule([ready],()=>{if(ready.values.has(this.primitive(true))){this.copy(atom.value,value);this.copy(atom.rejection,rejection);}});}continue;
+                }
                 const kinds=this.primitiveKinds(cell(method));
                 if(kinds&~KIND_FUNCTION)this.publish(value,atom);
                 if(kinds&KIND_FUNCTION)this.publish(target,method);
@@ -4720,7 +4724,10 @@ class SourceValueFlow {
                             }
                         }
                         if (atom.owner.kind.includes("generator")) this.publish(result!, { tag: "generator", owner: atom.owner });
-                        else if (atom.owner.kind === "async") this.publish(result!, { tag: "promise", value: atom.owner.returns, rejection: atom.owner.throws });
+                        else if (atom.owner.kind === "async") {
+                            const returned=this.projectReturn(atom.owner.returns,actualFormals),resolved=this.promiseAssimilation(returned,node);
+                            this.copy(atom.owner.throws,resolved.rejection);this.publish(result!,{tag:"promise",value:resolved.value,rejection:resolved.rejection});
+                        }
                         else {
                             if (invocation.construct) {
                                 this.rule([atom.owner.returns],()=>{

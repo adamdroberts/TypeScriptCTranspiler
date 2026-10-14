@@ -1,3 +1,5 @@
+Projected async return adoption and observable Promise then/species effects through shared source owners.
+
 Observed delayed Module rejection through its retained source role after draining jobs.
 
 Projected Promise.try and withResolvers source results through canonical capabilities.
