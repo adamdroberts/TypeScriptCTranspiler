@@ -34584,8 +34584,10 @@ class Emitter {
 
     private emitTernary(expr: ts.ConditionalExpression): EmitResult {
         const staticCondition = this.staticBooleanValue(expr.condition);
-        if (staticCondition === true) return this.emitExpr(expr.whenTrue);
-        if (staticCondition === false) return this.emitExpr(expr.whenFalse);
+        if (staticCondition !== null) {
+            const selected = staticCondition ? expr.whenTrue : expr.whenFalse;
+            return { c: this.boxSourceValue(this.emitExpr(selected), selected), ty: T_VALUE };
+        }
         if (this.isSideEffectFreeTopLevelConstInitializer(expr.condition)) {
             const trueString = this.sideEffectFreeStringLiteralText(expr.whenTrue, new Set());
             const falseString = this.sideEffectFreeStringLiteralText(expr.whenFalse, new Set());
@@ -34613,8 +34615,6 @@ class Emitter {
 
     private emitConditionalValueArms(expr: ts.ConditionalExpression, cond: string,
         whenT: EmitResult, whenF: EmitResult): EmitResult {
-        const distinctNullish = this.emitDistinctNullishConditional(expr, cond, whenT, whenF);
-        if (distinctNullish) return distinctNullish;
         if (
             whenT.ty.kind === "array" &&
             whenF.ty.kind === "array" &&
@@ -34634,7 +34634,8 @@ class Emitter {
                 ty: target,
             };
         }
-        if (!sameCType(whenT.ty, whenF.ty) || whenT.ty.c !== whenF.ty.c) {
+        if (whenT.ty.kind === "void" || whenT.ty.kind === "never" ||
+            !sameCType(whenT.ty, whenF.ty) || whenT.ty.c !== whenF.ty.c) {
             return {
                 c: `(${cond} ? ${this.coerce(whenT, T_VALUE, expr.whenTrue)} : ${this.coerce(whenF, T_VALUE, expr.whenFalse)})`,
                 ty: T_VALUE,
@@ -34643,22 +34644,6 @@ class Emitter {
         return {
             c: `(${cond} ? ${whenT.c} : ${whenF.c})`,
             ty: whenT.ty,
-        };
-    }
-
-    private emitDistinctNullishConditional(
-        expr: ts.ConditionalExpression,
-        condition: string,
-        whenTrue: EmitResult,
-        whenFalse: EmitResult,
-    ): EmitResult | null {
-        if (whenTrue.ty.kind !== "void" || whenFalse.ty.kind !== "void") return null;
-        const trueKind = this.equalityNullishKind(expr.whenTrue);
-        const falseKind = this.equalityNullishKind(expr.whenFalse);
-        if (!trueKind || !falseKind || trueKind === falseKind) return null;
-        return {
-            c: `(${condition} ? ${this.coerce(whenTrue, T_VALUE, expr.whenTrue)} : ${this.coerce(whenFalse, T_VALUE, expr.whenFalse)})`,
-            ty: T_VALUE,
         };
     }
 

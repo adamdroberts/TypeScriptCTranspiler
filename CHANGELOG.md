@@ -1,3 +1,5 @@
+- Conditional expressions preserve actual null/undefined Values through static arm selection and the shared lazy boxed boundary.
+
 - Register scoped comma evaluation evidence with one canonical expression-tree stress and the independently audited pinned comma scope.
 
 - Function-body environment properties capture and validate the independent Node success marker before native comparison.
