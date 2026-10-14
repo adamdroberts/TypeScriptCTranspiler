@@ -16031,185 +16031,213 @@ tsc_array_t* tsc_fs_dirents_encode_names(tsc_array_t* entries, const tsc_str_t* 
 
 /* ---------------- path ---------------- */
 
-tsc_str_t* path_join_impl(size_t n, va_list ap, bool resolve) {
-    /* Simple POSIX join: concatenate with '/' separators, collapse duplicates. */
-    char buf[4096];
-    size_t pos = 0;
+typedef struct {
+    const tsc_str_t* source;
+    size_t start, length;
+    bool parent;
+} path_component_t;
+typedef struct {
+    tsc_array_t* components;
+    bool absolute, trailing;
+} path_record_t;
+
+static path_record_t path_record_new(void) {
+    return (path_record_t){tsc_array_new(sizeof(path_component_t), 0), false, false};
+}
+
+/* Every POSIX path consumer uses this component stack. A parent removes one
+ * ordinary component, remains relative at the boundary, or stops at root. */
+static void path_record_append(path_record_t* record, const tsc_str_t* source, bool reset_absolute) {
+    if (!source || source->len == 0) return;
+    const bool absolute = source->data[0] == '/';
+    if (reset_absolute && absolute) {
+        record->components->len = 0;
+        record->absolute = true;
+    } else if (record->components->len == 0 && !record->absolute && absolute) {
+        record->absolute = true;
+    }
+    record->trailing = source->data[source->len - 1] == '/';
+    for (size_t cursor = 0; cursor < source->len;) {
+        while (cursor < source->len && source->data[cursor] == '/') cursor++;
+        const size_t start = cursor;
+        while (cursor < source->len && source->data[cursor] != '/') cursor++;
+        const size_t length = cursor - start;
+        if (!length || (length == 1 && source->data[start] == '.')) continue;
+        const bool parent = length == 2 && source->data[start] == '.' && source->data[start + 1] == '.';
+        if (parent && record->components->len && !TSC_ARR(path_component_t, record->components, record->components->len - 1).parent) {
+            record->components->len--;
+        } else if (!parent || !record->absolute) {
+            const path_component_t component = {source, start, length, parent};
+            tsc_array_push_raw(record->components, &component);
+        }
+    }
+}
+
+static size_t path_size_add(size_t left, size_t right) {
+    if (left > SIZE_MAX - right) tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("Path exceeds native String storage"));
+    return left + right;
+}
+
+static tsc_str_t* path_record_render(const path_record_t* record, bool preserve_trailing) {
+    const size_t count = record->components->len;
+    size_t length = record->absolute ? 1 : 0;
+    for (size_t index = 0; index < count; index++) {
+        if (index) length = path_size_add(length, 1);
+        length = path_size_add(length, TSC_ARR(path_component_t, record->components, index).length);
+    }
+    if (!length) length = 1;
+    const bool trailing = preserve_trailing && record->trailing && !(record->absolute && count == 0);
+    if (trailing) length = path_size_add(length, 1);
+    tsc_str_t* result = str_alloc(length);
+    size_t cursor = 0;
+    if (record->absolute) ((char*)result->data)[cursor++] = '/';
+    for (size_t index = 0; index < count; index++) {
+        const path_component_t component = TSC_ARR(path_component_t, record->components, index);
+        if (index) ((char*)result->data)[cursor++] = '/';
+        memcpy((char*)result->data + cursor, component.source->data + component.start, component.length);
+        cursor += component.length;
+    }
+    if (!cursor) ((char*)result->data)[cursor++] = '.';
+    if (trailing) ((char*)result->data)[cursor++] = '/';
+    return result;
+}
+
+static tsc_str_t* path_current_directory(void) {
+    size_t capacity = 128;
+    char* bytes = malloc(capacity);
+    if (!bytes) tsc_panic("Path allocation failed");
+    for (;;) {
+        if (getcwd(bytes, capacity)) {
+            tsc_str_t* result = tsc_str_from_cstr(bytes);
+            free(bytes);
+            return result;
+        }
+        if (errno != ERANGE) { free(bytes); tsc_throw_error(TSC_ERROR_ERROR, tsc_str_from_cstr("Cannot read current directory")); }
+        capacity = path_size_add(capacity, capacity);
+        char* resized = realloc(bytes, capacity);
+        if (!resized) { free(bytes); tsc_panic("Path allocation failed"); }
+        bytes = resized;
+    }
+}
+
+static tsc_str_t* path_join_list(tsc_array_t* arguments, bool resolve) {
+    path_record_t record = path_record_new();
+    size_t first = 0;
     if (resolve) {
-        char cwd[PATH_MAX];
-        if (getcwd(cwd, sizeof cwd)) {
-            size_t l = strlen(cwd);
-            if (l < sizeof buf) { memcpy(buf, cwd, l); pos = l; }
+        bool absolute = false;
+        for (size_t index = arguments->len; index > 0; index--) {
+            const tsc_str_t* source = TSC_ARR(tsc_str_t*, arguments, index - 1);
+            if (source && source->len && source->data[0] == '/') { first = index - 1; absolute = true; break; }
         }
+        if (!absolute) path_record_append(&record, path_current_directory(), true);
     }
-    for (size_t i = 0; i < n; i++) {
-        tsc_str_t* s = va_arg(ap, tsc_str_t*);
-        if (!s || s->len == 0) continue;
-        bool s_abs = s->data[0] == '/';
-        if (resolve && s_abs) { pos = 0; }
-        if (pos > 0 && buf[pos - 1] != '/' && (!s_abs || !resolve)) {
-            if (pos + 1 >= sizeof buf) break;
-            buf[pos++] = '/';
-        }
-        size_t start = (pos > 0 && s->data[0] == '/') ? 1 : 0;
-        if (pos + (s->len - start) >= sizeof buf) break;
-        memcpy(buf + pos, s->data + start, s->len - start);
-        pos += s->len - start;
+    bool started = resolve;
+    for (size_t index = first; index < arguments->len; index++) {
+        const tsc_str_t* source = TSC_ARR(tsc_str_t*, arguments, index);
+        if (!source || !source->len) continue;
+        const bool absolute = source->data[0] == '/';
+        if (!resolve && started && absolute) {
+            size_t start = 0;
+            while (start < source->len && source->data[start] == '/') start++;
+            const tsc_str_t* fragment = tsc_str_from_lit(source->data + start, source->len - start);
+            path_record_append(&record, fragment, false);
+            record.trailing = source->data[source->len - 1] == '/';
+        } else path_record_append(&record, source, resolve);
+        started = true;
     }
-    if (pos == 0) { buf[0] = '.'; pos = 1; }
-    tsc_str_t* r = str_alloc(pos);
-    memcpy((char*)r->data, buf, pos);
-    return r;
+    return path_record_render(&record, !resolve);
+}
+
+static tsc_str_t* path_join_impl(size_t count, va_list arguments, bool resolve) {
+    tsc_array_t* sources = tsc_array_new(sizeof(tsc_str_t*), 0);
+    for (size_t index = 0; index < count; index++) { tsc_str_t* source = va_arg(arguments, tsc_str_t*); tsc_array_push_raw(sources, &source); }
+    return path_join_list(sources, resolve);
 }
 
 tsc_str_t* tsc_path_join(size_t n, ...) {
-    va_list ap; va_start(ap, n);
-    tsc_str_t* r = path_join_impl(n, ap, false);
-    va_end(ap);
-    return r;
+    va_list arguments; va_start(arguments, n);
+    tsc_str_t* result = path_join_impl(n, arguments, false);
+    va_end(arguments);
+    return result;
 }
 
 tsc_str_t* tsc_path_resolve(size_t n, ...) {
-    va_list ap; va_start(ap, n);
-    tsc_str_t* r = path_join_impl(n, ap, true);
-    va_end(ap);
-    return r;
+    va_list arguments; va_start(arguments, n);
+    tsc_str_t* result = path_join_impl(n, arguments, true);
+    va_end(arguments);
+    return result;
 }
 
-bool tsc_path_is_absolute(const tsc_str_t* p) {
-    return p && p->len > 0 && p->data[0] == '/';
+bool tsc_path_is_absolute(const tsc_str_t* source) {
+    return source && source->len > 0 && source->data[0] == '/';
 }
 
-tsc_str_t* tsc_path_normalize(const tsc_str_t* p) {
-    if (!p || p->len == 0) return tsc_str_from_lit(".", 1);
-    bool absolute = tsc_path_is_absolute(p);
-    bool trailing_slash = p->len > 1 && p->data[p->len - 1] == '/';
-    char buf[4096];
-    size_t pos = absolute ? 1 : 0;
-    if (absolute) buf[0] = '/';
-    size_t starts[256];
-    bool parents[256];
-    size_t top = 0;
-    bool last_normal = false;
-
-    for (size_t i = 0; i <= p->len;) {
-        while (i < p->len && p->data[i] == '/') i++;
-        size_t start = i;
-        while (i < p->len && p->data[i] != '/') i++;
-        size_t len = i - start;
-        if (len == 0) break;
-        if (len == 1 && p->data[start] == '.') {
-            last_normal = false;
-            continue;
-        }
-        if (len == 2 && p->data[start] == '.' && p->data[start + 1] == '.') {
-            if (top > 0 && !parents[top - 1]) {
-                pos = starts[--top];
-            } else if (!absolute) {
-                size_t prev = pos;
-                if (pos > 0) {
-                    if (pos + 1 >= sizeof buf) break;
-                    buf[pos++] = '/';
-                }
-                if (pos + 2 >= sizeof buf) break;
-                starts[top] = prev;
-                parents[top] = true;
-                top++;
-                memcpy(buf + pos, "..", 2);
-                pos += 2;
-            }
-            last_normal = false;
-            continue;
-        }
-
-        if (top >= 256) break;
-        size_t prev = pos;
-        if (pos > 0 && !(absolute && pos == 1)) {
-            if (pos + 1 >= sizeof buf) break;
-            buf[pos++] = '/';
-        }
-        if (pos + len >= sizeof buf) break;
-        starts[top] = prev;
-        parents[top] = false;
-        top++;
-        memcpy(buf + pos, p->data + start, len);
-        pos += len;
-        last_normal = true;
-    }
-
-    if (pos == 0) {
-        buf[pos++] = '.';
-    }
-    if (trailing_slash && last_normal && !(absolute && pos == 1)) {
-        if (pos + 1 < sizeof buf && buf[pos - 1] != '/') buf[pos++] = '/';
-    }
-    tsc_str_t* r = str_alloc(pos);
-    memcpy((char*)r->data, buf, pos);
-    return r;
-}
-
-size_t path_split_components(const tsc_str_t* p, size_t starts[256], size_t lens[256]) {
-    size_t count = 0;
-    for (size_t i = 0; i < p->len && count < 256;) {
-        while (i < p->len && p->data[i] == '/') i++;
-        size_t start = i;
-        while (i < p->len && p->data[i] != '/') i++;
-        size_t len = i - start;
-        if (len == 0) break;
-        if (len == 1 && p->data[start] == '.') continue;
-        starts[count] = start;
-        lens[count] = len;
-        count++;
-    }
-    return count;
+tsc_str_t* tsc_path_normalize(const tsc_str_t* source) {
+    path_record_t record = path_record_new();
+    path_record_append(&record, source, false);
+    return path_record_render(&record, true);
 }
 
 tsc_str_t* tsc_path_relative(const tsc_str_t* from, const tsc_str_t* to) {
-    tsc_str_t* from_norm = tsc_path_normalize(from);
-    tsc_str_t* to_norm = tsc_path_normalize(to);
-    if (from_norm->len == to_norm->len && memcmp(from_norm->data, to_norm->data, from_norm->len) == 0) {
-        return tsc_str_from_lit("", 0);
-    }
-    if (tsc_path_is_absolute(from_norm) != tsc_path_is_absolute(to_norm)) {
-        return to_norm;
-    }
-
-    size_t from_starts[256], from_lens[256], to_starts[256], to_lens[256];
-    size_t from_count = path_split_components(from_norm, from_starts, from_lens);
-    size_t to_count = path_split_components(to_norm, to_starts, to_lens);
+    const tsc_str_t* cwd = path_current_directory();
+    path_record_t source = path_record_new(), target = path_record_new();
+    path_record_append(&source, cwd, true); path_record_append(&source, from, true);
+    path_record_append(&target, cwd, true); path_record_append(&target, to, true);
     size_t common = 0;
-    while (
-        common < from_count &&
-        common < to_count &&
-        from_lens[common] == to_lens[common] &&
-        memcmp(from_norm->data + from_starts[common], to_norm->data + to_starts[common], from_lens[common]) == 0
-    ) {
+    while (common < source.components->len && common < target.components->len) {
+        const path_component_t left = TSC_ARR(path_component_t, source.components, common), right = TSC_ARR(path_component_t, target.components, common);
+        if (left.length != right.length || memcmp(left.source->data + left.start, right.source->data + right.start, left.length)) break;
         common++;
     }
+    path_record_t result = path_record_new();
+    const tsc_str_t* parent = tsc_str_from_lit("..", 2);
+    for (size_t index = common; index < source.components->len; index++) {
+        const path_component_t component = {parent, 0, 2, true};
+        tsc_array_push_raw(result.components, &component);
+    }
+    for (size_t index = common; index < target.components->len; index++) {
+        const path_component_t component = TSC_ARR(path_component_t, target.components, index);
+        tsc_array_push_raw(result.components, &component);
+    }
+    return result.components->len ? path_record_render(&result, false) : tsc_str_from_lit("", 0);
+}
 
-    char buf[4096];
-    size_t pos = 0;
-    for (size_t i = common; i < from_count; i++) {
-        if (pos > 0) {
-            if (pos + 1 >= sizeof buf) break;
-            buf[pos++] = '/';
-        }
-        if (pos + 2 >= sizeof buf) break;
-        memcpy(buf + pos, "..", 2);
-        pos += 2;
+enum path_posix_operation {
+#define TSC_PATH_POSIX(operation, name, required) PATH_POSIX_##operation,
+TSC_PATH_POSIX_OPERATIONS(TSC_PATH_POSIX)
+#undef TSC_PATH_POSIX
+};
+static const struct { const char* name; int required; } path_posix_operations[] = {
+#define TSC_PATH_POSIX(operation, name, required) {#name, required},
+TSC_PATH_POSIX_OPERATIONS(TSC_PATH_POSIX)
+#undef TSC_PATH_POSIX
+};
+tsc_str_t* tsc_path_posix_values(size_t operation, tsc_array_t* arguments) {
+    if (operation >= sizeof(path_posix_operations) / sizeof(*path_posix_operations))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Unknown POSIX path operation"));
+    tsc_array_t* volatile actuals = arguments;
+    const int required = path_posix_operations[operation].required;
+    const size_t count = required < 0 ? actuals->len : (size_t)required;
+    tsc_array_t* strings = tsc_array_new(sizeof(tsc_str_t*), 0);
+    size_t first = 0;
+    // Node resolve examines actual values from the right and stops at the
+    // absolute boundary. Earlier arguments are evaluated but not validated.
+    if (operation == PATH_POSIX_RESOLVE) for (size_t position = count; position > 0; position--) {
+        const tsc_value_t value = tsc_value_get_prop(tsc_value_array(actuals), tsc_str_from_num((double)(position - 1)));
+        if (!tsc_str_eq(tsc_value_typeof(value), tsc_str_from_cstr("string")))
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Path argument must be a String"));
+        const tsc_str_t* source = tsc_value_as_string(value);
+        if (source->len && source->data[0] == '/') { first = position - 1; break; }
     }
-    for (size_t i = common; i < to_count; i++) {
-        if (pos > 0) {
-            if (pos + 1 >= sizeof buf) break;
-            buf[pos++] = '/';
-        }
-        if (pos + to_lens[i] >= sizeof buf) break;
-        memcpy(buf + pos, to_norm->data + to_starts[i], to_lens[i]);
-        pos += to_lens[i];
+    for (size_t index = first; index < count; index++) {
+        const tsc_value_t value = index < actuals->len ? tsc_value_get_prop(tsc_value_array(actuals), tsc_str_from_num((double)index)) : tsc_value_undefined();
+        if (!tsc_str_eq(tsc_value_typeof(value), tsc_str_from_cstr("string")))
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Path argument must be a String"));
+        tsc_str_t* source = tsc_value_as_string(value); tsc_array_push_raw(strings, &source);
     }
-    tsc_str_t* r = str_alloc(pos);
-    memcpy((char*)r->data, buf, pos);
-    return r;
+    if (operation == PATH_POSIX_JOIN || operation == PATH_POSIX_RESOLVE) return path_join_list(strings, operation == PATH_POSIX_RESOLVE);
+    if (operation == PATH_POSIX_NORMALIZE) return tsc_path_normalize(TSC_ARR(tsc_str_t*, strings, 0));
+    return tsc_path_relative(TSC_ARR(tsc_str_t*, strings, 0), TSC_ARR(tsc_str_t*, strings, 1));
 }
 
 static bool glob_match_inner(const char* path, size_t path_len, const char* pattern, size_t pattern_len) {

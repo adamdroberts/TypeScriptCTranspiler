@@ -1,3 +1,5 @@
+Unified POSIX path normalization, joining, resolving and relative output through one dynamic component record and complete actual Lists; removed fixed path buffers and component limits.
+
 Represented Array keys, values and entries through canonical indexed views activated by ordinary next, retaining sparse domains and actual property effects.
 
 Corrected custom iterable regression Symbol.iterator returns and made delegated value String display explicit.

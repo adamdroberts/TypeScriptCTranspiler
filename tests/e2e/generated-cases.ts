@@ -54,6 +54,7 @@ export interface FsReadActualListWidthSpec {generator:"fs-read-actual-list-width
 export interface CollectionSourceAliasDepthSpec {generator:"collection-source-alias-depth";depth:number;}
 export interface PrimitivePropertyPrototypeDepthSpec {generator:"primitive-property-prototype-depth";depth:number;}
 export interface GeneratorMethodOwnerDepthSpec {generator:"generator-method-owner-depth";depth:number;}
+export interface PathComponentDepthSpec {generator:"path-component-depth";depth:number;}
 export interface ArrayIteratorSourceDepthSpec {generator:"array-iterator-source-depth";depth:number;}
 export interface SetCompositionSourceDepthSpec {generator:"set-composition-source-depth";depth:number;}
 export interface ObjectLiteralEffectDepthSpec {generator:"object-literal-effect-depth";depth:number;}
@@ -238,6 +239,7 @@ export type GeneratedCaseSpec =
     | CollectionSourceAliasDepthSpec
     | PrimitivePropertyPrototypeDepthSpec
     | GeneratorMethodOwnerDepthSpec
+    | PathComponentDepthSpec
     | ArrayIteratorSourceDepthSpec
     | SetCompositionSourceDepthSpec
     | ObjectLiteralEffectDepthSpec
@@ -296,6 +298,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         throw new Error(`invalid generated case spec ${filename}: expected an object`);
     }
     const spec = value as Record<string, unknown>;
+    if(spec.generator==='path-component-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid path component spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
     if(spec.generator==='array-iterator-source-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid Array iterator source spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
@@ -1842,6 +1848,7 @@ console.log("raw JSON text width:", valid);
         case "collection-source-alias-depth": return collectionSourceAliasInput(spec.depth);
         case "primitive-property-prototype-depth": return primitivePropertyPrototypeInput(spec.depth);
         case "generator-method-owner-depth": return generatorMethodOwnerInput(spec.depth);
+        case "path-component-depth": return pathComponentInput(spec.depth);
         case "array-iterator-source-depth": return arrayIteratorSourceInput(spec.depth);
         case "set-composition-source-depth": return setCompositionSourceInput(spec.depth);
         case "object-literal-effect-depth": return objectLiteralEffectInput(spec.depth);
@@ -2004,4 +2011,8 @@ export function arrayIteratorSourceInput(depth:number):string {
     const aliases=[`const owner0={0:'17;',2:'19;',length:3};`];
     for(let index=1;index<depth;index++)aliases.push(`const owner${index}=owner${index-1};`);
     return `export {};${aliases.join('\n')}let total=0;for(const entry of Array.prototype.entries.call(owner${depth-1})){if(entry[1]!==undefined)total+=Number(eval(entry[1]));}console.log('array iterator source:',total===36);\n`;
+}
+
+export function pathComponentInput(depth:number):string {
+    return `import path from 'node:path';const count=${depth};let parts:string[]=[];for(let index=0;index<count;index++)parts.push('component'+index);const long=parts.join('/'),joined=path.join(...parts),normalized=path.normalize(long+'/../tail/'),resolved=path.resolve('/root',...parts,'..','tail'),relative=path.relative('/root/'+long,'/root/leaf');console.log('path components:',joined===long&&normalized===parts.slice(0,-1).join('/')+'/tail/'&&resolved==='/root/'+parts.slice(0,-1).join('/')+'/tail'&&relative==='../'.repeat(count)+'leaf');\n`;
 }

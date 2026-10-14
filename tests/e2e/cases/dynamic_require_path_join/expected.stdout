@@ -1,4 +1,4 @@
 path a init
-path b init
 path first: path-a
+path b init
 path second: path-b

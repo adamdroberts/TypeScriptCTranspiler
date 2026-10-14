@@ -824,8 +824,6 @@ int fs_copy_symlink_cstr(const char* src, const char* dest, bool force, bool err
 int fs_cp_recursive_cstr(const char* src, const char* dest, bool recursive, bool force, bool error_on_exist, bool dereference, bool verbatim_symlinks, int copy_flags, bool preserve_timestamps);
 void fs_readdir_recursive_into(const char* root, const char* rel, tsc_array_t* out);
 void fs_readdir_recursive_buffer_into(const char* root, const char* rel, tsc_array_t* out);
-tsc_str_t* path_join_impl(size_t n, va_list ap, bool resolve);
-size_t path_split_components(const tsc_str_t* p, size_t starts[256], size_t lens[256]);
 double date_millis_part(const tsc_date_t* d);
 tsc_str_t* path_str_slice(const tsc_str_t* p, size_t start, size_t len);
 tsc_str_t* path_get_string_prop(tsc_value_t object, const char* key, size_t key_len);

@@ -2015,6 +2015,13 @@ void setPriority(double pid, double priority, tsc_array_t* ignore);
 double tsc_date_now(void);
 
 /* ------------- path ------------- */
+/* One descriptor collection shared by native path dispatch and source emission. */
+#define TSC_PATH_POSIX_OPERATIONS(X) \
+    X(JOIN, join, -1) \
+    X(RESOLVE, resolve, -1) \
+    X(NORMALIZE, normalize, 1) \
+    X(RELATIVE, relative, 2)
+tsc_str_t* tsc_path_posix_values(size_t operation, tsc_array_t* arguments);
 tsc_str_t* tsc_path_join(size_t n, ...);
 tsc_str_t* tsc_path_resolve(size_t n, ...);
 tsc_str_t* tsc_path_normalize(const tsc_str_t* p);

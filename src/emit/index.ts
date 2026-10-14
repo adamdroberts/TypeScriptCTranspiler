@@ -12,7 +12,7 @@ import ts from "typescript";
 import {moduleLinkRecord} from "../module-source-record";
 import { ecmaDirectivePrologueHasUseStrict, ecmaParseGoal } from "../ecmascript-source";
 import { sourceUnitFormat } from "../program";
-import { runtimeGlobalBindings, runtimeUtilExports, runtimeFsFdOperations } from "../global-bindings";
+import { runtimeGlobalBindings, runtimeUtilExports, runtimeFsFdOperations, runtimePathPosixOperations } from "../global-bindings";
 import { canonicalParameterBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding } from "../source-bindings";
 import { timersPromiseOperations, callbackTimerOperations } from "../timers-promises-operations";
 import { directLexicalDeclarations, lexicalDeclarationsFromList, type ScopeLexicalDeclaration, type NamedScopeLexicalDeclaration } from "./lexical-declarations";
@@ -43624,6 +43624,11 @@ class Emitter {
 
     private emitPathCall(call: ts.CallExpression, name: string, isWin32 = false): EmitResult {
         const args = call.arguments;
+        const operation=isWin32?undefined:runtimePathPosixOperations.get(name);
+        if(operation!==undefined){
+            const actual=this.emitSpreadCallArgumentList(args,undefined,true);
+            return this.emitSequencedExpr(T_STRING,[{value:actual,node:call}],([values])=>`tsc_path_posix_values(${operation}, ${values})`);
+        }
         const stringSpecs = () => args.map((a) => {
             const r = this.emitExpr(a);
             return { value: r, target: T_STRING, node: a };
@@ -43638,20 +43643,18 @@ class Emitter {
         switch (name) {
             case "join":
             case "resolve": {
-                const fn = isWin32
-                    ? (name === "join" ? "tsc_path_win32_join" : "tsc_path_win32_resolve")
-                    : (name === "join" ? "tsc_path_join" : "tsc_path_resolve");
+                const fn = name === "join" ? "tsc_path_win32_join" : "tsc_path_win32_resolve";
                 return this.emitSequencedCall(fn, T_STRING, stringSpecs(), [args.length.toString()]);
             }
             case "normalize":
                 if (args.length < 1) unsupported(call, "path.normalize expects at least 1 arg");
-                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(1), ([path]) => isWin32 ? `tsc_path_win32_normalize(${path})` : `tsc_path_normalize(${path})`);
+                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(1), ([path]) => `tsc_path_win32_normalize(${path})`);
             case "isAbsolute":
                 if (args.length < 1) unsupported(call, "path.isAbsolute expects at least 1 arg");
                 return this.emitSequencedExpr(T_BOOLEAN, fixedStringSpecs(1), ([path]) => isWin32 ? `tsc_path_win32_is_absolute(${path})` : `tsc_path_is_absolute(${path})`);
             case "relative":
                 if (args.length < 2) unsupported(call, "path.relative expects at least 2 args");
-                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(2), ([from, to]) => isWin32 ? `tsc_path_win32_relative(${from}, ${to})` : `tsc_path_relative(${from}, ${to})`);
+                return this.emitSequencedExpr(T_STRING, fixedStringSpecs(2), ([from, to]) => `tsc_path_win32_relative(${from}, ${to})`);
             case "matchesGlob":
                 if (args.length < 2) unsupported(call, "path.matchesGlob expects at least 2 args");
                 return this.emitSequencedExpr(T_BOOLEAN, fixedStringSpecs(2), ([path, pattern]) => isWin32 ? `tsc_path_win32_matches_glob(${path}, ${pattern})` : `tsc_path_matches_glob(${path}, ${pattern})`);

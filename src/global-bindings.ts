@@ -27,6 +27,13 @@ export const runtimeFsFdOperations: ReadonlyMap<string,number> = new Map(
 );
 if (!runtimeFsFdOperations.size) throw new Error("missing native filesystem descriptor collection");
 
+const pathPosixDescriptors=fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_runtime.h"),"utf8")
+    .match(/#define TSC_PATH_POSIX_OPERATIONS\(X\) ([\s\S]*?)\ntsc_str_t\* tsc_path_posix_values/)?.[1];
+export const runtimePathPosixOperations:ReadonlyMap<string,number>=new Map(
+    [...(pathPosixDescriptors??"").matchAll(/X\(\w+, (\w+), -?\d+\)/g)].map((match,index)=>[match[1]!,index]),
+);
+if(!runtimePathPosixOperations.size)throw new Error("missing native POSIX path operation collection");
+
 /** Names/attributes are projected from the native Realm initializer's table.
  * Ambient declarations describe types, not the current value of a binding. */
 export interface RuntimeGlobalBinding {
