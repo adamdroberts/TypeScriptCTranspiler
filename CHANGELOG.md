@@ -1,3 +1,5 @@
+- Align the unchanged fs_stat consumer with independent Node ordinary-object tags.
+
 - Typed Stats fields, methods, lazy dates and String conversion now share the ordinary returned owner and writable declaration surface.
 
 - Register scoped conditional Value/lazy-arm evidence with one canonical expression-tree stress.

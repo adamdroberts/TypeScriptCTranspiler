@@ -1,6 +1,6 @@
 file: true false 5
 dir: false true true
-string: [object Stats]
-ignored: true false [object Stats] [object Stats] vfdsl
+string: [object Object]
+ignored: true false [object Object] [object Object] vfdsl
 resolve: true 5
 promise: true false 5
