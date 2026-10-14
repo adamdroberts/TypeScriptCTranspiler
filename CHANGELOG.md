@@ -1,3 +1,5 @@
+- Check accessor function prototype constructor identity independently of console object formatting.
+
 - Align dynamic Array locale observations with the selected ECMA-262 empty element argument List and actual TypeError identity.
 
 - Filesystem calls share ordinary export owners and full actual Lists; runtime options, native flags and boxed Promise publication replace direct compiler dispatch.
