@@ -1,3 +1,5 @@
+Retained primitive BigInt JSON source hooks and native abrupt paths through shared owners.
+
 Shared native Atomics operation owners and ordered scalar conversions with source analysis.
 
 Projected native TypedArray element-width metadata into shared source owners.

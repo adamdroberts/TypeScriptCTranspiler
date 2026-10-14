@@ -3472,8 +3472,10 @@ class SourceValueFlow {
                 if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(prepared,atom);continue;}
                 const kinds=this.primitiveKinds(cell(atom));
                 if(!(kinds&(KIND_OBJECT|KIND_FUNCTION|KIND_BIGINT))){this.publish(prepared,atom);continue;}
-                const owner=this.ordinaryOwner(atom);if(!owner){fail(output);continue;}
-                const method=item(cell(atom),"toJSON"),callee=this.newCell();this.invoke(context,callee,cell(atom),[{cell:key,spread:false}],prepared);
+                const owner=this.ordinaryOwner(atom),bigintPrimitive=!!(kinds&KIND_BIGINT)&&!(kinds&~KIND_PRIMITIVE);
+                if(!owner&&!bigintPrimitive){fail(output);continue;}
+                if(bigintPrimitive&&kinds&~KIND_BIGINT)this.publish(prepared,atom);
+                const method=item(bigintPrimitive?this.primitivePrototype("BigInt"):cell(atom),"toJSON"),callee=this.newCell();this.invoke(context,callee,cell(atom),[{cell:key,spread:false}],prepared);
                 this.rule([method],()=>{for(const candidate of method.values){
                     if(candidate.tag==="abrupt"||candidate.tag==="pending-source"){this.publish(prepared,candidate);continue;}
                     if(this.primitiveKinds(cell(candidate))&KIND_FUNCTION||candidate.tag==="unknown"||candidate.tag==="opaque-object")this.publish(callee,candidate);
@@ -3493,7 +3495,8 @@ class SourceValueFlow {
                     if(atom.tag==="primitive"||atom.tag==="text-operation")continue;
                     // A closed primitive kind domain cannot run object hooks.
                     // Its JSON text may be unbounded without mutation effects.
-                    if(!(kinds&~(KIND_UNDEFINED|KIND_NULL|KIND_BOOLEAN|KIND_NUMBER|KIND_STRING|KIND_SYMBOL))) {
+                    if(!(kinds&~KIND_PRIMITIVE)) {
+                        if(kinds&KIND_BIGINT)abrupt(output);
                         if(kinds&(KIND_NULL|KIND_BOOLEAN|KIND_NUMBER|KIND_STRING))this.publish(output,this.unknownString);
                         if(kinds&(KIND_UNDEFINED|KIND_SYMBOL))this.publish(output,this.primitive(undefined));
                         continue;
