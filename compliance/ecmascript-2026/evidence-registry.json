@@ -3379,7 +3379,8 @@
         "sec-import-call-runtime-semantics-evaluation#ordered-immediate-source-effects-and-promise-rejection",
         "sec-promise.prototype.then#source-owner-handler-result-and-rejection-graph",
         "sec-promise.prototype.catch#mutable-then-lookup-and-source-rejection-handler",
-        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding"
+        "sec-promise.prototype.finally#generic-then-lookup-finalizer-and-source-forwarding",
+        "sec-getvalue#canonical-binding-source-origin-capture"
       ]
     },
     {
@@ -4308,7 +4309,8 @@
       "targets": [
         "sec-evaluatecall#finite-host-callable-location-source-projections",
         "sec-moduledeclarationlinking#canonical-entry-link-validation-before-evaluation",
-        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation"
+        "sec-import-call-runtime-semantics-evaluation#canonical-entry-link-validation-before-evaluation",
+        "sec-getvalue#canonical-binding-source-origin-capture"
       ]
     },
     {
@@ -4968,7 +4970,8 @@
       "kind": "implementation",
       "id": "src/source-value-flow.ts#solve",
       "targets": [
-        "sec-evaluate-property-access-with-expression-key#pending-generated-source-key"
+        "sec-evaluate-property-access-with-expression-key#pending-generated-source-key",
+        "sec-getvalue#canonical-binding-source-origin-capture"
       ]
     },
     {
@@ -5046,6 +5049,55 @@
       "id": "src/source-value-flow.ts#onActive",
       "targets": [
         "sec-performeval#canonical-caller-environment-references"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/lexical-source-capture.property.test.ts",
+      "targets": [
+        "sec-getvalue#canonical-binding-source-origin-capture"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/source-effect-origins.property.test.ts",
+      "targets": [
+        "sec-getvalue#canonical-binding-source-origin-capture"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "lexical_source_capture_depth",
+      "targets": [
+        "sec-getvalue#canonical-binding-source-origin-capture"
+      ],
+      "stressReview": {
+        "dimension": "retained lexical source capture alias graph",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "Property and typed CLI share one representative deep capture/import reaction graph; compact binding/order/opaque/dynamic partitions are independent of alias depth.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#SourceCapturePhase",
+      "targets": [
+        "sec-getvalue#canonical-binding-source-origin-capture"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#effectVisible",
+      "targets": [
+        "sec-getvalue#canonical-binding-source-origin-capture"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/source-value-flow.ts#initializeActive",
+      "targets": [
+        "sec-getvalue#canonical-binding-source-origin-capture"
       ]
     }
   ]

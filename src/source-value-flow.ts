@@ -164,6 +164,7 @@ interface EvaluationEnvironment {
     readonly callers: Set<ts.Node>;
     readonly references: Map<ts.Identifier, {value: Cell; writes: Cell}>;
 }
+interface SourceCapturePhase {readonly context:ts.Node;readonly argumentsRead:boolean;}
 
 const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
     ts.SyntaxKind.InKeyword, ts.SyntaxKind.InstanceOfKeyword,
@@ -347,9 +348,9 @@ class SourceValueFlow {
     private readonly sourceFiles = new WeakMap<ts.Node, ts.SourceFile>();
     private readonly sourceStarts = new WeakMap<ts.Node, number>();
     private readonly executionGuards = new WeakMap<ts.Node, readonly {condition: Cell; truthy: boolean}[]>();
-    private readonly capturePhases=new Map<ts.Node,Map<boolean,object>>();
-    private readonly capturedCellPhases=new Map<Cell,ReadonlySet<object>>();
-    private readonly capturedAtomPhases=new WeakMap<Atom,ReadonlySet<object>>();
+    private readonly capturePhases=new Map<ts.Node,Map<boolean,SourceCapturePhase>>();
+    private readonly capturedCellPhases=new Map<Cell,ReadonlySet<SourceCapturePhase>>();
+    private readonly capturedAtomPhases=new WeakMap<Atom,ReadonlySet<SourceCapturePhase>>();
     private readonly readCaptures = new Map<Cell, Map<ts.Node | undefined, Map<boolean, Cell>>>();
     private readonly empty = this.newCell();
     private readonly globalMutation = this.newCell();
@@ -783,10 +784,17 @@ class SourceValueFlow {
         if (!phases) {phases = new Map(); contexts.set(context,phases);}
         const previous = phases.get(argumentsRead); if (previous) return previous;
         let phaseKinds=this.capturePhases.get(context);if(!phaseKinds){phaseKinds=new Map();this.capturePhases.set(context,phaseKinds);}
-        let phase=phaseKinds.get(argumentsRead);if(!phase){phase={};phaseKinds.set(argumentsRead,phase);}
+        let phase=phaseKinds.get(argumentsRead);if(!phase){phase={context,argumentsRead};phaseKinds.set(argumentsRead,phase);}
         const pending:Cell[]=[];
         const project=(source:Cell):Cell=>{
-            const inherited=this.capturedCellPhases.get(source);if(inherited?.has(phase!))return source;
+            const inherited=this.capturedCellPhases.get(source);
+            // A later acyclic capture cannot undo the earlier filtering.
+            // Reuse that canonical projection instead of composing an alias
+            // path of equivalent phase filters through every saved binding.
+            if(inherited?.has(phase!)||[...(inherited??[])].some(prior=>{
+                return prior.argumentsRead===argumentsRead && !this.dynamicContext(prior.context) &&
+                    this.sourceFile(prior.context)===this.sourceFile(context) && prior.context.getEnd()<=context.getStart();
+            }))return source;
             let contexts=this.readCaptures.get(source);if(!contexts){contexts=new Map();this.readCaptures.set(source,contexts);}
             let phases=contexts.get(context);if(!phases){phases=new Map();contexts.set(context,phases);}
             let target=phases.get(argumentsRead);
@@ -3660,8 +3668,9 @@ class SourceValueFlow {
             }
             const ambient=this.isAmbientIdentifier(node);
             const binding=this.binding(node);
-            if(ambient)this.copyRead(binding,result,node);
-            else this.copy(binding,result);
+            // Lexical, imported and global source bindings share the same
+            // origin capture. Dynamic/repeated contexts remain conservative.
+            this.copyRead(binding,result,node);
             if (this.bindingMayBeUninitialized(node)) this.publish(result,this.primitive(undefined));
             for (const base of this.withBindingObjects(node)) this.copy(this.property(base, node.text, node), result);
             if (ambient && !this.evaluationEnvironments.has(this.sourceFile(node)) && !this.globalLexicals.has(node.text)) {
@@ -4695,7 +4704,7 @@ class SourceValueFlow {
                 // Unresolved external bindings are value inputs, rather than
                 // owner absence dependencies. Wake their guarded mutations
                 // before sealing any contextual own-location absence.
-                for(const [node,cell]of this.cells)if(ts.isIdentifier(node)&&!cell.values.size&&!this.bindingSymbol(node)){
+                for(const [node,cell]of this.cells)if(ts.isIdentifier(node)&&!cell.values.size&&this.isAmbientIdentifier(node)){
                     const origins=this.sourceOrigins.get(this.sourceFile(node));
                     if(origins&&!origins.values.size)continue;
                     const binding=this.binding(node);

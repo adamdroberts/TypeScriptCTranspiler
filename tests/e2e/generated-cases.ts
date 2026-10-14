@@ -54,6 +54,7 @@ export interface FsReadActualListWidthSpec {generator:"fs-read-actual-list-width
 export interface CollectionSourceAliasDepthSpec {generator:"collection-source-alias-depth";depth:number;}
 export interface PrimitivePropertyPrototypeDepthSpec {generator:"primitive-property-prototype-depth";depth:number;}
 export interface GeneratorMethodOwnerDepthSpec {generator:"generator-method-owner-depth";depth:number;}
+export interface LexicalSourceCaptureDepthSpec {generator:"lexical-source-capture-depth";depth:number;}
 export interface EvalCallerEnvironmentDepthSpec {generator:"eval-caller-environment-depth";depth:number;}
 export interface PendingComputedKeyDepthSpec {generator:"pending-computed-key-depth";depth:number;}
 export interface SwitchNormalCompletionDepthSpec {generator:"switch-normal-completion-depth";depth:number;}
@@ -243,6 +244,7 @@ export type GeneratedCaseSpec =
     | CollectionSourceAliasDepthSpec
     | PrimitivePropertyPrototypeDepthSpec
     | GeneratorMethodOwnerDepthSpec
+    | LexicalSourceCaptureDepthSpec
     | EvalCallerEnvironmentDepthSpec
     | PendingComputedKeyDepthSpec
     | SwitchNormalCompletionDepthSpec
@@ -306,6 +308,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         throw new Error(`invalid generated case spec ${filename}: expected an object`);
     }
     const spec = value as Record<string, unknown>;
+    if(spec.generator==='lexical-source-capture-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid lexical source capture spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
     if(spec.generator==='eval-caller-environment-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid eval caller environment spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
@@ -1872,6 +1878,7 @@ console.log("raw JSON text width:", valid);
         case "collection-source-alias-depth": return collectionSourceAliasInput(spec.depth);
         case "primitive-property-prototype-depth": return primitivePropertyPrototypeInput(spec.depth);
         case "generator-method-owner-depth": return generatorMethodOwnerInput(spec.depth);
+        case "lexical-source-capture-depth": return lexicalSourceCaptureInput(spec.depth);
         case "eval-caller-environment-depth": return evalCallerEnvironmentInput(spec.depth);
         case "pending-computed-key-depth": return pendingComputedKeyInput(spec.depth);
         case "switch-normal-completion-depth": return switchNormalCompletionInput(spec.depth);
@@ -1996,6 +2003,7 @@ export function moduleFailureDepthInput(depth:number,phase:'load'|'link'='load')
 }
 export function generateE2eCaseFiles(raw:string,filename:string):Readonly<Record<string,string>>{
     const spec=parseGeneratedCaseSpec(raw,filename);
+    if(spec.generator==='lexical-source-capture-depth')return lexicalSourceCaptureFiles;
     if(spec.generator==='module-async-cycle-depth')return moduleAsyncCycleInput(spec.depth).files;
     if(spec.generator==='module-iterator-import-depth')return moduleIteratorImportInput(spec.depth).files;
     return spec.generator==='module-failure-depth'?moduleFailureDepthInput(spec.depth,spec.phase).files:{};
@@ -2069,4 +2077,11 @@ export function pendingComputedKeyInput(depth:number):string {
 export function evalCallerEnvironmentInput(depth:number):string {
     const bindings=Array.from({length:depth},(_,index)=>`const source${index}:any=${index?'source'+(index-1):"'47;'"};`);
     return `function caller():any{${bindings.join('\n')}return eval('source${depth-1}');}console.log('eval caller graph:',eval(caller()));\n`;
+}
+
+export const lexicalSourceCaptureFiles:Readonly<Record<string,string>>={'data.json':'262\n'};
+/** One synchronous source capture precedes the later import reaction. */
+export function lexicalSourceCaptureInput(depth:number):string {
+    const aliases=Array.from({length:depth},(_,index)=>`const saved${index}:any=${index?'saved'+(index-1):'body'};`);
+    return `let body:any='61;';const options={get with(){body='67;';return {type:'json'}}};const pending=import('./data.json',options);${aliases.join('\n')}\nconsole.log('lexical source capture:',eval(saved${depth-1}));pending.then((namespace:any)=>console.log('module:',namespace.default));\n`;
 }
