@@ -249,6 +249,8 @@ class SourceValueFlow {
     private readonly proxyReads = new Map<string,Cell>();
     private readonly promiseOwners = new WeakMap<Atom,ObjectOwner>();
     private promisePrototypeValue?:Cell;
+    private readonly promiseResolveOwners=new Map<ts.Node,ObjectOwner>();
+    private readonly escapedCallableCalls=new Map<ts.Node,Map<Cell,Cell>>();
     private readonly promiseReactions = new Map<ts.Node,Map<string,Cell>>();
     private readonly sourceCells = new WeakMap<SourceFacts,Cell>();
     private readonly formalInputs = new Map<Cell,Set<Cell>>();
@@ -758,6 +760,16 @@ class SourceValueFlow {
     }
     private opaqueEffect(context?: ts.Node): void {
         this.copy(this.executionOrigins(context),this.opaqueMutation);
+    }
+    private escapeCallableArgument(argument:Cell,context:ts.Node):void {
+        let calls=this.escapedCallableCalls.get(context);if(!calls){calls=new Map();this.escapedCallableCalls.set(context,calls);}
+        if(calls.has(argument))return;
+        const result=this.newCell(),target=this.newCell(),actuals=this.newCell();calls.set(argument,result);
+        this.publish(actuals,this.unknown);
+        this.rule([argument],()=>{for(const atom of argument.values){
+            if(atom.tag==="function"||atom.tag==="bound"||atom.tag==="intrinsic"||atom.tag==="operation"||atom.tag==="promise-resolver"||atom.tag==="builtin"&&atom.normalResult!=="not-callable"||this.ordinaryOwner(atom)?.proxy)this.publish(target,atom);
+        }});
+        this.invoke(context,target,actuals,[{cell:actuals,spread:true}],result);
     }
     /** Close represented call cycles through one adjacency graph. An origin
      * alone cannot distinguish successive recursive activations. */
@@ -2916,6 +2928,17 @@ class SourceValueFlow {
         }});return {value,rejection};
     }
 
+    private promiseAwait(input:Cell,context:ts.Node):Cell {
+        let calls=this.promiseReactions.get(context);if(!calls){calls=new Map();this.promiseReactions.set(context,calls);}
+        const key="await:"+input.id,prior=calls.get(key);if(prior)return prior;
+        const result=this.newCell();calls.set(key,result);
+        this.returnTransforms.set(result,{inputs:[input],evaluate:inputs=>this.promiseAwait(inputs[0]!,context)});
+        const operand=this.promiseResolve(input,context);
+        this.rule([operand],()=>{for(const atom of operand.values)if(atom.tag==="promise"){
+            this.copy(atom.value,result);const handler=this.exceptionHandlers.get(context);if(handler)this.copy(atom.rejection,handler);
+        }});return result;
+    }
+
     /** PromiseResolve keeps an intrinsic Promise whose constructor matches;
      * all other values enter the same resolver/thenable graph. Await and the
      * native static resolve member share this identity and effect boundary. */
@@ -2923,7 +2946,17 @@ class SourceValueFlow {
         let calls=this.promiseConstructions.get(context);if(!calls){calls=new Map();this.promiseConstructions.set(context,calls);}
         const key="resolve:"+input.id,prior=calls.get(key);if(prior)return prior;
         const result=this.newCell(),adopted=this.newCell(),seen=new Set<Atom>();calls.set(key,result);
-        const resolved=this.promiseAssimilation(adopted,context);this.publish(result,{tag:"promise",value:resolved.value,rejection:resolved.rejection});
+        this.returnTransforms.set(result,{inputs:[input],evaluate:inputs=>this.promiseResolve(inputs[0]!,context)});
+        const resolved=this.promiseAssimilation(adopted,context),promise:Atom={tag:"promise",value:resolved.value,rejection:resolved.rejection};
+        this.publish(result,promise);const identity=this.promiseAtoms.get(resolved.value)!.get(resolved.rejection)!;
+        // Actual-input views keep the allocation's mutable property owner.
+        // Intern the Promise before attaching that owner: the assimilation
+        // holder already publishes the same completion-cell identity.
+        let owner=this.promiseResolveOwners.get(context);
+        if(!owner){
+            owner=this.ordinaryOwner(identity)!;this.promiseResolveOwners.set(context,owner);this.ownerCreations.set(owner,context);this.ownerMutation(owner);
+        }
+        else this.promiseOwners.set(identity,owner);
         this.rule([input],()=>{for(const atom of input.values){
             if(atom.tag!=="promise"){this.publish(adopted,atom);continue;}
             if(seen.has(atom))continue;seen.add(atom);
@@ -4163,14 +4196,7 @@ class SourceValueFlow {
             for (const span of node.templateSpans) { parts.push(this.cell(span.expression)); literal(span.literal.text); }
             this.publish(result, { tag: "text-operation", operation: "template", parts: this.convertList(parts,node,"text") });
         } else if (ts.isAwaitExpression(node)) {
-            const operand = this.promiseResolve(this.cell(node.expression),node);
-            this.rule([operand], () => { for (const atom of operand.values) {
-                if (atom.tag === "promise") {
-                    this.copy(atom.value, result!);
-                    const handler = this.exceptionHandlers.get(node);
-                    if (handler) this.copy(atom.rejection, handler);
-                }
-            } });
+            this.copy(this.promiseAwait(this.cell(node.expression),node),result);
         } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
             this.dynamicImportEffects(node,result);
         } else if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
@@ -4391,7 +4417,10 @@ class SourceValueFlow {
                             this.opaqueEffect(node);
                             this.writeProperty(invocation.receiver,null,this.empty,false,"set",node);
                             const argumentsEscaping = invocation.args ?? (invocation.sequence ? [this.allArgumentValues(invocation.sequence)] : []);
-                            for (const argument of argumentsEscaping) this.writeProperty(argument,null,this.empty,false,"set",node);
+                            for (const argument of argumentsEscaping) {
+                                this.writeProperty(argument,null,this.empty,false,"set",node);
+                                this.escapeCallableArgument(argument,node);
+                            }
                         });
                         continue;
                     }

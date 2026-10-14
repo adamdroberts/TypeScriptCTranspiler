@@ -24,12 +24,13 @@ test('async return adoption retains source values, rejection and observable then
   ["async function f(){throw 'return 113;'}f().catch(body=>Function(body));",'return 113;'],
   ["const p=Promise.resolve(0);p.then=function(resolve){resolve('return 127;')};async function f(){return p}f().then(body=>Function(body));",'return 127;'],
   ["const p=Promise.resolve(0);Object.defineProperty(p,'then',{get(){throw 'return 131;'}});async function f(){return p}f().catch(body=>Function(body));",'return 131;'],
-  ["async function f(value){return value}const first=f('return 137;');f(runtimeInput);first.then(body=>Function(body));",'return 137;'],
+  ["async function f(value){return value}const first=f('return 137;');f(0);first.then(body=>Function(body));",'return 137;'],
  ] as const;
  for(const [source,body]of cases)expect(facts(source)).toEqual([{kind:'ordinary',choices:[[body]]}]);
  for(const hook of ["p.then=function(){mutate(list)};","Object.defineProperty(p,'then',{get(){mutate(list);return undefined}});","Object.defineProperty(p,'constructor',{get(){mutate(list);return Promise}});","Object.defineProperty(p,'constructor',{value:{get [Symbol.species](){mutate(list);return Promise}}});"])
   expect(facts("const list=['return 101;'];const p=Promise.resolve(0);"+hook+"async function f(){return p}f();Function(...list);").some(value=>value.choices===null)).toBe(true);
  expect(facts("async function f(value){return value}f(runtimeInput).then(body=>Function(body));").some(value=>value.choices===null)).toBe(true);
+ expect(facts("async function f(value){return value}const first=f('return 137;');f(runtimeInput);first.then(body=>Function(body));").some(value=>value.choices===null)).toBe(true);
 });
 
 test('async adoption source owners match independent Node and native invocation',async()=>{

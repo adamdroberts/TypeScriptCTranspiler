@@ -62,6 +62,7 @@ export interface ModuleRejectionOriginDepthSpec {generator:"module-rejection-ori
 export interface PromiseStaticSourceDepthSpec {generator:"promise-static-source-depth";depth:number;}
 export interface AsyncReturnAdoptionDepthSpec {generator:"async-return-adoption-depth";depth:number;}
 export interface AwaitResolutionDepthSpec {generator:"await-resolution-depth";depth:number;}
+export interface PromiseReturnProjectionDepthSpec {generator:"promise-return-projection-depth";depth:number;}
 export interface CallbackTimerSourceDepthSpec {generator:"callback-timer-source-depth";depth:number;}
 export interface HasInstanceDepthSpec {generator:"has-instance-depth";depth:number;}
 export interface RelationalSourceDepthSpec {generator:"relational-source-depth";depth:number;}
@@ -328,6 +329,7 @@ export type GeneratedCaseSpec =
     | PromiseStaticSourceDepthSpec
     | AsyncReturnAdoptionDepthSpec
     | AwaitResolutionDepthSpec
+    | PromiseReturnProjectionDepthSpec
     | CallbackTimerSourceDepthSpec
     | HasInstanceDepthSpec
     | RelationalSourceDepthSpec
@@ -388,6 +390,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     }
     if(spec.generator==='await-resolution-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid await resolution spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
+    if(spec.generator==='promise-return-projection-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid Promise return projection spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
     }
     if(spec.generator==='callback-timer-source-depth'){
@@ -2036,6 +2042,7 @@ console.log("raw JSON text width:", valid);
         case "promise-static-source-depth": return promiseStaticSourceInput(spec.depth);
         case "async-return-adoption-depth": return asyncReturnAdoptionInput(spec.depth);
         case "await-resolution-depth": return awaitResolutionInput(spec.depth);
+        case "promise-return-projection-depth": return promiseReturnProjectionInput(spec.depth);
         case "callback-timer-source-depth": return callbackTimerSourceInput(spec.depth);
         case "has-instance-depth": return hasInstanceInput(spec.depth);
         case "relational-source-depth": return relationalSourceInput(spec.depth);
@@ -2382,6 +2389,11 @@ export function asyncReturnAdoptionInput(depth:number):string {
 export function awaitResolutionInput(depth:number):string {
  const owners=Array.from({length:depth},(_,index)=>`const awaitSourceOwner${index}:any=${index?`{body:awaitSourceOwner${index-1}.body,previous:awaitSourceOwner${index-1}}`:`{body:'return 149;',previous:null}`};`);
  return `{${owners.join('\n')}async function awaitedSource():Promise<void>{const thenable:any={then(resolve:any){resolve(awaitSourceOwner${depth-1}.body)}};const body:any=await thenable;console.log('await resolution:',Function(body)())}awaitedSource();}\n`;
+}
+
+export function promiseReturnProjectionInput(depth:number):string {
+ const forwards=Array.from({length:depth},(_,index)=>`async function projectedPromiseReturn${index}(value:any):Promise<any>{return ${index?`await projectedPromiseReturn${index-1}(value)`:`await Promise.resolve(value)`}}`);
+ return `{${forwards.join('\n')}const first=projectedPromiseReturn${depth-1}('return 229;');projectedPromiseReturn${depth-1}('return 239;');first.then(body=>console.log('Promise projection:',Function(body)()));}\n`;
 }
 
 export function moduleRejectionOriginInput(depth:number):{source:string;files:Record<string,string>} {

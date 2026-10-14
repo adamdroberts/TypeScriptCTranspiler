@@ -1,3 +1,5 @@
+Preserved projected Promise actuals and mutable owners, retaining opaque callback invocation effects.
+
 Shared await and intrinsic Promise.resolve identity, thenable and source-effect resolution.
 
 Projected async return adoption and observable Promise then/species effects through shared source owners.
