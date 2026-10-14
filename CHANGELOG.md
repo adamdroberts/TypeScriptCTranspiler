@@ -1,3 +1,5 @@
+Removed unused typed object method/accessor creation through a shared property-tree worklist while preserving computed keys, getters, abrupt order and escaping values. Existing collection-spread DCE and inferred-type-depth limits remain open.
+
 Derived ImportCall targets from canonical expression flow and a module source worklist. Iterator activity and actual Lists preserve empty/dense/hole domains; dynamic namespaces share live source bindings. Independent Node/native properties retain the original deferred-error loop and reject imported iterator mutations. Full host/source eligibility remains open. Immutable String target leaves avoid unrelated graph reconstruction. Shared proof discovery defers recursive builders and preserves imported Module goals separately from ambient declarations.
 
 Subscribed inline array-like source forwarding to the canonical nested List worklist, repairing omitted reflected worker sources. Ordinary CLI agent references now use the installed host owner; independent Node properties and retained agent CLI regressions verify the scoped repair. Full source/host eligibility remains open.

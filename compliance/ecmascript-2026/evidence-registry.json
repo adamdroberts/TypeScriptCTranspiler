@@ -4561,6 +4561,41 @@
       "targets": [
         "sec-import-call-runtime-semantics-evaluation#canonical-expression-and-iterator-source-closure"
       ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/object-literal-effects.property.test.ts",
+      "targets": [
+        "sec-runtime-semantics-propertydefinitionevaluation#object-creation-versus-enumerable-read-effects"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "object_literal_effect_depth",
+      "targets": [
+        "sec-runtime-semantics-propertydefinitionevaluation#object-creation-versus-enumerable-read-effects"
+      ],
+      "stressReview": {
+        "dimension": "nested literal property-tree depth preserving creation and spread read modes",
+        "parameter": "depth",
+        "representativeHighDepth": 512,
+        "rationale": "One generated property tree and one iterative evaluation worklist are shared by the Node/native property and typed CLI. Type checking remains enabled through an explicit unknown result annotation; no inferred-type or language-depth limit is claimed repaired. Semantic partitions supply effect evidence independently of successive depths.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "object_literal_effects",
+      "targets": [
+        "sec-runtime-semantics-propertydefinitionevaluation#object-creation-versus-enumerable-read-effects"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "src/emit/index.ts#objectLiteralEvaluationHasNoSideEffects",
+      "targets": [
+        "sec-runtime-semantics-propertydefinitionevaluation#object-creation-versus-enumerable-read-effects"
+      ]
     }
   ]
 }

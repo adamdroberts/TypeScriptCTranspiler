@@ -51,6 +51,7 @@ export interface DynamicImportSourceDepthSpec {
     depth: number;
 }
 export interface FsReadActualListWidthSpec {generator:"fs-read-actual-list-width";width:number;}
+export interface ObjectLiteralEffectDepthSpec {generator:"object-literal-effect-depth";depth:number;}
 export interface ModuleIteratorImportDepthSpec {generator:"module-iterator-import-depth";depth:number;}
 export interface ModuleFailureDepthSpec {generator:"module-failure-depth";depth:number;phase:"load"|"link";}
 export interface OsUserInfoOptionDepthSpec { generator:"os-user-info-option-depth"; depth:number; }
@@ -229,6 +230,7 @@ export type GeneratedCaseSpec =
     | ModuleRequestWidthSpec
     | DynamicImportSourceDepthSpec
     | ModuleFailureDepthSpec
+    | ObjectLiteralEffectDepthSpec
     | ModuleIteratorImportDepthSpec
     | OsUserInfoOptionDepthSpec
     | EventTargetActualsDepthSpec
@@ -284,6 +286,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
         throw new Error(`invalid generated case spec ${filename}: expected an object`);
     }
     const spec = value as Record<string, unknown>;
+    if(spec.generator==='object-literal-effect-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid object literal effect spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
     if(spec.generator==='module-iterator-import-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid iterator import source spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
@@ -1803,6 +1809,7 @@ console.log("raw JSON text width:", valid);
                 `const stressView=Buffer.alloc(4);let stressSeen=0;const stressOptions={get offset(){stressSeen++;return 0},get length(){stressSeen++;return 4},get position(){stressSeen++;return 0}};\n` +
                 `const stressBytes=stressRead(stressFD,stressView,stressOptions,...Array.from({length:${spec.width}},()=>++stressSeen));\n` +
                 `console.log('bytes:',stressBytes,'seen:',stressSeen,'text:',stressView.toString());stressClose(stressFD);stressRemove(stressPath);\n`;
+        case "object-literal-effect-depth": return objectLiteralEffectInput(spec.depth);
         case "module-iterator-import-depth": return moduleIteratorImportInput(spec.depth).source;
         case "module-failure-depth":
             return moduleFailureDepthInput(spec.depth,spec.phase).source;
@@ -1927,4 +1934,12 @@ export function moduleIteratorImportInput(depth:number):{source:string;files:Rea
     const aliases=['const requests0=["./a.mjs"];'];
     for(let index=1;index<depth;index++)aliases.push(`const requests${index}=requests${index-1};`);
     return {files:{"a.mjs":"export const value=17;\n","b.mjs":"export const value=19;\n"},source:`export {};${aliases.join("\n")}async function main(){let total=0;for(const request of ["./a.mjs","./b.mjs"])total+=(await import(request)).value;for(const request of [])await import(request);for(const request of requests${depth-1})total+=(await import(request)).value;console.log("iterator source:",total===53)}main();\n`};
+}
+
+/** One nested property tree supplies the native property and CLI stress input. */
+export function objectLiteralEffectInput(depth:number):string {
+    const marker="__unused_object_body__";
+    let value='{method(){return "'+marker+'"},get value(){return "'+marker+'"}}';
+    for(let index=0;index<depth;index++)value='{nested:'+value+',method(){return "'+marker+'"},set value(input:string){console.log("'+marker+'",input)}}';
+    return 'export {};const unused:unknown='+value+';console.log("done");\n';
 }

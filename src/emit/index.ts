@@ -1360,6 +1360,10 @@ class Emitter {
         expr: ts.Expression,
         seenConsts = new Set<ts.Symbol>(),
     ): boolean {
+        const literal = unwrapTransparentExpression(expr);
+        if (ts.isObjectLiteralExpression(literal)) {
+            return this.objectLiteralEvaluationHasNoSideEffects(literal, seenConsts, false);
+        }
         // Ordinary calls and their inferred aliases have actual tagged results.
         // Reuse their graph fact before the older scalar purity predictors.
         if (this.expressionHasCanonicalSourceValue(expr)) return false;
@@ -1561,29 +1565,41 @@ class Emitter {
                 return this.isSideEffectFreeTopLevelConstInitializer(element, seenConsts);
             });
         }
-        if (ts.isObjectLiteralExpression(expr)) {
-            return expr.properties.every((prop) => {
-                if (ts.isSpreadAssignment(prop)) {
-                    return this.isSideEffectFreeObjectSpreadOperand(prop.expression, seenConsts);
-                }
-                if (ts.isPropertyAssignment(prop)) {
-                    if (!this.objectLiteralPropertyNameHasNoDefinitionSideEffects(prop.name, seenConsts)) return false;
-                    return this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts);
-                }
-                if (ts.isShorthandPropertyAssignment(prop)) {
-                    return this.isSideEffectFreeTopLevelConstInitializer(prop.name, seenConsts);
-                }
-                if (
-                    ts.isMethodDeclaration(prop) ||
-                    ts.isGetAccessorDeclaration(prop) ||
-                    ts.isSetAccessorDeclaration(prop)
-                ) {
-                    return this.objectLiteralPropertyNameHasNoDefinitionSideEffects(prop.name, seenConsts);
-                }
-                return false;
-            });
-        }
         return false;
+    }
+
+    private objectLiteralEvaluationHasNoSideEffects(
+        literal: ts.ObjectLiteralExpression,
+        seenConsts: Set<ts.Symbol>,
+        readEnumerableValues: boolean,
+    ): boolean {
+        const pending = [{ literal, readEnumerableValues }];
+        while (pending.length) {
+            const current = pending.pop()!;
+            for (const property of current.literal.properties) {
+                if (ts.isSpreadAssignment(property)) {
+                    const operand = unwrapTransparentExpression(property.expression);
+                    if (ts.isObjectLiteralExpression(operand)) pending.push({ literal: operand, readEnumerableValues: true });
+                    else if (!this.isSideEffectFreeObjectSpreadOperand(operand, seenConsts)) return false;
+                    continue;
+                }
+                if (ts.isShorthandPropertyAssignment(property)) {
+                    if (!this.isSideEffectFreeTopLevelConstInitializer(property.name, seenConsts)) return false;
+                    continue;
+                }
+                if (!this.objectLiteralPropertyNameHasNoDefinitionSideEffects(property.name, seenConsts)) return false;
+                if (ts.isPropertyAssignment(property)) {
+                    const value = unwrapTransparentExpression(property.initializer);
+                    if (ts.isObjectLiteralExpression(value)) pending.push({ literal: value, readEnumerableValues: false });
+                    else if (!this.isSideEffectFreeTopLevelConstInitializer(value, seenConsts)) return false;
+                } else if (ts.isGetAccessorDeclaration(property)) {
+                    if (current.readEnumerableValues) return false;
+                } else if (!ts.isMethodDeclaration(property) && !ts.isSetAccessorDeclaration(property)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private isSideEffectFreeLengthOperand(
@@ -12513,8 +12529,9 @@ class Emitter {
     ): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (ts.isObjectLiteralExpression(unwrapped)) {
-            return this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
+            return this.objectLiteralEvaluationHasNoSideEffects(unwrapped, seenConsts, true);
         }
+        if (this.expressionHasCanonicalSourceValue(unwrapped)) return false;
         if (this.isSideEffectFreeOwnDataPropertyDescriptorObjectOperand(unwrapped, seenConsts)) {
             return true;
         }
