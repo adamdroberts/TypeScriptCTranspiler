@@ -1,3 +1,5 @@
+Corrected generator return-expression effect timing expectations and made intended object String display explicit, verified independently with Node.
+
 Materialized the generator locals Iterator helper and corrected remaining-value and completed-next observations from independent Node.
 
 Aligned generator result property order and completed delegated-return expectations with independent unchanged Script execution.

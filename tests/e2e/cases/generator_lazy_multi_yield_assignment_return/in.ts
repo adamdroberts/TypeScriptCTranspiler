@@ -118,7 +118,7 @@ console.log("spread-rhs-items", spreadRhsFourth.done, spreadRhsFourth.value);
 const spreadRhsFifth: any = spreadRhsIterator.next(spreadRhsItems);
 console.log("spread-rhs-after", spreadRhsEvents.join(","), spreadRhsFifth.done, spreadRhsFifth.value);
 const spreadRhsDone: any = spreadRhsIterator.next("spread-rhs-after");
-console.log("spread-rhs-done", spreadRhsDone.done, spreadRhsDone.value, spreadRhsBox.value.items.length, spreadRhsBox.value.items[0], spreadRhsBox.value.items[2], spreadRhsBox.value.after);
+console.log("spread-rhs-done", spreadRhsDone.done, String(spreadRhsDone.value), spreadRhsBox.value.items.length, spreadRhsBox.value.items[0], spreadRhsBox.value.items[2], spreadRhsBox.value.after);
 
 const computedKeyIterator = computedKeyAssignmentReturn();
 const computedKeyFirst: any = computedKeyIterator.next();
@@ -134,4 +134,4 @@ console.log("computed-key-value", computedKeyEvents.join(","), computedKeyFifth.
 const computedKeySixth: any = computedKeyIterator.next(4);
 console.log("computed-key-after", computedKeyEvents.join(","), computedKeySixth.done, computedKeySixth.value);
 const computedKeyDone: any = computedKeyIterator.next("after");
-console.log("computed-key-done", computedKeyDone.done, computedKeyDone.value, computedKeyBox.value.prefixsuffix, computedKeyBox.value.after);
+console.log("computed-key-done", computedKeyDone.done, String(computedKeyDone.value), computedKeyBox.value.prefixsuffix, computedKeyBox.value.after);
