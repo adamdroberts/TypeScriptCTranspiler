@@ -38253,6 +38253,12 @@ class Emitter {
         return { c: this.coerce(dynamic, mapped, call), ty: mapped };
     }
 
+    /** Physical native payloads cross the ordinary Value ABI before a
+     * fulfilled Promise can expose them to any reflected reaction. */
+    private nativePromiseSettlement(value:EmitResult,error:string,node:ts.Node):string {
+        return `tsc_promise_settle_immediate(${error} ? tsc_value_string(${error}) : ${this.boxObjectIdentity(value.c,value.ty,node)}, !!${error})`;
+    }
+
     /** Native APIs may deliver physical pointer payloads. One per-value codec
      * crosses that ABI before the shared ordinary Promise reaction observes it. */
     private promiseWithValueCodec(value: string, type: CType, node: ts.Node): string {
@@ -39247,8 +39253,7 @@ class Emitter {
             return `({ ` +
                 `${resultType} ${result} = ${resolver}(${values[0]}); ` +
                 `tsc_promise_t* ${out}; ` +
-                `if (${result}.error) { ${out} = tsc_promise_settle_immediate(tsc_value_string(${result}.error), true); } else { ` +
-                `${out} = tsc_promise_settle_immediate(tsc_value_array(${addresses}), false); } ` +
+                `${out} = ${this.nativePromiseSettlement({c:addresses,ty:arrayType(T_STRING)}, `${result}.error`,call)}; ` +
                 `${out}; })`;
         });
     }
@@ -39271,8 +39276,7 @@ class Emitter {
             return `({ ` +
                 `tsc_dns_lookup_all_result_t ${result} = tsc_dns_resolve_any(${values[0]}); ` +
                 `tsc_promise_t* ${out}; ` +
-                `if (${result}.error) { ${out} = tsc_promise_settle_immediate(tsc_value_string(${result}.error), true); } else { ` +
-                `${out} = tsc_promise_settle_immediate(tsc_value_array(${records}), false); } ` +
+                `${out} = ${this.nativePromiseSettlement({c:records,ty:arrayType(T_VALUE)}, `${result}.error`,call)}; ` +
                 `${out}; })`;
         });
     }
@@ -39371,8 +39375,7 @@ class Emitter {
                 return `({ ` +
                     `${ttl ? "tsc_dns_resolve_ttl_result_t" : "tsc_dns_resolve4_result_t"} ${result} = ${ttl ? "tsc_dns_resolve4_ttl" : "tsc_dns_resolve4"}(${hostC}); ` +
                     `tsc_promise_t* ${out}; ` +
-                    `if (${result}.error) { ${out} = tsc_promise_settle_immediate(tsc_value_string(${result}.error), true); } else { ` +
-                    `${out} = tsc_promise_settle_immediate(tsc_value_array(${addresses}), false); } ` +
+                    `${out} = ${this.nativePromiseSettlement({c:addresses,ty:arrayType(ttl?T_VALUE:T_STRING)}, `${result}.error`,call)}; ` +
                     `${out}; })`;
             }
             if (method === "resolve6") {
@@ -39381,8 +39384,7 @@ class Emitter {
                 return `({ ` +
                     `${ttl ? "tsc_dns_resolve_ttl_result_t" : "tsc_dns_resolve6_result_t"} ${result} = ${ttl ? "tsc_dns_resolve6_ttl" : "tsc_dns_resolve6"}(${hostC}); ` +
                     `tsc_promise_t* ${out}; ` +
-                    `if (${result}.error) { ${out} = tsc_promise_settle_immediate(tsc_value_string(${result}.error), true); } else { ` +
-                    `${out} = tsc_promise_settle_immediate(tsc_value_array(${addresses}), false); } ` +
+                    `${out} = ${this.nativePromiseSettlement({c:addresses,ty:arrayType(ttl?T_VALUE:T_STRING)}, `${result}.error`,call)}; ` +
                     `${out}; })`;
             }
             const lookupOptions = this.dnsLookupOptions(optionsNode);
@@ -39391,8 +39393,7 @@ class Emitter {
                 return `({ ` +
                     `tsc_dns_lookup_all_result_t ${result} = tsc_dns_lookup_all(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}, ${lookupOptions.order.toFixed(1)}); ` +
                     `tsc_promise_t* ${out}; ` +
-                    `if (${result}.error) { ${out} = tsc_promise_settle_immediate(tsc_value_string(${result}.error), true); } else { ` +
-                    `${out} = tsc_promise_settle_immediate(tsc_value_array(${addresses}), false); } ` +
+                    `${out} = ${this.nativePromiseSettlement({c:addresses,ty:arrayType(T_VALUE)}, `${result}.error`,call)}; ` +
                     `${out}; })`;
             }
             const obj = this.freshTemp("_dns_result");

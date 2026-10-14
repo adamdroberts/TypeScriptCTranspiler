@@ -1,3 +1,5 @@
+Boxed native Promise array payloads through the canonical element representation before fulfillment.
+
 Retained generator source owners, payloads and native descriptor-backed completion members.
 
 Corrected async iterator fixture protocol and observed primitive-result TypeError identity.

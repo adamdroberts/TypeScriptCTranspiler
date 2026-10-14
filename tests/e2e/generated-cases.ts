@@ -65,6 +65,7 @@ export interface AwaitResolutionDepthSpec {generator:"await-resolution-depth";de
 export interface PromiseReturnProjectionDepthSpec {generator:"promise-return-projection-depth";depth:number;}
 export interface EscapedCallbackGraphDepthSpec {generator:"escaped-callback-graph-depth";depth:number;}
 export interface GeneratorSourceOwnerDepthSpec {generator:"generator-source-owner-depth";depth:number;}
+export interface NativePromiseArrayDepthSpec {generator:"native-promise-array-depth";depth:number;}
 export interface CallbackTimerSourceDepthSpec {generator:"callback-timer-source-depth";depth:number;}
 export interface HasInstanceDepthSpec {generator:"has-instance-depth";depth:number;}
 export interface RelationalSourceDepthSpec {generator:"relational-source-depth";depth:number;}
@@ -334,6 +335,7 @@ export type GeneratedCaseSpec =
     | PromiseReturnProjectionDepthSpec
     | EscapedCallbackGraphDepthSpec
     | GeneratorSourceOwnerDepthSpec
+    | NativePromiseArrayDepthSpec
     | CallbackTimerSourceDepthSpec
     | HasInstanceDepthSpec
     | RelationalSourceDepthSpec
@@ -406,6 +408,10 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     }
     if(spec.generator==='generator-source-owner-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid generator source owner spec ${filename}`);
+        return {generator:spec.generator,depth:spec.depth};
+    }
+    if(spec.generator==='native-promise-array-depth'){
+        if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<1)throw new Error(`invalid native Promise array spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth};
     }
     if(spec.generator==='callback-timer-source-depth'){
@@ -2057,6 +2063,7 @@ console.log("raw JSON text width:", valid);
         case "promise-return-projection-depth": return promiseReturnProjectionInput(spec.depth);
         case "escaped-callback-graph-depth": return escapedCallbackGraphInput(spec.depth);
         case "generator-source-owner-depth": return generatorSourceOwnerInput(spec.depth);
+        case "native-promise-array-depth": return nativePromiseArrayInput(spec.depth);
         case "callback-timer-source-depth": return callbackTimerSourceInput(spec.depth);
         case "has-instance-depth": return hasInstanceInput(spec.depth);
         case "relational-source-depth": return relationalSourceInput(spec.depth);
@@ -2418,6 +2425,11 @@ export function escapedCallbackGraphInput(depth:number):string {
 export function generatorSourceOwnerInput(depth:number):string {
  const owners=Array.from({length:depth},(_,index)=>`const generatorSourceOwner${index}:any=${index?`{iterator:generatorSourceOwner${index-1}.iterator,previous:generatorSourceOwner${index-1}}`:`{iterator:source(),previous:null}`};`);
  return `{function* source():Generator<any,any,any>{yield 'return 317;'}${owners.join('\n')}console.log('generator source:',Function(generatorSourceOwner${depth-1}.iterator.next().value)());}\n`;
+}
+
+export function nativePromiseArrayInput(depth:number):string {
+ const owners=Array.from({length:depth},(_,index)=>`const nativePromiseArrayOwner${index}:any=${index?`{value:nativePromiseArrayOwner${index-1}.value,previous:nativePromiseArrayOwner${index-1}}`:`{value:array,previous:null}`};`);
+ return `import * as dns from 'node:dns/promises';async function verifyNativePromiseArray():Promise<void>{const array:any=await dns.resolve4('127.0.0.1');${owners.join('\n')}const retained:any=nativePromiseArrayOwner${depth-1}.value;const copied:any=await Promise.resolve(retained).then(value=>value);console.log('native Promise array:',copied===array,typeof copied[0],copied[0]);Reflect.set(copied,'1',17);Reflect.set(copied,'2',null);delete copied[0];console.log('native Promise mutation:',array===copied,!(0 in array),array[1],array[2]);}verifyNativePromiseArray();\n`;
 }
 
 export function moduleRejectionOriginInput(depth:number):{source:string;files:Record<string,string>} {
