@@ -1,3 +1,5 @@
+Rejected duplicate Switch default productions through canonical static validation and preserved parentless raw directive reads.
+
 Corrected CaseBlockEvaluation evidence rationale to match its scoped completion property.
 
 Required actual child stream owners before refreshing optional stdio properties.

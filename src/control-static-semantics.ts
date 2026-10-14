@@ -294,6 +294,14 @@ export function earlyControlFlowStaticSemanticsFailure(
             worklist.push({ node: node.statement, context: { ...context, labels } });
             continue;
         }
+        if (ts.isCaseBlock(node)) {
+            let defaultClause: ts.DefaultClause | undefined;
+            for (const clause of node.clauses) {
+                if (!ts.isDefaultClause(clause)) continue;
+                if (defaultClause) return {node: clause, message: "switch CaseBlock contains more than one default clause"};
+                defaultClause = clause;
+            }
+        }
         const iteration = ts.isForStatement(node) ||
             ts.isForInStatement(node) ||
             ts.isForOfStatement(node) ||

@@ -7,10 +7,10 @@ export function ecmaParseGoal(sourceFile: ts.SourceFile): EcmaParseGoal {
 }
 
 /** Use Strict is a raw directive token, not the cooked String value. */
-export function ecmaDirectivePrologueHasUseStrict(statements: readonly ts.Statement[]): boolean {
+export function ecmaDirectivePrologueHasUseStrict(statements: readonly ts.Statement[], sourceFile?: ts.SourceFile): boolean {
     for (const statement of statements) {
         if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression)) return false;
-        const token = statement.expression.getText();
+        const token = statement.expression.getText(sourceFile);
         if (token === '"use strict"' || token === "'use strict'") return true;
     }
     return false;
@@ -156,12 +156,12 @@ export function createEcmaSourceFile(
         for (;;) {
             let changed = false;
             const worklist: Array<{node: ts.Node; parent?: ts.Node; strict: boolean}> = [{
-                node: sourceFile, strict: goal === "module" || ecmaDirectivePrologueHasUseStrict(sourceFile.statements),
+                node: sourceFile, strict: goal === "module" || ecmaDirectivePrologueHasUseStrict(sourceFile.statements, sourceFile),
             }];
             while (worklist.length) {
                 const {node, parent, strict: inherited} = worklist.pop()!;
                 const strict = inherited || ts.isClassLike(node) || ts.isFunctionLike(node) &&
-                    "body" in node && !!node.body && ts.isBlock(node.body) && ecmaDirectivePrologueHasUseStrict(node.body.statements);
+                    "body" in node && !!node.body && ts.isBlock(node.body) && ecmaDirectivePrologueHasUseStrict(node.body.statements, sourceFile);
                 if (goal === "script" && ts.isAwaitExpression(node) && !(node.flags & ts.NodeFlags.AwaitContext)) {
                     const start = node.getStart(sourceFile);
                     if (!referenceTokens.has(start)) { referenceTokens.set(start, "await"); changed = true; }
