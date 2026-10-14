@@ -1,3 +1,5 @@
+- Register scoped GetSubstitution evidence with exact pinned metadata reconciliation and a live named-capture template worklist stress.
+
 - Retain JSON dynamic-import source namespace owners without checker symbols and model finite missing relative targets as rejection.
 
 - Keep non-finite primitive String payloads unresolved in virtual source fields and presence.

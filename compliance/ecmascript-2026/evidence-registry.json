@@ -529,7 +529,8 @@
         "sec-string.prototype.towellformed#generic-tostring-and-lone-surrogate-replacement",
         "sec-string.prototype.tostring#generic-this-string-value-tostring",
         "sec-string.prototype.valueof#generic-this-string-value-valueof",
-        "sec-string.prototype-%symbol.iterator%#generic-tostring-and-code-point-iteration"
+        "sec-string.prototype-%symbol.iterator%#generic-tostring-and-code-point-iteration",
+        "sec-getsubstitution#utf16-template-token-and-live-named-get-worklist"
       ]
     },
     {
@@ -5797,7 +5798,8 @@
       "id": "stdlib/lib.core.d.ts#RegExp",
       "targets": [
         "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist",
-        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist"
+        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist",
+        "sec-getsubstitution#utf16-template-token-and-live-named-get-worklist"
       ]
     },
     {
@@ -5856,7 +5858,8 @@
       "kind": "property",
       "id": "tests/property/regexp-replace.property.test.ts",
       "targets": [
-        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist"
+        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist",
+        "sec-getsubstitution#utf16-template-token-and-live-named-get-worklist"
       ]
     },
     {
@@ -5877,21 +5880,45 @@
       "kind": "e2e",
       "id": "regexp_replace_protocol",
       "targets": [
-        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist"
+        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist",
+        "sec-getsubstitution#utf16-template-token-and-live-named-get-worklist"
       ]
     },
     {
       "kind": "implementation",
       "id": "runtime/tsc_regexp_api.c#tsc_regexp_replace_apply",
       "targets": [
-        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist"
+        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist",
+        "sec-getsubstitution#utf16-template-token-and-live-named-get-worklist"
       ]
     },
     {
       "kind": "implementation",
       "id": "runtime/tsc_regexp_api.c#tsc_string_get_substitution",
       "targets": [
-        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist"
+        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist",
+        "sec-getsubstitution#utf16-template-token-and-live-named-get-worklist"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "string_substitution_token_worklist",
+      "targets": [
+        "sec-getsubstitution#utf16-template-token-and-live-named-get-worklist"
+      ],
+      "stressReview": {
+        "dimension": "UTF-16 replacement-template token stream and retained output-owner graph depth",
+        "parameter": "depth",
+        "representativeHighDepth": 4096,
+        "rationale": "One long template exercises the canonical token cursor and repeated live named Get/ToString effects while retained references preserve output ownership; the algorithm is independent of the representative depth.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#append_string_substitution",
+      "targets": [
+        "sec-getsubstitution#utf16-template-token-and-live-named-get-worklist"
       ]
     }
   ]

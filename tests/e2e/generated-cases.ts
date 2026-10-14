@@ -3,6 +3,11 @@ export interface RegexpPatternDepthSpec {
     depth: number;
 }
 
+export interface StringSubstitutionTokenWorklistSpec {
+    generator: "string-substitution-token-worklist";
+    depth: number;
+}
+
 export interface RegexpReplaceCaptureWorklistSpec {
     generator: "regexp-replace-capture-worklist";
     depth: number;
@@ -281,6 +286,7 @@ export type GeneratedCaseSpec =
     | RegexpPatternDepthSpec
     | RegexpSplitCaptureWorklistSpec
     | RegexpReplaceCaptureWorklistSpec
+    | StringSubstitutionTokenWorklistSpec
     | AsyncLeadingAwaitChainSpec
     | AsyncBindingDefaultDepthSpec
     | AsyncLogicalExpressionDepthSpec
@@ -561,6 +567,11 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     if(spec.generator==='module-failure-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<2||!['load','link'].includes(String(spec.phase)))throw new Error(`invalid generated Module failure spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth,phase:spec.phase as 'load'|'link'};
+    }
+    if (spec.generator === "string-substitution-token-worklist") {
+        if (typeof spec.depth !== "number" || !Number.isInteger(spec.depth) || spec.depth < 2)
+            throw new Error(`invalid generated substitution worklist spec ${filename}`);
+        return { generator: spec.generator, depth: spec.depth };
     }
     if (spec.generator === "regexp-replace-capture-worklist") {
         if (typeof spec.depth !== "number" || !Number.isInteger(spec.depth) || spec.depth < 2)
@@ -2048,6 +2059,21 @@ const valid = evaluated === ${spec.width} && raw.rawJSON === text &&
     Object.isFrozen(raw) && Object.getPrototypeOf(raw) === null;
 console.log("raw JSON text width:", valid);
 `;
+        case "string-substitution-token-worklist":
+            return [
+                "const depth: number = DEPTH;",
+                "let gets: number = 0, conversions: number = 0;",
+                "const group={get part(){gets++;return{toString(){conversions++;return'G'}}}};",
+                "const receiver: any = {flags:'',exec(){return{0:'b',1:undefined,2:'C',length:3,index:1,groups:group}}};",
+                "const piece='$$:$&:$1:$2:$01:$20:$<part>:$`:$\\':';",
+                "const expected='$:b::C::C0:G:a:c:';",
+                "const output=RegExp.prototype[Symbol.replace].call(receiver,'abc',piece.repeat(depth));",
+                "let graph: any = null;",
+                "for(let index=0;index<depth;index++)graph={index,output,previous:graph};",
+                "let valid=output==='a'+expected.repeat(depth)+'c'&&gets===depth&&conversions===depth;",
+                "for(let index=depth-1;index>=0;index--){valid=valid&&graph.index===index&&graph.output===output;graph=graph.previous;}",
+                "console.log('substitution worklist:',valid&&graph===null);"
+            ].join("\n").replace("DEPTH",String(spec.depth))+"\n";
         case "regexp-replace-capture-worklist":
             return `const replace: any = RegExp.prototype[Symbol.replace];
 const captures: any = { 0: "x", index: 0, length: ${spec.depth} + 1 };

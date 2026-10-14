@@ -6633,6 +6633,58 @@
         }
       ],
       "rationale": "Scoped reciprocal replacement intrinsic evidence; no whole-RegExp, whole-String or whole-target conformance claim."
+    },
+    {
+      "clause": "sec-getsubstitution",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "utf16-template-token-and-live-named-get-worklist",
+          "title": "UTF-16 replacement cursor with literal/dollar, matched/prefix/suffix, numbered capture fallback, undefined captures, live named Get/ToString and abrupt identity",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-getsubstitution"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/regexp-replace.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "string_substitution_token_worklist"
+            ],
+            "e2e": [
+              "regexp_replace_protocol"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#String",
+              "stdlib/lib.core.d.ts#RegExp"
+            ],
+            "implementation": [
+              "runtime/tsc_regexp_api.c#tsc_string_get_substitution",
+              "runtime/tsc_regexp_api.c#tsc_regexp_replace_apply",
+              "runtime/tsc_string.c#append_string_substitution"
+            ]
+          },
+          "rationale": "One UTF-16 template cursor and output builder use the actual capture List and live named-capture owner. Shared callers cover RegExp replacement and ordinary String fallback. The independent Node replacement property checks token parsing, one/two-digit fallback, undefined captures, coercion and abrupt identity; one long generated template stress verifies repeated live named Gets/conversions and retained output through the same algorithm. Exact pinned clause source metadata is reconciled across the immutable replacement and named-group replacement scopes with independent Node and native artifact-byte audit. Feature readiness, full String/RegExp surface, host eligibility and exhaustive signed target coverage remain open."
+        }
+      ],
+      "rationale": "Reciprocal scoped GetSubstitution worklist evidence; no full-target coverage claim."
     }
   ],
   "groups": [
