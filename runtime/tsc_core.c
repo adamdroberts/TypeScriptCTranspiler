@@ -2099,6 +2099,8 @@ void tsc_clear_immediate(double id) {
     for (size_t i = 0; i < g_immediate_len; i++) {
         if (g_immediate_queue[i].id == id) {
             g_immediate_queue[i].canceled = true;
+            g_immediate_queue[i].fn = NULL;
+            g_immediate_queue[i].env = NULL;
             return;
         }
     }
@@ -2123,20 +2125,22 @@ void tsc_drain_immediates(void) {
     size_t count = g_immediate_len;
     size_t idx = 0;
     while (idx < count) {
-        tsc_immediate_entry_t entry = g_immediate_queue[idx++];
-        if (!g_immediate_queue[idx - 1].canceled && entry.fn) {
+        tsc_immediate_entry_t entry = g_immediate_queue[idx];
+        g_immediate_queue[idx++] = (tsc_immediate_entry_t){0};
+        if (!entry.canceled && entry.fn) {
             entry.fn(entry.env);
             tsc_job_checkpoint();
         }
         tsc_drain_microtasks_and_next_ticks();
     }
-    if (g_immediate_len > count) {
-        size_t remaining = g_immediate_len - count;
+    size_t previous_len = g_immediate_len;
+    size_t remaining = previous_len - count;
+    if (remaining) {
         memmove(g_immediate_queue, g_immediate_queue + count, remaining * sizeof(tsc_immediate_entry_t));
-        g_immediate_len = remaining;
-    } else {
-        g_immediate_len = 0;
     }
+    if (previous_len > remaining)
+        memset(g_immediate_queue + remaining, 0, (previous_len - remaining) * sizeof(tsc_immediate_entry_t));
+    g_immediate_len = remaining;
 }
 
 static double tsc_now_ms(void) {

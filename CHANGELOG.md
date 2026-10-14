@@ -1,3 +1,5 @@
+Released cancelled and consumed immediate callback payload roots while preserving snapshot FIFO and reentrant appends.
+
 Released consumed cross-thread queue payload roots through the canonical synchronized FIFO drain.
 
 Preserved source projection provenance across capture and return substitution, closing mutual operation cloning through recursive edges without iteration bounds.
