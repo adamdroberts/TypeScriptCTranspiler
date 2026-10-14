@@ -45,6 +45,20 @@ export interface RuntimeGlobalBinding {
     normalResult?: "non-string" | "boolean" | "object" | "unknown" | "not-callable" | "primitive-string";
 }
 
+/** Source owners project the same descriptor collection installed natively. */
+export const runtimeMathMethods:ReadonlyMap<string,{length:number;kind:string}>=new Map(
+    fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_math_methods.def"),"utf8")
+        .split(/\r?\n/).filter(line=>line.startsWith('TSC_MATH_')).map(line=>{
+            const row=/^TSC_MATH_(UNARY|BINARY|VARIADIC)\((\w+), ([^\n]+)\)$/.exec(line);
+            if(!row)throw new Error("invalid native Math method descriptor");
+            const [,form,name,arguments_]=row,parts=arguments_!.split(',').map(value=>value.trim());
+            const length=form==='UNARY'?1:form==='BINARY'?2:Number(parts[0]),kind=form==='VARIADIC'?parts[1]?.replace('TSC_MATH_',''):form;
+            if(!Number.isInteger(length)||length<0||!['UNARY','BINARY','RANDOM','MIN','MAX','HYPOT','SUM_PRECISE'].includes(kind??''))throw new Error("invalid native Math method descriptor");
+            return [name!,{length,kind:kind!}] as const;
+        }),
+);
+if(!runtimeMathMethods.size)throw new Error("missing native Math method descriptors");
+
 export const runtimeObjectPrototypeMethods: ReadonlyMap<string, NonNullable<RuntimeGlobalBinding["normalResult"]>> = new Map(
     fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_object_prototype_methods.def"), "utf8")
         .split(/\r?\n/).filter(line => line.startsWith("TSC_OBJECT_PROTOTYPE_METHOD"))

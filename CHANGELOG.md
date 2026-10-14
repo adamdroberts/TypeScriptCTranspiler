@@ -1,3 +1,5 @@
+Shared native Math descriptors with ordinary source owners, preserving ordered conversion effects and unbounded Number results.
+
 Captured canonical List extent locations and retained recursive activation timing through the shared call graph.
 
 Retained canonical allocation origins for ordinary source owners and preserved live object member reads through the emitter.

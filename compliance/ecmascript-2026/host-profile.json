@@ -37,6 +37,7 @@
     "runtime/tsc_array_abi.h",
     "runtime/tsc_iterator.c",
     "runtime/tsc_map_set.c",
+    "runtime/tsc_math_methods.def",
     "runtime/tsc_node.c",
     "runtime/tsc_url_owner.c",
     "runtime/tsc_console_owner.c",

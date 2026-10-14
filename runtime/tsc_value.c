@@ -9547,43 +9547,13 @@ typedef struct {
     { name_literal, sizeof(name_literal) - 1, length_value, kind_value, { .unary = NULL } }
 
 static const tsc_math_intrinsic_t math_intrinsics[] = {
-    TSC_MATH_UNARY_ENTRY("abs", fabs),
-    TSC_MATH_UNARY_ENTRY("acos", acos),
-    TSC_MATH_UNARY_ENTRY("acosh", acosh),
-    TSC_MATH_UNARY_ENTRY("asin", asin),
-    TSC_MATH_UNARY_ENTRY("asinh", asinh),
-    TSC_MATH_UNARY_ENTRY("atan", atan),
-    TSC_MATH_UNARY_ENTRY("atanh", atanh),
-    TSC_MATH_BINARY_ENTRY("atan2", atan2),
-    TSC_MATH_UNARY_ENTRY("cbrt", cbrt),
-    TSC_MATH_UNARY_ENTRY("ceil", ceil),
-    TSC_MATH_UNARY_ENTRY("clz32", tsc_math_clz32),
-    TSC_MATH_UNARY_ENTRY("cos", cos),
-    TSC_MATH_UNARY_ENTRY("cosh", cosh),
-    TSC_MATH_UNARY_ENTRY("exp", exp),
-    TSC_MATH_UNARY_ENTRY("expm1", expm1),
-    TSC_MATH_UNARY_ENTRY("f16round", tsc_math_f16round),
-    TSC_MATH_UNARY_ENTRY("floor", floor),
-    TSC_MATH_UNARY_ENTRY("fround", tsc_math_fround),
-    TSC_MATH_VARIADIC_ENTRY("hypot", 2.0, TSC_MATH_HYPOT),
-    TSC_MATH_BINARY_ENTRY("imul", tsc_math_imul),
-    TSC_MATH_UNARY_ENTRY("log", log),
-    TSC_MATH_UNARY_ENTRY("log1p", log1p),
-    TSC_MATH_UNARY_ENTRY("log10", log10),
-    TSC_MATH_UNARY_ENTRY("log2", log2),
-    TSC_MATH_VARIADIC_ENTRY("max", 2.0, TSC_MATH_MAX),
-    TSC_MATH_VARIADIC_ENTRY("min", 2.0, TSC_MATH_MIN),
-    TSC_MATH_BINARY_ENTRY("pow", tsc_number_exponentiate),
-    TSC_MATH_VARIADIC_ENTRY("random", 0.0, TSC_MATH_RANDOM),
-    TSC_MATH_UNARY_ENTRY("round", tsc_math_round),
-    TSC_MATH_UNARY_ENTRY("sign", tsc_math_sign),
-    TSC_MATH_UNARY_ENTRY("sin", sin),
-    TSC_MATH_UNARY_ENTRY("sinh", sinh),
-    TSC_MATH_UNARY_ENTRY("sqrt", sqrt),
-    TSC_MATH_VARIADIC_ENTRY("sumPrecise", 1.0, TSC_MATH_SUM_PRECISE),
-    TSC_MATH_UNARY_ENTRY("tan", tan),
-    TSC_MATH_UNARY_ENTRY("tanh", tanh),
-    TSC_MATH_UNARY_ENTRY("trunc", trunc),
+#define TSC_MATH_UNARY(name, function) TSC_MATH_UNARY_ENTRY(#name, function),
+#define TSC_MATH_BINARY(name, function) TSC_MATH_BINARY_ENTRY(#name, function),
+#define TSC_MATH_VARIADIC(name, length, kind) TSC_MATH_VARIADIC_ENTRY(#name, length, kind),
+#include "tsc_math_methods.def"
+#undef TSC_MATH_UNARY
+#undef TSC_MATH_BINARY
+#undef TSC_MATH_VARIADIC
 };
 
 #undef TSC_MATH_UNARY_ENTRY

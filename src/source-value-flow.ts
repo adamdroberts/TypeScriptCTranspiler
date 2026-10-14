@@ -17,7 +17,7 @@ import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, functionConstructorSourceKey, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
 import {declarativeSourceBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding, sourceBindingTarget} from "./source-bindings";
-import {runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeUtilExports, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
+import {runtimeMathMethods,runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeUtilExports, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
     readonly roots?: readonly string[];
@@ -54,7 +54,7 @@ type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpressio
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
 type Operation = "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}`;
+    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
@@ -1521,7 +1521,7 @@ class SourceValueFlow {
     }
     /** The same ordered List advances only through possible normal results.
      * An abrupt conversion suppresses every later conversion edge. */
-    private convertList(args: readonly Cell[], context: ts.Node, mode: PrimitiveHint | "numeric" | "text"): readonly Cell[] {
+    private convertList(args: readonly Cell[], context: ts.Node, mode: PrimitiveHint | "numeric" | "number" | "text"): readonly Cell[] {
         let conversions = this.orderedConversions.get(context);
         if (!conversions) {conversions = new Map(); this.orderedConversions.set(context, conversions);}
         const identity = mode + ":" + args.map(argument => argument.id).join(",");
@@ -1529,7 +1529,7 @@ class SourceValueFlow {
         const converted: Cell[] = []; conversions.set(identity, converted);
         for (const [index, argument] of args.entries()) {
             const input = this.newCell(), result = mode === "text" ? this.stringHintCell(input, context)
-                : mode === "numeric" ? this.coerceCell(input, context, "numeric") : this.primitiveConversion(input, context, mode);
+                : mode === "numeric" || mode === "number" ? this.coerceCell(input, context, mode) : this.primitiveConversion(input, context, mode);
             converted.push(result);
             if (index === 0) this.copy(argument, input);
             else {
@@ -2090,6 +2090,11 @@ class SourceValueFlow {
                 const fields: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell()};this.copy(this.opaqueMutation,fields.shape);
                 for (const [name, operation] of INITIAL_SOURCE_OPERATIONS.get(key) ?? []) {
                     const value = this.newCell();this.publish(value,this.operation(operation));this.defineField(fields,name,value);
+                }
+                if(key==="Math") {
+                    fields.ordinary=true;fields.prototype=this.objectPrototype();
+                    for(const name of runtimeMathMethods.keys()){const value=this.newCell();this.publish(value,this.operation(`math-member:${name}`));this.defineField(fields,name,value,false);}
+                    const value=this.newCell();this.publish(value,this.primitive("Math"));this.defineField(fields,this.wellKnownSymbols.get("toStringTag")!,value,false);
                 }
                 if(key==="JSON") {
                     fields.ordinary=true;
@@ -2851,6 +2856,11 @@ class SourceValueFlow {
         if(atom.tag === "function")return atom.owner.fields;
         if(atom.tag === "bound")return atom.fields;
         if(atom.tag === "builtin")return atom.fields;
+        if(atom.tag==="operation"&&atom.operation.startsWith("math-member:")){
+            let owner=this.intrinsicOwners.get(atom);if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);this.copy(this.opaqueMutation,owner.shape);
+                const operation=atom.operation.slice("math-member:".length),descriptor=runtimeMathMethods.get(operation)!,name=this.newCell(),length=this.newCell();this.publish(name,this.primitive(operation));this.publish(length,this.primitive(descriptor.length));this.defineField(owner,"name",name);this.defineField(owner,"length",length);
+            }return owner;
+        }
         if(atom.tag==="operation"&&(atom.operation==="array-values"||atom.operation==="array-keys"||atom.operation==="array-entries")){
             let owner=this.intrinsicOwners.get(atom);if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);this.copy(this.opaqueMutation,owner.shape);
                 const name=this.newCell(),length=this.newCell();this.publish(name,this.primitive(atom.operation.slice("array-".length)));this.publish(length,this.primitive(0));this.defineField(owner,"name",name);this.defineField(owner,"length",length);
@@ -4292,6 +4302,24 @@ class SourceValueFlow {
                         worklist.push({ ...invocation, target: atom.target, args: argv && atom.prefix ? [...atom.prefix, ...argv] : null, direct: false,
                             sequence: invocation.sequence && atom.prefix ? this.transformArguments(invocation.sequence, {prefix: atom.prefix}) : null,
                             receiver: invocation.construct ? invocation.receiver : atom.receiver, boundPath }); continue;
+                    }
+                    if(atom.tag==="operation"&&atom.operation.startsWith("math-member:")) {
+                        const descriptor=runtimeMathMethods.get(atom.operation.slice("math-member:".length))!;
+                        if(invocation.construct){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));continue;}
+                        if(!argv){this.publish(result,this.nonString);this.onActive(node,()=>this.opaqueEffect(node));const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.unknown);continue;}
+                        if(descriptor.kind==="SUM_PRECISE"){
+                            const elements=this.iteratorElements(argument(0)??omittedArgument,node);this.watch(rule,elements);
+                            const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));
+                            if(this.primitiveState(elements,rule,true).unresolved){this.onActive(node,()=>this.opaqueEffect(node));if(handler)this.publish(handler,this.unknown);}
+                            let value=this.numericValues.get(KIND_NUMBER);if(!value){value={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,value);}this.publish(result,value);continue;
+                        }
+                        const count=descriptor.kind==="RANDOM"?0:descriptor.kind==="UNARY"||descriptor.kind==="BINARY"?descriptor.length:argv.length;
+                        const converted=this.convertList(Array.from({length:count},(_,index)=>argument(index)??omittedArgument),node,"number");
+                        for(const input of converted)this.watchText(rule,input);
+                        if(converted.some(input=>this.primitiveState(input,rule,true).pending))continue;
+                        if(converted.some(input=>{const proof=this.primitiveChoiceProof(input);return proof.primitiveComplete&&!proof.values.length})){this.publish(result,this.abrupt);continue;}
+                        let value=this.numericValues.get(KIND_NUMBER);if(!value){value={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,value);}this.publish(result,value);
+                        continue;
                     }
                     if(atom.tag==="operation"&&atom.operation==="promise-species"){this.copy(invocation.receiver,result);continue;}
                     if(atom.tag==="operation"&&atom.operation==="promise-finally-forward") {
