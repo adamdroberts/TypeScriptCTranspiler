@@ -1098,15 +1098,16 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee)) return [];
         const method = callee.name.text;
-        if (method !== "alloc" && method !== "allocUnsafe" && method !== "allocUnsafeSlow") return [];
+        // Unsafe allocation has a known extent but no initialized byte value.
+        // Every downstream byte projection must retain that unknown domain.
+        if (method !== "alloc") return [];
         const target = unwrapStaticExpression(callee.expression);
         if (!isStaticBufferConstructorExpression(target)) return [];
-        if (method !== "alloc" && call.arguments.length > 1) return [];
 
         const sizes = resolveStaticIntegerKeys(call.arguments[0]!);
         if (sizes.length === 0) return [];
         const fillArg = call.arguments[1];
-        const fills = method !== "alloc" || !fillArg || isStaticUndefinedExpression(fillArg)
+        const fills = !fillArg || isStaticUndefinedExpression(fillArg)
             ? [0]
             : resolveStaticIntegerKeys(fillArg);
         if (fills.length === 0) return [];
@@ -1545,36 +1546,6 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return dedupe(out);
     };
 
-    const resolveStaticBufferAllocToStringCall = (call: ts.CallExpression): string[] => {
-        if (call.arguments.length > 1 || call.arguments.some(ts.isSpreadElement)) return [];
-        const callee = unwrapStaticExpression(call.expression);
-        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "toString") return [];
-        const receiver = unwrapStaticExpression(callee.expression);
-        if (!ts.isCallExpression(receiver)) return [];
-        const receiverCallee = unwrapStaticExpression(receiver.expression);
-        if (!ts.isPropertyAccessExpression(receiverCallee)) return [];
-        const receiverMethod = receiverCallee.name.text;
-        if (receiverMethod !== "alloc" && receiverMethod !== "allocUnsafe" && receiverMethod !== "allocUnsafeSlow") return [];
-
-        const buffers = resolveStaticBufferExpression(receiver);
-        if (buffers.length === 0) return [];
-        const encodingArg = call.arguments[0];
-        const encodings = !encodingArg || isStaticUndefinedExpression(encodingArg)
-            ? [undefined]
-            : resolve(encodingArg);
-        if (encodings.length === 0) return [];
-
-        const out: string[] = [];
-        for (const buffer of buffers) {
-            for (const encoding of encodings) {
-                const nodeEncoding = nodeBufferEncoding(encoding);
-                if (!nodeEncoding) return [];
-                out.push(buffer.toString(nodeEncoding));
-                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
-            }
-        }
-        return dedupe(out);
-    };
 
     const compareStaticBuffers = (left: Buffer, right: Buffer): string => {
         const result = Buffer.compare(left, right);
@@ -5915,7 +5886,6 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         resolveStaticBufferIsEncodingCall,
         resolveStaticBufferFromToStringCall,
         resolveStaticBufferConcatToStringCall,
-        resolveStaticBufferAllocToStringCall,
         resolveStaticBufferToStringCall,
         resolveStaticBufferToLocaleStringCall,
         resolveStaticBufferCompareCall,

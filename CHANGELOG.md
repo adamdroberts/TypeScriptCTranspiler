@@ -1,3 +1,5 @@
+Stopped finite Buffer source proofs from inventing zero-filled unsafe allocation bytes; shared transformations remain unknown and use the existing AOT closure diagnostic.
+
 Unified POSIX path normalization, joining, resolving and relative output through one dynamic component record and complete actual Lists; removed fixed path buffers and component limits.
 
 Represented Array keys, values and entries through canonical indexed views activated by ordinary next, retaining sparse domains and actual property effects.

@@ -1,0 +1,1 @@
+dynamic require(variable) needs a finite AOT specifier proof or --dynamic-require-manifest allow-list
