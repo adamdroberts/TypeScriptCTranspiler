@@ -1,3 +1,5 @@
+- Record independently audited pinned callable-text scenarios while retaining Proxy and host conformance gates.
+
 - Retain known property-write completion provenance through saved reads, return projections and descriptor snapshots.
 
 - Preserve abrupt Function.prototype.toString receiver completions through the shared callable projection before source evaluation.
