@@ -1,3 +1,5 @@
+- Check the canonical disposable capability and async disposal worklist in the local extension C regression.
+
 - Check canonical Reference and iterator operations in suspending iterator binding/assignment C regressions.
 
 - Check canonical CopyDataProperties and iterator-step lowering in the suspending binding-rest C regression.

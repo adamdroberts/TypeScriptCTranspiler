@@ -1,2 +1,4 @@
 tsc_async_cfg_
-tsc_promise_after_async_dispose_many
+tsc_dispose_capability_add
+tsc_dispose_resources_async_step
+tsc_dispose_resources_async_resume
