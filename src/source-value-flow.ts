@@ -18,7 +18,7 @@ import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, functionConstructorSourceKey, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
 import {declarativeSourceBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding, sourceBindingTarget} from "./source-bindings";
-import {runtimeDynamicFunctionDescriptors,runtimeGeneratorMethods,runtimeCallbackTimerDescriptors,runtimeAtomicsMethods,runtimeTypedArrayDescriptors,runtimeMathMethods,runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeBufferExports, runtimeUtilExports, runtimeFsExports, runtimeFsConstants, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
+import {runtimeDynamicFunctionDescriptors,runtimeGeneratorMethods,runtimeCallbackTimerDescriptors,runtimeAtomicsMethods,runtimeTypedArrayDescriptors,runtimeMathMethods,runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeBufferExports, runtimeChildProcessOperations, runtimeUtilExports, runtimeFsExports, runtimeFsConstants, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
     readonly roots?: readonly string[];
@@ -1022,6 +1022,16 @@ class SourceValueFlow {
             if(ts.isImportSpecifier(declaration))return this.bufferModuleExport((declaration.propertyName??declaration.name).text);
             if(ts.isNamespaceImport(declaration))return this.bufferModule(true);
             if(ts.isImportClause(declaration)&&declaration.name)return this.bufferModule(false);
+        }
+        for(const declaration of origin?.declarations??[]){
+            let current:ts.Node|undefined=declaration;
+            while(current&&!ts.isImportDeclaration(current)&&!ts.isSourceFile(current))current=current.parent;
+            if(!current||!ts.isImportDeclaration(current)||!ts.isStringLiteralLike(current.moduleSpecifier)||
+                !["child_process","node:child_process"].includes(current.moduleSpecifier.text))continue;
+            if(current.importClause?.isTypeOnly||ts.isImportSpecifier(declaration)&&declaration.isTypeOnly)continue;
+            if(ts.isImportSpecifier(declaration))return this.childProcessExport((declaration.propertyName??declaration.name).text);
+            if(ts.isNamespaceImport(declaration))return this.childProcessModule(true);
+            if(ts.isImportClause(declaration)&&declaration.name)return this.childProcessModule(false);
         }
         const projected = sourceBindingTarget(this.checker, origin), symbol = projected.symbol;
         const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
@@ -2179,6 +2189,28 @@ class SourceValueFlow {
     private immutableGlobalBinding(key: string): boolean {
         const binding = runtimeGlobalBindings.get(key);
         return binding?.kind === "value" && !binding.writable && !binding.configurable;
+    }
+    private readonly childProcessOwners=new Map<boolean,Cell>();
+    private readonly childProcessExports=new Map<string,Cell>();
+    private childProcessExport(name:string):Cell {
+        const prior=this.childProcessExports.get(name);if(prior)return prior;
+        const value=this.newCell();this.childProcessExports.set(name,value);
+        const descriptor=runtimeChildProcessOperations.get(name);
+        if(!descriptor){this.publish(value,this.unknown);return value;}
+        const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};
+        const length=this.newCell(),text=this.newCell();this.publish(length,this.primitive(descriptor.arity));this.publish(text,this.primitive(name));
+        this.defineField(owner,"length",length,false);this.defineField(owner,"name",text,false);this.copy(this.opaqueMutation,owner.shape);
+        this.publish(value,{tag:"builtin",name:"child_process:"+name,normalResult:descriptor.result==="CALLBACK"?"non-string":descriptor.result==="BYTES"?"unknown":"object",fields:owner});
+        return value;
+    }
+    private childProcessModule(namespace:boolean):Cell {
+        const prior=this.childProcessOwners.get(namespace);if(prior)return prior;
+        const value=this.newCell(),owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),ordinary:!namespace,prototype:this.objectPrototype()};
+        if(namespace){const prototype=this.newCell();this.publish(prototype,this.primitive(null));owner.prototype=prototype;}
+        this.childProcessOwners.set(namespace,value);this.publish(value,{tag:"object",owner});
+        for(const name of runtimeChildProcessOperations.keys())this.defineField(owner,name,this.childProcessExport(name));
+        if(namespace)this.defineField(owner,"default",this.childProcessModule(false));
+        this.copy(this.opaqueMutation,owner.shape);return value;
     }
     private readonly bufferModuleOwners=new Map<boolean,{value:Cell;owner:ObjectOwner}>();
     private readonly bufferModuleExports=new Map<string,Cell>();
@@ -4938,7 +4970,7 @@ class SourceValueFlow {
                             this.copy(generated.value,result!);
                         }
                     } else if (atom.tag === "builtin") {
-                        if (atom.name === "Buffer" || atom.name.startsWith("Buffer.") || atom.name.startsWith("fs:")) {
+                        if (atom.name === "Buffer" || atom.name.startsWith("Buffer.") || atom.name.startsWith("fs:") || atom.name.startsWith("child_process:")) {
                             this.onActive(node, () => {
                                 this.opaqueEffect(node);
                                 for (const actual of argv ?? (invocation.sequence ? [this.allArgumentValues(invocation.sequence)] : []))

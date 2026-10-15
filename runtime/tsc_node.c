@@ -2458,6 +2458,233 @@ tsc_value_t tsc_child_process_exec_utf8(const tsc_str_t* command, const tsc_str_
     return tsc_child_process_spawn_sync(shell ? shell : tsc_str_from_lit("/bin/sh", 7), args, cwd, NULL, env, NULL, NULL, true, false, true, true, false, false, false, uid, gid, max_buffer, timeout_ms, timeout_signal, true);
 }
 
+/* Ordinary child-process export owners. The synchronous callback profile is
+ * intentionally retained; invocation and role selection use actual values. */
+typedef enum {
+#define TSC_CHILD_PROCESS_OPERATION(name, operation, shape, result, arity) CHILD_##operation,
+#include "tsc_child_process_operations.def"
+#undef TSC_CHILD_PROCESS_OPERATION
+} child_operation_t;
+typedef struct { const char* name; child_operation_t operation; bool file_arguments; int arity; } child_operation_descriptor_t;
+#define CHILD_SHAPE_COMMAND false
+#define CHILD_SHAPE_FILE_ARGUMENTS true
+static const child_operation_descriptor_t child_operations[] = {
+#define TSC_CHILD_PROCESS_OPERATION(name, operation, shape, result, arity) {#name, CHILD_##operation, CHILD_SHAPE_##shape, arity},
+#include "tsc_child_process_operations.def"
+#undef TSC_CHILD_PROCESS_OPERATION
+};
+static tsc_value_t child_actual(tsc_array_t* args, size_t position) {
+    return args && position < (size_t)tsc_array_length(args)
+        ? tsc_value_get_index(tsc_value_array(args), (double)position) : tsc_value_undefined();
+}
+static bool child_type(tsc_value_t value, const char* name) {
+    return tsc_str_eq(tsc_value_typeof(value), tsc_str_from_cstr(name));
+}
+static void child_invalid(void) {
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("unsupported child_process argument or option value"));
+}
+static tsc_str_t* child_string(tsc_value_t value) {
+    if (!child_type(value, "string")) child_invalid();
+    return tsc_value_as_string(value);
+}
+static tsc_str_t* child_optional_string(tsc_value_t value) {
+    return tsc_value_is_nullish(value) ? NULL : child_string(value);
+}
+static double child_number(tsc_value_t value) {
+    if (tsc_value_is_undefined(value)) return -1.0;
+    if (!child_type(value, "number")) child_invalid();
+    return tsc_value_as_num(value);
+}
+static int child_signal(tsc_value_t value) {
+    if (tsc_value_is_undefined(value)) return 15;
+    if (child_type(value,"number")) {
+        double number=tsc_value_as_num(value);
+        if (number >= 1 && number <= 15 && number == floor(number)) return (int)number;
+    } else if (child_type(value,"string")) {
+        int number=tsc_posix_signal_number(tsc_value_as_string(value));
+        if (number >= 1 && number <= 15) return number;
+    }
+    child_invalid(); return 15;
+}
+static tsc_array_t* child_arguments(tsc_value_t value) {
+    if (!tsc_value_is_array(value)) child_invalid();
+    tsc_array_t* volatile out=tsc_array_new(sizeof(tsc_str_t*),0);
+    double length=tsc_array_length(tsc_value_as_array(value));
+    for (double index=0;index<length;++index) {
+        tsc_str_t* item=tsc_value_to_string(tsc_value_get_index(value,index));
+        tsc_array_push_raw(out,&item);
+    }
+    return out;
+}
+static tsc_array_t* child_environment(tsc_value_t value) {
+    if (tsc_value_is_nullish(value)) return NULL;
+    if (!tsc_value_is_object(value)) child_invalid();
+    tsc_array_t* volatile out=tsc_array_new(sizeof(tsc_str_t*),0);
+    tsc_array_t* volatile keys=tsc_value_own_keys(value);
+    for (double index=0;index<tsc_array_length(keys);++index) {
+        tsc_str_t* volatile name=TSC_ARR(tsc_str_t*,keys,(size_t)index);
+        if (!tsc_value_property_is_enumerable(value,name)) continue;
+        tsc_value_t item=tsc_value_get_prop(value,name);
+        if (tsc_value_is_undefined(item)) continue;
+        tsc_str_t* text=tsc_value_to_string(item);
+        tsc_str_t* pair=tsc_str_concat_n(3,name,tsc_str_from_lit("=",1),text);
+        tsc_array_push_raw(out,&pair);
+    }
+    return out;
+}
+typedef enum {CHILD_PIPE, CHILD_IGNORE, CHILD_INHERIT} child_stdio_t;
+static child_stdio_t child_stdio_mode(tsc_value_t value, int fd) {
+    if (tsc_value_is_nullish(value)) return CHILD_PIPE;
+    if (child_type(value,"number") && tsc_value_as_num(value)==fd) return CHILD_INHERIT;
+    if (child_type(value,"string")) {
+        tsc_str_t* text=tsc_value_as_string(value);
+        if (tsc_str_eq(text,tsc_str_from_lit("pipe",4))) return CHILD_PIPE;
+        if (tsc_str_eq(text,tsc_str_from_lit("ignore",6))) return CHILD_IGNORE;
+        if (tsc_str_eq(text,tsc_str_from_lit("inherit",7))) return CHILD_INHERIT;
+    }
+    child_invalid(); return CHILD_PIPE;
+}
+typedef enum {CHILD_CWD, CHILD_INPUT, CHILD_ENV, CHILD_SHELL, CHILD_ARGV0,
+    CHILD_UID, CHILD_GID, CHILD_MAX_BUFFER, CHILD_TIMEOUT, CHILD_KILL_SIGNAL,
+    CHILD_ENCODING, CHILD_STDIO, CHILD_DETACHED, CHILD_SIGNAL, CHILD_OPTION_COUNT} child_option_t;
+static const char* child_option_names[CHILD_OPTION_COUNT]={"cwd","input","env","shell","argv0",
+    "uid","gid","maxBuffer","timeout","killSignal","encoding","stdio","detached","signal"};
+static tsc_value_t child_operation_apply(void* environment, tsc_value_t receiver, tsc_array_t* actuals) {
+    (void)receiver;
+    const child_operation_descriptor_t* descriptor=environment;
+    if (descriptor->operation==CHILD_FORK) {
+        tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("child_process.fork requires an AOT child-module and IPC owner"));
+    }
+    tsc_str_t* volatile file=child_string(child_actual(actuals,0));
+    size_t cursor=1;
+    tsc_array_t* volatile arguments=NULL;
+    if (descriptor->file_arguments && tsc_value_is_array(child_actual(actuals,cursor))) {
+        arguments=child_arguments(child_actual(actuals,cursor++));
+    }
+    bool callback_operation=descriptor->operation==CHILD_EXEC || descriptor->operation==CHILD_EXEC_FILE;
+    tsc_value_t options=child_actual(actuals,cursor),callback=tsc_value_undefined();
+    void* volatile options_root=tsc_value_gc_root(options);
+    if (callback_operation && tsc_value_is_callable(options)) {callback=options;options=tsc_value_undefined();}
+    else {++cursor;if (callback_operation) callback=child_actual(actuals,cursor);}
+    void* volatile callback_root=tsc_value_gc_root(callback);
+    if (!tsc_value_is_nullish(options) && !tsc_value_is_object(options)) child_invalid();
+    if (callback_operation && !tsc_value_is_undefined(callback) && !tsc_value_is_callable(callback)) child_invalid();
+    /* One presence-bearing option collection preserves each actual Get once.
+     * Companion pointer roots retain boxed owners across later getters. */
+    tsc_value_t slots[CHILD_OPTION_COUNT]; void* volatile roots[CHILD_OPTION_COUNT];
+    for (size_t index=0;index<CHILD_OPTION_COUNT;++index) {
+        slots[index]=tsc_value_is_nullish(options)?tsc_value_undefined():tsc_value_get_prop(options,tsc_str_from_cstr(child_option_names[index]));
+        roots[index]=tsc_value_gc_root(slots[index]);
+    }
+    tsc_str_t* volatile cwd=child_optional_string(slots[CHILD_CWD]);
+    tsc_str_t* volatile input=child_optional_string(slots[CHILD_INPUT]);
+    tsc_array_t* volatile env=child_environment(slots[CHILD_ENV]);
+    tsc_str_t* volatile shell=NULL;
+    if (!tsc_value_is_undefined(slots[CHILD_SHELL])) {
+        if (child_type(slots[CHILD_SHELL],"boolean")) {if(tsc_value_as_bool(slots[CHILD_SHELL]))shell=tsc_str_from_lit("/bin/sh",7);}
+        else shell=child_string(slots[CHILD_SHELL]);
+    }
+    tsc_str_t* volatile argv0=child_optional_string(slots[CHILD_ARGV0]);
+    double uid=child_number(slots[CHILD_UID]),gid=child_number(slots[CHILD_GID]);
+    double max_buffer=child_number(slots[CHILD_MAX_BUFFER]),timeout=child_number(slots[CHILD_TIMEOUT]);
+    int signal=child_signal(slots[CHILD_KILL_SIGNAL]);
+    bool utf8=callback_operation;
+    if (!tsc_value_is_undefined(slots[CHILD_ENCODING]) && !tsc_value_is_nullish(slots[CHILD_ENCODING])) {
+        tsc_str_t* encoding=child_string(slots[CHILD_ENCODING]);
+        if (tsc_str_eq(encoding,tsc_str_from_lit("utf8",4)) || tsc_str_eq(encoding,tsc_str_from_lit("utf-8",5)))utf8=true;
+        else if(tsc_str_eq(encoding,tsc_str_from_lit("buffer",6)))utf8=false;
+        else child_invalid();
+    }
+    bool detached=tsc_value_is_truthy(slots[CHILD_DETACHED]);
+    child_stdio_t stdio[3]={CHILD_PIPE,CHILD_PIPE,CHILD_PIPE};
+    if (!tsc_value_is_undefined(slots[CHILD_STDIO])) {
+        bool list=tsc_value_is_array(slots[CHILD_STDIO]);
+        for (int fd=0;fd<3;++fd)stdio[fd]=child_stdio_mode(list?tsc_value_get_index(slots[CHILD_STDIO],fd):slots[CHILD_STDIO],fd);
+    }
+    if (descriptor->operation==CHILD_EXEC_SYNC || descriptor->operation==CHILD_EXEC_FILE_SYNC) {
+        tsc_buffer_t* volatile bytes=descriptor->operation==CHILD_EXEC_SYNC
+            ? tsc_child_process_exec_sync(file,cwd,input,env,shell,uid,gid,max_buffer,timeout,signal)
+            : tsc_child_process_exec_file_sync(file,arguments,cwd,input,env,shell,argv0,uid,gid,max_buffer,timeout,signal);
+        return utf8?tsc_value_string(tsc_buffer_to_string(bytes,tsc_str_from_lit("utf8",4))):tsc_value_buffer(bytes);
+    }
+    if (descriptor->operation==CHILD_SPAWN) return tsc_child_process_spawn(file,arguments,cwd,env,shell,argv0,
+        stdio[0]==CHILD_PIPE,stdio[0]==CHILD_IGNORE,stdio[1]==CHILD_PIPE,stdio[1]==CHILD_IGNORE,stdio[1]==CHILD_INHERIT,
+        stdio[2]==CHILD_PIPE,stdio[2]==CHILD_IGNORE,stdio[2]==CHILD_INHERIT,detached,uid,gid,timeout,signal,slots[CHILD_SIGNAL]);
+    tsc_value_t result=descriptor->operation==CHILD_EXEC
+        ? tsc_child_process_exec_utf8(file,cwd,env,shell,uid,gid,max_buffer,timeout,signal)
+        : tsc_child_process_spawn_sync(file,arguments,cwd,callback_operation?NULL:input,env,shell,argv0,
+            callback_operation||stdio[0]==CHILD_PIPE,!callback_operation&&stdio[0]==CHILD_IGNORE,
+            callback_operation||stdio[1]==CHILD_PIPE,callback_operation||stdio[2]==CHILD_PIPE,
+            !callback_operation&&stdio[1]==CHILD_INHERIT,!callback_operation&&stdio[2]==CHILD_INHERIT,
+            !callback_operation&&detached,uid,gid,max_buffer,timeout,signal,utf8);
+    void* volatile result_root=tsc_value_gc_root(result);
+    if (callback_operation && tsc_value_is_callable(callback)) {
+        tsc_value_t error=tsc_value_get_prop(result,tsc_str_from_lit("error",5));
+        if (tsc_value_is_undefined(error))error=tsc_value_as_num(tsc_value_get_prop(result,tsc_str_from_lit("status",6)))==0
+            ?tsc_value_null():tsc_value_string(tsc_str_from_cstr("child_process command failed"));
+        tsc_array_t* volatile values=tsc_array_new(sizeof(tsc_value_t),0);
+        tsc_array_push_raw(values,&error);
+        tsc_value_t stdout=tsc_value_get_prop(result,tsc_str_from_lit("stdout",6));tsc_array_push_raw(values,&stdout);
+        tsc_value_t stderr=tsc_value_get_prop(result,tsc_str_from_lit("stderr",6));tsc_array_push_raw(values,&stderr);
+        (void)tsc_value_apply_function(callback,tsc_value_undefined(),tsc_value_array(values));
+    }
+    (void)roots;(void)options_root;(void)callback_root;(void)result_root;
+    return callback_operation?tsc_value_undefined():result;
+}
+typedef struct {tsc_object_t* ordinary;tsc_object_t* namespace_object;tsc_value_t* functions;void** roots;} child_module_state_t;
+static const char child_module_key;
+static child_module_state_t* child_module_state(void) {
+    child_module_state_t* state=tsc_realm_state_get(&child_module_key);
+    if (!state) {state=TSC_GC_MALLOC(sizeof(*state));memset(state,0,sizeof(*state));tsc_realm_state_set(&child_module_key,state);}
+    return state;
+}
+static tsc_value_t child_export_owner(size_t index) {
+    child_module_state_t* volatile state=child_module_state();
+    if (!state->functions) {
+        state->functions=TSC_GC_MALLOC(sizeof(child_operations)/sizeof(*child_operations)*sizeof(*state->functions));
+        state->roots=TSC_GC_MALLOC(sizeof(child_operations)/sizeof(*child_operations)*sizeof(*state->roots));
+        memset(state->roots,0,sizeof(child_operations)/sizeof(*child_operations)*sizeof(*state->roots));
+    }
+    if (!state->roots[index]) {
+        state->functions[index]=tsc_value_function_generic_named(child_operation_apply,(void*)&child_operations[index],
+            child_operations[index].arity,tsc_str_from_cstr(child_operations[index].name));
+        state->roots[index]=tsc_value_gc_root(state->functions[index]);
+    }
+    return state->functions[index];
+}
+static tsc_value_t child_module_default(void* environment,tsc_value_t receiver) {
+    (void)environment;(void)receiver;return tsc_child_process_module_value(false);
+}
+#define TSC_CHILD_PROCESS_OPERATION(name, operation, shape, result, arity) \
+static tsc_value_t child_export_##name(void* environment,tsc_value_t receiver) { \
+    (void)environment;(void)receiver;return child_export_owner(CHILD_##operation); \
+}
+#include "tsc_child_process_operations.def"
+#undef TSC_CHILD_PROCESS_OPERATION
+static const tsc_accessor_getter_t child_export_getters[]={
+#define TSC_CHILD_PROCESS_OPERATION(name, operation, shape, result, arity) child_export_##name,
+#include "tsc_child_process_operations.def"
+#undef TSC_CHILD_PROCESS_OPERATION
+};
+tsc_value_t tsc_child_process_module_value(bool namespace_object) {
+    child_module_state_t* volatile state=child_module_state();
+    if (!state->ordinary) {
+        state->ordinary=tsc_object_new();state->namespace_object=tsc_module_namespace_new();
+        for(size_t index=0;index<sizeof(child_operations)/sizeof(*child_operations);++index) {
+            tsc_str_t* name=tsc_str_from_cstr(child_operations[index].name);
+            tsc_value_t value=child_export_owner(index);
+            tsc_object_define(state->ordinary,name,value,true,true,true);
+            (void)tsc_module_namespace_define(state->namespace_object,name,child_export_getters[index]);
+        }
+        (void)tsc_module_namespace_define(state->namespace_object,tsc_str_from_lit("default",7),child_module_default);
+        tsc_module_namespace_finalize(state->namespace_object);
+    }
+    return tsc_value_object(namespace_object?state->namespace_object:state->ordinary);
+}
+tsc_value_t tsc_child_process_export_value(tsc_str_t* name) {
+    return tsc_value_get_prop(tsc_child_process_module_value(true),name);
+}
+
 /* ---------------- URL ---------------- */
 
 tsc_str_t* str_from_range(const char* data, size_t start, size_t end) {

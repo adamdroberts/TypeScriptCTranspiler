@@ -1,3 +1,5 @@
+- Replace child-process syntax and physical-type selectors with canonical ordinary export owners and actual-List runtime decoding.
+
 - Distinguish Node host-global descriptors in the canonical global oracle while preserving byte-identical native inputs and exact native assertions.
 
 - Give Buffer module imports canonical ordinary export owners and complete actual argument Lists, preserving shared constructor and base64 identity.

@@ -143,6 +143,7 @@
     "runtime/tsc_error_values.def",
     "runtime/tsc_buffer_statics.def",
     "runtime/tsc_buffer_exports.def",
+    "runtime/tsc_child_process_operations.def",
     "src/buffer-statics.ts",
     "runtime/tsc_text_codec.c",
     "runtime/tsc_util_owner.c",

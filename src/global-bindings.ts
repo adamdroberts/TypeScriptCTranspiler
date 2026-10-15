@@ -239,3 +239,11 @@ export const runtimeBufferExports: ReadonlySet<string> = new Set(
         .matchAll(/^TSC_BUFFER_EXPORT\((\w+), /gm)].map(match => match[1]!),
 );
 if (!runtimeBufferExports.size) throw new Error("missing canonical Buffer module exports");
+
+/** Runtime export identity, role decoding and source metadata share this table. */
+export const runtimeChildProcessOperations: ReadonlyMap<string, {readonly arity:number;readonly result:string}> = new Map(
+    [...fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_child_process_operations.def"), "utf8")
+        .matchAll(/^TSC_CHILD_PROCESS_OPERATION\((\w+), \w+, \w+, (\w+), (\d+)\)$/gm)]
+        .map(([,name,result,arity])=>[name!,{arity:Number(arity),result:result!}]),
+);
+if (!runtimeChildProcessOperations.size) throw new Error("missing canonical child process operations");
