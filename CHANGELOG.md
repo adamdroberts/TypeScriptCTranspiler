@@ -1,3 +1,5 @@
+- Map reviewed ES5/ES2015 bind section metadata to the current intrinsic while retaining exact-anchor precedence and open conformance gates.
+
 - Project actual callable bind targets before metadata/prototype reads, retaining abrupt alternatives and successful bound-owner witnesses.
 
 - Compare complete async logical-value observations with independent Node execution before native validation.

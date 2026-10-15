@@ -33,6 +33,26 @@
     {
       "field": "es6id",
       "match": "exact",
+      "value": "19.2.3.2",
+      "clauses": [
+        "sec-function.prototype.bind"
+      ],
+      "reason": "ECMA-262 sixth edition section 19.2.3.2 is Function.prototype.bind (https://262.ecma-international.org/6.0/#sec-function.prototype.bind). This exact historical section maps to the current bind intrinsic without discharging separate bound-function internal-method requirements or overriding a supplied current esid.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es5id",
+      "match": "prefix",
+      "value": "15.3.4.5-",
+      "clauses": [
+        "sec-function.prototype.bind"
+      ],
+      "reason": "ECMA-262 fifth edition section 15.3.4.5 is Function.prototype.bind (https://262.ecma-international.org/5.1/#sec-15.3.4.5). The hyphen-delimited step metadata belongs to that intrinsic. Separate dotted internal-method sections and adjacent numeric section names remain outside this boundary, and a supplied current esid retains precedence.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "field": "es6id",
+      "match": "exact",
       "value": "14.5",
       "clauses": [
         "sec-class-definitions"
