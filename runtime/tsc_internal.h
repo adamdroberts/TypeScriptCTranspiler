@@ -214,6 +214,7 @@ tsc_value_t tsc_value_get_prototype_from_constructor(
 bool tsc_value_is_regexp(tsc_value_t value);
 tsc_realm_t* tsc_value_function_realm(tsc_value_t function);
 tsc_value_t tsc_regexp_constructor_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
+tsc_value_t tsc_regexp_compile_apply(void* env, tsc_value_t receiver, tsc_array_t* args);
 
 typedef struct {
     tsc_value_t target;

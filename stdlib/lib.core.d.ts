@@ -953,6 +953,7 @@ interface RegExp {
     [Symbol.replace](string: string, replacement: string | ((...args: any[]) => string)): string;
     exec(s?: string, ...ignored: any[]): RegExpExecArray | null;
     test(s?: string, ...ignored: any[]): boolean;
+    compile(pattern?: string | RegExp, flags?: string, ...ignored: any[]): RegExp;
     toLocaleString(...ignored: any[]): string;
     toString(...ignored: any[]): string;
     valueOf(...ignored: any[]): RegExp;

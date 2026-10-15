@@ -38,7 +38,7 @@ tsc_value_t tsc_regexp_constructor_apply(void* env, tsc_value_t receiver, tsc_ar
     tsc_value_t source = pattern;
     if (native) {
         source = tsc_value_string(native->source);
-        if (tsc_value_is_undefined(flags)) flags = tsc_value_string(native->flags);
+        if (tsc_value_is_undefined(flags)) flags = tsc_value_string(native->original_flags);
     } else if (pattern_is_regexp) {
         source = tsc_value_get_prop(pattern, tsc_str_from_lit("source", 6));
         if (tsc_value_is_undefined(flags)) flags = tsc_value_get_prop(pattern, tsc_str_from_lit("flags", 5));
@@ -125,7 +125,7 @@ tsc_str_t* tsc_regexp_source(const tsc_regexp_t* regexp) {
     return tsc_str_from_units_range(output.units, 0, output.len);
 }
 
-tsc_regexp_t* tsc_regexp_new(const tsc_str_t* pattern, const tsc_str_t* flags) {
+static void regexp_initialize_record(tsc_regexp_t* result, const tsc_str_t* pattern, const tsc_str_t* flags) {
     size_t pn, fn;
     const uint16_t* pu = tsc_str_utf16_units(pattern, &pn);
     const uint16_t* fu = tsc_str_utf16_units(flags, &fn);
@@ -136,9 +136,9 @@ tsc_regexp_t* tsc_regexp_new(const tsc_str_t* pattern, const tsc_str_t* flags) {
     tsc_re_compiled_t* compiled = tsc_re_compile(pu, pn, options, &error);
     if (!compiled)
         tsc_throw_error(TSC_ERROR_SYNTAX, tsc_str_from_cstr("Invalid regular expression pattern"));
-    tsc_regexp_t* result = TSC_GC_MALLOC(sizeof(*result));
     result->re = compiled;
     result->source = (tsc_str_t*)pattern;
+    result->original_flags = (tsc_str_t*)flags;
     char canonical[8]; size_t count = 0;
     if (options.has_indices) canonical[count++] = 'd';
     if (options.global) canonical[count++] = 'g';
@@ -160,6 +160,12 @@ tsc_regexp_t* tsc_regexp_new(const tsc_str_t* pattern, const tsc_str_t* flags) {
     result->sticky = options.sticky;
     result->compiled = true;
     result->capture_count = tsc_re_group_count(compiled);
+}
+
+tsc_regexp_t* tsc_regexp_new(const tsc_str_t* pattern, const tsc_str_t* flags) {
+    tsc_regexp_t* result = TSC_GC_MALLOC(sizeof(*result));
+    memset(result, 0, sizeof(*result));
+    regexp_initialize_record(result, pattern, flags);
     result->prototype = tsc_regexp_prototype_value();
     result->prototype_gc_root = tsc_value_gc_root(result->prototype);
     return result;
@@ -208,6 +214,31 @@ static tsc_regexp_t* regexp_require_matcher(tsc_value_t receiver) {
         if (object->is_regexp && object->class_ptr) return object->class_ptr;
     }
     tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("RegExp exec called on incompatible receiver"));
+}
+tsc_value_t tsc_regexp_compile_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env;
+    tsc_regexp_t* volatile regexp = regexp_require_matcher(receiver);
+    void* volatile receiver_root = tsc_value_gc_root(receiver);
+    tsc_value_t pattern = args && args->len ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    tsc_value_t flags = args && args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
+    if (value_is_box(pattern) && value_tag(pattern) == TSC_VALUE_TAG_OBJECT) {
+        const tsc_object_t* object = value_ptr(pattern);
+        if (object->is_regexp && object->class_ptr) {
+            if (!tsc_value_is_undefined(flags))
+                tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("RegExp compile flags supplied with a RegExp pattern"));
+            const tsc_regexp_t* source = object->class_ptr;
+            pattern = tsc_value_string(source->source);
+            flags = tsc_value_string(source->original_flags);
+        }
+    }
+    void* volatile pattern_root = tsc_value_gc_root(pattern);
+    void* volatile flags_root = tsc_value_gc_root(flags);
+    tsc_str_t* volatile pattern_text = tsc_value_is_undefined(pattern) ? tsc_str_from_lit("", 0) : tsc_value_to_string(pattern);
+    tsc_str_t* volatile flags_text = tsc_value_is_undefined(flags) ? tsc_str_from_lit("", 0) : tsc_value_to_string(flags);
+    regexp_initialize_record(regexp, pattern_text, flags_text);
+    regexp_set_last_index_value(receiver, tsc_value_num(0));
+    (void)receiver_root; (void)pattern_root; (void)flags_root;
+    return receiver;
 }
 static tsc_value_t regexp_named_values(const tsc_regexp_t* re, const uint16_t* units,
                                        const size_t* captures, const tsc_array_t* indices) {

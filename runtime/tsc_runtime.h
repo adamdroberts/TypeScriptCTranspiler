@@ -342,6 +342,7 @@ typedef struct tsc_regexp {
     void* prototype_gc_root;
     tsc_str_t* source;
     tsc_str_t* flags;
+    tsc_str_t* original_flags;
     bool global;
     bool has_indices;
     bool ignore_case;

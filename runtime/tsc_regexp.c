@@ -2810,6 +2810,7 @@ tsc_value_t tsc_regexp_prototype_value(void) {
         }
         static const struct { const char* name; double length; tsc_generic_function_t apply; } methods[] = {
             {"exec", 1, tsc_regexp_exec_apply}, {"test", 1, tsc_regexp_test_apply},
+            {"compile", 2, tsc_regexp_compile_apply},
             {"toString", 0, regexp_to_string_apply}
         };
         for (size_t i = 0; i < sizeof(methods) / sizeof(*methods); i++) {

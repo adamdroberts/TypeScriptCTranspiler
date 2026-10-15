@@ -1,3 +1,5 @@
+- Add pinned Annex B RegExp.prototype.compile through shared in-place matcher initialization, retaining owner identity and abrupt lastIndex semantics.
+
 - Preserve external emitter callback roots through a declaration graph and remove independently audited dormant private predecessors.
 
 - Check the canonical disposable capability and async disposal worklist in the local extension C regression.
