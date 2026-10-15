@@ -1,3 +1,5 @@
+- Check canonical CopyDataProperties and iterator-step lowering in the suspending binding-rest C regression.
+
 - Register scoped immutable ThrowTypeError and restricted-accessor evidence with one retained poison-owner worklist stress.
 
 - Share one frozen Realm-owned ThrowTypeError intrinsic across restricted function and unmapped-arguments accessors.
