@@ -1,3 +1,5 @@
+- Preserve earlier own-property presence across later deletes while retaining repeated and suspended alternatives.
+
 - Reuse canonical descriptor conversion and projection subscriptions as source facts grow.
 
 - Project existing anonymous native text for Promise resolving functions and Function.prototype without observing mutable names.

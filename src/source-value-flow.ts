@@ -1439,9 +1439,12 @@ class SourceValueFlow {
                 if(!record.writes.size)return;
             }
             if(!record.writes.size&&record.facts.values.has(this.primitive(false)))this.publish(result,this.primitive(false));
-            if(record.initial&&![...record.writes.values()].some(event=>event.mode==="delete")&&!(typeof key==="symbol"&&this.freshSymbols.has(key))){this.publish(result,this.primitive(true));return;}
             const origins=context?this.executionOrigins(context):null;
             if(origins)this.watch(rule,origins);
+            const activation=context?this.enclosingActivation(context):null;
+            if(activation)this.watch(rule,this.activationTiming(activation));
+            const visibleDeletes=[...record.writes].filter(([write,event])=>event.mode==="delete"&&this.effectVisible({tag:"unknown",origin:write},context));
+            if(record.initial&&!visibleDeletes.length&&!(typeof key==="symbol"&&this.freshSymbols.has(key))){this.publish(result,this.primitive(true));return;}
             const points=context&&this.enclosingActivation(context)?[...(origins?.values??[])].map(atom=>atom.tag==="unknown"?atom.origin:undefined):[context];
             if(!points.length)return;
             for(const point of points){
@@ -1450,10 +1453,10 @@ class SourceValueFlow {
                     this.watch(rule,event.base);this.watch(rule,event.receiver);
                     const singleton=(cell:Cell)=>[...cell.values].every(atom=>atom.tag==="abrupt"||this.ordinaryOwner(atom)===owner)&&[...cell.values].some(atom=>this.ordinaryOwner(atom)===owner);
                     const reference=context&&this.enclosingActivation(write)===this.enclosingActivation(context)?context:point;
-                    if(event.mode==="delete"){present=false;continue;}
+                    if(event.mode==="delete"){if(this.effectVisible({tag:"unknown",origin:write},reference))present=false;continue;}
                     if(reference&&singleton(event.base)&&singleton(event.receiver)&&this.writeDominates(write,reference,rule))present=true;
                 }
-                if([...record.writes.values()].some(event=>event.mode==="delete"))present=false;
+                if(visibleDeletes.length)present=false;
                 if(typeof key==="symbol"&&this.freshSymbols.has(key))present=false;
                 if(present)this.publish(result,this.primitive(true));
                 else if(this.presenceClosed){this.publish(result,this.primitive(false));if(record.facts.values.has(this.primitive(true)))this.publish(result,this.primitive(true));}

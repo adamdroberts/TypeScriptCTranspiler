@@ -14,7 +14,9 @@ const definitions=[
 ];
 const captures=['owner.read','owner["read"]','Object.getOwnPropertyDescriptor(owner,"read").value','Object.getOwnPropertyDescriptors(owner).read.value','(()=>owner.read)()'];
 const writes=['owner.read=()=>"19;";','Object.defineProperty(owner,"read",{value:()=>"19;",writable:true,configurable:true});'];
+const deletes=['delete owner.read;','Reflect.deleteProperty(owner,"read");'];
 const snapshots=definitions.flatMap(definition=>captures.flatMap(capture=>writes.map(write=>definition+'const saved='+capture+';'+write+'print(eval(saved()));')));
+snapshots.push(...captures.flatMap(capture=>deletes.map(remove=>'const owner=Object.create({read:()=>"23;"});owner.read=()=>"17;";const saved='+capture+';'+remove+'print(eval(saved()));')));
 snapshots.push('const owner={read:()=>"17;"};function capture(owner){return owner.read;}const saved=capture(owner);owner.read=()=>"19;";print(eval(saved()));');
 snapshots.push('const owner={get read(){return ()=>"17;"}};const saved=Object.getOwnPropertyDescriptor(owner,"read").get;Object.defineProperty(owner,"read",{get(){return ()=>"19;"}});print(eval(saved.call(owner)()));');
 function reference(source:string):string {
@@ -43,6 +45,16 @@ test('write completion filtering remains conservative for repeated and suspended
  for(const prefix of ['owner.read=external;','opaque(owner);']){
   const graph=finiteEvalScriptSourceGraph([{path:'unknown.js',source:'const owner={read:()=>"17;"};'+prefix+'const saved=owner.read;eval(saved());'}]);
   expect(graph.error).toContain('direct eval source is not a finite static string expression');
+ }
+});
+test('delete visibility retains real repeated and suspended prototype alternatives',()=>{
+ for(const source of [
+  'const owner=Object.create({read:()=>"23;"});owner.read=()=>"17;";function read(){print(eval(owner.read()));}read();delete owner.read;read();',
+  'const owner=Object.create({read:()=>"23;"});owner.read=()=>"17;";for(let index=0;index<2;index++){print(eval(owner.read()));delete owner.read;}',
+  'const owner=Object.create({read:()=>"23;"});owner.read=()=>"17;";async function read(){await 0;print(eval(owner.read()));}read();delete owner.read;',
+ ]){
+  const expected=reference(source).trim().split('\n').map(value=>value+';'),graph=finiteEvalScriptSourceGraph([{path:'subject.js',source}]);
+  expect(graph.error).toBeNull();for(const value of expected)expect(graph.directEvalSources.map(entry=>entry.source)).toContain(value);
  }
 });
 test('known write provenance follows declared Script initialization order',()=>{
