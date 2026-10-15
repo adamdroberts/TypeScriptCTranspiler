@@ -3,4 +3,5 @@ index: a false true false false
 fields: first second ab xy
 identity: true true
 boxing-source: 41 object
+boxing-value: true
 receiver-source: 43

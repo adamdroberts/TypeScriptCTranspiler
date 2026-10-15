@@ -12,10 +12,10 @@ const boxingRoutes=[
  'function receiver(){return this;}receiver.apply(value,[])',
  'function receiver(){return this;}receiver.bind(value)()',
 ];
-function boxingSources():string {
+function boxingSources(observation='eval(owner.body)',initial='0'):string {
  return boxingRoutes.map((route,index)=>{
   const split=route.lastIndexOf('}'),declaration=route.startsWith('function')?route.slice(0,split+1):'',expression=declaration?route.slice(split+1):route;
-  return `{const owner={body:"17;"};let value=0;value++;${declaration}const boxed=${expression};console.log("boxing",${index},eval(owner.body),typeof boxed,boxed!==value);}`;
+  return `{const owner={body:"17;"};let value=${initial};value++;${declaration}const boxed=${expression};console.log("boxing",${index},${observation},typeof boxed,boxed!==value);}`;
  }).join('\n');
 }
 const source=String.raw`
@@ -50,14 +50,24 @@ test('boxing abstract primitives retains sources without inventing coercion effe
   expect({operation,error:result.error}).toMatchObject({error:expect.stringContaining('direct eval source is not a finite static string expression')});
  }
 });
+test('boxed abstract primitive results remain non-String eval inputs',()=>{
+ for(const initial of ['0','0n']){
+  const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:boxingSources('eval(boxed)===boxed',initial)}]);
+  expect({initial,error:graph.error}).toEqual({initial,error:null});expect(graph.directEvalSources).toEqual([]);
+ }
+ for(const expression of ['Object(opaque())','Object(value).valueOf()','Object(value).toString()']){
+  const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:'let value=0;value++;eval('+expression+');'}]);
+  expect({expression,error:graph.error}).toMatchObject({error:expect.stringContaining('direct eval source is not a finite static string expression')});
+ }
+});
 test('boxing source effects match independent Node and native execution',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'tsc2c-box-effects-'));
  try{
-  const subject=boxingSources()+'\nconst hooks={get [Symbol.toPrimitive](){throw "coercion";},get valueOf(){throw "coercion";},get toString(){throw "coercion";}};console.log("coercion-free",Object(hooks)===hooks);';
+  const subject=boxingSources()+'\n'+['0','0n'].map(initial=>boxingSources('eval(boxed)===boxed',initial)).join('\n')+'\nconst hooks={get [Symbol.toPrimitive](){throw "coercion";},get valueOf(){throw "coercion";},get toString(){throw "coercion";}};console.log("coercion-free",Object(hooks)===hooks);';
   const entry=join(directory,'main.js'),stdout=join(directory,'node.stdout');await writeFile(entry,subject);
   const node=Bun.spawnSync(['node',entry],{stdout:Bun.file(stdout),stderr:'pipe',timeout:120000});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
-  const expected=await readFile(stdout,'utf8');expect(expected).toContain('boxing 5 17 object true\n');expect(expected).toEndWith('coercion-free true\n');
+  const expected=await readFile(stdout,'utf8');expect(expected).toContain('boxing 5 17 object true\n');expect(expected).toContain('boxing 5 true object true\n');expect(expected).toEndWith('coercion-free true\n');
   for(const noGc of [false,true]){
    const output=join(directory,'native-'+noGc),diagnostics:string[]=[];
    const built=await compile({entry,output,noGc,buildDir:output+'-build',diagnosticWriter:message=>diagnostics.push(message)});

@@ -11,6 +11,7 @@ const sourceOwner = {body: "41;"};
 let counter = 0; counter++;
 const boxedCounter = Object(counter);
 console.log("boxing-source:", eval(sourceOwner.body), typeof boxedCounter);
+console.log("boxing-value:", eval(boxedCounter) === boxedCounter);
 function receiver(this: any) { return this; }
 const receiverOwner = {body: "43;"};
 receiver.call(counter);

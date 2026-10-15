@@ -2788,7 +2788,12 @@ class SourceValueFlow {
                 // invoking conversion hooks. An incomplete value proof does
                 // not introduce an arbitrary mutation; newTarget prototype
                 // reads retain their own effects above.
-                if(!state.proof.primitiveComplete)this.publish(result,this.unknown);
+                if(!state.proof.primitiveComplete){
+                    // A primitive box remains an Object even when its
+                    // payload has no finite proof. Callable input uncertainty
+                    // keeps its existing conservative representation.
+                    this.publish(result,this.primitiveKinds(cell(atom))&KIND_FUNCTION?this.unknown:this.opaqueObject);
+                }
             }
         });
         return result;
