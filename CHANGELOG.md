@@ -1,3 +1,5 @@
+- Apply shared initializer reachability before lexical-slot initialization and preserve observable class-definition effects and Script bindings.
+
 - Keep ambient Script declarations compatible with the published AbortController global while preserving identical erased runtime input.
 
 - Classify historical ES6 Class Definitions metadata by its exact parent section, retaining current-anchor precedence and open descendant coverage.

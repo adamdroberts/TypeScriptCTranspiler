@@ -1297,6 +1297,9 @@ class Emitter {
         seenConsts = new Set<ts.Symbol>(),
     ): boolean {
         const literal = unwrapTransparentExpression(expr);
+        // A discarded class evaluates its definition plan. Tagged storage
+        // does not make its deferred constructor/member bodies observable.
+        if (ts.isClassExpression(literal)) return this.classDefinitionHasNoSideEffects(literal);
         if (ts.isObjectLiteralExpression(literal)) {
             return this.objectLiteralEvaluationHasNoSideEffects(literal, seenConsts, false);
         }
@@ -1330,9 +1333,6 @@ class Emitter {
         }
         if (ts.isArrowFunction(expr) || ts.isFunctionExpression(expr)) {
             return true;
-        }
-        if (ts.isClassExpression(expr)) {
-            return this.classDefinitionHasNoSideEffects(expr);
         }
         if (ts.isIdentifier(expr)) {
             if (
@@ -28071,6 +28071,15 @@ class Emitter {
                 }
                 continue;
             }
+            // Reachability selects initializer evaluation independently of
+            // the canonical lexical slot used to represent the binding.
+            if (!this.shouldEmitLocalVariable(d)) {
+                if (d.initializer && !this.isSideEffectFreeTopLevelConstInitializer(d.initializer)) {
+                    const value = this.emitExpr(d.initializer);
+                    buf.line(`${value.c};`);
+                }
+                continue;
+            }
             if (this.isDirectScopeLexicalDeclaration(d) && this.lexicalBindingScopes.length > 0) {
                 if (!d.initializer && !ts.isIdentifier(d.name)) {
                     unsupported(d, "lexical binding pattern requires an initializer");
@@ -28126,13 +28135,6 @@ class Emitter {
                 unsupported(d, "destructuring declarations");
             }
             const name = this.identifierName(d.name);
-            if (!this.shouldEmitLocalVariable(d)) {
-                if (d.initializer && !this.isSideEffectFreeTopLevelConstInitializer(d.initializer)) {
-                    const value = this.emitExpr(d.initializer);
-                    buf.line(`${value.c};`);
-                }
-                continue;
-            }
             const sym = this.symbolForIdentifier(d.name);
             if (sym && this.asyncAwaitHoistedPreludeSymbols.has(sym)) {
                 const type = this.variableStorageType(this.prepareType(mapType(d, this.checker)));
