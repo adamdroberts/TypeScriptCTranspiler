@@ -2784,7 +2784,11 @@ class SourceValueFlow {
                     if(value===null||value===undefined){owner.ordinary=true;owner.unboxed=true;this.publish(plain,this.primitive(true));this.publish(result,{tag:"object",owner});continue;}
                     const kind=typeof value;this.copy(this.boxedPrimitive(cell(this.primitive(value)),kind,context),result);
                 }
-                if(!state.proof.primitiveComplete){this.publish(result,this.unknown);this.activateOpaqueEffect(context);}
+                // Boxing preserves objects and wraps primitives without
+                // invoking conversion hooks. An incomplete value proof does
+                // not introduce an arbitrary mutation; newTarget prototype
+                // reads retain their own effects above.
+                if(!state.proof.primitiveComplete)this.publish(result,this.unknown);
             }
         });
         return result;

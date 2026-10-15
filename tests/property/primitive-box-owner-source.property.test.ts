@@ -6,6 +6,18 @@ import {join} from 'node:path';
 import {compile} from '../../src/compile';
 import {finiteEvalScriptSourceGraph} from '../test262/native-host';
 
+const boxingRoutes=[
+ 'Object(value)', 'new Object(value)', 'Reflect.construct(Object,[value])',
+ 'function receiver(){return this;}receiver.call(value)',
+ 'function receiver(){return this;}receiver.apply(value,[])',
+ 'function receiver(){return this;}receiver.bind(value)()',
+];
+function boxingSources():string {
+ return boxingRoutes.map((route,index)=>{
+  const split=route.lastIndexOf('}'),declaration=route.startsWith('function')?route.slice(0,split+1):'',expression=declaration?route.slice(split+1):route;
+  return `{const owner={body:"17;"};let value=0;value++;${declaration}const boxed=${expression};console.log("boxing",${index},eval(owner.body),typeof boxed,boxed!==value);}`;
+ }).join('\n');
+}
 const source=String.raw`
 function wrap(value:any):any{return Object(value);}
 const inputs:any[]=['', 'x', 'xy', '\uD83D\uDE00', 7, true, 11n, Symbol('owner')];
@@ -26,6 +38,35 @@ let retained=true;
 for(let index=255;index>=0;index--){retained=retained&&graph.value.length===wide.length&&graph.value[4095]==='x';graph=graph.previous;}
 console.log('retained',retained&&graph===null);
 `;
+test('boxing abstract primitives retains sources without inventing coercion effects',()=>{
+ const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:boxingSources()}]);
+ expect(graph.error).toBeNull();expect(new Set(graph.directEvalSources.map(entry=>entry.source))).toEqual(new Set(['17;']));
+ for(const operation of [
+  'const target=(function(){}).bind(null);Object.defineProperty(target,"prototype",{get(){return opaque();}});Reflect.construct(Object,[value],target);',
+  'const target=new Proxy(function(){},{get(){return opaque();}});Reflect.construct(Object,[value],target);',
+  'const boxed=Object(value);opaque(boxed);',
+ ]){
+  const result=finiteEvalScriptSourceGraph([{path:'main.js',source:'const owner={body:"17;"};let value=0;value++;'+operation+'eval(owner.body);'}]);
+  expect({operation,error:result.error}).toMatchObject({error:expect.stringContaining('direct eval source is not a finite static string expression')});
+ }
+});
+test('boxing source effects match independent Node and native execution',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'tsc2c-box-effects-'));
+ try{
+  const subject=boxingSources()+'\nconst hooks={get [Symbol.toPrimitive](){throw "coercion";},get valueOf(){throw "coercion";},get toString(){throw "coercion";}};console.log("coercion-free",Object(hooks)===hooks);';
+  const entry=join(directory,'main.js'),stdout=join(directory,'node.stdout');await writeFile(entry,subject);
+  const node=Bun.spawnSync(['node',entry],{stdout:Bun.file(stdout),stderr:'pipe',timeout:120000});
+  expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const expected=await readFile(stdout,'utf8');expect(expected).toContain('boxing 5 17 object true\n');expect(expected).toEndWith('coercion-free true\n');
+  for(const noGc of [false,true]){
+   const output=join(directory,'native-'+noGc),diagnostics:string[]=[];
+   const built=await compile({entry,output,noGc,buildDir:output+'-build',diagnosticWriter:message=>diagnostics.push(message)});
+   expect({noGc,code:built.exitCode,diagnostics}).toEqual({noGc,code:0,diagnostics:[]});
+   const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120000});
+   expect({code:native.exitCode,stderr:native.stderr.toString()}).toEqual({code:0,stderr:''});expect(native.stdout.toString()).toBe(expected);
+  }
+ }finally{await rm(directory,{recursive:true,force:true});}
+},600000);
 test('primitive wrapper source owners retain all observed finite String fields',()=>{
  for(const text of ['', '7', '11', '\uD83D\uDE00']){
   const subject=`function wrap(value){return Object(value)};const first=wrap(${JSON.stringify(text)}),second=wrap(${JSON.stringify(text)});eval(first[0]);eval(second.valueOf());`;

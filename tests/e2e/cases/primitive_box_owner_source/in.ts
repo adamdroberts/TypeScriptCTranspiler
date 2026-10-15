@@ -7,3 +7,11 @@ first.extra = "first"; second.extra = "second";
 console.log("fields:", first.extra, second.extra, first.valueOf(), second.valueOf());
 const object: any = {};
 console.log("identity:", wrap(object) === object, wrap(7).valueOf() === 7);
+const sourceOwner = {body: "41;"};
+let counter = 0; counter++;
+const boxedCounter = Object(counter);
+console.log("boxing-source:", eval(sourceOwner.body), typeof boxedCounter);
+function receiver(this: any) { return this; }
+const receiverOwner = {body: "43;"};
+receiver.call(counter);
+console.log("receiver-source:", eval(receiverOwner.body));
