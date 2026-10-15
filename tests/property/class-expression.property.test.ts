@@ -1,3 +1,5 @@
+import {nodeReferenceSync} from "./node-reference";
+import ts from "typescript";
 import { expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -123,38 +125,31 @@ test("class expressions derive constructor identity and method closures from one
     }
 }, 90_000);
 
-test("unrepresented class initialization plans fail at their shared boundaries", async () => {
-    const partitions = [
-        {
-            source: "class Base {}\nfunction make(): any { return class extends Base {}; }\nmake();\n",
-            diagnostic: "class expression heritage is not supported by dynamic class definition",
-        },
-        {
-            source: "function make(): any { return class { field: any = 1; }; }\nmake();\n",
-            diagnostic: "class element requires the canonical initialization plan",
-        },
-        {
-            source: "function make(): any { class Local { field: any = 1; } return Local; }\nmake();\n",
-            diagnostic: "class element requires the canonical initialization plan",
-        },
-    ] as const;
-    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-class-expression-unsupported-"));
+test("dynamic class factories retain heritage, captures and fresh field storage", async () => {
+    const source = `class Base { base: any = 17; }
+function heritage(value: any): any { return class extends Base { field: any = value; }; }
+function expression(value: any): any { return class { field: any = value; }; }
+function declaration(value: any): any { class Local { field: any = value; } return Local; }
+for (const make of [heritage, expression, declaration]) {
+ const C: any = make(19), D: any = make(23), first: any = new C(), second: any = new D();
+ console.log(first.field, second.field, first instanceof C, first instanceof D, C !== D);
+ if (make === heritage) console.log(first.base, first instanceof Base);
+ first.field = 29; console.log(first.field, new C().field);
+}console.log('complete');`;
+    const javascript = ts.transpileModule(source, {compilerOptions: {target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.None}}).outputText;
+    const node = nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({console:{log:(...values)=>fs.writeSync(1,values.map(String).join(" ")+"\\n")}});'], {stdin: Buffer.from(javascript), stdout:'pipe', stderr:'pipe', timeout:30_000});
+    expect({exitCode: node.exitCode, stderr: node.stderr.toString()}).toEqual({exitCode:0, stderr:''});
+    const expected = node.stdout.toString(); expect(expected.endsWith('complete\n')).toBe(true);
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'tsc2c-class-factory-property-'));
     try {
-        for (const [index, partition] of partitions.entries()) {
-            const entry = path.join(temporary, `unsupported-${index}.ts`);
-            await fs.writeFile(entry, partition.source, "utf8");
-            const diagnostics: string[] = [];
-            const result = await compile({
-                entry,
-                output: path.join(temporary, `unsupported-${index}`),
-                buildDir: path.join(temporary, `build-${index}`),
-                emitCOnly: true,
-                diagnosticWriter: (message) => diagnostics.push(message),
-            });
-            expect(result.exitCode).not.toBe(0);
-            expect(diagnostics.join("")).toContain(partition.diagnostic);
+        const entry = path.join(temporary, 'subject.ts'); await fs.writeFile(entry, source);
+        for (const noGc of [false,true]) {
+            const output = path.join(temporary, 'program-'+noGc), diagnostics: string[] = [];
+            const built = await compile({entry,output,noGc,buildDir:output+'-build',diagnosticWriter:message=>diagnostics.push(message)});
+            expect({exitCode:built.exitCode,diagnostics:diagnostics.join('')}).toEqual({exitCode:0,diagnostics:''});
+            const native = Bun.spawnSync([output], {stdout:'pipe',stderr:'pipe',timeout:120_000});
+            expect({exitCode:native.exitCode,stderr:native.stderr.toString()}).toEqual({exitCode:0,stderr:''});
+            expect(native.stdout.toString()).toBe(expected);
         }
-    } finally {
-        await fs.rm(temporary, { recursive: true, force: true });
-    }
-});
+    } finally { await fs.rm(temporary,{recursive:true,force:true}); }
+},180_000);
