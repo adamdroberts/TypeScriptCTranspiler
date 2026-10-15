@@ -1,3 +1,5 @@
+- Check actual TypeError owners and explicit dynamic-value string conversion in independent Node/native regression observations.
+
 - Route typed static derived classes through retained constructor environments and complete actual Lists; remove physical superclass initializer predecessors.
 
 - Verify the explicit fork AOT/IPC failure on the ordinary callable owner after actual argument evaluation.

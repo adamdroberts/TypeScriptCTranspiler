@@ -5,7 +5,7 @@ function badObjectCreate(): string {
     try {
         return String(Object.create(badPrototype));
     } catch (err) {
-        return String(err);
+        return (err instanceof TypeError) + ":" + (err instanceof Error ? err.name : typeof err);
     }
 }
 
@@ -17,7 +17,7 @@ function badForOf(): string {
         }
         return String(count);
     } catch (err) {
-        return String(err);
+        return (err instanceof TypeError) + ":" + (err instanceof Error ? err.name : typeof err);
     }
 }
 

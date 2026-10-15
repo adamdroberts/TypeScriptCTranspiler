@@ -22,7 +22,7 @@ console.log("unicode escapes:", escaped["letter"], accent.codePointAt(0), face.c
 
 const values = Object.values(data);
 console.log("values len:", values.length);
-values.forEach((v) => console.log(" value:", v));
+values.forEach((v) => console.log(" value:", String(v)));
 
 const literal: any = { a: 1, b: "two", c: false };
 console.log("literal:", JSON.stringify(literal));
