@@ -2446,15 +2446,6 @@ class Emitter {
         return false;
     }
 
-    private isSideEffectFreeCryptoDigestEncoding(
-        expr: ts.Expression | undefined,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        if (!expr || this.isSideEffectFreeUndefinedValue(expr, seenConsts)) return true;
-        const encoding = this.sideEffectFreeStringLiteralText(expr, seenConsts);
-        return encoding === "hex" || encoding === "base64";
-    }
-
     private isSideEffectFreeHashMethodCall(
         recv: ts.Expression,
         method: string,
@@ -3086,13 +3077,6 @@ class Emitter {
             (
                 false
             );
-    }
-
-    private isSideEffectFreeFreshOrReturnedEmptyArrayOperand(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        return this.sideEffectFreeFreshOrReturnedArrayLength(expr, seenConsts) === 0;
     }
 
     private isSideEffectFreeEmptyArrayFromSource(
@@ -5637,88 +5621,6 @@ class Emitter {
         return init ? this.sideEffectFreeObjectLiteralOwnStringKeys(init, seenConsts) : null;
     }
 
-    private isSideEffectFreeStringArrayOperand(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isArrayLiteralExpression(unwrapped)) {
-            return unwrapped.elements.every((element) =>
-                ts.isExpression(element) &&
-                this.isSideEffectFreeStringCoercion(element, seenConsts)
-            );
-        }
-        if (
-            ts.isCallExpression(unwrapped) &&
-            (
-                false
-            )
-        ) {
-            return true;
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreeStringArrayOperand(init, seenConsts);
-    }
-
-    private isSideEffectFreeObjectValuesStringCoercionSource(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
-            return true;
-        }
-        if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (ts.isArrayLiteralExpression(unwrapped)) {
-            return unwrapped.elements.every((element) =>
-                ts.isExpression(element) &&
-                this.isSideEffectFreeStringCoercion(element, seenConsts)
-            );
-        }
-        if (ts.isObjectLiteralExpression(unwrapped)) {
-            const entries = this.sideEffectFreeObjectLiteralOwnDataEntries(unwrapped, seenConsts);
-            return entries !== null &&
-                entries.every((entry) => this.isSideEffectFreeStringCoercion(entry.value, seenConsts));
-        }
-        if (
-            ts.isCallExpression(unwrapped) &&
-            (
-                false
-            )
-        ) {
-            return true;
-        }
-        if (this.isObjectAssignCall(unwrapped)) {
-            return false;
-        }
-        if (this.isObjectFromEntriesCall(unwrapped)) {
-            return false;
-        }
-        if (ts.isCallExpression(unwrapped) && this.isObjectCreateCall(unwrapped)) {
-            return false;
-        }
-        if (ts.isCallExpression(unwrapped) && this.isObjectDefinePropertyCall(unwrapped)) {
-            return this.isSideEffectFreeObjectDefinePropertyStringValuesCall(unwrapped, seenConsts);
-        }
-        if (ts.isCallExpression(unwrapped) && this.isObjectDefinePropertiesCall(unwrapped)) {
-            return this.isSideEffectFreeObjectDefinePropertiesStringValuesCall(unwrapped, seenConsts);
-        }
-        const targetOperand = this.sideEffectFreeObjectTargetReturningOperand(unwrapped, seenConsts);
-        if (targetOperand) {
-            return this.isSideEffectFreeObjectValuesStringCoercionSource(
-                targetOperand,
-                new Set(seenConsts),
-            );
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreeObjectValuesStringCoercionSource(init, seenConsts);
-    }
-
     private isSideEffectFreeEmptyOwnPropertyObjectValuesSource(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -5742,137 +5644,6 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeEmptyOwnPropertyObjectValuesSource(init, seenConsts);
-    }
-
-    private isSideEffectFreeNonStringPrimitiveObjectEntriesSource(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
-            return false;
-        }
-        if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) {
-            return true;
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreeNonStringPrimitiveObjectEntriesSource(init, seenConsts);
-    }
-
-    private isSideEffectFreeObjectAssignStringValuesSource(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (this.isSideEffectFreeNullishObjectAssignSource(unwrapped, seenConsts)) return true;
-        if (this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts)) return true;
-        return this.isSideEffectFreeObjectValuesStringCoercionSource(unwrapped, seenConsts);
-    }
-
-    private isSideEffectFreeObjectFromEntriesStringValuesOperand(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isArrayLiteralExpression(unwrapped)) {
-            return unwrapped.elements.every((element) => {
-                if (!ts.isExpression(element)) return false;
-                const entry = this.unwrapSideEffectFreeStaticExpression(element);
-                if (!ts.isArrayLiteralExpression(entry) || entry.elements.length < 2) return false;
-                return entry.elements.every((entryElement, index) => {
-                    if (!ts.isExpression(entryElement)) return false;
-                    if (index === 0) return this.isSideEffectFreePropertyKeyCoercion(entryElement, seenConsts);
-                    if (index === 1) return this.isSideEffectFreeStringCoercion(entryElement, seenConsts);
-                    return this.isSideEffectFreeTopLevelConstInitializer(entryElement, seenConsts);
-                });
-            });
-        }
-        if (this.isObjectEntriesCall(unwrapped)) {
-            return this.isSideEffectFreeObjectValuesStringCoercionSource(
-                unwrapped.arguments[0]!,
-                new Set(seenConsts),
-            );
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreeObjectFromEntriesStringValuesOperand(init, seenConsts);
-    }
-
-    private isSideEffectFreeObjectDefinePropertyStringValuesCall(
-        call: ts.CallExpression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        return call.arguments.length === 3 &&
-            this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) &&
-            this.isSideEffectFreeObjectValuesStringCoercionSource(call.arguments[0]!, new Set(seenConsts)) &&
-            this.isSideEffectFreePropertyKeyCoercion(call.arguments[1]!, seenConsts) &&
-            this.isSideEffectFreeDataPropertyDescriptorStringValue(call.arguments[2]!, seenConsts);
-    }
-
-    private isSideEffectFreeObjectDefinePropertiesStringValuesCall(
-        call: ts.CallExpression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        return call.arguments.length === 2 &&
-            this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(call.arguments[0]!, seenConsts) &&
-            this.isSideEffectFreeObjectValuesStringCoercionSource(call.arguments[0]!, new Set(seenConsts)) &&
-            this.isSideEffectFreeDataPropertyDescriptorMapStringValues(call.arguments[1]!, seenConsts);
-    }
-
-    private isSideEffectFreeDataPropertyDescriptorMapStringValues(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isObjectLiteralExpression(unwrapped)) {
-            return unwrapped.properties.every((prop) =>
-                ts.isPropertyAssignment(prop) &&
-                this.objectLiteralStaticStringKey(prop.name, seenConsts) !== null &&
-                this.isSideEffectFreeDataPropertyDescriptorStringValue(prop.initializer, seenConsts)
-            );
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreeDataPropertyDescriptorMapStringValues(init, seenConsts);
-    }
-
-    private isSideEffectFreeDataPropertyDescriptorStringValue(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isObjectLiteralExpression(unwrapped)) {
-            const allowed = new Set(["value", "writable", "enumerable", "configurable"]);
-            return unwrapped.properties.every((prop) => {
-                if (!ts.isPropertyAssignment(prop)) return false;
-                const name = this.objectLiteralStaticStringKey(prop.name, seenConsts);
-                if (name === null || !allowed.has(name)) return false;
-                return name === "value"
-                    ? this.isSideEffectFreeStringCoercion(prop.initializer, seenConsts)
-                    : this.isSideEffectFreeTopLevelConstInitializer(prop.initializer, seenConsts);
-            });
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreeDataPropertyDescriptorStringValue(init, seenConsts);
-    }
-
-    private isSideEffectFreeStringSetConstructorSource(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (
-            ts.isNewExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set")
-        ) {
-            const args = Array.from(unwrapped.arguments ?? []);
-            return args.length === 0 ||
-                (
-                    args.length === 1 &&
-                    this.isSideEffectFreeStringArrayOperand(args[0]!, seenConsts)
-                );
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreeStringSetConstructorSource(init, seenConsts);
     }
 
     private isSideEffectFreeStringMethodCall(
@@ -6328,21 +6099,6 @@ class Emitter {
             errorArgs.slice(1).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
         );
-    }
-
-    private sideEffectFreeOptionalNonnegativeInteger(
-        expr: ts.Expression | undefined,
-        seenConsts: Set<ts.Symbol>,
-        defaultValue: number,
-    ): number | null {
-        if (!expr || this.isSideEffectFreeUndefinedValue(expr, seenConsts)) return defaultValue;
-        const value = this.sideEffectFreeNumericLiteralSameValueZeroValue(expr, seenConsts);
-        return value !== null &&
-            Number.isFinite(value) &&
-            Number.isInteger(value) &&
-            value >= 0
-            ? value
-            : null;
     }
 
     private isSideEffectFreeEventConstructorArgs(
@@ -8932,15 +8688,6 @@ class Emitter {
             method === "setPrototypeOf";
     }
 
-    private isObjectSetPrototypeOfCall(expr: ts.Expression): expr is ts.CallExpression {
-        return ts.isCallExpression(expr) &&
-            ts.isPropertyAccessExpression(expr.expression) &&
-            ts.isIdentifier(expr.expression.expression) &&
-            this.isUnshadowedGlobalIdentifier(expr.expression.expression, "Object") &&
-            expr.expression.name.text === "setPrototypeOf" &&
-            expr.arguments.length === 2;
-    }
-
     private sideEffectFreeDataDescriptorMapPrimitiveValueResult(
         expr: ts.Expression,
         key: string,
@@ -10016,114 +9763,6 @@ class Emitter {
         return null;
     }
 
-    private sideEffectFreeArrayFromElementPresenceResult(
-        expr: ts.Expression,
-        index: number,
-        seenConsts: Set<ts.Symbol>,
-    ): "present" | "absent" | "unsafe" {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
-            return index >= 0 && index < Array.from(unwrapped.text).length ? "present" : "absent";
-        }
-        if (ts.isArrayLiteralExpression(unwrapped)) {
-            return this.sideEffectFreeArrayLiteralElementPresenceResult(
-                unwrapped,
-                index,
-                seenConsts,
-            );
-        }
-        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(
-            unwrapped,
-            seenConsts,
-        );
-        if (returnedArrayLength !== null) {
-            return index >= 0 && index < returnedArrayLength ? "present" : "absent";
-        }
-        if (
-            ts.isNewExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            (
-                this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map") ||
-                this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set")
-            )
-        ) {
-            const collectionName = this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map")
-                ? "Map"
-                : "Set";
-            const exactLength = this.sideEffectFreeNewCollectionLength(
-                unwrapped,
-                collectionName,
-                seenConsts,
-            );
-            if (exactLength !== null) {
-                return index >= 0 && index < exactLength ? "present" : "absent";
-            }
-        }
-        if (
-            ts.isNewExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set") &&
-            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
-        ) {
-            const args = Array.from(unwrapped.arguments ?? []);
-            if (args.length === 0) return "absent";
-            if (args.length === 1) {
-                return this.sideEffectFreeArrayFromSetElementPresenceResult(
-                    args[0]!,
-                    index,
-                    seenConsts,
-                );
-            }
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return init
-            ? this.sideEffectFreeArrayFromElementPresenceResult(init, index, seenConsts)
-            : "unsafe";
-    }
-
-    private sideEffectFreeArrayFromSetElementPresenceResult(
-        expr: ts.Expression,
-        index: number,
-        seenConsts: Set<ts.Symbol>,
-    ): "present" | "absent" | "unsafe" {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isArrayLiteralExpression(unwrapped)) {
-            return this.sideEffectFreeArrayLiteralElementPresenceResult(
-                unwrapped,
-                index,
-                seenConsts,
-            );
-        }
-        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(
-            unwrapped,
-            seenConsts,
-        );
-        if (returnedArrayLength !== null) {
-            if (index < 0 || index >= returnedArrayLength) return "absent";
-            return index === 0 ? "present" : "unsafe";
-        }
-        if (
-            ts.isNewExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set") &&
-            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
-        ) {
-            const args = Array.from(unwrapped.arguments ?? []);
-            if (args.length === 0) return "absent";
-            if (args.length === 1) {
-                return this.sideEffectFreeArrayFromSetElementPresenceResult(
-                    args[0]!,
-                    index,
-                    seenConsts,
-                );
-            }
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return init
-            ? this.sideEffectFreeArrayFromSetElementPresenceResult(init, index, seenConsts)
-            : "unsafe";
-    }
-
     private sideEffectFreeArrayLiteralElementPresenceResult(
         literal: ts.ArrayLiteralExpression,
         index: number,
@@ -10186,113 +9825,6 @@ class Emitter {
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init
             ? this.sideEffectFreeArraySpreadElementPresenceResult(init, index, seenConsts)
-            : "unsafe";
-    }
-
-    private sideEffectFreePrimitiveArrayFromElementResult(
-        expr: ts.Expression,
-        index: number,
-        seenConsts: Set<ts.Symbol>,
-    ): "present" | "absent" | "unsafe" {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
-            return index >= 0 && index < Array.from(unwrapped.text).length ? "present" : "absent";
-        }
-        if (ts.isArrayLiteralExpression(unwrapped)) {
-            return this.sideEffectFreePrimitiveArrayLiteralElementResult(
-                unwrapped,
-                index,
-                seenConsts,
-            );
-        }
-        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(
-            unwrapped,
-            seenConsts,
-        );
-        if (returnedArrayLength !== null) {
-            if (index < 0 || index >= returnedArrayLength) return "absent";
-            return this.sideEffectFreePrimitiveArrayElementOperandResult(
-                unwrapped,
-                index,
-                new Set(seenConsts),
-            );
-        }
-        if (
-            ts.isNewExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map") &&
-            this.sideEffectFreeNewCollectionLength(unwrapped, "Map", seenConsts) === 0
-        ) {
-            return "absent";
-        }
-        if (
-            ts.isNewExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set") &&
-            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
-        ) {
-            const args = Array.from(unwrapped.arguments ?? []);
-            if (args.length === 0) return "absent";
-            if (args.length === 1) {
-                return this.sideEffectFreePrimitiveArrayFromSetElementResult(
-                    args[0]!,
-                    index,
-                    seenConsts,
-                );
-            }
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return init
-            ? this.sideEffectFreePrimitiveArrayFromElementResult(init, index, seenConsts)
-            : "unsafe";
-    }
-
-    private sideEffectFreePrimitiveArrayFromSetElementResult(
-        expr: ts.Expression,
-        index: number,
-        seenConsts: Set<ts.Symbol>,
-    ): "present" | "absent" | "unsafe" {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isArrayLiteralExpression(unwrapped)) {
-            return this.sideEffectFreePrimitiveArrayLiteralElementResult(
-                unwrapped,
-                index,
-                seenConsts,
-            );
-        }
-        const returnedArrayLength = this.sideEffectFreeFreshOrReturnedArrayLength(
-            unwrapped,
-            seenConsts,
-        );
-        if (returnedArrayLength !== null) {
-            if (index < 0 || index >= returnedArrayLength) return "absent";
-            return index === 0
-                ? this.sideEffectFreePrimitiveArrayElementOperandResult(
-                    unwrapped,
-                    0,
-                    new Set(seenConsts),
-                )
-                : "unsafe";
-        }
-        if (
-            ts.isNewExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Set") &&
-            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
-        ) {
-            const args = Array.from(unwrapped.arguments ?? []);
-            if (args.length === 0) return "absent";
-            if (args.length === 1) {
-                return this.sideEffectFreePrimitiveArrayFromSetElementResult(
-                    args[0]!,
-                    index,
-                    seenConsts,
-                );
-            }
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return init
-            ? this.sideEffectFreePrimitiveArrayFromSetElementResult(init, index, seenConsts)
             : "unsafe";
     }
 
@@ -11819,44 +11351,6 @@ class Emitter {
             this.isSideEffectFreeTopLevelConstInitializer(unwrapped, seenConsts);
     }
 
-    private isSideEffectFreeFreshObjectMutationTarget(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (this.isSideEffectFreeFreshObjectOrArrayLiteralOperand(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeFreshBuiltinObjectOperand(unwrapped, seenConsts)) {
-            return true;
-        }
-        if (this.isSideEffectFreeOwnDataPropertyDescriptorObjectOperand(unwrapped, seenConsts)) {
-            return true;
-        }
-        const targetOperand = this.sideEffectFreeExtensibleObjectTargetReturningOperand(
-            unwrapped,
-            seenConsts,
-        );
-        if (targetOperand) {
-            return this.isSideEffectFreeFreshObjectMutationTarget(
-                targetOperand,
-                new Set(seenConsts),
-            );
-        }
-        if (!ts.isCallExpression(unwrapped)) return false;
-        const isFreshArrayHelper =
-            false;
-        if (isFreshArrayHelper) return true;
-        return (
-            this.isObjectAssignCall(unwrapped) ||
-            this.isObjectFromEntriesCall(unwrapped) ||
-            this.isObjectCreateCall(unwrapped) ||
-            this.isObjectDefinePropertyCall(unwrapped) ||
-            this.isObjectDefinePropertiesCall(unwrapped)
-        ) &&
-            this.isSideEffectFreeStaticCall(unwrapped, seenConsts);
-    }
-
     private isSideEffectFreeFreshBuiltinObjectOperand(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -11895,20 +11389,6 @@ class Emitter {
         return !!init && this.isSideEffectFreeFreshBuiltinObjectOperand(init, seenConsts);
     }
 
-    private sideEffectFreeExtensibleObjectTargetReturningOperand(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): ts.Expression | null {
-        if (!ts.isCallExpression(expr)) return null;
-        if (
-            this.isObjectSetPrototypeOfCall(expr) &&
-            this.isSideEffectFreeStaticCall(expr, seenConsts)
-        ) {
-            return expr.arguments[0] ?? null;
-        }
-        return this.sideEffectFreeObjectPrototypeValueOfTargetReturningOperand(expr, seenConsts);
-    }
-
     private isSideEffectFreeObjectCreatePrototypeOperand(
         expr: ts.Expression,
         seenConsts: Set<ts.Symbol>,
@@ -11923,46 +11403,6 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeObjectCreatePrototypeOperand(init, seenConsts);
-    }
-
-    private isSideEffectFreeObjectFromEntriesOperand(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isArrayLiteralExpression(unwrapped)) {
-            return unwrapped.elements.every((element) => {
-                if (!ts.isExpression(element)) return false;
-                const entry = this.unwrapSideEffectFreeStaticExpression(element);
-                if (!ts.isArrayLiteralExpression(entry) || entry.elements.length < 2) return false;
-                const key = entry.elements[0]!;
-                const value = entry.elements[1]!;
-                return ts.isExpression(key) &&
-                    ts.isExpression(value) &&
-                    this.isSideEffectFreePropertyKeyCoercion(key, seenConsts) &&
-                    this.isSideEffectFreeTopLevelConstInitializer(value, seenConsts);
-            });
-        }
-        if (
-            ts.isCallExpression(unwrapped) &&
-            ts.isPropertyAccessExpression(unwrapped.expression) &&
-            ts.isIdentifier(unwrapped.expression.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression.expression, "Object") &&
-            unwrapped.expression.name.text === "entries" &&
-            unwrapped.arguments.length === 1
-        ) {
-            return this.isSideEffectFreeObjectCoercionOperand(unwrapped.arguments[0]!, seenConsts);
-        }
-        if (
-            ts.isNewExpression(unwrapped) &&
-            ts.isIdentifier(unwrapped.expression) &&
-            this.isUnshadowedGlobalIdentifier(unwrapped.expression, "Map") &&
-            this.isSideEffectFreeNewExpression(unwrapped, seenConsts)
-        ) {
-            return true;
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreeObjectFromEntriesOperand(init, seenConsts);
     }
 
     private isSideEffectFreePropertyKeyCoercion(
@@ -12018,22 +11458,6 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return !!init && this.isSideEffectFreeDataPropertyDescriptor(init, seenConsts);
-    }
-
-    private isSideEffectFreeDataPropertyDescriptorMap(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (ts.isObjectLiteralExpression(unwrapped)) {
-            return unwrapped.properties.every((prop) => {
-                if (!ts.isPropertyAssignment(prop)) return false;
-                return this.objectLiteralStaticStringKey(prop.name, seenConsts) !== null &&
-                    this.isSideEffectFreeDataPropertyDescriptor(prop.initializer, seenConsts);
-            });
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        return !!init && this.isSideEffectFreeDataPropertyDescriptorMap(init, seenConsts);
     }
 
     private objectLiteralStaticStringKey(
@@ -12115,22 +11539,6 @@ class Emitter {
         }
         return this.isSideEffectFreeObjectEnumerationOperand(unwrapped, seenConsts) ||
             this.isSideEffectFreeNonNullishPrimitiveObjectOperand(unwrapped, seenConsts);
-    }
-
-    private isSideEffectFreeObjectAssignSourceOperand(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
-        if (
-            unwrapped.kind === ts.SyntaxKind.NullKeyword ||
-            this.isUnshadowedUndefinedExpression(unwrapped)
-        ) {
-            return true;
-        }
-        const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
-        if (init) return this.isSideEffectFreeObjectAssignSourceOperand(init, seenConsts);
-        return this.isSideEffectFreeObjectCoercionOperand(unwrapped, seenConsts);
     }
 
     private isSideEffectFreeNonNullishPrimitiveObjectOperand(
@@ -12273,15 +11681,6 @@ class Emitter {
             this.isOutOfBandIdentifier(id)
             ? id.text
             : null;
-    }
-
-    private isOutOfBandGlobalBinding(id: ts.Identifier, name: string): boolean {
-        if (id.text !== name) return false;
-        // In check-JavaScript programs TypeScript can synthesize an Identifier
-        // or property-access "declaration" from a free global/property pair.
-        // Such a use does not shadow the host global; real source bindings
-        // have declaration nodes.
-        return this.isOutOfBandIdentifier(id);
     }
 
     private isRuntimeGlobalReference(id: ts.Identifier): boolean {
@@ -13589,18 +12988,6 @@ class Emitter {
         if (!moduleId) unsupported(id, "Module binding requires a canonical retained cell");
         if (raw) this.symbolStorageTypes.set(raw, T_VALUE);
         return this.jsonModuleBindings.get(target) ?? this.collectJsonModuleBinding(target, moduleId);
-    }
-
-    private hasDynamicJsonModuleRepresentation(expression: ts.Expression): boolean {
-        const current = unwrapTransparentExpression(expression);
-        if (ts.isIdentifier(current)) {
-            return !!this.jsonModuleBindingForImportIdentifier(current) ||
-                !!this.moduleNamespacePlanForIdentifier(current);
-        }
-        if (ts.isPropertyAccessExpression(current) || ts.isElementAccessExpression(current)) {
-            return this.hasDynamicJsonModuleRepresentation(current.expression);
-        }
-        return false;
     }
 
     private jsDefaultExportDeclarationForImport(
@@ -18830,10 +18217,6 @@ class Emitter {
         return members.length > 0 ? members : null;
     }
 
-    private isRequireBindingInitializer(call: ts.CallExpression): boolean {
-        return ts.isVariableDeclaration(call.parent) && call.parent.initializer === call;
-    }
-
     private requireBindingModuleExportsCName(id: ts.Identifier): string | null {
         const decl = this.requireBindingModuleExportsDeclaration(id);
         return decl ? this.declarationCName(decl) : null;
@@ -19695,17 +19078,6 @@ class Emitter {
             this.isNamespaceImportFrom(expr, ["buffer", "node:buffer"]) ||
             this.isDefaultImportFrom(expr, ["buffer", "node:buffer"])
         );
-    }
-
-    private isBufferConstructorExpression(expr: ts.Expression): boolean {
-        const unwrapped = unwrapTransparentExpression(expr);
-        if (ts.isIdentifier(unwrapped)) {
-            return this.isUnshadowedGlobalIdentifier(unwrapped, "Buffer") ||
-                this.isNamedImportFrom(unwrapped, ["buffer", "node:buffer"], "Buffer");
-        }
-        return ts.isPropertyAccessExpression(unwrapped) &&
-            unwrapped.name.text === "Buffer" &&
-            this.isBufferModuleIdentifier(unwrapped.expression);
     }
 
     private isProcessEnvObject(expr: ts.Expression): boolean {
@@ -22309,19 +21681,6 @@ class Emitter {
                 : null;
     }
 
-    private identifierHasDynamicAnnotation(id: ts.Identifier): boolean {
-        const sym = this.symbolForIdentifier(id);
-        let decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-        if (decl && ts.isIdentifier(decl) && ts.isVariableDeclaration(decl.parent)) {
-            decl = decl.parent;
-        }
-        if (!decl || !ts.isVariableDeclaration(decl) || !decl.type) return false;
-        return (
-            decl.type.kind === ts.SyntaxKind.AnyKeyword ||
-            decl.type.kind === ts.SyntaxKind.UnknownKeyword
-        );
-    }
-
     private unboxDynamicValue(cExpr: string, target: CType, node: ts.Node = this.currentSf!): string {
         switch (target.kind) {
             case "number":
@@ -22546,31 +21905,6 @@ class Emitter {
             if (found) return;
             if (node !== fn && ts.isFunctionLike(node) && !ts.isArrowFunction(node)) return;
             if (ts.isIdentifier(node) && this.isImplicitArgumentsIdentifier(node)) {
-                found = true;
-                return;
-            }
-            ts.forEachChild(node, visit);
-        };
-        for (const parameter of fn.parameters) {
-            if (parameter.initializer) visit(parameter.initializer);
-        }
-        if (fn.body) visit(fn.body);
-        return found;
-    }
-
-    private functionUsesOwnActivationBinding(fn: ts.FunctionLikeDeclaration): boolean {
-        if (ts.isArrowFunction(fn)) return false;
-        let found = false;
-        const visit = (node: ts.Node): void => {
-            if (found) return;
-            if (node !== fn && ts.isFunctionLike(node) && !ts.isArrowFunction(node)) return;
-            if (
-                node.kind === ts.SyntaxKind.ThisKeyword ||
-                ts.isIdentifier(node) && this.isImplicitArgumentsIdentifier(node) ||
-                ts.isMetaProperty(node) &&
-                    node.keywordToken === ts.SyntaxKind.NewKeyword &&
-                    node.name.text === "target"
-            ) {
                 found = true;
                 return;
             }
@@ -26045,10 +25379,6 @@ class Emitter {
 
     private isGenericFunction(fd: ts.FunctionDeclaration): boolean {
         return !hasCanonicalValueFormals(fd) && !!fd.typeParameters?.length;
-    }
-
-    private isGenericMethod(md: ts.MethodDeclaration): boolean {
-        return !!md.typeParameters?.length;
     }
 
     private emitFunctionPrototype(fd: ts.FunctionDeclaration): void {
@@ -29670,12 +29000,6 @@ class Emitter {
         buf.close();
     }
 
-    private classDeclForExpression(expr: ts.Expression): ts.ClassDeclaration | null {
-        const ty = this.checker.getTypeAtLocation(expr);
-        const sym = ty.getSymbol();
-        return sym?.getDeclarations()?.find(ts.isClassDeclaration) ?? null;
-    }
-
     private classDeclForConstructorIdentifier(
         id: ts.Identifier,
         seen = new Set<ts.Symbol>(),
@@ -29916,570 +29240,6 @@ class Emitter {
         return decl && ts.isVariableDeclaration(decl)
             ? this.decoratedClassConstructorAliasTarget(decl)
             : null;
-    }
-
-    private forOfBindingValueWithDefault(
-        element: ts.BindingElement,
-        value: EmitResult,
-    ): EmitResult {
-        if (!element.initializer) return value;
-        const initializer = unwrapTransparentExpression(element.initializer);
-        if (ts.isYieldExpression(initializer) || this.nodeContainsYield(element.initializer)) {
-            unsupported(element.initializer, "for-of destructuring defaults cannot suspend");
-        }
-        const fallback = this.emitExpr(element.initializer);
-        const fallbackValue = this.coerce(fallback, T_VALUE, element.initializer);
-        const sourceValue = value.ty.kind === "value"
-            ? value.c
-            : this.coerce(value, T_VALUE, element);
-        const valueTemp = this.freshTemp("_for_of_default");
-        return {
-            c: `({ tsc_value_t ${valueTemp} = ${sourceValue}; tsc_value_is_undefined(${valueTemp}) ? ${fallbackValue} : ${valueTemp}; })`,
-            ty: T_VALUE,
-        };
-    }
-
-    private forOfObjectBindingDescriptors(
-        pattern: ts.ObjectBindingPattern,
-    ): ForOfObjectBindingDescriptor[] {
-        if (pattern.elements.length === 0) {
-            unsupported(pattern, "for-of object destructuring requires at least one binding");
-        }
-        const descriptors: ForOfObjectBindingDescriptor[] = [];
-        let nextComputedKeyId = 0;
-        let nextDefaultId = 0;
-        const collectArray = (
-            current: ts.ArrayBindingPattern,
-            prefix: readonly ForOfObjectAccessSegment[],
-            inheritedComputedKey: string | null = null,
-            inheritedComputedKeyId: number | null = null,
-        ): void => {
-            if (current.elements.length === 0) {
-                unsupported(current, "nested for-of array destructuring requires at least one binding");
-            }
-            for (let index = 0; index < current.elements.length; index++) {
-                const element = current.elements[index];
-                if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
-                if (element.dotDotDotToken) {
-                    if (
-                        !ts.isBindingElement(element) ||
-                        index !== current.elements.length - 1 ||
-                        !ts.isIdentifier(element.name) ||
-                        element.initializer
-                    ) {
-                        unsupported(
-                            element,
-                            "nested for-of array rest requires one terminal identifier without a default",
-                        );
-                    }
-                    const type = this.prepareType(mapType(element.name, this.checker));
-                    if (type.kind !== "value" && type.kind !== "array") {
-                        unsupported(
-                            element.name,
-                            "nested for-of array rest requires a dynamic array-compatible type",
-                        );
-                    }
-                    descriptors.push({
-                        element,
-                        identifier: element.name,
-                        property: null,
-                        computedKey: inheritedComputedKey,
-                        computedKeyId: inheritedComputedKeyId,
-                        rest: false,
-                        arrayRest: true,
-                        type,
-                        accessPath: [...prefix],
-                        arrayRestIndex: index,
-                    });
-                    continue;
-                }
-                const nestedIndex = (): ForOfObjectAccessSegment => {
-                    if (!element.initializer) {
-                        return { kind: "index", value: index };
-                    }
-                    if (this.nodeContainsYield(element.initializer)) {
-                        unsupported(element.initializer, "for-of destructuring defaults cannot suspend");
-                    }
-                    return {
-                        kind: "index",
-                        value: index,
-                        defaultId: nextDefaultId++,
-                        defaultInitializer: element.initializer,
-                    };
-                };
-                if (ts.isObjectBindingPattern(element.name)) {
-                    if (element.propertyName) {
-                        unsupported(
-                            element,
-                            "nested for-of array object bindings require a plain object pattern",
-                        );
-                    }
-                    collect(
-                        element.name,
-                        [...prefix, nestedIndex()],
-                        inheritedComputedKey,
-                        inheritedComputedKeyId,
-                    );
-                    continue;
-                }
-                if (ts.isArrayBindingPattern(element.name)) {
-                    if (element.propertyName) {
-                        unsupported(
-                            element,
-                            "nested for-of array bindings require a plain nested array pattern",
-                        );
-                    }
-                    collectArray(
-                        element.name,
-                        [...prefix, nestedIndex()],
-                        inheritedComputedKey,
-                        inheritedComputedKeyId,
-                    );
-                    continue;
-                }
-                if (
-                    !ts.isBindingElement(element) ||
-                    !ts.isIdentifier(element.name) ||
-                    element.propertyName ||
-                    element.initializer && this.nodeContainsYield(element.initializer)
-                ) {
-                    unsupported(
-                        element,
-                        "nested for-of array destructuring supports identifier bindings with await-free defaults",
-                    );
-                }
-                descriptors.push({
-                    element,
-                    identifier: element.name,
-                    property: null,
-                    computedKey: inheritedComputedKey,
-                    computedKeyId: inheritedComputedKeyId,
-                    rest: false,
-                    arrayRest: false,
-                    type: this.prepareType(mapType(element.name, this.checker)),
-                    accessPath: [...prefix, { kind: "index", value: index }],
-                    arrayRestIndex: null,
-                });
-            }
-        };
-        const collect = (
-            current: ts.ObjectBindingPattern,
-            prefix: readonly ForOfObjectAccessSegment[],
-            inheritedComputedKey: string | null = null,
-            inheritedComputedKeyId: number | null = null,
-        ): void => {
-            if (current.elements.length === 0) {
-                unsupported(current, "for-of object destructuring requires at least one binding");
-            }
-            let restSeen = false;
-            for (let index = 0; index < current.elements.length; index++) {
-                const element = current.elements[index];
-                if (!element || !ts.isBindingElement(element)) {
-                    unsupported(current, "for-of object destructuring requires simple static binding elements");
-                }
-                if (element.dotDotDotToken) {
-                    if (
-                        restSeen ||
-                        index !== current.elements.length - 1 ||
-                        !ts.isIdentifier(element.name) ||
-                        element.initializer
-                    ) {
-                        unsupported(
-                            element,
-                            "for-of object rest destructuring supports one terminal top-level identifier without a default",
-                        );
-                    }
-                    const type = this.prepareType(mapType(element.name, this.checker));
-                    if (type.kind !== "value") {
-                        unsupported(
-                            element.name,
-                            "for-of object rest destructuring requires a dynamic object type",
-                        );
-                    }
-                    descriptors.push({
-                        element,
-                        identifier: element.name,
-                        property: null,
-                        computedKey: inheritedComputedKey,
-                        computedKeyId: inheritedComputedKeyId,
-                        rest: true,
-                        arrayRest: false,
-                        type,
-                        accessPath: [...prefix],
-                        arrayRestIndex: null,
-                    });
-                    restSeen = true;
-                    continue;
-                }
-                if (restSeen) {
-                    unsupported(
-                        element,
-                        "for-of object destructuring cannot bind after an object rest element",
-                    );
-                }
-                const computedProperty = !!element.propertyName && ts.isComputedPropertyName(element.propertyName);
-                const property = element.propertyName
-                    ? this.staticPropertyName(element.propertyName)
-                    : ts.isIdentifier(element.name)
-                        ? element.name.text
-                        : null;
-                let computedKey: string | null = null;
-                let computedKeyId = inheritedComputedKeyId;
-                if (computedProperty) {
-                    if (
-                        !ts.isIdentifier(element.name) &&
-                        !ts.isObjectBindingPattern(element.name) &&
-                        !ts.isArrayBindingPattern(element.name) ||
-                        this.nodeContainsYield((element.propertyName as ts.ComputedPropertyName).expression)
-                    ) {
-                        unsupported(
-                            element,
-                            "for-of computed object keys require a yield-free key with an identifier or bounded nested binding",
-                        );
-                    }
-                    const propertyExpression = (element.propertyName as ts.ComputedPropertyName).expression;
-                    computedKey = this.coerce(
-                        this.emitExpr(propertyExpression),
-                        T_STRING,
-                        propertyExpression,
-                    );
-                    computedKeyId = nextComputedKeyId++;
-                } else if (property === null) {
-                    unsupported(element, "for-of object destructuring requires static property names");
-                }
-                const bindingComputedKey = computedKey ?? inheritedComputedKey;
-                const bindingComputedKeyId = computedKeyId;
-                const bindingPrefixBase: ForOfObjectAccessSegment[] = computedProperty
-                    ? [...prefix, { kind: "computed", value: computedKey!, id: computedKeyId! }]
-                    : [...prefix, { kind: "property", value: property! }];
-                const bindingPrefix: ForOfObjectAccessSegment[] =
-                    (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)) &&
-                    element.initializer
-                        ? (() => {
-                            if (this.nodeContainsYield(element.initializer!)) {
-                                unsupported(element.initializer!, "for-of destructuring defaults cannot suspend");
-                            }
-                            const last = bindingPrefixBase[bindingPrefixBase.length - 1];
-                            return [
-                                ...bindingPrefixBase.slice(0, -1),
-                                {
-                                    ...last,
-                                    defaultId: nextDefaultId++,
-                                    defaultInitializer: element.initializer!,
-                                },
-                            ];
-                        })()
-                        : bindingPrefixBase;
-                if (ts.isObjectBindingPattern(element.name)) {
-                    collect(
-                        element.name,
-                        bindingPrefix,
-                        bindingComputedKey,
-                        bindingComputedKeyId,
-                    );
-                    continue;
-                }
-                if (ts.isArrayBindingPattern(element.name)) {
-                    collectArray(
-                        element.name,
-                        bindingPrefix,
-                        bindingComputedKey,
-                        bindingComputedKeyId,
-                    );
-                    continue;
-                }
-                if (
-                    !ts.isIdentifier(element.name) ||
-                    element.initializer && this.nodeContainsYield(element.initializer)
-                ) {
-                    unsupported(
-                        element,
-                        "for-of object destructuring supports identifier bindings with await-free defaults",
-                    );
-                }
-                descriptors.push({
-                    element,
-                    identifier: element.name,
-                    property,
-                    computedKey: bindingComputedKey,
-                    computedKeyId: bindingComputedKeyId,
-                    rest: false,
-                    arrayRest: false,
-                    type: this.prepareType(mapType(element.name, this.checker)),
-                    accessPath: bindingPrefix,
-                    arrayRestIndex: null,
-                });
-            }
-        };
-        collect(pattern, []);
-        return descriptors;
-    }
-
-    private emitDynamicObjectRestForOf(
-        buf: CBuf,
-        sourceC: string,
-        descriptors: readonly ForOfObjectBindingDescriptor[],
-        restPath: readonly ForOfObjectAccessSegment[],
-        computedKeyTemps: ReadonlyMap<number, string>,
-    ): EmitResult {
-        const excluded = Array.from(new Set(
-            descriptors
-                .filter((descriptor) =>
-                    descriptor.accessPath.length > restPath.length &&
-                    restPath.every((segment, index) => {
-                        const candidate = descriptor.accessPath[index];
-                        if (!candidate || candidate.kind !== segment.kind || candidate.value !== segment.value) {
-                            return false;
-                        }
-                        return candidate.kind !== "computed" || segment.kind !== "computed" || candidate.id === segment.id;
-                    })
-                )
-                .flatMap((descriptor) => {
-                    const segment = descriptor.accessPath[restPath.length];
-                    if (segment?.kind === "property") {
-                        return [
-                            `tsc_str_from_lit("${escapeCString(segment.value)}", ${utf8ByteLen(segment.value)})`,
-                        ];
-                    }
-                    if (segment?.kind === "computed") {
-                        return [computedKeyTemps.get(segment.id) ?? segment.value];
-                    }
-                    return [];
-                }),
-        ));
-        return this.emitDynamicObjectRestWithExcludedKeys(buf, sourceC, excluded);
-    }
-
-    private emitDynamicObjectRestWithExcludedKeys(
-        buf: CBuf,
-        sourceC: string,
-        excluded: readonly string[],
-    ): EmitResult {
-        const sourceVar = this.freshTemp("_for_of_object_rest_source");
-        const restObject = this.freshTemp("_for_of_object_rest");
-        const restKeys = this.freshTemp("_for_of_object_rest_keys");
-        const restIndex = this.freshTemp("_for_of_object_rest_i");
-        const restKey = this.freshTemp("_for_of_object_rest_key");
-        buf.line(`tsc_value_t const ${sourceVar} = ${sourceC};`);
-        const skip = excluded
-            .map((property) => `tsc_str_eq(${restKey}, ${property})`)
-            .join(" || ");
-        buf.line(`tsc_object_t* ${restObject} = tsc_object_new();`);
-        buf.line(`tsc_array_t* ${restKeys} = tsc_value_object_keys(${sourceVar});`);
-        buf.open(`for (size_t ${restIndex} = 0; ${restIndex} < ${restKeys}->len; ${restIndex}++)`);
-        buf.line(`tsc_str_t* ${restKey} = TSC_ARR(tsc_str_t*, ${restKeys}, ${restIndex});`);
-        if (skip) buf.line(`if (${skip}) continue;`);
-        buf.line(`tsc_object_set(${restObject}, ${restKey}, tsc_value_get_prop(${sourceVar}, ${restKey}));`);
-        buf.close();
-        return { c: `tsc_value_object(${restObject})`, ty: T_VALUE };
-    }
-
-    private emitDynamicArrayRestForOf(
-        buf: CBuf,
-        sourceC: string,
-        startIndex: number,
-    ): EmitResult {
-        const sourceVar = this.freshTemp("_for_of_nested_array");
-        const restArray = this.freshTemp("_for_of_nested_array_rest");
-        const restIndex = this.freshTemp("_for_of_nested_array_rest_i");
-        const restValue = this.freshTemp("_for_of_nested_array_rest_v");
-        buf.line(`tsc_value_t const ${sourceVar} = ${sourceC};`);
-        buf.line(`tsc_array_t* ${restArray} = tsc_array_new(sizeof(tsc_value_t), 1);`);
-        buf.open(
-            `for (size_t ${restIndex} = ${startIndex}; ` +
-            `${restIndex} < (size_t)tsc_value_length(${sourceVar}); ${restIndex}++)`,
-        );
-        buf.line(`tsc_value_t ${restValue} = tsc_value_get_index(${sourceVar}, (double)${restIndex});`);
-        buf.line(`tsc_array_push_raw(${restArray}, &${restValue});`);
-        buf.close();
-        return { c: `tsc_value_array(${restArray})`, ty: T_VALUE };
-    }
-
-    private emitDynamicObjectBindingsForOf(
-        buf: CBuf,
-        pattern: ts.ObjectBindingPattern,
-        sourceC: string,
-        assign: (descriptor: ForOfObjectBindingDescriptor, value: EmitResult) => void,
-    ): void {
-        const descriptors = this.forOfObjectBindingDescriptors(pattern);
-        const sourceVar = this.freshTemp("_for_of_object_value");
-        buf.line(`tsc_value_t const ${sourceVar} = ${sourceC};`);
-        const computedKeyTemps = new Map<number, string>();
-        const defaultTemps = new Map<number, {
-            initialized: string;
-            value: string;
-            fallback: string;
-        }>();
-        for (const descriptor of descriptors) {
-            for (const segment of descriptor.accessPath) {
-                if (segment.kind !== "computed" || computedKeyTemps.has(segment.id)) continue;
-                const keyTemp = this.freshTemp("_for_of_computed_key");
-                computedKeyTemps.set(segment.id, keyTemp);
-                buf.line(`tsc_str_t* const ${keyTemp} = ${segment.value};`);
-            }
-        }
-        for (const descriptor of descriptors) {
-            for (const segment of descriptor.accessPath) {
-                if (segment.defaultId === undefined || defaultTemps.has(segment.defaultId)) continue;
-                if (!segment.defaultInitializer) {
-                    unsupported(descriptor.element, "for-of nested defaults require an initializer");
-                }
-                const fallback = this.coerce(
-                    this.emitExpr(segment.defaultInitializer),
-                    T_VALUE,
-                    segment.defaultInitializer,
-                );
-                const initialized = this.freshTemp("_for_of_nested_default_initialized");
-                const fallbackTemp = this.freshTemp("_for_of_nested_default");
-                defaultTemps.set(segment.defaultId, {
-                    initialized,
-                    value: fallbackTemp,
-                    fallback,
-                });
-                buf.line(`bool ${initialized} = false;`);
-                buf.line(`tsc_value_t ${fallbackTemp} = tsc_value_undefined();`);
-            }
-        }
-        const accessValue = (accessPath: readonly ForOfObjectAccessSegment[]): string =>
-            accessPath.reduce(
-                (source, segment) => {
-                    let value: string;
-                    if (segment.kind === "property") {
-                        value = `tsc_value_get_prop(${source}, tsc_str_from_lit("${escapeCString(segment.value)}", ${utf8ByteLen(segment.value)}))`;
-                    } else if (segment.kind === "computed") {
-                        const key = computedKeyTemps.get(segment.id) ?? segment.value;
-                        value = `tsc_value_get_prop(${source}, ${key})`;
-                    } else {
-                        value = `tsc_value_get_index(${source}, ${segment.value}.0)`;
-                    }
-                    if (segment.defaultId === undefined) return value;
-                    const fallback = defaultTemps.get(segment.defaultId);
-                    if (!fallback) {
-                        unsupported(segment.defaultInitializer ?? pattern, "for-of nested default was not staged");
-                    }
-                    const valueTemp = this.freshTemp("_for_of_nested_default_value");
-                    return `({ tsc_value_t ${valueTemp} = ${value}; ` +
-                        `if (tsc_value_is_undefined(${valueTemp})) { ` +
-                        `if (!${fallback.initialized}) { ${fallback.value} = ${fallback.fallback}; ${fallback.initialized} = true; } ` +
-                        `${valueTemp} = ${fallback.value}; } ${valueTemp}; })`;
-                },
-                sourceVar,
-            );
-        for (const descriptor of descriptors) {
-            const objectValueC = accessValue(descriptor.accessPath);
-            const value = descriptor.rest
-                ? this.emitDynamicObjectRestForOf(
-                    buf,
-                    objectValueC,
-                    descriptors,
-                    descriptor.accessPath,
-                    computedKeyTemps,
-                )
-                : descriptor.arrayRest
-                    ? this.emitDynamicArrayRestForOf(buf, objectValueC, descriptor.arrayRestIndex!)
-                : this.forOfBindingValueWithDefault(descriptor.element, {
-                    c: objectValueC,
-                    ty: T_VALUE,
-                });
-            assign(descriptor, value);
-        }
-    }
-
-    private emitDynamicArrayBindingPatternForOf(
-        buf: CBuf,
-        pattern: ts.ArrayBindingPattern,
-        sourceC: string,
-        assign: (identifier: ts.Identifier, value: EmitResult) => void,
-    ): void {
-        if (pattern.elements.length === 0) {
-            unsupported(pattern, "dynamic for-of array destructuring requires at least one binding");
-        }
-        const sourceVar = this.freshTemp("_for_of_nested_array_value");
-        buf.line(`tsc_value_t const ${sourceVar} = ${sourceC};`);
-        for (let index = 0; index < pattern.elements.length; index++) {
-            const element = pattern.elements[index];
-            if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
-            if (ts.isBindingElement(element) && element.dotDotDotToken) {
-                if (
-                    index !== pattern.elements.length - 1 ||
-                    !ts.isIdentifier(element.name) ||
-                    element.propertyName ||
-                    element.initializer
-                ) {
-                    unsupported(
-                        element,
-                        "dynamic for-of array rest requires one terminal identifier without a default",
-                    );
-                }
-                const restType = this.prepareType(mapType(element.name, this.checker));
-                if (
-                    restType.kind !== "value" &&
-                    (restType.kind !== "array" || restType.elem?.kind !== "value")
-                ) {
-                    unsupported(
-                        element.name,
-                        "dynamic for-of array rest requires a boxed or dynamic array-compatible binding",
-                    );
-                }
-                assign(
-                    element.name,
-                    this.emitDynamicArrayRestForOf(buf, sourceVar, index),
-                );
-                continue;
-            }
-            if (
-                !ts.isBindingElement(element) ||
-                element.dotDotDotToken ||
-                element.propertyName
-            ) {
-                unsupported(
-                    element,
-                    "dynamic for-of array bindings support fixed identifier/object/array elements without rest",
-                );
-            }
-            if (element.initializer && this.nodeContainsYield(element.initializer)) {
-                unsupported(
-                    element,
-                    "dynamic for-of array bindings support await-free defaults only",
-                );
-            }
-            const value: EmitResult = {
-                c: `tsc_value_get_index(${sourceVar}, ${index}.0)`,
-                ty: T_VALUE,
-            };
-            const nestedValue = (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)) &&
-                element.initializer
-                ? this.forOfBindingValueWithDefault(element, value)
-                : value;
-            if (ts.isObjectBindingPattern(element.name)) {
-                this.emitDynamicObjectBindingsForOf(
-                    buf,
-                    element.name,
-                    nestedValue.c,
-                    (descriptor, nestedValue) => assign(descriptor.identifier, nestedValue),
-                );
-                continue;
-            }
-            if (ts.isArrayBindingPattern(element.name)) {
-                this.emitDynamicArrayBindingPatternForOf(
-                    buf,
-                    element.name,
-                    nestedValue.c,
-                    assign,
-                );
-                continue;
-            }
-            if (!ts.isIdentifier(element.name)) {
-                unsupported(
-                    element,
-                    "dynamic for-of array bindings support identifier elements without rest",
-                );
-            }
-            assign(
-                element.name,
-                this.forOfBindingValueWithDefault(element, value),
-            );
-        }
     }
 
 
@@ -30968,20 +29728,6 @@ class Emitter {
         }
         const init = this.sideEffectFreeEarlierConstInitializer(unwrapped, seenConsts);
         return init ? this.sideEffectFreePrimitiveBooleanValue(init, seenConsts) : null;
-    }
-
-    private isSideEffectFreeFreshNonArrayBuiltinOperand(
-        expr: ts.Expression,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        return this.isSideEffectFreeFreshErrorOperand(expr, seenConsts) ||
-            this.isSideEffectFreeFreshMapOperand(expr, seenConsts) ||
-            this.isSideEffectFreeFreshSetOperand(expr, seenConsts) ||
-            this.isSideEffectFreeFreshWeakMapOperand(expr, seenConsts) ||
-            this.isSideEffectFreeFreshWeakSetOperand(expr, seenConsts) ||
-            this.isSideEffectFreeFreshEventOperand(expr, seenConsts) ||
-            this.isSideEffectFreeFreshEventTargetOperand(expr, seenConsts) ||
-            this.isSideEffectFreeFreshEventEmitterOperand(expr, seenConsts);
     }
 
     private sideEffectFreeBigIntLiteralText(
@@ -34117,13 +32863,6 @@ class Emitter {
             this.isDefaultImportFrom(expr, ["events", "node:events"])
         );
     }
-
-    private isUrlModuleIdentifier(expr: ts.Expression): boolean {
-        return ts.isIdentifier(expr) && (
-            this.isNamespaceImportFrom(expr, ["url", "node:url"]) ||
-            this.isDefaultImportFrom(expr, ["url", "node:url"])
-        );
-    }
     private importedHostModuleOwner(expression: ts.Expression): EmitResult | null {
         const expr = unwrapTransparentExpression(expression);
         if (ts.isIdentifier(expr) && this.namedImportExportName(expr,["os","node:os"]) === "userInfo" ||
@@ -34479,40 +33218,6 @@ class Emitter {
         if (!operation || operation.form !== "equality") unsupported(bin,"unrepresented equality operation");
         const result = this.emitDynamicBinary(operation.kernel,T_BOOLEAN,bin,left,right);
         return {c:operation.negate ? `(!${result.c})` : result.c,ty:T_BOOLEAN};
-    }
-
-    private equalityNullishKind(expr: ts.Expression): "null" | "undefined" | null {
-        const unwrapped = unwrapTransparentExpression(expr);
-        if (unwrapped.kind === ts.SyntaxKind.NullKeyword) return "null";
-        if (this.isUnshadowedUndefinedExpression(unwrapped) || ts.isVoidExpression(unwrapped)) {
-            return "undefined";
-        }
-
-        const type = this.checker.getTypeAtLocation(expr);
-        const members = type.isUnion() ? type.types : [type];
-        let result: "null" | "undefined" | null = null;
-        for (const member of members) {
-            const kind = member.flags & ts.TypeFlags.Null
-                ? "null"
-                : member.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Void)
-                    ? "undefined"
-                    : null;
-            if (!kind || (result !== null && result !== kind)) return null;
-            result = kind;
-        }
-        return result;
-    }
-
-    private expressionNullishKinds(expr: ts.Expression): { hasNull: boolean; hasUndefined: boolean } {
-        const type = this.declaredOrCurrentType(expr);
-        const members = type.isUnion() ? type.types : [type];
-        let hasNull = false;
-        let hasUndefined = false;
-        for (const member of members) {
-            if (member.flags & ts.TypeFlags.Null) hasNull = true;
-            if (member.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Void)) hasUndefined = true;
-        }
-        return { hasNull, hasUndefined };
     }
 
     private emitDynamicBinary(
@@ -36262,20 +34967,6 @@ class Emitter {
         return null;
     }
 
-    private genericMethodDeclaration(
-        sig: ts.Signature,
-    ): ts.MethodDeclaration | null {
-        const decl = sig.getDeclaration();
-        if (
-            decl &&
-            ts.isMethodDeclaration(decl) &&
-            this.isGenericMethod(decl)
-        ) {
-            return decl;
-        }
-        return null;
-    }
-
     private emitGenericFunctionCall(
         call: ts.CallExpression,
         fd: ts.FunctionDeclaration,
@@ -36338,25 +35029,6 @@ class Emitter {
         return bindings;
     }
 
-    private genericBindingsForCallback(
-        cb: ts.Expression,
-        fd: ts.FunctionDeclaration,
-        contextSig: ts.Signature,
-    ): TypeBindings {
-        const params = contextSig.getParameters().map((param) =>
-            mapTsType(
-                cb,
-                this.checker.getTypeOfSymbolAtLocation(param, cb),
-                this.checker,
-            ),
-        );
-        const contextRet = contextSig.getReturnType();
-        const ret = contextRet.flags & ts.TypeFlags.Void
-            ? undefined
-            : mapTsType(cb, contextRet, this.checker);
-        return this.genericBindingsForCallbackTypes(cb, fd, params, ret);
-    }
-
     private genericBindingsForCallbackTypes(
         cb: ts.Expression,
         fd: ts.FunctionDeclaration,
@@ -36383,16 +35055,6 @@ class Emitter {
             }
         }
         return bindings;
-    }
-
-    private contextualCallSignature(
-        cb: ts.Expression,
-        label: string,
-    ): ts.Signature {
-        const contextType = this.checker.getContextualType(cb);
-        const sig = contextType?.getCallSignatures()[0];
-        if (!sig) unsupported(cb, `${label}: generic callback needs a contextual function type`);
-        return sig;
     }
 
     private bindTypeNode(
@@ -36518,61 +35180,6 @@ class Emitter {
                 }
             } finally {
                 this.returnStack.pop();
-            }
-            this.genericDefs.close();
-            this.genericDefs.line();
-        });
-    }
-
-    private ensureGenericMethodSpecialization(
-        md: ts.MethodDeclaration,
-        owningCls: string,
-        bindings: TypeBindings,
-    ): string {
-        const methodName = this.classMethodCName(md.name);
-        if (!methodName) unsupported(md, "computed generic method names");
-        const baseName = `${owningCls}_${methodName}`;
-        const typeParams = md.typeParameters ?? [];
-        const typeKey = typeParams
-            .map((tp) => `${tp.name.text}:${this.typeKey(bindings.get(tp.name.text)! )}`)
-            .join(",");
-        const key = `${md.getSourceFile().fileName}:${md.pos}:${baseName}<${typeKey}>`;
-        const existing = this.genericSpecializations.get(key);
-        if (existing) return existing;
-
-        const name = `${baseName}__g${this.genericCounter++}`;
-        this.genericSpecializations.set(key, name);
-        this.emitGenericMethodSpecializationBody(md, owningCls, name, bindings);
-        return name;
-    }
-
-    private emitGenericMethodSpecializationBody(
-        md: ts.MethodDeclaration,
-        owningCls: string,
-        name: string,
-        bindings: TypeBindings,
-    ): void {
-        withTypeBindings(bindings, () => {
-            const sig = this.checker.getSignatureFromDeclaration(md);
-            if (!sig) unsupported(md, "could not resolve method signature");
-            const returnType = this.mapRuntimeType(md, sig.getReturnType());
-            const params = isStatic(md)
-                ? this.collectParams(md.parameters)
-                : [`${owningCls}_t* self`, ...this.collectParams(md.parameters)];
-            const signature =
-                `${returnType.c} ${name}(` +
-                (params.length ? params.join(", ") : "void") +
-                `)`;
-            this.protos.line(signature + ";");
-            this.genericDefs.open(signature);
-            if (!isStatic(md)) this.currentClass = owningCls;
-            this.returnStack.push(returnType);
-            try {
-                if (!md.body) unsupported(md, "method without body");
-                for (const s of md.body.statements) this.emitStmt(this.genericDefs, s);
-            } finally {
-                this.returnStack.pop();
-                this.currentClass = null;
             }
             this.genericDefs.close();
             this.genericDefs.line();
@@ -37760,39 +36367,6 @@ class Emitter {
                 `.box_group = ${groupCodec.box}, .unbox_group = ${groupCodec.unbox} }; ` +
                 `tsc_value_map_group_by(${source}, ${callback}, &${layout}); })`;
         });
-    }
-
-    private emitMapEntriesArray(node: ts.Node, recv: EmitResult, feature: string): EmitResult {
-        if (recv.ty.kind !== "map") unsupported(node, `${feature} expects a Map`);
-        return this.mapEntriesArrayExpr(node, recv.c, recv.ty, feature);
-    }
-
-    private mapEntriesArrayExpr(
-        node: ts.Node,
-        mapExpr: string,
-        mapTy: CType,
-        feature = "Map.entries",
-    ): EmitResult {
-        const k = mapTy.key;
-        const v = mapTy.elem;
-        if (!k || !v) unsupported(node, `${feature} needs known Map key/value types`);
-        const elemType = entryType(v, k);
-        const mt = this.freshTemp("_me_map");
-        const out = this.freshTemp("_me_out");
-        const iv = this.freshTemp("_me_i");
-        const entry = this.freshTemp("_me_entry");
-        const keyExpr = `*((${k.c}*)((char*)${mt}->keys + ${iv} * ${mt}->ks))`;
-        const valueExpr = `*((${v.c}*)((char*)${mt}->values + ${iv} * ${mt}->vs))`;
-        return {
-            c:
-                `({ tsc_map_t* const ${mt} = ${mapExpr}; ` +
-                `tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${mt}->len ? ${mt}->len : 1); ` +
-                `for (size_t ${iv} = 0; ${iv} < ${mt}->len; ${iv}++) { ` +
-                `${elemType.c} ${entry} = {0}; ${this.objectEntryKeySet(entry, k, keyExpr, node)}; ` +
-                `${this.objectEntrySet(entry, v, valueExpr, node)}; ` +
-                `tsc_array_push_raw(${out}, &${entry}); } ${out}; })`,
-            ty: arrayType(elemType),
-        };
     }
 
     private emitMapMethod(
@@ -40645,14 +39219,6 @@ class Emitter {
         return unwrapTransparentExpression(expr).kind === ts.SyntaxKind.NullKeyword;
     }
 
-    private isZeroDelayLiteral(expr: ts.Expression): boolean {
-        const resolved = this.resolveSideEffectFreeEarlierConstExpression(expr);
-        const cur = unwrapTransparentExpression(resolved);
-        if (this.isUndefinedLikeExpression(cur)) return true;
-        const value = this.sideEffectFreeNumericLiteralSameValueZeroValue(resolved, new Set());
-        return value !== null && value === 0;
-    }
-
     private emitEventListenerExpression(expr: ts.Expression): EmitResult {
         if (ts.isIdentifier(expr) && this.isDirectFunctionReferenceValue(expr)) {
             const sym = this.symbolForIdentifier(expr);
@@ -40735,40 +39301,6 @@ class Emitter {
         );
     }
 
-    private errorConstructorRuntimeKind(name: string): string | null {
-        switch (name) {
-            case "Error": return "TSC_ERROR_ERROR";
-            case "TypeError": return "TSC_ERROR_TYPE";
-            case "RangeError": return "TSC_ERROR_RANGE";
-            case "SyntaxError": return "TSC_ERROR_SYNTAX";
-            case "ReferenceError": return "TSC_ERROR_REFERENCE";
-            case "EvalError": return "TSC_ERROR_EVAL";
-            case "URIError": return "TSC_ERROR_URI";
-            case "AggregateError": return "TSC_ERROR_AGGREGATE";
-            case "SuppressedError": return "TSC_ERROR_SUPPRESSED";
-            default: return null;
-        }
-    }
-
-    private emitErrorCauseOption(options: ts.Expression): EmitResult {
-        const cur = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (!ts.isObjectLiteralExpression(cur)) {
-            unsupported(options, "Error options must be an object literal in this subset");
-        }
-        for (const prop of cur.properties) {
-            if (ts.isSpreadAssignment(prop)) {
-                unsupported(prop, "Error options spread is not supported");
-            }
-            if (ts.isPropertyAssignment(prop) && this.staticPropertyName(prop.name) === "cause") {
-                return this.emitExpr(prop.initializer);
-            }
-            if (ts.isShorthandPropertyAssignment(prop) && prop.name.text === "cause") {
-                return this.emitExpr(prop.name);
-            }
-        }
-        return { c: "tsc_value_undefined()", ty: T_VALUE };
-    }
-
     private emitStringMethod(
         call: ts.CallExpression,
         recv: EmitResult,
@@ -40798,49 +39330,6 @@ class Emitter {
                 return this.emitDynamicNamedPropertyCall(call, recv, method);
         }
         unsupported(call, `Number method .${method}`);
-    }
-
-    private emitGlobalNumberPredicate(call: ts.CallExpression, name: "isNaN" | "isFinite"): EmitResult {
-        const arg = call.arguments[0]!;
-        const value = this.emitExpr(arg);
-        const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
-        const fn = name === "isNaN" ? "isnan" : "isfinite";
-        if (value.ty.kind === "number") {
-            return this.emitSequencedExpr(T_BOOLEAN, [{ value }, ...ignored], ([v]) => `(${fn}(${v}))`);
-        }
-        return this.emitSequencedExpr(T_BOOLEAN, [
-            { value, target: T_VALUE, node: arg },
-            ...ignored,
-        ], ([v]) => `(${fn}(tsc_value_to_number(${v})))`);
-    }
-
-    private emitGlobalUriFunction(
-        call: ts.CallExpression,
-        name: "encodeURI" | "encodeURIComponent" | "decodeURI" | "decodeURIComponent",
-    ): EmitResult {
-        const functions = {
-            encodeURI: "tsc_str_encode_uri",
-            encodeURIComponent: "tsc_str_encode_uri_component",
-            decodeURI: "tsc_str_decode_uri",
-            decodeURIComponent: "tsc_str_decode_uri_component",
-        } as const;
-        const fn = functions[name];
-        const arg = call.arguments[0];
-        if (!arg) {
-            return { c: `${fn}(tsc_str_from_lit("undefined", 9))`, ty: T_STRING };
-        }
-        const value = this.emitExpr(arg);
-        const ignored = this.ignoredArgumentSpecs(call.arguments, 1);
-        if (value.ty.kind === "string") {
-            return this.emitSequencedExpr(T_STRING, [
-                { value },
-                ...ignored,
-            ], ([text]) => `${fn}(${text})`);
-        }
-        return this.emitSequencedExpr(T_STRING, [
-            { value, target: T_VALUE, node: arg },
-            ...ignored,
-        ], ([input]) => `${fn}(tsc_value_to_string(${input}))`);
     }
 
     private emitBooleanMethod(
@@ -41197,14 +39686,6 @@ class Emitter {
         }
     }
 
-    private emitBufferPropertyKeyCheck(objExpr: ts.Expression, obj: EmitResult, keyExpr: ts.Expression, inherited: boolean, ignored: SequencedCallArg[] = []): EmitResult {
-        const key = this.emitExpr(keyExpr);
-        const operation = inherited ? "tsc_value_has_computed_prop" : "tsc_value_has_own_computed_prop";
-        return this.emitSequencedExpr(T_BOOLEAN, [
-            { value: obj, target: T_VALUE, node: objExpr }, { value: key, target: T_VALUE, node: keyExpr }, ...ignored,
-        ], ([owner, property]) => `${operation}(${owner}, ${property})`);
-    }
-
     private emitOsCall(call: ts.CallExpression, name: string): EmitResult {
         const ret = (ty: CType, c: string): EmitResult =>
             this.emitSequencedExpr(ty, this.ignoredArgumentSpecs(call.arguments, 0), () => c);
@@ -41381,42 +39862,12 @@ class Emitter {
             .filter((p) => p.flags & ts.SymbolFlags.Property);
     }
 
-    private homogeneousObjectPropertyType(
-        node: ts.Node,
-        props: ts.Symbol[],
-        label: string,
-    ): CType {
-        let commonType: CType | null = null;
-        for (const p of props) {
-            const decl = p.valueDeclaration ?? p.getDeclarations()?.[0];
-            if (!decl) continue;
-            const pt = this.checker.getTypeOfSymbolAtLocation(p, decl);
-            const pCt = mapTsType(node, pt, this.checker);
-            if (!commonType) commonType = pCt;
-            else if (!sameCType(commonType, pCt)) {
-                unsupported(
-                    node,
-                    `${label} requires homogeneous field types (Phase 3 for mixed)`,
-                );
-            }
-        }
-        return commonType ?? T_VOID;
-    }
-
     private objectEntrySet(entryVar: string, ty: CType, value: string, node: ts.Node): string {
         return `tsc_object_entry_store(&${entryVar}, 1.0, ${this.boxObjectIdentity(value, ty, node)})`;
     }
 
-    private objectEntryValue(entryVar: string, ty: CType, node: ts.Node): string {
-        return this.coerce({ c: `tsc_value_get_index(tsc_value_array(${entryVar}.pair), 1.0)`, ty: T_VALUE }, ty, node);
-    }
-
     private objectEntryKeySet(entryVar: string, ty: CType, value: string, node: ts.Node): string {
         return `tsc_object_entry_store(&${entryVar}, 0.0, ${this.boxObjectIdentity(value, ty, node)})`;
-    }
-
-    private objectEntryKeyValue(entryVar: string, ty: CType, node: ts.Node): string {
-        return this.coerce({ c: `tsc_value_get_index(tsc_value_array(${entryVar}.pair), 0.0)`, ty: T_VALUE }, ty, node);
     }
 
     private staticPropertyName(name: ts.PropertyName): string | null {
@@ -41955,28 +40406,6 @@ class Emitter {
         return null;
     }
 
-    /** Physical member identity is one framed component List. Public property
-     * spellings remain separate from scope, member kind and String/Symbol key
-     * identity, so every native definition and consumer selects the same name. */
-    private nativeClassMemberCName(name: ts.PropertyName, kind: "method" | "get" | "set"): string | null {
-        const declaration = name.parent;
-        if (!ts.isMethodDeclaration(declaration) && !ts.isGetAccessorDeclaration(declaration) &&
-            !ts.isSetAccessorDeclaration(declaration)) return null;
-        const symbol = ts.isComputedPropertyName(name) ? this.wellKnownSymbolName(name.expression) : null;
-        const key = ts.isComputedPropertyName(name) ? `computed:${name.pos}` : this.staticPropertyName(name);
-        if (key === null) return null;
-        return mangleQualifiedIdent(["native-member", isStatic(declaration) ? "static" : "instance",
-            kind, symbol === null ? "string" : "symbol", key]);
-    }
-
-    private classMethodCName(name: ts.PropertyName): string | null {
-        return this.nativeClassMemberCName(name, "method");
-    }
-
-    private classAccessorCName(name: ts.PropertyName, kind: "get" | "set"): string | null {
-        return this.nativeClassMemberCName(name, kind);
-    }
-
     private wellKnownSymbolName(expr: ts.Expression): WellKnownSymbolName | null {
         if (!ts.isPropertyAccessExpression(expr) || !ts.isIdentifier(expr.expression)) return null;
         if (!this.isUnshadowedGlobalIdentifier(expr.expression, "Symbol")) return null;
@@ -42008,46 +40437,6 @@ class Emitter {
         unsupported(fieldNode, `unknown object literal field ${fieldName}`);
     }
 
-    private emitTypedObjectHasOwn(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        keyExpr: ts.Expression,
-        tsType: ts.Type,
-        label: string,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        if (obj.ty.kind !== "class") unsupported(objExpr, `${label} on non-object`);
-        const key = this.emitExpr(keyExpr);
-        const props = this.typedObjectPropertyNames(tsType, obj.ty);
-        return this.emitSequencedExpr(T_BOOLEAN, [
-            { value: obj, node: objExpr },
-            { value: key, target: T_STRING, node: keyExpr },
-            ...ignored,
-        ], ([objC, keyC]) => {
-            const checks = props.map((name) =>
-                `tsc_str_eq(${keyC}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))`,
-            );
-            return `({ (void)${objC}; ${checks.length > 0 ? checks.join(" || ") : "false"}; })`;
-        });
-    }
-
-    private isSuppressedErrorExpression(expr: ts.Expression): boolean {
-        const type = this.checker.getTypeAtLocation(unwrapTransparentExpression(expr));
-        return type.getSymbol()?.getName() === "SuppressedError" ||
-            type.aliasSymbol?.getName() === "SuppressedError";
-    }
-
-    private typedObjectPropertyNames(tsType: ts.Type, ty: CType): string[] {
-        const props = this.objectProperties(tsType).map((prop) => prop.getName());
-        if (props.length > 0 || ty.kind !== "class" || !ty.className) return props;
-        const declaration = this.nativeTypeDeclarations.get(ty.className);
-        if (declaration && ts.isInterfaceDeclaration(declaration)) return this.interfaceFields(declaration).map(field => field.name);
-        if (declaration && ts.isClassDeclaration(declaration)) return [
-            ...this.collectInheritedFields(declaration), ...this.classOwnInstanceFields(declaration),
-        ].map(field => field.name);
-        return props;
-    }
-
     private isUndefinedExpression(expr: ts.Expression): boolean {
         if (ts.isIdentifier(expr) && expr.text === "undefined") return true;
         return ts.isVoidExpression(expr) &&
@@ -42072,46 +40461,6 @@ class Emitter {
     private emitOrdinaryObjectExpression(expression: ts.Expression): EmitResult {
         this.ordinaryAggregateDepth++;
         try { return this.emitExpr(expression); } finally { this.ordinaryAggregateDepth--; }
-    }
-
-    private emitPropertyDescriptorDefinition(
-        objectExpr: ts.Expression,
-        object: EmitResult,
-        keyExpr: ts.Expression,
-        descriptorExpr: ts.Expression,
-        reflect: boolean,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const key = this.emitExpr(keyExpr);
-        const descriptor = this.emitOrdinaryObjectExpression(descriptorExpr);
-        return this.emitSequencedExpr(reflect ? T_BOOLEAN : object.ty, [
-            { value: object, node: objectExpr },
-            { value: key, target: T_VALUE, node: keyExpr },
-            { value: descriptor, target: T_VALUE, node: descriptorExpr },
-            ...ignored,
-        ], ([value, property, desc]) => {
-            const target = this.boxObjectIdentity(value!, object.ty, objectExpr);
-            const define = `tsc_${reflect ? "reflect" : "value"}_define_computed_property_descriptor(${target}, ${property}, ${desc})`;
-            return reflect ? define
-                : `({ if (!${define}) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty failed")); ${value}; })`;
-        });
-    }
-
-    private emitObjectDefineProperties(
-        objExpr: ts.Expression,
-        obj: EmitResult,
-        descriptorsExpr: ts.Expression,
-        ignored: SequencedCallArg[] = [],
-    ): EmitResult {
-        const descriptors = this.emitOrdinaryObjectExpression(descriptorsExpr);
-        return this.emitSequencedExpr(obj.ty, [
-            { value: obj, node: objExpr },
-            { value: descriptors, target: T_VALUE, node: descriptorsExpr },
-            ...ignored,
-        ], ([value, map]) => {
-            const target = this.boxObjectIdentity(value!, obj.ty, objExpr);
-            return `({ if (!tsc_value_define_properties_descriptor_map(${target}, ${map})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperties failed")); ${value}; })`;
-        });
     }
 
     private ignoredArgumentSpecs(

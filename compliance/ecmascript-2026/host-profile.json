@@ -101,6 +101,7 @@
     "src/test262-agent-operations.ts",
     "src/runtime-code-aot.ts",
     "src/tools/check-emitter-method-reachability.ts",
+    "src/tools/emitter-method-graph.ts",
     "src/util-format-source.ts",
     "stdlib/lib.core.d.ts",
     "tests/test262/HOST_PROTOCOL.md",
