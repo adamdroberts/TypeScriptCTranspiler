@@ -6739,6 +6739,62 @@
         }
       ],
       "rationale": "Scoped reciprocal String replacement evidence; whole String/RegExp, feature readiness and full-target conformance remain separate."
+    },
+    {
+      "clause": "sec-string.prototype.replaceall",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "regexp-gate-symbol-dispatch-and-complete-position-worklist",
+          "title": "Object IsRegExp/global-flags gate and original symbol dispatch; ordered literal conversion, complete non-overlapping UTF-16 position List, empty boundaries, callbacks, substitution and abrupt identity",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-string.prototype.replaceall"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/string-replacement-protocol.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "string_replacement_position_worklist"
+            ],
+            "e2e": [
+              "string_replacement_protocol"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#String"
+            ],
+            "implementation": [
+              "runtime/tsc_value.c#string_replace_from_values",
+              "runtime/tsc_value.c#string_protocol_call",
+              "runtime/tsc_value.c#string_match_position_worklist",
+              "runtime/tsc_value.c#string_functional_replacement",
+              "runtime/tsc_string.c#string_replace_sequence",
+              "runtime/tsc_regexp_api.c#tsc_string_get_substitution",
+              "runtime/tsc_value.c#string_require_global_regexp",
+              "runtime/tsc_value.c#tsc_value_is_regexp"
+            ]
+          },
+          "rationale": "The shared ordinary String replacement entry checks IsRegExp and required global flags before reading Symbol.replace, preserving original receiver/replacement Values. One complete UTF-16 match-position List drives non-overlapping literal replacements and empty code-unit boundaries; callback argument/result conversions and token substitution retain actual Values and abrupt identity. The existing independent Node protocol property and one generated position/retained-owner worklist cover this path without an alternate lowering or count limit. Exact pinned replaceAll sources retain their canonical metadata owners and are reconciled with Node and runner-owned native artifact bytes; the separate IsHTMLDDA case uses the native host contract property rather than claiming an unavailable Node host-object comparison. Feature readiness, broad compiler-memory remediation, host eligibility and exhaustive signed target coverage remain open."
+        }
+      ],
+      "rationale": "Scoped reciprocal replaceAll worklist evidence on the shared String protocol implementation; no whole-target conformance claim."
     }
   ],
   "groups": [

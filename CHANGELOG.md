@@ -1,3 +1,5 @@
+- Register scoped String replaceAll evidence on the shared symbol protocol and UTF-16 position worklist.
+
 - Stop source fact existence queries on the first reachable value instead of counting the entire dependency graph.
 
 - Register scoped String replacement protocol and UTF-16 position-worklist evidence with independent Node/native and pinned artifact-byte validation.

@@ -531,7 +531,8 @@
         "sec-string.prototype.valueof#generic-this-string-value-valueof",
         "sec-string.prototype-%symbol.iterator%#generic-tostring-and-code-point-iteration",
         "sec-getsubstitution#utf16-template-token-and-live-named-get-worklist",
-        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist",
+        "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist"
       ]
     },
     {
@@ -927,7 +928,8 @@
       "targets": [
         "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search",
         "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",
-        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix"
+        "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix",
+        "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist"
       ]
     },
     {
@@ -5899,7 +5901,8 @@
       "targets": [
         "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist",
         "sec-getsubstitution#utf16-template-token-and-live-named-get-worklist",
-        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist",
+        "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist"
       ]
     },
     {
@@ -5927,14 +5930,16 @@
       "kind": "property",
       "id": "tests/property/string-replacement-protocol.property.test.ts",
       "targets": [
-        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist",
+        "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist"
       ]
     },
     {
       "kind": "stress",
       "id": "string_replacement_position_worklist",
       "targets": [
-        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist",
+        "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist"
       ],
       "stressReview": {
         "dimension": "UTF-16 literal-match position List and retained callback owner graph",
@@ -5948,42 +5953,55 @@
       "kind": "e2e",
       "id": "string_replacement_protocol",
       "targets": [
-        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist",
+        "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist"
       ]
     },
     {
       "kind": "implementation",
       "id": "runtime/tsc_value.c#string_replace_from_values",
       "targets": [
-        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist",
+        "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist"
       ]
     },
     {
       "kind": "implementation",
       "id": "runtime/tsc_value.c#string_protocol_call",
       "targets": [
-        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist",
+        "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist"
       ]
     },
     {
       "kind": "implementation",
       "id": "runtime/tsc_value.c#string_match_position_worklist",
       "targets": [
-        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist",
+        "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist"
       ]
     },
     {
       "kind": "implementation",
       "id": "runtime/tsc_value.c#string_functional_replacement",
       "targets": [
-        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist",
+        "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist"
       ]
     },
     {
       "kind": "implementation",
       "id": "runtime/tsc_string.c#string_replace_sequence",
       "targets": [
-        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist",
+        "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_require_global_regexp",
+      "targets": [
+        "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist"
       ]
     }
   ]
