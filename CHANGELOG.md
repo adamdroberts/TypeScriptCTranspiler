@@ -1,3 +1,5 @@
+- Retain source values across unknown property keys through shared property, global binding and callback-escape locations.
+
 - Normalize comparable source capture chains through their retained input graph.
 
 - Project callable Proxy native text through the shared callability graph without invoking property traps.

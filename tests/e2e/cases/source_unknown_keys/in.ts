@@ -1,0 +1,16 @@
+const executeSource: any = eval;
+const createPrototype: any = Object.create;
+const owner: any = { m(body: string) { return executeSource(body); } };
+console.log("own:" + owner[String.fromCharCode(109)]("17;"));
+const child: any = createPrototype(owner);
+console.log("inherited:" + child[String.fromCharCode(109)]("19;"));
+const written: any = {};
+written[String.fromCharCode(109)] = function(body: string) { return executeSource(body); };
+console.log("write:" + written.m("23;"));
+const defined: any = { [String.fromCharCode(109)](body: string) { return executeSource(body); } };
+console.log("definition:" + defined.m("29;"));
+const accessor: any = { get [String.fromCharCode(109)]() { return function(body: string) { return executeSource(body); }; } };
+console.log("getter:" + accessor.m("31;"));
+const numeric: any = { [109](body: string) { return executeSource(body); } };
+console.log("pure:" + numeric[String(Math.floor(Math.random()) + 109)]("37;"));
+console.log("complete");

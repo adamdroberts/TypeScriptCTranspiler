@@ -236,6 +236,8 @@ class SourceValueFlow {
     private readonly primitiveBoxes = new Map<ts.Node,Map<string,Cell>>();
     private readonly primitiveStringFields = new WeakMap<ObjectOwner,{input:Cell;keys:Set<SourcePropertyKey>}>();
     private readonly ownerFieldEffects = new WeakMap<ObjectOwner,Cell>();
+    private readonly unknownPropertyLocations = new WeakMap<ObjectOwner,Cell>();
+    private readonly ownerRealms = new WeakMap<ObjectOwner,SourceRealmRecord>();
     private readonly booleanPrimitives = new Map<Cell,Cell>();
     private readonly primitiveDefaults = new Map<string,Cell>();
     private readonly defaultedPrimitiveInputs = new Map<Cell,Map<string,Cell>>();
@@ -829,6 +831,7 @@ class SourceValueFlow {
                         if(!owner||atom.tag!=="function"&&!this.sourceObjectOwners.has(owner)&&!this.ownerCreations.has(owner)&&!owner.collections&&!owner.collectionIterator)continue;
                         this.watch(rule,owner.shape);
                         for(const field of owner.fields.values())visit(field);
+                        const unknown=this.unknownPropertyLocations.get(owner);if(unknown)visit(unknown);
                         for(const accessor of owner.accessors.values()){visit(accessor.get);visit(accessor.set);}
                         if(owner.prototype)visit(owner.prototype);
                         if(owner.proxy){visit(owner.proxy.target);visit(owner.proxy.handler);}
@@ -1395,19 +1398,32 @@ class SourceValueFlow {
         for(const key of owner.accessors.keys())keys.add(key);
         return [...keys];
     }
+    private attachField(owner:ObjectOwner,key:SourcePropertyKey,cell:Cell):void {
+        if(owner.fields.has(key))return;
+        this.propertyLocations.add(cell);owner.fields.set(key,cell);this.publish(owner.shape,this.primitive(key));
+        if(this.ownerRealms.has(owner)&&typeof key==="string"&&this.immutableGlobalBinding(key))return;
+        let effects=this.ownerFieldEffects.get(owner);
+        if(!effects){effects=this.newCell();this.ownerFieldEffects.set(owner,effects);this.copy(owner.shape,effects,"origin");}
+        this.copy(effects,cell);
+        const unknown=this.unknownPropertyLocations.get(owner);if(unknown)this.copy(unknown,cell);
+    }
     private field(owner: ObjectOwner, key: SourcePropertyKey): Cell {
-        let cell = owner.fields.get(key);
-        if (!cell) {
-            cell = this.newCell();this.propertyLocations.add(cell); owner.fields.set(key, cell); this.publish(owner.shape, this.primitive(key));
-            // Every field borrows the owner's opaque mutation graph. Keep
-            // origins in one filtered cell rather than copying them into
-            // each existing and subsequently created property location.
-            let effects=this.ownerFieldEffects.get(owner);
-            if(!effects){
-                effects=this.newCell();this.ownerFieldEffects.set(owner,effects);
-                this.copy(owner.shape,effects,"origin");
-            }
-            this.copy(effects,cell);
+        let cell=owner.fields.get(key);
+        if(!cell){
+            const realm=this.ownerRealms.get(owner);
+            cell=realm&&typeof key==="string"?this.realmBinding(realm,key):this.newCell();
+            this.attachField(owner,key,cell);
+        }
+        return cell;
+    }
+    /** Unknown-key writes keep their actual values in one owner location.
+     * Existing and subsequently discovered named locations borrow it. */
+    private unknownPropertyLocation(owner:ObjectOwner):Cell {
+        let cell=this.unknownPropertyLocations.get(owner);
+        if(!cell){
+            cell=this.newCell();this.propertyLocations.add(cell);this.unknownPropertyLocations.set(owner,cell);
+            for(const[key,field]of owner.fields)if(!this.ownerRealms.has(owner)||typeof key!=="string"||!this.immutableGlobalBinding(key))this.copy(cell,field);
+            this.publish(owner.shape,{tag:"descriptor",identity:cell});
         }
         return cell;
     }
@@ -1488,7 +1504,8 @@ class SourceValueFlow {
         });
         this.presenceRules.add(rule);return result;
     }
-    private defineField(owner: ObjectOwner, key: SourcePropertyKey, value: Cell, enumerable?:boolean): void {
+    private defineField(owner: ObjectOwner, key: SourcePropertyKey|null, value: Cell, enumerable?:boolean): void {
+        if(key===null){this.publish(owner.shape,this.unknown);this.copy(value,this.unknownPropertyLocation(owner));return;}
         const location=this.ownPresence(owner,key);location.initial=true;
         if(enumerable!==undefined)this.publish(location.enumerable,this.primitive(enumerable));
         if (typeof key === "symbol" && this.freshSymbols.has(key)) this.publish(this.presence(owner,key),this.primitive(false));
@@ -1568,7 +1585,7 @@ class SourceValueFlow {
                 if(!store)continue;
                 const destinations=mode==="set"?[...receiver.values].map(value=>this.ordinaryOwner(value)).filter((value):value is ObjectOwner=>!!value):[owner];
                 for(const owner of destinations){
-                if(key===null){const origins=this.executionOrigins(context);this.copy(origins,owner.shape);for(const record of owner.collections?.values()??[])this.copy(origins,record.shape);}
+                if(key===null){const origins=this.executionOrigins(context);this.copy(origins,owner.shape);if(mode!=="delete")this.copyWrite(value,this.unknownPropertyLocation(owner),context);for(const record of owner.collections?.values()??[])this.copy(origins,record.shape);}
                 else {
                     const presence=this.presence(owner,key);
                     if(context)this.ownPresence(owner,key).writes.set(context,{base,receiver,mode});
@@ -1886,21 +1903,20 @@ class SourceValueFlow {
         rule = this.rule([base, key], () => {
             const names = this.propertyKeys(key, rule, context);
             const domain = names === null ? this.computedKeyDomain(key) : null;
-            if (names === null && domain) {
-                const keys = domain.numeric ? this.propertyDomainKeys(base, context, rule, "numeric") : [];
-                if (keys === undefined) return;
-                if (keys === null) this.publish(result, this.unknown);
-                else {
-                    // The numeric domain has unbounded cardinality. Known
-                    // owner locations plus absence cover every possible key.
-                    this.publish(result, this.primitive(undefined));
-                    for (const name of [...keys, ...domain.keys]) if (!selected.has(name)) {
-                        selected.add(name);
-                        this.copy(this.property(base, name, context), result);
-                    }
+            if (names === null) {
+                const projection=this.propertyKeyDomain(base,context,rule,domain?"numeric":"all");
+                if(projection.opaque)this.publish(result,this.unknown);
+                else if(!projection.pending)this.publish(result,this.primitive(undefined));
+                for(const name of [...projection.keys,...(domain?.keys??[])])if(!selected.has(name)){
+                    selected.add(name);this.copy(this.property(base,name,context),result);
+                }
+                for(const location of projection.locations)this.copyRead(location,result,context);
+                for(const getter of projection.getters){
+                    const captured=this.captureRead(getter,context);this.watch(rule,captured);
+                    if(captured.values.has(this.primitive(undefined)))this.publish(result,this.primitive(undefined));
+                    this.invoke(context,this.accessorCallee(captured),base,[],result);
                 }
             }
-            else if (names === null) this.publish(result, this.unknown);
             // Generated eval can still be awaiting the transitive AOT source
             // closure. Preserve that dependency instead of sealing this read
             // with top and tainting unrelated, already finite earlier reads.
@@ -2024,12 +2040,12 @@ class SourceValueFlow {
         const result=this.newCell();this.proxyReads.set(signature,result);
         const method=this.property(proxy.handler,trap,context),callee=this.newCell(),property=this.newCell(),receiver=this.newCell();
         this.publish(property,key===null?this.unknown:this.primitive(key));this.publish(receiver,{tag:"object",owner});
-        let read!:Rule;read=this.rule([method],()=>{for(const atom of method.values){
+        this.rule([method],()=>{for(const atom of method.values){
             if(atom!==this.primitive(undefined)&&atom!==this.primitive(null))this.publish(callee,atom);
             else if(trap==="ownKeys"||trap==="getOwnPropertyDescriptor")this.publish(result,this.unknown);
             else if(trap==="get") {
                 if(key!==null)this.copy(this.property(proxy.target,key,context),result);
-                else for(const target of proxy.target.values){const targetOwner=this.ordinaryOwner(target);if(targetOwner){this.watch(read,proxy.target);this.watch(read,targetOwner.shape);const names=this.ownerKeys(targetOwner,read);if(names===null)this.publish(result,this.unknown);else for(const name of names??[])if(typeof name==="string")this.copy(this.property(proxy.target,name,context),result);}}
+                else this.copy(this.computedProperty(proxy.target,property,context),result);
             }
         }});
         this.invoke(context,callee,proxy.handler,[{cell:proxy.target,spread:false},...(trap!=="ownKeys"?[{cell:property,spread:false}]:[]),...(trap==="get"?[{cell:receiver,spread:false}]:[])],result);
@@ -2355,8 +2371,8 @@ class SourceValueFlow {
     }
     private realmBinding(realm:SourceRealmRecord,key:string):Cell {
         if(realm===this.currentRealm)return this.globalBinding(key);
-        let cell=realm.bindings.get(key);if(cell)return cell;
-        cell=this.newCell();realm.bindings.set(key,cell);this.copy(this.globalMutation,cell);
+        let cell=realm.bindings.get(key);if(cell){if(realm.owner)this.attachField(realm.owner,key,cell);return cell;}
+        cell=this.newCell();this.propertyLocations.add(cell);realm.bindings.set(key,cell);if(!this.immutableGlobalBinding(key))this.copy(this.globalMutation,cell);
         if(key==="globalThis")this.publish(cell,realm.global);
         else if(key==="$262")this.publish(cell,realm.record);
         else if(key==="eval")this.publish(cell,this.realmOperation(realm,"eval"));
@@ -2365,6 +2381,7 @@ class SourceValueFlow {
         else if(key==="NaN")this.publish(cell,this.primitive(NaN));
         else if(key==="Infinity")this.publish(cell,this.primitive(Infinity));
         else if(runtimeGlobalBindings.has(key))this.publish(cell,this.unknown);
+        if(realm.owner)this.attachField(realm.owner,key,cell);
         return cell;
     }
     private realmOperation(realm:SourceRealmRecord,operation:Operation):Atom {
@@ -2375,7 +2392,7 @@ class SourceValueFlow {
     private globalBinding(key: string): Cell {
         let cell = this.currentRealm.bindings.get(key);
         if (!cell) {
-            cell = this.newCell();this.currentRealm.bindings.set(key,cell);
+            cell = this.newCell();this.propertyLocations.add(cell);this.currentRealm.bindings.set(key,cell);
             if (!this.immutableGlobalBinding(key)) this.copy(this.globalMutation,cell);
             if(runtimeCallbackTimerDescriptors.has(key))this.publish(cell,this.operation(`callback-timer:${key}`));
             if (key === "fs") this.copy(this.fsModule(false,false),cell);
@@ -2447,6 +2464,7 @@ class SourceValueFlow {
                 this.publish(cell, {tag:"builtin", name:key, normalResult:descriptor.normalResult,fields});
             }
         }
+        if(this.currentRealm.owner)this.attachField(this.currentRealm.owner,key,cell);
         return cell;
     }
     private isAmbientIdentifier(node: ts.Identifier): boolean {
@@ -3021,51 +3039,59 @@ class SourceValueFlow {
         const keys=this.propertyDomainKeys(receiver,context,rule,"index");
         return keys===null||keys===undefined?keys:keys.map(Number).sort((left,right)=>left-right);
     }
-    private propertyDomainKeys(receiver:Cell,context:ts.Node,rule:Rule,domain:"index"|"numeric"):readonly string[]|null|undefined {
+    /** Enumerate represented locations without discarding them when another
+     * part of the key/owner domain is opaque. Prototype cycles close on owner
+     * identity; shape and binding discoveries wake this same worklist. */
+    private propertyKeyDomain(receiver:Cell,context:ts.Node,rule:Rule,domain:"all"|"index"|"numeric"):{keys:readonly SourcePropertyKey[];locations:readonly Cell[];getters:readonly Cell[];pending:boolean;opaque:boolean} {
         const activation=this.enclosingActivation(context);if(activation){this.watch(rule,activation.active);this.watch(rule,this.activationTiming(activation));}
-        const keys=new Set<string>(),owners:ObjectOwner[]=[],visited=new Set<ObjectOwner>();
+        const keys=new Set<SourcePropertyKey>(),locations=new Set<Cell>(),getters=new Set<Cell>(),pending=[...receiver.values],visited=new Set<ObjectOwner>();
+        let unresolved=false,opaque=false;
         const add=(key:SourcePropertyKey|null)=>{
+            if(key===null)return;
+            if(domain==="all"){keys.add(key);return;}
             if(typeof key!=="string")return;
             const index=Number(key);
             if(domain==="index"){
                 if(Number.isSafeInteger(index)&&index>=0&&String(index)===key)keys.add(key);
             }else if(String(index)===key)keys.add(key);
-            else {
-                try {if(String(BigInt(key))===key)keys.add(key);} catch {}
-            }
+            else {try {if(String(BigInt(key))===key)keys.add(key);} catch {}}
         };
         this.watch(rule,receiver);
-        for(const atom of receiver.values){
-            if(atom.tag==="pending-source")return undefined;
+        while(pending.length){
+            const atom=pending.pop()!;
+            if(atom.tag==="pending-source"){unresolved=true;continue;}
             if(atom.tag==="abrupt"||atom.tag==="primitive"&&(atom.value===null||atom.value===undefined))continue;
             if(atom.tag==="primitive"&&typeof atom.value==="string"){
-                if(domain==="numeric")return null;
-                for(let index=0;index<atom.value.length;index++)keys.add(String(index));
-            }else{
-                const owner=this.ordinaryOwner(atom);
-                if(!owner||atom.tag==="builtin"&&!owner.closedIndices)return null;
-                owners.push(owner);
+                if(domain!=="index")opaque=true;
+                for(let index=0;index<atom.value.length;index++)add(String(index));
+                if(domain==="all")add("length");
+                continue;
             }
-        }
-        while(owners.length){
-            const owner=owners.pop()!;if(visited.has(owner))continue;visited.add(owner);
+            const owner=this.ordinaryOwner(atom);
+            if(!owner){opaque=true;continue;}
+            if(visited.has(owner))continue;visited.add(owner);
             this.watch(rule,owner.shape);
-            if(!this.definitionsReady(owner,rule))return undefined;
-            if(this.opaqueShape(owner,context)||owner.accessors.has(null))return null;
-            const names=this.ownerKeys(owner,rule);if(names===null||names===undefined)return names;for(const key of names)add(key);
+            if(!this.definitionsReady(owner,rule))unresolved=true;
+            if(this.opaqueShape(owner,context)||atom.tag==="builtin"&&(domain==="all"||!owner.closedIndices))opaque=true;
+            const names=this.ownerKeys(owner,rule);
+            if(names===null)opaque=true;
+            else if(names===undefined)unresolved=true;
+            for(const key of names??[...owner.fields.keys(),...owner.accessors.keys()])add(key);
+            const location=this.unknownPropertyLocations.get(owner);if(location)locations.add(location);
+            const accessor=owner.accessors.get(null);if(accessor){getters.add(accessor.get);opaque=true;}
+            if(owner.proxy){locations.add(this.proxyReadEffects(owner,null,"get",context));opaque=true;}
+            if(atom.tag==="global")for(const key of runtimeGlobalBindings.keys())add(key);
             if(owner.prototype){
                 this.watch(rule,owner.prototype);
-                if(!owner.prototype.values.nonempty)return undefined;
-                for(const prototype of owner.prototype.values){
-                    if(prototype===this.primitive(null))continue;
-                    if(prototype.tag==="pending-source")return undefined;
-                    const parent=this.ordinaryOwner(prototype);
-                    if(!parent||prototype.tag==="builtin"&&!parent.closedIndices)return null;
-                    owners.push(parent);
-                }
+                if(!owner.prototype.values.nonempty)unresolved=true;
+                for(const prototype of owner.prototype.values)if(prototype!==this.primitive(null))pending.push(prototype);
             }
         }
-        return [...keys];
+        return {keys:[...keys],locations:[...locations],getters:[...getters],pending:unresolved,opaque};
+    }
+    private propertyDomainKeys(receiver:Cell,context:ts.Node,rule:Rule,domain:"index"|"numeric"):readonly string[]|null|undefined {
+        const projection=this.propertyKeyDomain(receiver,context,rule,domain);
+        return projection.opaque?null:projection.pending?undefined:projection.keys as readonly string[];
     }
     private property(base: Cell, key: SourcePropertyKey, context?: ts.Node, ownOnly=false): Cell {
         let keys=this.propertyReads.get(base);if(!keys){keys=new Map();this.propertyReads.set(base,keys);}
@@ -3411,8 +3437,11 @@ class SourceValueFlow {
 
         if(atom.tag==="global"){
             if(!atom.realm.owner){
-                atom.realm.owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.realmObjectPrototype(atom.realm)};
+                atom.realm.owner={fields:new Map(),accessors:new Map(),shape:this.newCell()};
+                this.ownerRealms.set(atom.realm.owner,atom.realm);
+                atom.realm.owner.prototype=this.realmObjectPrototype(atom.realm);
                 this.copy(this.globalMutation,atom.realm.owner.shape);
+                for(const[key,binding]of atom.realm.bindings)this.attachField(atom.realm.owner,key,binding);
                 for(const key of runtimeGlobalBindings.keys())this.ownPresence(atom.realm.owner,key).initial=true;
             }
             return atom.realm.owner;
@@ -3541,7 +3570,7 @@ class SourceValueFlow {
         }
         const firstOwner = this.ordinaryOwner(atom), worklist = firstOwner ? [firstOwner] : [];
         if(atom.tag==="global" && typeof key === "string" && !firstOwner!.accessors.has(key)) {
-            const binding=this.realmBinding(atom.realm,key);this.copy(binding,this.field(firstOwner!,key));
+            const binding=this.realmBinding(atom.realm,key);this.field(firstOwner!,key);
             if(runtimeGlobalBindings.has(key)||binding.values.nonempty)this.ownPresence(firstOwner!,key).initial=true;
         }
         const visited = new Set<ObjectOwner>();
@@ -3709,7 +3738,7 @@ class SourceValueFlow {
                 this.projectMemberKeys(member.name,member,key=>{
                     if(key===null)this.publish(target.shape,this.unknown);
                     if(ts.isGetAccessorDeclaration(member)||ts.isSetAccessorDeclaration(member))this.defineAccessor(target,key,ts.isGetAccessorDeclaration(member)?"get":"set",this.cell(member),member);
-                    else if(key!==null){
+                    else {
                         if(ts.isMethodDeclaration(member))this.defineField(target,key,this.cell(member));
                         if(isStatic&&ts.isPropertyDeclaration(member)){
                             const value=member.initializer?this.cell(member.initializer):this.newCell();
@@ -3726,7 +3755,7 @@ class SourceValueFlow {
                     if(!instance)continue;
                     for(const initializer of initializers){
                         const keys=this.propertyKeys(initializer.keys,fieldsRule);
-                        if(keys===null)this.publish(instance.shape,this.unknown);
+                        if(keys===null)this.defineField(instance,null,initializer.value);
                         else for(const key of keys??[])this.defineField(instance,key,initializer.value);
                     }
                 }
@@ -4554,10 +4583,9 @@ class SourceValueFlow {
                 this.projectMemberKeys(member.name,member,key=>{
                     if(key===null)this.publish(owner.shape,this.unknown);
                     if(ts.isGetAccessorDeclaration(member)||ts.isSetAccessorDeclaration(member))this.defineAccessor(owner,key,ts.isGetAccessorDeclaration(member)?"get":"set",this.cell(member),member);
-                    else if(key!==null){
-                        if(ts.isPropertyAssignment(member))this.defineField(owner,key,this.cell(member.initializer),true);
-                        if(ts.isShorthandPropertyAssignment(member))this.defineField(owner,key,this.cell(member.name),true);
-                        if(ts.isMethodDeclaration(member))this.defineField(owner,key,this.cell(member),true);
+                    else {
+                        const value=ts.isPropertyAssignment(member)?this.cell(member.initializer):ts.isShorthandPropertyAssignment(member)?this.cell(member.name):ts.isMethodDeclaration(member)?this.cell(member):undefined;
+                        if(value)this.defineField(owner,key,value,true);
                     }
                 },owner);
             }
