@@ -273,3 +273,18 @@ export const runtimeFunctionRestrictedProperties:readonly string[]=(()=>{
  if(!names.size)throw new Error("native prototype collection cannot be represented");
  return [...names];
 })();
+
+/** The native String constructor installer is the canonical static method table. */
+export const runtimeStringStaticMethods:ReadonlyMap<string,{implementation:string;length:number}>=(()=>{
+ const source=fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_value.c"),"utf8");
+ const table=/static const tsc_string_static_method_t string_static_methods\[\] = \{([\s\S]*?)\n\};/.exec(source);
+ if(!table)throw new Error("native String static collection cannot be represented");
+ const methods=new Map<string,{implementation:string;length:number}>();
+ for(const line of table[1]!.split(/\r?\n/)){
+  if(!line.trim())continue;
+  const row=/^    \{ "(\w+)", (\d+), (\d+)\.0, (\w+) \},$/.exec(line);
+  if(!row||methods.has(row[1]!)||row[1]!.length!==Number(row[2]))throw new Error("native String static collection cannot be represented");
+  methods.set(row[1]!,{implementation:row[4]!,length:Number(row[3])});
+ }
+ if(!methods.size)throw new Error("native String static collection cannot be represented");return methods;
+})();

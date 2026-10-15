@@ -1,4 +1,4 @@
-import {runtimeArrayPrototypeMethods,runtimeFunctionPrototypeMethods,runtimeFunctionRestrictedProperties} from "./global-bindings";
+import {runtimeArrayPrototypeMethods,runtimeFunctionPrototypeMethods,runtimeFunctionRestrictedProperties,runtimeStringStaticMethods} from "./global-bindings";
 import {sourceNumericOperation, type SourceNumericOperation, type SourcePrimitive} from "./source-numeric-operations";
 import {bufferStaticDescriptors} from "./buffer-statics";
 import ts from "typescript";
@@ -55,7 +55,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
-type Operation = `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
+type Operation = `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
     "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
@@ -67,16 +67,18 @@ const NUMERIC_CONVERSIONS: ReadonlyMap<string, (value: Primitive) => Primitive> 
     ["Number", (value: Primitive) => Number(value)],
     ["number", (value: Primitive) => +(value as number)],
     ["BigInt", (value: Primitive) => BigInt(value as string | number | bigint | boolean)],
+    ["code-point", (value: Primitive) => {const point=+(value as number);if(!Number.isInteger(point)||point<0||point>0x10ffff)throw new RangeError("invalid code point");return point;}],
     ["numeric", (value: Primitive) => typeof value === "bigint" ? value : Number(value)],
     ["length", (value: Primitive) => {
         const number=+(value as number);
         return number>0?Math.min(Math.trunc(number),Number.MAX_SAFE_INTEGER):0;
     }],
 ]);
-const SOURCE_NATIVE_METHODS:ReadonlyMap<Operation,{name:string;length:number;owner:"Array"|"Function"|null;opaque:boolean}>=(()=>{
-    const methods=new Map<Operation,{name:string;length:number;owner:"Array"|"Function"|null;opaque:boolean}>();
+const SOURCE_NATIVE_METHODS:ReadonlyMap<Operation,{name:string;length:number;owner:"Array"|"Function"|"String"|null;opaque:boolean}>=(()=>{
+    const methods=new Map<Operation,{name:string;length:number;owner:"Array"|"Function"|"String"|null;opaque:boolean}>();
     const collections=[
         {owner:"Array" as const,methods:runtimeArrayPrototypeMethods,prefix:"native-array:",precise:new Map<string,Operation>([["toString","array-text"],["join","array-join"],["keys","array-keys"],["values","array-values"],["entries","array-entries"]])},
+        {owner:"String" as const,methods:runtimeStringStaticMethods,prefix:"native-string-static:",precise:new Map<string,Operation>([["fromCharCode","string-codes:unit"],["fromCodePoint","string-codes:point"]])},
         {owner:"Function" as const,methods:runtimeFunctionPrototypeMethods,prefix:"native-function:",precise:new Map<string,Operation>([["call","call"],["apply","apply"],["bind","bind"],["toString","function-text"]])},
     ];
     for(const collection of collections)for(const[name,descriptor]of collection.methods){
@@ -103,6 +105,7 @@ type ArgumentSequence = { readonly id: number; readonly context: ts.Node; readon
     { readonly kind: "slice"; readonly source: ArgumentSequence; readonly offset: number } |
     { readonly kind: "prepend"; readonly source: ArgumentSequence; readonly prefix: readonly Cell[] });
 type Atom =
+    | {readonly tag:"text-operation";readonly operation:"string-codes";readonly coding:"unit"|"point";readonly parts:readonly Cell[]}
     | { readonly tag: "builtin"; readonly name: string; readonly normalResult: NonNullable<RuntimeGlobalBinding["normalResult"]>; readonly fields: ObjectOwner }
     | { readonly tag: "intrinsic"; readonly domain: Domain; readonly kind: DynamicFunctionKind;readonly realm?:SourceRealmRecord }
     | { readonly tag: "function"; readonly owner: FunctionOwner }
@@ -1789,7 +1792,7 @@ class SourceValueFlow {
     }
     /** The same ordered List advances only through possible normal results.
      * An abrupt conversion suppresses every later conversion edge. */
-    private convertList(args: readonly Cell[], context: ts.Node, mode: PrimitiveHint | "numeric" | "number" | "primitive-number" | "text" | readonly (PrimitiveHint | "numeric" | "number" | "primitive-number" | "text")[]): readonly Cell[] {
+    private convertList(args: readonly Cell[], context: ts.Node, mode: PrimitiveHint | "numeric" | "number" | "primitive-number" | "code-point" | "text" | readonly (PrimitiveHint | "numeric" | "number" | "primitive-number" | "code-point" | "text")[]): readonly Cell[] {
         let conversions = this.orderedConversions.get(context);
         if (!conversions) {conversions = new Map(); this.orderedConversions.set(context, conversions);}
         const modes=typeof mode==="string"?args.map(()=>mode):mode;
@@ -1799,7 +1802,7 @@ class SourceValueFlow {
         const converted: Cell[] = []; conversions.set(identity, converted);
         for (const [index, argument] of args.entries()) {
             const conversion=modes[index]!,input = this.newCell(), result = conversion === "text" ? this.stringHintCell(input, context)
-                : conversion === "numeric" || conversion === "number" ? this.coerceCell(input, context, conversion) : this.primitiveConversion(input, context, conversion==="primitive-number"?"number":conversion);
+                : conversion === "numeric" || conversion === "number" || conversion === "code-point" ? this.coerceCell(input, context, conversion) : this.primitiveConversion(input, context, conversion==="primitive-number"?"number":conversion);
             converted.push(result);
             if (index === 0) this.copy(argument, input);
             else {
@@ -2041,7 +2044,7 @@ class SourceValueFlow {
     }
     private primitiveNumericConversionSafe(input: Cell, conversion: string): boolean {
         const kinds=this.primitiveKinds(input);
-        if(!kinds||kinds&(KIND_SYMBOL|KIND_OBJECT|KIND_FUNCTION))return false;
+        if(conversion==="code-point"||!kinds||kinds&(KIND_SYMBOL|KIND_OBJECT|KIND_FUNCTION))return false;
         if(conversion==="BigInt")return !(kinds&~(KIND_BIGINT|KIND_BOOLEAN));
         return conversion!=="length"&&conversion!=="number"||!(kinds&KIND_BIGINT);
     }
@@ -2453,6 +2456,9 @@ class SourceValueFlow {
                 const fields: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell()};this.copy(this.opaqueMutation,fields.shape);
                 for (const [name, operation] of INITIAL_SOURCE_OPERATIONS.get(key) ?? []) {
                     const value = this.newCell();this.publish(value,this.operation(operation));this.defineField(fields,name,value);
+                }
+                if(key==="String")for(const[operation,method]of SOURCE_NATIVE_METHODS)if(method.owner==="String"){
+                    const value=this.newCell();this.publish(value,this.operation(operation));this.defineField(fields,method.name,value,false);
                 }
                 if(key==="Math") {
                     fields.ordinary=true;fields.prototype=this.objectPrototype();
@@ -5578,6 +5584,11 @@ class SourceValueFlow {
                             }
                             this.publish(result!, value);
                         }
+                        if(atom.operation==="string-codes:unit"||atom.operation==="string-codes:point"){
+                            const coding=atom.operation==="string-codes:unit"?"unit":"point";
+                            if(!argv){this.publish(result,this.unknownString);this.activateOpaqueEffect(node);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));}
+                            else this.publish(result,{tag:"text-operation",operation:"string-codes",coding,parts:this.convertList(argv,node,coding==="unit"?"number":"code-point")});
+                        }
                         if (atom.operation === "function-text") {
                             const target=this.callableTarget(invocation.receiver,node);
                             this.copy(target.completion,result!);this.watch(rule,target.callable);
@@ -5725,6 +5736,11 @@ class SourceValueFlow {
                                 if(text===null){primitiveComplete=false;textComplete=false;}else add(text);
                             } else if(atom.operation==="error-text")add(tuple[0]===""?tuple[1]!:tuple[1]===""?tuple[0]!:String(tuple[0])+": "+String(tuple[1]));
                             else if(atom.operation==="primitive-string"){try{add(atom.parts.length>1?(tuple[0] as number|bigint).toString(tuple[1] as number|undefined):String(tuple[0]));}catch{}}
+                            else if(atom.operation==="string-codes"){
+                                if(atom.coding==="point"&&tuple.some(value=>typeof value!=="number"||!Number.isInteger(value)||value<0||value>0x10ffff))continue;
+                                try{add(tuple.map(value=>atom.coding==="unit"?String.fromCharCode(value as number):String.fromCodePoint(value as number)).join(""));}
+                                catch{primitiveComplete=false;textComplete=false;}
+                            }
                             else if (atom.operation === "bound-name") add("bound " + (typeof tuple[0] === "string" ? tuple[0] : ""));
                             else if(atom.operation==="array-join"){
                                 const range=atom.indexedRange,separator=String(tuple[0]),pieces:string[]=[];

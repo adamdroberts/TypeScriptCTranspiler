@@ -1,3 +1,5 @@
+- Model native String code-unit and code-point construction in finite source analysis using shared installer metadata and actual argument Lists.
+
 - Share native Array/Function prototype collections with source lookup, preserving actual join dispatch, restricted accessors, readonly write alternatives and prototype-read effects.
 
 - Retain source values across unknown property keys through shared property, global binding and callback-escape locations.

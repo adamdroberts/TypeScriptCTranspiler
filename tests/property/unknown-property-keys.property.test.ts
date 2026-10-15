@@ -25,7 +25,7 @@ const cases=[
 const pureCases=cases.filter(item=>!['numeric','symbol'].includes(item.name)).map(item=>({...item,name:'pure-'+item.name,source:item.source.replaceAll('String.fromCharCode(109)','String(Math.floor(Math.random())+109)').replaceAll(' m(', ' [109](').replaceAll('{m(', '{[109](').replaceAll('.m(', '[109](').replaceAll('get m()', 'get [109]()')}));
 const prelude='const executeSource=eval;const createPrototype=Object.create;const defineProperty=Object.defineProperty;';
 function reference(source:string):string {
- const node=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({external:owner=>owner["109"]("19;"),print:value=>fs.writeSync(1,String(value)+"\\n")});'],{stdin:Buffer.from(source),stdout:'pipe',stderr:'pipe',timeout:30_000});
+ const node=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({opaqueKey:code=>String.fromCharCode(code),external:owner=>owner["109"]("19;"),print:value=>fs.writeSync(1,String(value)+"\\n")});'],{stdin:Buffer.from(source),stdout:'pipe',stderr:'pipe',timeout:30_000});
  expect({exitCode:node.exitCode,stderr:node.stderr.toString()}).toEqual({exitCode:0,stderr:''});
  return node.stdout.toString();
 }
@@ -65,7 +65,7 @@ test('global object properties share Object Environment locations and retain unk
    // Retained opaque alternatives must never become a false finite proof.
    for(const call of calls)if(call.choices!==null)expect(call.choices).toContain(expected);
   }
-  const laterLookup='const owner={m(body){return executeSource(body);}};print(owner[String.fromCharCode(109)]("17;"));const child=Object.create(owner);print(child[String.fromCharCode(109)]("19;"));';
+  const laterLookup='const owner={m(body){return executeSource(body);}};print(owner[opaqueKey(109)]("17;"));const child=Object.create(owner);print(child[String.fromCharCode(109)]("19;"));';
   expect(reference(prelude+laterLookup)).toBe('17\n19\n');
   const escaped=await invocations(directory,'later-opaque-lookup',prelude+laterLookup);
   expect(escaped.some(call=>call.choices===null)).toBe(true);
