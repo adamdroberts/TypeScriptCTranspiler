@@ -1,3 +1,5 @@
+- Keep function declaration binding identity stable across checker expando/prototype inference so lexical reads and captures share the original cell.
+
 - Share opaque source-effect activation subscriptions by source operation node and require complete file-backed Promise owner reference output.
 
 - Register scoped outer String matchAll evidence using the shared symbol protocol and lazy iterator state.

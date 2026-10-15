@@ -698,6 +698,7 @@ class Emitter {
      * and the same identifier/capture operations. */
     private lexicalBindingScopes: Map<ts.Symbol, LocalLexicalBindingPlan>[] = [];
     private classBindingSymbols = new WeakMap<ts.ClassLikeDeclaration, ts.Symbol>();
+    private functionBindingSymbols = new WeakMap<ts.FunctionDeclaration, ts.Symbol>();
     private sourceEnvironmentFiles = new WeakMap<ts.SourceFile, boolean>();
     /** Runtime parameter environments for non-simple source formal lists.
      * These are separate from CaseBlock environments but expose the same
@@ -18940,7 +18941,15 @@ class Emitter {
         if (bindingOwner && ts.isFunctionLike(bindingOwner) && "body" in bindingOwner &&
             bindingOwner.body && ts.isBlock(bindingOwner.body) && this.isNodeWithin(id, bindingOwner.body)) {
             const selected = this.functionDeclarationsForBody(bindingOwner.body).get(id.text);
-            if (selected) sym = this.checker.getSymbolAtLocation(selected.name);
+            if (selected) sym = this.functionBindingSymbol(selected, this.checker.getSymbolAtLocation(selected.name));
+        }
+        // Checking a JavaScript expando assignment can replace a function's
+        // checker Symbol. Its declaration still owns the same runtime binding
+        // and every environment/capture lookup must retain that identity.
+        if (sym) {
+            const bindingDeclaration = sym.valueDeclaration ?? sym.declarations?.[0];
+            if (bindingDeclaration && ts.isFunctionDeclaration(bindingDeclaration))
+                sym = this.functionBindingSymbol(bindingDeclaration, sym);
         }
         // JavaScript computed names can carry a transient checker Symbol for
         // the same named class declaration. The declaration name owns the
@@ -18972,6 +18981,14 @@ class Emitter {
             }
         }
         return sym;
+    }
+
+    private functionBindingSymbol(declaration: ts.FunctionDeclaration, fallback: ts.Symbol | undefined): ts.Symbol | undefined {
+        const existing = this.functionBindingSymbols.get(declaration);
+        if (existing) return existing;
+        const canonical = (declaration as ts.FunctionDeclaration & { symbol?: ts.Symbol }).symbol ?? fallback;
+        if (canonical) this.functionBindingSymbols.set(declaration, canonical);
+        return canonical;
     }
 
     private isNamedImportFrom(id: ts.Identifier, moduleNames: readonly string[], exportedName: string): boolean {
@@ -22502,7 +22519,7 @@ class Emitter {
                 if (!ts.isFunctionDeclaration(declaration)) continue;
                 const parameter = parameters.get(declaration.name.text);
                 if (!parameter) continue;
-                const functionSymbol = this.checker.getSymbolAtLocation(declaration.name);
+                const functionSymbol = this.symbolForIdentifier(declaration.name);
                 const parameterSymbol = this.checker.getSymbolAtLocation(parameter.name);
                 if (!functionSymbol || !parameterSymbol) continue;
                 const original = captures.get(functionSymbol) ?? captures.get(parameterSymbol);
