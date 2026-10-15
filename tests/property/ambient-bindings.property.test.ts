@@ -11,7 +11,7 @@ function subject(strict:boolean,profile:boolean,noGc:boolean,typed:boolean=true,
  return `${strict?'export {};':''}
  declare var Array:ArrayConstructor;
  declare var Object:ObjectConstructor;
- declare const AbortController:{new():any};
+ ${strict?'declare const AbortController:{new():any};':'declare var AbortController:AbortControllerConstructor;'}
  function emit(value:any):void{${profile?'(globalThis as any).print':'console.log'}(value);}
  function check(value:boolean,label:string):void{if(!value)throw label;emit(label+':true');}
  function collect():void{${profile&&!noGc?'(globalThis as any).$262.gc();':''}}

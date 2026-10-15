@@ -1,3 +1,5 @@
+- Keep ambient Script declarations compatible with the published AbortController global while preserving identical erased runtime input.
+
 - Classify historical ES6 Class Definitions metadata by its exact parent section, retaining current-anchor precedence and open descendant coverage.
 
 - Share complete file-backed Node reference output capture while preserving original oracle programs, process options and assertions.
