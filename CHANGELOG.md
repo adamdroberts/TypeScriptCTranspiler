@@ -1,3 +1,5 @@
+- Project callable Proxy native text through the shared callability graph without invoking property traps.
+
 - Retain top-level repeated effect origins so later loops preserve earlier saved source values.
 
 - Reuse opaque callable capture-effect subscriptions while retaining late target and binding facts.

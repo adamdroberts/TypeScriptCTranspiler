@@ -5380,7 +5380,7 @@ class SourceValueFlow {
                             this.copy(target.completion,result!);this.watch(rule,target.callable);
                             for (const receiver of target.callable.values) {
                                 if (receiver.tag === "function") this.publish(result!, this.text(receiver.owner.sourceText));
-                                else if (receiver.tag === "bound" || receiver.tag === "promise-resolver" ||
+                                else if (receiver.tag === "bound" || receiver.tag === "promise-resolver" || this.ordinaryOwner(receiver)?.proxy ||
                                     receiver.tag === "intrinsic" && receiver.domain === "prototype" && receiver.kind === "ordinary")
                                     this.publish(result!, this.text("function () { [native code] }"));
                                 else if (receiver.tag === "builtin" && receiver.normalResult !== "not-callable")

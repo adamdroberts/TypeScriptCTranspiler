@@ -56,6 +56,8 @@ test("inherited callable text closes eval sources and matches Node in both memor
   'var bound=f.bind(null);check("bound",bound.toString());',
   'var capability=Promise.withResolvers();Object.defineProperty(capability.resolve,"name",{get(){throw "unexpected name read"}});check("resolver",eval(JSON.stringify(Function.prototype.toString.call(capability.resolve))));check("rejecter",eval(JSON.stringify(Function.prototype.toString.call(capability.reject))));',
   'check("prototype",eval(JSON.stringify(Function.prototype.toString.call(Function.prototype))));',
+  'var proxy=new Proxy(f,{get(){throw "unexpected proxy getter"}});check("proxy",eval(JSON.stringify(Function.prototype.toString.call(proxy))));',
+  'var retainedProxy=f;for(var proxyDepth=0;proxyDepth<512;proxyDepth++)retainedProxy=new Proxy(retainedProxy,{});if(NATIVE_GC)$262.gc();check("proxy-deep",eval(JSON.stringify(Function.prototype.toString.call(retainedProxy))));',
   'var graph='+ '{next:'.repeat(depth)+'{f:f}'+ '}'.repeat(depth)+';',
   'if(NATIVE_GC)$262.gc();check("deep",eval("("+graph'+'.next'.repeat(depth)+'.f.toString()+")()"));',
  ].join("\n");
@@ -79,7 +81,7 @@ test("inherited callable text closes eval sources and matches Node in both memor
 },600_000);
 
 test("non-callable function-text receivers retain abrupt completion before eval",()=>{
- const receivers=['undefined','null','false','17','19n','Symbol("receiver")','{}','[]'];
+ const receivers=['undefined','null','false','17','19n','Symbol("receiver")','{}','[]','new Proxy({}, {})'];
  const sources=receivers.map(receiver=>`var receiver=${receiver};try{eval(Function.prototype.toString.call(receiver));}catch(error){if(!(error instanceof TypeError))throw error;}`);
  expect(oracle(sources)).toEqual(sources.map(()=>[]));
  for(const source of sources){
@@ -90,6 +92,7 @@ test("non-callable function-text receivers retain abrupt completion before eval"
 
 test("represented native callable owners retain anonymous text without reading mutable metadata",()=>{
  const sources=[
+  ...definitions.map(definition=>'const proxy=new Proxy('+definition+',{get(){throw "unexpected proxy getter"}});eval(Function.prototype.toString.call(proxy));'),
   'const capability=Promise.withResolvers();eval(Function.prototype.toString.call(capability.resolve));',
   'const capability=Promise.withResolvers();Object.defineProperty(capability.resolve,"name",{get(){throw "unexpected name read"}});eval(Function.prototype.toString.call(capability.resolve));',
   'const capability=Promise.withResolvers();eval(Function.prototype.toString.call(capability.reject));',
@@ -97,4 +100,5 @@ test("represented native callable owners retain anonymous text without reading m
  ];
  const expected=oracle(sources);expect(expected).toEqual(sources.map(()=>['function () { [native code] }']));
  for(const source of sources)expect(sourceEvaluationInvocations(program(source)).map(call=>call.choices)).toEqual([['function () { [native code] }']]);
+ expect(sourceEvaluationInvocations(program('eval(Function.prototype.toString.call(external));')).some(call=>call.choices===null)).toBe(true);
 });
