@@ -1,3 +1,5 @@
+- Compose retained CommonJS host property References with canonical Module link resolution and share source-unit format metadata.
+
 - Check actual TypeError owners and explicit dynamic-value string conversion in independent Node/native regression observations.
 
 - Route typed static derived classes through retained constructor environments and complete actual Lists; remove physical superclass initializer predecessors.

@@ -3,6 +3,9 @@
 export const moduleNamespaceBinding = Symbol("Module namespace binding");
 export interface ModuleExportRecord<Request> {
     readonly path:string;
+    /** Host records resolve named reads against their retained property owner.
+     * This is not a Source Text Module's declarative export table. */
+    readonly hostPropertyExports?:boolean;
     readonly localExports:ReadonlyMap<string,string>;
     readonly indirectExports:ReadonlyMap<string,{readonly moduleRequest:Request;readonly importName:string|typeof moduleNamespaceBinding}>;
     readonly starExports:readonly Request[];
@@ -20,6 +23,7 @@ export function exportedModuleNames<Request, Module extends ModuleExportRecord<R
         const current=worklist.pop()!;
         if(visited.has(current.path))continue;
         visited.add(current.path);
+        if(current.hostPropertyExports)throw new Error("Host property exports require a finite export-name record");
         for(const name of [...current.localExports.keys(),...current.indirectExports.keys()]){
             if(name!=="default"||current===record)names.add(name);
         }
@@ -56,6 +60,7 @@ export function resolveModuleExport<Request, Module extends ModuleExportRecord<R
         if(frame.phase==="enter"){
             const key=frame.record.path+"\0"+frame.name;
             if(resolveSet.has(key)){complete(null);continue;}resolveSet.add(key);
+            if(frame.record.hostPropertyExports){complete({modulePath:frame.record.path,bindingName:frame.name});continue;}
             const local=frame.record.localExports.get(frame.name);
             if(local!==undefined){complete({modulePath:frame.record.path,bindingName:local});continue;}
             const indirect=frame.record.indirectExports.get(frame.name);

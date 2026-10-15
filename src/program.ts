@@ -1,3 +1,5 @@
+import {sourceUnitFormats,type SourceUnitFormat} from './source-unit-format';
+export {sourceUnitFormat} from './source-unit-format';
 import ts from "typescript";
 import {buildModuleGraph,moduleLoadFailures} from "./resolve";
 import {retainModuleParseFailure,inertModuleSource} from "./module-source-record";
@@ -57,11 +59,7 @@ interface SourceUnit {
     readonly goal: EcmaParseGoal;
     readonly fileName: string;
     readonly initialBody: boolean;
-    readonly format: "ecmascript" | "commonjs";
-}
-const sourceUnitFormats = new WeakMap<ts.SourceFile, SourceUnit["format"]>();
-export function sourceUnitFormat(source: ts.SourceFile): SourceUnit["format"] | undefined {
-    return sourceUnitFormats.get(source);
+    readonly format: SourceUnitFormat;
 }
 const programSourceUnits = new WeakMap<ts.Program, ReadonlyMap<string, SourceUnit>>();
 const programUnitFiles = new WeakMap<ts.Program, ReadonlyMap<string, SourceUnit>>();

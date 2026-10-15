@@ -1,3 +1,4 @@
+import {sourceUnitFormat} from './source-unit-format';
 import ts from 'typescript';
 import {ecmaParseGoal} from './ecmascript-source';
 import {earlyControlFlowStaticSemanticsFailure} from './control-static-semantics';
@@ -63,7 +64,7 @@ export function moduleLinkRecord(source:ts.SourceFile,path:string):ModuleLinkRec
     source=moduleSourceOriginal(source);
     let paths=linkRecords.get(source);if(!paths){paths=new Map();linkRecords.set(source,paths);}
     const prior=paths.get(path);if(prior)return prior;
-    const record:ModuleLinkRecord={path,requestedModules:[],imports:[],localExports:new Map(),indirectExports:new Map(),starExports:[],bindings:new Map(),namespaceDeclarations:new Map()};paths.set(path,record);
+    const record:ModuleLinkRecord={path,hostPropertyExports:sourceUnitFormat(source)==='commonjs',requestedModules:[],imports:[],localExports:new Map(),indirectExports:new Map(),starExports:[],bindings:new Map(),namespaceDeclarations:new Map()};paths.set(path,record);
     if(/\.json$/i.test(source.fileName)){record.localExports.set('default','*default*');record.bindings.set('*default*',source);return record;}
     const requests=new Map<string,ModuleRequest>(),declarations=new Map<ts.ImportDeclaration|ts.ExportDeclaration,ModuleRequest>(),imports=new Map<string,ModuleBindingEntry>();
     const modifier=(node:ts.Node,kind:ts.SyntaxKind)=>!!(ts.canHaveModifiers(node)?ts.getModifiers(node):undefined)?.some(modifier=>modifier.kind===kind);

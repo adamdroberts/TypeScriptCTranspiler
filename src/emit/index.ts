@@ -619,6 +619,8 @@ class Emitter {
     private asyncAwaitContinuationReturnTargets: AsyncAwaitContinuationReturnTarget[] = [];
     private commonJsExportGlobals = new Set<string>();
     private commonJsModuleBindings = new Map<ts.SourceFile, CommonJsModuleBindingPlan>();
+    private commonJsExportReferences = new Map<string,Map<string,ts.Identifier>>();
+    private commonJsExportReferenceOwners = new WeakMap<ts.Node,{info:ModuleInfo;name:string}>();
     private commonJsSourceFileFacts = new WeakMap<ts.SourceFile, boolean>();
     private commonJsRequireSources: Set<ts.SourceFile> | null = null;
     private requireDestructureTypes = new Map<ts.Symbol, CType>();
@@ -12401,7 +12403,11 @@ class Emitter {
         while (!ts.isImportDeclaration(statement) && statement.parent) statement = statement.parent;
         if (!ts.isImportDeclaration(statement) || !ts.isStringLiteralLike(statement.moduleSpecifier)) return null;
         const info = this.resolvedModuleInfoForDeclaration(statement);
-        if (!info || !this.isCommonJsSourceFile(info.sf)) return null;
+        if (!info) return null;
+        if (!this.isCommonJsSourceFile(info.sf)) {
+            const target=this.moduleImportBindingForSymbol(symbol);
+            return target?this.commonJsExportReferenceOwners.get(target)??null:null;
+        }
         return { info, name: ts.isNamespaceImport(declaration) ? null :
             ts.isImportSpecifier(declaration) ? (declaration.propertyName ?? declaration.name).text : "default" };
     }
@@ -18466,6 +18472,19 @@ class Emitter {
         const resolved = resolveModuleExport<ModuleRequest, EmitterModuleExportRecord>(this.moduleExportRecord(info), exportName,
             (record, request) => this.importedModuleExportRecord(record, request));
         if (!resolved || resolved === "ambiguous") return resolved;
+        const target=this.moduleExportRecords.get(resolved.modulePath);
+        if(target?.hostPropertyExports&&typeof resolved.bindingName==="string"){
+            let names=this.commonJsExportReferences.get(resolved.modulePath);
+            if(!names){names=new Map();this.commonJsExportReferences.set(resolved.modulePath,names);}
+            let reference=names.get(resolved.bindingName);
+            if(!reference){
+                reference=ts.factory.createIdentifier(resolved.bindingName);
+                ts.setOriginalNode(reference,target.info.sf);ts.setTextRange(reference,target.info.sf);
+                Object.assign(reference,{parent:target.info.sf});names.set(resolved.bindingName,reference);
+                this.commonJsExportReferenceOwners.set(reference,{info:target.info,name:resolved.bindingName});
+            }
+            return reference;
+        }
         const declaration = resolved.bindingName === moduleNamespaceBinding
             ? this.moduleNamespaceDeclarations.get(resolved.modulePath)
             : this.moduleExportRecords.get(resolved.modulePath)?.bindings.get(resolved.bindingName);
@@ -18474,6 +18493,8 @@ class Emitter {
     }
 
     private moduleNamespaceExportRead(declaration: ts.Node): EmitResult {
+        const host=this.commonJsExportReferenceOwners.get(declaration);
+        if(host)return this.commonJsImportedValue(host);
         const namespaceTarget = this.moduleNamespaceTargetInfo(declaration);
         if (namespaceTarget) return { c: `${this.ensureModuleNamespacePlan(namespaceTarget).factory}()`, ty: T_VALUE };
         if (ts.isSourceFile(declaration)) {
@@ -18520,8 +18541,15 @@ class Emitter {
     private populateModuleNamespacePlan(plan: ModuleNamespacePlan): void {
         const moduleInfo = this.graph.modules.get(plan.moduleId);
         if (!moduleInfo) unsupported(plan.source, "module namespace source is outside the AOT module graph");
-        const exportNames = exportedModuleNames<ModuleRequest, EmitterModuleExportRecord>(this.moduleExportRecord(moduleInfo),
-            (record, request) => this.importedModuleExportRecord(record, request));
+        let exportNames:string[];
+        try {
+            exportNames=exportedModuleNames<ModuleRequest, EmitterModuleExportRecord>(this.moduleExportRecord(moduleInfo),
+                (record, request) => this.importedModuleExportRecord(record, request));
+        } catch(error) {
+            if(error instanceof Error&&error.message==="Host property exports require a finite export-name record")
+                unsupported(moduleInfo.sf,error.message);
+            throw error;
+        }
         const exported = exportNames
             .map((name) => {
                 const declaration = this.resolveModuleNamespaceExport(moduleInfo, name);

@@ -93,6 +93,7 @@
     "src/module-specifiers.ts",
     "src/native-addons.ts",
     "src/program.ts",
+    "src/source-unit-format.ts",
     "src/regexp-escape.ts",
     "src/resolve.ts",
     "src/source-bindings.ts",
