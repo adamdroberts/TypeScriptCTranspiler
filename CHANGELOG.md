@@ -1,3 +1,5 @@
+- Classify historical ES6 Class Definitions metadata by its exact parent section, retaining current-anchor precedence and open descendant coverage.
+
 - Share complete file-backed Node reference output capture while preserving original oracle programs, process options and assertions.
 
 - Verify finite activation sources around unrelated generators with independent Node and require complete file-backed native-reference output.

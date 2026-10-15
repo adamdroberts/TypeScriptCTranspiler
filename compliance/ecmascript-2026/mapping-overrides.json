@@ -31,6 +31,16 @@
   ],
   "legacyIdRules": [
     {
+      "field": "es6id",
+      "match": "exact",
+      "value": "14.5",
+      "clauses": [
+        "sec-class-definitions"
+      ],
+      "reason": "ECMA-262 sixth edition section 14.5 is Class Definitions (https://262.ecma-international.org/6.0/#sec-class-definitions), the current Class Definitions parent clause. This exact historical section mapping classifies ownership only; it does not discharge the parent's descendant requirements or override a supplied current esid.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
       "field": "es5id",
       "match": "prefix",
       "value": "10.2.1_",
