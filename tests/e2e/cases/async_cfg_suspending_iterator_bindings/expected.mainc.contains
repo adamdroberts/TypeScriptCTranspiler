@@ -1,3 +1,4 @@
 binding_value_
-iterator_index_
+tsc_sync_iterator_step
+tsc_for_in_iterator_open
 async_iterator_

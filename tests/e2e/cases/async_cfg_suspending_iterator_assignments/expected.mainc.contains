@@ -1,3 +1,4 @@
 binding_value_
-_async_cfg_binding_assignment_receiver
-_async_cfg_binding_assignment_index
+tsc_value_prepare_property_reference
+tsc_value_set_computed_prop
+expression_result_
