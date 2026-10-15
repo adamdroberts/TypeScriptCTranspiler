@@ -404,6 +404,15 @@ tsc_value_t tsc_environment_reference_get_captured(const tsc_reference_t* refere
     return binding_read(binding);
 }
 
+/* Capture the existing declarative cell, including initialization state. */
+tsc_async_cell_ref_t tsc_environment_reference_cell(const tsc_reference_t* reference) {
+    if (reference->kind != TSC_REFERENCE_DECLARATIVE)
+        return tsc_global_reference_cell(reference);
+    tsc_environment_binding_t* binding = environment_own_binding(reference->base, reference->name);
+    if (binding) return binding->cell;
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("capture requires a retained declarative binding"));
+}
+
 tsc_value_t tsc_environment_reference_set_captured(const tsc_reference_t* reference, tsc_value_t value) {
     if (reference->kind == TSC_REFERENCE_OBJECT) {
         tsc_environment_t* environment = reference->base;

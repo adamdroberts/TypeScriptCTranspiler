@@ -952,6 +952,8 @@ typedef struct {
     bool strict;
 } tsc_reference_t;
 tsc_reference_t tsc_environment_reference_capture(tsc_str_t* key, bool strict);
+tsc_async_cell_ref_t tsc_environment_reference_cell(const tsc_reference_t* reference);
+tsc_async_cell_ref_t tsc_global_reference_cell(const tsc_reference_t* reference);
 tsc_reference_t* tsc_environment_annex_b_function_instantiation(tsc_str_t* key, bool deletable);
 tsc_value_t tsc_environment_reference_get_captured(const tsc_reference_t* reference);
 tsc_value_t tsc_environment_reference_set_captured(const tsc_reference_t* reference, tsc_value_t value);

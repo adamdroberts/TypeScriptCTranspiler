@@ -1,3 +1,5 @@
+- Snapshot Script declarative binding state through the shared closure-capture descriptor collection, preserving TDZ and nested captures.
+
 - Retain privately branded DispatchQueue owners across Value storage, captures, native tasks and Realm changes; validate actual handles through one decoder.
 
 - Record the locally verified libdispatch toolchain and expose the remaining queue Value/capture representation blockers.

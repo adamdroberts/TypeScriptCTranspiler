@@ -345,6 +345,7 @@ interface ClosureCapture {
     type: CType;
     field: string;
     lexical: { readonly name: string; readonly immutable: boolean } | null;
+    sourceReference?: ts.Identifier;
 }
 
 const ARROW_LEXICAL_CAPTURE_KINDS = ["this", "arguments", "new-target", "home-object"] as const;
@@ -357,6 +358,7 @@ interface ArrowLexicalCapture {
 }
 
 interface ClosureEnvBinding {
+    sourceSnapshot?: boolean;
     type: CType;
     ptr: string;
     rootPtr?: string;
@@ -22005,7 +22007,8 @@ class Emitter {
                 sym &&
                 decl &&
                 (!this.isModuleBindingSymbol(sym) || this.dispatchCaptureClone) &&
-                !this.test262ScriptGlobalBindingName(node) &&
+                (!this.test262ScriptGlobalBindingName(node) || this.dispatchCaptureClone ||
+                    this.closureEnvBindingForSymbol(sym)?.sourceSnapshot) &&
                 (
                     !(this.isNodeWithin(decl, fn) || ts.isMethodDeclaration(fn) &&
                         this.classElementInitializerOwners.has(fn) &&
@@ -22014,7 +22017,7 @@ class Emitter {
                         this.isSupportedLexicalFunctionDeclaration(fn)
                 ) &&
                 (!this.isTopLevelValueDeclaration(decl) ||
-                    (this.dispatchCaptureClone && !this.isAmbientDeclaration(decl))) &&
+                    ((this.dispatchCaptureClone || this.closureEnvBindingForSymbol(sym)?.sourceSnapshot) && !this.isAmbientDeclaration(decl))) &&
                 this.isCapturableValueDeclaration(decl)
             ) {
                 const lexical = this.localLexicalMetadataForSymbol(sym);
@@ -22042,11 +22045,12 @@ class Emitter {
                 const field = `${mangleIdent(node.text)}_${captures.size}`;
                 captures.set(sym, {
                     symbol: sym,
-                    type,
+                    type: this.test262ScriptGlobalBindingName(node) ? T_VALUE : type,
                     field,
                     lexical: lexical
                         ? { name: lexical.name, immutable: lexical.immutable }
                         : null,
+                    ...(this.test262ScriptGlobalBindingName(node) ? { sourceReference: node } : {}),
                 });
             }
         };
@@ -30480,7 +30484,8 @@ class Emitter {
                     }
                     const alias = this.freshTemp("_finally_reference");
                     buf.line(`${type.c}${type.kind === "value" ? " volatile" : ""}* ${alias} = ${pointer};`);
-                    const binding: ClosureEnvBinding = { type, ptr: alias };
+                    const binding: ClosureEnvBinding = { type, ptr: alias,
+                        ...(this.closureEnvBindingForSymbol(symbol)?.sourceSnapshot ? { sourceSnapshot: true } : {}) };
                     const rootPointer = this.captureRootPtrForSymbol(symbol);
                     if (rootPointer) {
                         const rootAlias = this.freshTemp("_finally_root_reference");
@@ -30801,6 +30806,8 @@ class Emitter {
             }
             const scriptGlobal = this.test262ScriptGlobalBindingName(expr);
             if (scriptGlobal) {
+                const captured = this.closureEnvBindingForSymbol(this.symbolForIdentifier(expr));
+                if (captured?.sourceSnapshot) return { c: this.identifierRead(expr), ty: captured.type };
                 return {
                     c: `tsc_environment_reference_get(${this.test262GlobalBindingKey(scriptGlobal)})`,
                     ty: T_VALUE,
@@ -31407,6 +31414,7 @@ class Emitter {
 
     private sourceReferencePlan(id: ts.Identifier): SourceReferencePlan | null {
         const withName = this.withEnvironmentReferenceName(id);
+        if (!withName && this.closureEnvBindingForSymbol(this.symbolForIdentifier(id))?.sourceSnapshot) return null;
         if (!withName && this.classNameBindingForIdentifier(id)) return null;
         const scriptGlobal = this.test262ScriptGlobalBindingName(id);
         const referenceName = this.test262HostGlobalBindingName(id) ??
@@ -34266,6 +34274,7 @@ class Emitter {
                 if (ts.isFunctionLike(node) && "body" in node) { creator = node as ts.FunctionLikeDeclaration; break; }
             }
             const references = captures.filter(capture => {
+                if (capture.sourceReference && !this.closureEnvBindingForSymbol(capture.symbol)?.sourceSnapshot) return false;
                 const declaration = capture.symbol.valueDeclaration ?? capture.symbol.declarations?.[0];
                 return declaration && this.environmentBindingIsLexical(capture.symbol) &&
                     (!creator || this.isNodeWithin(declaration, creator));
@@ -34283,14 +34292,21 @@ class Emitter {
             const env = this.freshTemp("_env");
             pieces.push(`${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`);
             for (const cap of captures) {
-                const ptr = this.capturePtrForSymbol(cap.symbol);
+                let sourceCell: string | null = null;
+                if (cap.sourceReference && !this.closureEnvBindingForSymbol(cap.symbol)?.sourceSnapshot) {
+                    const reference = this.freshTemp("_capture_reference");
+                    sourceCell = this.freshTemp("_capture_cell");
+                    pieces.push(`tsc_reference_t ${reference} = ${this.sourceReferencePlan(cap.sourceReference)!.capture}`);
+                    pieces.push(`tsc_async_cell_ref_t ${sourceCell} = tsc_environment_reference_cell(&${reference})`);
+                }
+                const ptr = sourceCell ? `((${cap.type.c}*)${sourceCell}.value_cell)` : this.capturePtrForSymbol(cap.symbol);
                 if (!ptr) unsupported(fn, `cannot capture ${cap.symbol.getName()}`);
                 let dynamicRootPtr: string | null = null;
                 let clonedInitializationPtr: string | null = null;
                 const cloneDispatchCapture = this.dispatchCaptureClone &&
                     this.dispatchCaptureCloneable(cap.type);
                 if (this.dispatchCaptureClone && cap.lexical) {
-                    const initializedPtr = this.captureInitializationPtrForSymbol(cap.symbol);
+                    const initializedPtr = sourceCell ? `${sourceCell}.initialized_cell` : this.captureInitializationPtrForSymbol(cap.symbol);
                     if (!initializedPtr) {
                         unsupported(
                             fn,
@@ -34407,6 +34423,7 @@ class Emitter {
                 envBindings.set(cap.symbol, {
                     type: cap.type,
                     ptr: `${envLocal}->${cap.field}`,
+                    ...(cap.sourceReference ? { sourceSnapshot: true } : {}),
                     ...(cap.type.kind === "value" ? { rootPtr: `${envLocal}->${cap.field}_gc_root` } : {}),
                     ...(cap.lexical ? {
                         initializedPtr: `${envLocal}->${cap.field}_initialized`,

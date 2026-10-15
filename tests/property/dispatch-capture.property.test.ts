@@ -95,6 +95,11 @@ const uninitializedSnapshotSource = [
     "scheduleBeforeInitialization();",
     "const late: number[] = [1];",
     "scheduleParameterSnapshot(23);",
+    "const initialized: any = { values: [29] };",
+    "dispatch.async(queue, () => (() => initialized.values[0])()).then(",
+    "    (result) => console.log('dispatch Script snapshot:', result),",
+    ");",
+    "initialized.values[0] = 99;",
     "function scheduleBeforeInitialization(): void {",
     "    dispatch.async(queue, () => late.length).then(",
     "        (value) => console.log('dispatch tdz value:', value),",
@@ -182,7 +187,8 @@ test("dispatch tasks snapshot one canonical capture descriptor collection", asyn
             expect(process.stderr.toString()).toBe("");
             expect(process.stdout.toString()).toBe(
                 "dispatch tdz error: ReferenceError: Cannot access 'late' before initialization\n" +
-                "dispatch parameter snapshot: 23\n",
+                "dispatch parameter snapshot: 23\n" +
+                "dispatch Script snapshot: 29\n",
             );
         }
 

@@ -3535,6 +3535,14 @@ tsc_reference_t tsc_global_reference_capture(tsc_str_t* key, bool strict) {
         .strict = strict };
 }
 
+tsc_async_cell_ref_t tsc_global_reference_cell(const tsc_reference_t* reference) {
+    if (reference->kind == TSC_REFERENCE_GLOBAL_LEXICAL) {
+        tsc_global_lexical_binding_t* binding = reference->base;
+        return (tsc_async_cell_ref_t){ &binding->value, &binding->value_gc_root, &binding->initialized };
+    }
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("capture requires a retained declarative binding"));
+}
+
 tsc_value_t tsc_global_reference_get_captured(const tsc_reference_t* reference) {
     if (reference->kind == TSC_REFERENCE_GLOBAL_LEXICAL) return global_lexical_get(reference->base);
     if (reference->kind == TSC_REFERENCE_UNRESOLVABLE) {
