@@ -75,3 +75,13 @@ test("inherited callable text closes eval sources and matches Node in both memor
   }
  } finally {await fs.rm(directory,{recursive:true,force:true});}
 },600_000);
+
+test("non-callable function-text receivers retain abrupt completion before eval",()=>{
+ const receivers=['undefined','null','false','17','19n','Symbol("receiver")','{}','[]'];
+ const sources=receivers.map(receiver=>`var receiver=${receiver};try{eval(Function.prototype.toString.call(receiver));}catch(error){if(!(error instanceof TypeError))throw error;}`);
+ expect(oracle(sources)).toEqual(sources.map(()=>[]));
+ for(const source of sources){
+  const calls=sourceEvaluationInvocations(program(source));
+  expect({source,normalSources:calls.flatMap<string|null>(call=>call.choices??[null])}).toEqual({source,normalSources:[]});
+ }
+});

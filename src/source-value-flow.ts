@@ -5333,19 +5333,17 @@ class SourceValueFlow {
                             this.publish(result!, value);
                         }
                         if (atom.operation === "function-text") {
-                            for (const receiver of invocation.receiver.values) {
+                            const target=this.callableTarget(invocation.receiver,node);
+                            this.copy(target.completion,result!);this.watch(rule,target.callable);
+                            for (const receiver of target.callable.values) {
                                 if (receiver.tag === "function") this.publish(result!, this.text(receiver.owner.sourceText));
                                 else if (receiver.tag === "bound") this.publish(result!, this.text("function () { [native code] }"));
                                 else if (receiver.tag === "builtin" && receiver.normalResult !== "not-callable")
                                     this.publish(result!, this.text(`function ${receiver.name}() { [native code] }`));
                                 else if(receiver.tag==="operation"&&jsonOperations.has(receiver.operation as JSONSourceOperation))
                                     this.publish(result!,this.text(`function ${jsonOperations.get(receiver.operation as JSONSourceOperation)!.name}() { [native code] }`));
-                                else if(receiver.tag==="primitive") {
-                                    this.publish(result!,this.abrupt);
-                                    const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));
-                                } else this.publish(result!, receiver.tag === "pending-source" ? receiver : this.unknown);
+                                else this.publish(result!, this.unknown);
                             }
-                            this.watch(rule, invocation.receiver);
                         }
                         if (atom.operation === "realm") {let realm=this.realmAllocations.get(node);if(!realm){realm=this.newRealm();this.realmAllocations.set(node,realm);}this.publish(result!,realm.record);}
                         if (atom.operation === "eval" || atom.operation === "eval-script" || atom.operation === "agent-start") {
