@@ -382,6 +382,7 @@ class SourceValueFlow {
     private readonly sourceFiles = new WeakMap<ts.Node, ts.SourceFile>();
     private readonly sourceStarts = new WeakMap<ts.Node, number>();
     private readonly executionGuards = new WeakMap<ts.Node, readonly {condition: Cell; truthy: boolean}[]>();
+    private readonly captureInputs=new WeakMap<Cell,{source:Cell;phase:SourceCapturePhase}>();
     private readonly capturePhases=new Map<ts.Node,Map<boolean,SourceCapturePhase>>();
     private readonly propertyLocations=new Set<Cell>();
     private readonly knownWrites=new Map<Cell,Map<ts.Node,Cell>>();
@@ -934,6 +935,11 @@ class SourceValueFlow {
     private copyRead(from: Cell, into: Cell, context?: ts.Node, argumentsRead = false): void {
         this.copy(this.captureRead(from,context,argumentsRead),into);
     }
+    private capturePrecedes(before:SourceCapturePhase,after:SourceCapturePhase):boolean {
+        if(before.argumentsRead!==after.argumentsRead||this.sourceFile(before.context)!==this.sourceFile(after.context)||before.context.getEnd()>after.context.getStart())return false;
+        const left=this.enclosingActivation(before.context),right=this.enclosingActivation(after.context);
+        return left===right&&!this.repeatedActivationContext(before.context)&&!this.repeatedActivationContext(after.context)&&(!left||!this.activationTiming(left).values.nonempty);
+    }
     private captureRead(from: Cell, context?: ts.Node, argumentsRead = false): Cell {
         if (!context || this.dynamicContext(context) && !(this.enclosingActivation(context) && this.propertyLocations.has(from))) return from;
         let contexts = this.readCaptures.get(from);
@@ -945,21 +951,25 @@ class SourceValueFlow {
         let phase=phaseKinds.get(argumentsRead);if(!phase){phase={kind:"capture",context,argumentsRead};phaseKinds.set(argumentsRead,phase);}
         const pending:Cell[]=[];
         const project=(source:Cell):Cell=>{
+            // Comparable acyclic filters intersect at the earlier phase.
+            // Follow the retained source graph instead of retaining every
+            // ordering of equivalent nested capture projections.
+            const seen=new Set<Cell>();
+            while(!seen.has(source)){
+                seen.add(source);const prior=this.captureInputs.get(source);
+                if(!prior||!this.capturePrecedes(phase!,prior.phase))break;
+                source=prior.source;
+            }
             const inherited=this.projectedCellPhases.get(source);
             // A later acyclic capture cannot undo the earlier filtering.
             // Reuse that canonical projection instead of composing an alias
             // path of equivalent phase filters through every saved binding.
-            if(inherited?.has(phase!)||[...(inherited??[])].some(prior=>{
-                if(prior.kind!=="capture"||prior.argumentsRead!==argumentsRead||this.sourceFile(prior.context)!==this.sourceFile(context)||prior.context.getEnd()>context.getStart())return false;
-                const before=this.enclosingActivation(prior.context),after=this.enclosingActivation(context);
-                return before===after&&!this.repeatedActivationContext(prior.context)&&!this.repeatedActivationContext(context)&&
-                    (!before||!this.activationTiming(before).values.nonempty);
-            }))return source;
+            if(inherited?.has(phase!)||[...(inherited??[])].some(prior=>prior.kind==="capture"&&this.capturePrecedes(prior,phase!)))return source;
             let contexts=this.readCaptures.get(source);if(!contexts){contexts=new Map();this.readCaptures.set(source,contexts);}
             let phases=contexts.get(context);if(!phases){phases=new Map();contexts.set(context,phases);}
             let target=phases.get(argumentsRead);
             if(!target){target=this.newCell();phases.set(argumentsRead,target);
-                this.projectedCellPhases.set(target,new Set([...(inherited??[]),phase!]));
+                this.projectedCellPhases.set(target,new Set([...(inherited??[]),phase!]));this.captureInputs.set(target,{source,phase:phase!});
                 this.readCaptures.set(target,new Map([[context,new Map([[argumentsRead,target]])]]));pending.push(source);}
             return target;
         };
