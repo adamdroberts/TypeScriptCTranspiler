@@ -125,6 +125,7 @@
     "tests/test262/render-matrix.ts",
     "tests/test262/run.ts",
     "tests/test262/self.test.ts",
+    "tests/test262/source-path-rule.test.ts",
     "tests/test262/spec-catalog.ts",
     "runtime/tsc_console_methods.def",
     "runtime/tsc_json_methods.def",

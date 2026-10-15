@@ -51,9 +51,17 @@ interface EsidAlias extends ReviewedMapping {
     esid: string;
 }
 
-interface PathRule extends ReviewedMapping {
+export interface PathRule extends ReviewedMapping {
     prefix: string;
     esid?: string;
+}
+
+/** Review applies to one source-qualified metadata owner. Directory depth
+ * and descriptor cardinality do not alter this selection algorithm. */
+export function reviewedSourcePathRule(test:string,esid:string|undefined,rules:readonly PathRule[]):PathRule|undefined {
+    let selected:PathRule|undefined;
+    for(const rule of rules)if(rule.esid===esid&&test.startsWith(rule.prefix)&&(!selected||rule.prefix.length>selected.prefix.length))selected=rule;
+    return selected;
 }
 
 export interface LegacyIdRule extends ReviewedMapping {
@@ -551,8 +559,12 @@ export async function buildInventory(options: {
                 kind: "exact",
             };
         } else if (scope.scope === "in-scope") {
-            const informativeRule = metadata.esid && exactAnchor && !exactNormative
-                ? mappings.pathRules.find((rule) => rule.esid === metadata.esid && test.startsWith(rule.prefix))
+            // A reviewed source-qualified rule can identify either an
+            // informative historical anchor or unresolved metadata. Exact
+            // normative anchors above retain precedence; no placeholder is
+            // interpreted globally across unrelated semantic directories.
+            const qualifiedRule = metadata.esid
+                ? reviewedSourcePathRule(test,metadata.esid,mappings.pathRules)
                 : undefined;
             const alias = metadata.esid && !exactAnchor ? mappings.aliases.get(metadata.esid) : undefined;
             const legacyIdRules = metadata.esid === undefined
@@ -560,7 +572,7 @@ export async function buildInventory(options: {
                 : [];
             const legacyIdRule = legacyIdRules.length === 1 ? legacyIdRules[0] : undefined;
             const pathRule = metadata.esid === undefined
-                ? mappings.pathRules.find((rule) => rule.esid === undefined && test.startsWith(rule.prefix))
+                ? reviewedSourcePathRule(test,undefined,mappings.pathRules)
                 : undefined;
             if (legacyIdRules.length > 1) {
                 issues.push({
@@ -570,10 +582,10 @@ export async function buildInventory(options: {
                     claimBlocking: true,
                 });
             }
-            if (informativeRule) {
-                mappedClauses = [...new Set([...mappedClauses, ...informativeRule.clauses])].sort();
-                mappingSources.push(`informative-esid-path:${informativeRule.esid}:${informativeRule.prefix}`);
-                usedPathRules.add(`${informativeRule.esid}\0${informativeRule.prefix}`);
+            if (qualifiedRule) {
+                mappedClauses = [...new Set([...mappedClauses, ...qualifiedRule.clauses])].sort();
+                mappingSources.push(`${exactAnchor?"informative-esid-path":"unresolved-esid-path"}:${qualifiedRule.esid}:${qualifiedRule.prefix}`);
+                usedPathRules.add(`${qualifiedRule.esid}\0${qualifiedRule.prefix}`);
             } else if (alias) {
                 mappedClauses = [...new Set([...mappedClauses, ...alias.clauses])].sort();
                 mappingSources.push(`esid-alias:${alias.esid}`);

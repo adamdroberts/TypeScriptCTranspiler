@@ -1,3 +1,5 @@
+- Resolve unresolved Test262 metadata through reviewed source-qualified path rules while retaining exact anchor precedence and fail-closed unmatched owners.
+
 - Register scoped String replaceAll evidence on the shared symbol protocol and UTF-16 position worklist.
 
 - Stop source fact existence queries on the first reachable value instead of counting the entire dependency graph.
