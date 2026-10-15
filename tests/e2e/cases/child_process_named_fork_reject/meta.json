@@ -1,1 +1,1 @@
-{"description":"named child_process fork imports produce a precise unsupported diagnostic"}
+{"description":"ordinary named fork owner rejects invocation with the stable AOT child-module/IPC TypeError after actual evaluation"}

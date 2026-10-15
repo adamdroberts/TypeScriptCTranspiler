@@ -1,3 +1,5 @@
+- Verify the explicit fork AOT/IPC failure on the ordinary callable owner after actual argument evaluation.
+
 - Replace child-process syntax and physical-type selectors with canonical ordinary export owners and actual-List runtime decoding.
 
 - Distinguish Node host-global descriptors in the canonical global oracle while preserving byte-identical native inputs and exact native assertions.
