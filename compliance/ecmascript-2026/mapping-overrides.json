@@ -547,6 +547,14 @@
       ],
       "reason": "The structural intrinsic directory directly exercises RegExp.prototype [ %Symbol.split% ], including descriptor, species, RegExpExec, cursor and abrupt branches.",
       "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "prefix": "test/built-ins/String/prototype/replace/",
+      "clauses": [
+        "sec-string.prototype.replace"
+      ],
+      "reason": "Legacy scenarios without current esid in this pinned semantic directory exercise the String replacement intrinsic, including historical ES5 and ES6 source records. The rule applies only when esid is absent, preserving exact RegExp replacement and standard-built-in construction metadata as their separate canonical owners.",
+      "reviewedBy": "tsc2c compliance review"
     }
   ],
   "testOverrides": [

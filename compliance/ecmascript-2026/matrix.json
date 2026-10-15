@@ -6685,6 +6685,60 @@
         }
       ],
       "rationale": "Reciprocal scoped GetSubstitution worklist evidence; no full-target coverage claim."
+    },
+    {
+      "clause": "sec-string.prototype.replace",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "actual-symbol-dispatch-and-utf16-literal-worklist",
+          "title": "Original symbol-method receiver/arguments, ordered literal conversion and UTF-16 position worklist, functional replacement and token substitution, abrupt identity and descriptors",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-string.prototype.replace"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/string-replacement-protocol.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "string_replacement_position_worklist"
+            ],
+            "e2e": [
+              "string_replacement_protocol"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#String"
+            ],
+            "implementation": [
+              "runtime/tsc_value.c#string_replace_from_values",
+              "runtime/tsc_value.c#string_protocol_call",
+              "runtime/tsc_value.c#string_match_position_worklist",
+              "runtime/tsc_value.c#string_functional_replacement",
+              "runtime/tsc_string.c#string_replace_sequence",
+              "runtime/tsc_regexp_api.c#tsc_string_get_substitution"
+            ]
+          },
+          "rationale": "One ordinary saved protocol method receives the original receiver and replacement Values before any fallback conversion. The literal fallback traverses UTF-16 search positions and actual callback Lists through the shared match worklist and substitution cursor. Independent Node properties cover ordered coercion, no-match/empty search, callback receiver/arguments/result, live Symbol.replace lookup, nullish/noncallable methods, abrupt identity and intrinsic descriptors. One generated position worklist checks first versus complete replacement, empty UTF-16 boundaries and retained source owners. Exact pinned String replacement metadata and historical semantic directory sources have independent Node/native outcome reconciliation; the separate Annex B IsHTMLDDA case has exact native artifact-byte audit and the host semantic property, without an unavailable Node IsHTMLDDA comparison. Full replaceAll registration, Symbol.replace readiness, compiler-memory repair, host eligibility and exhaustive signed target coverage remain open."
+        }
+      ],
+      "rationale": "Scoped reciprocal String replacement evidence; whole String/RegExp, feature readiness and full-target conformance remain separate."
     }
   ],
   "groups": [

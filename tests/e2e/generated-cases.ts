@@ -3,6 +3,11 @@ export interface RegexpPatternDepthSpec {
     depth: number;
 }
 
+export interface StringReplacementPositionWorklistSpec {
+    generator: "string-replacement-position-worklist";
+    depth: number;
+}
+
 export interface StringSubstitutionTokenWorklistSpec {
     generator: "string-substitution-token-worklist";
     depth: number;
@@ -286,6 +291,7 @@ export type GeneratedCaseSpec =
     | RegexpPatternDepthSpec
     | RegexpSplitCaptureWorklistSpec
     | RegexpReplaceCaptureWorklistSpec
+    | StringReplacementPositionWorklistSpec
     | StringSubstitutionTokenWorklistSpec
     | AsyncLeadingAwaitChainSpec
     | AsyncBindingDefaultDepthSpec
@@ -567,6 +573,11 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     if(spec.generator==='module-failure-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<2||!['load','link'].includes(String(spec.phase)))throw new Error(`invalid generated Module failure spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth,phase:spec.phase as 'load'|'link'};
+    }
+    if (spec.generator === "string-replacement-position-worklist") {
+        if (typeof spec.depth !== "number" || !Number.isInteger(spec.depth) || spec.depth < 2)
+            throw new Error(`invalid generated String replacement position spec ${filename}`);
+        return { generator: spec.generator, depth: spec.depth };
     }
     if (spec.generator === "string-substitution-token-worklist") {
         if (typeof spec.depth !== "number" || !Number.isInteger(spec.depth) || spec.depth < 2)
@@ -2059,6 +2070,33 @@ const valid = evaluated === ${spec.width} && raw.rawJSON === text &&
     Object.isFrozen(raw) && Object.getPrototypeOf(raw) === null;
 console.log("raw JSON text width:", valid);
 `;
+        case "string-replacement-position-worklist":
+            return [
+                "const depth: number = DEPTH;",
+                "const input = 'a😀'.repeat(depth);",
+                "let owner: any = null, calls = 0, valid = true;",
+                "const replaced = input.replaceAll('a', function(this: any, matched: string, offset: number, source: string): string {",
+                "    'use strict';",
+                "    valid = valid && this === undefined && arguments.length === 3 && matched === 'a' && offset === calls * 3 && source === input;",
+                "    owner = { offset, source, previous: owner }; calls++; return 'X';",
+                "});",
+                "valid = valid && calls === depth && replaced === 'X😀'.repeat(depth);",
+                "for (let index = depth - 1; index >= 0; index--) {",
+                "    valid = valid && owner.offset === index * 3 && owner.source === input; owner = owner.previous;",
+                "}",
+                "let boundary = 0;",
+                "const unchanged = input.replaceAll('', function(this: any, matched: string, offset: number, source: string): string {",
+                "    'use strict';",
+                "    valid = valid && this === undefined && matched === '' && offset === boundary && source === input; boundary++; return '';",
+                "});",
+                "let once = 0;",
+                "const first = input.replace('a', function(this: any, matched: string, offset: number, source: string): string {",
+                "    'use strict';",
+                "    valid = valid && this === undefined && matched === 'a' && offset === 0 && source === input; once++; return 'X';",
+                "});",
+                "valid = valid && owner === null && unchanged === input && boundary === input.length + 1 && once === 1 && first === 'X😀' + input.slice(3);",
+                "console.log('replacement positions:', valid);"
+            ].join("\n").replace("DEPTH",String(spec.depth))+"\n";
         case "string-substitution-token-worklist":
             return [
                 "const depth: number = DEPTH;",

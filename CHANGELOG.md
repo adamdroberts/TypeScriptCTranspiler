@@ -1,3 +1,5 @@
+- Register scoped String replacement protocol and UTF-16 position-worklist evidence with independent Node/native and pinned artifact-byte validation.
+
 - Retain source mutation origins on canonical filtered dependency edges and share capture-phase origin projections.
 
 - Share unfiltered source owner mutations through the canonical origin graph and use a file-backed activation oracle.

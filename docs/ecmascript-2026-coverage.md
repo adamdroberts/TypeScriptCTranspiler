@@ -1600,7 +1600,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-tozeropaddeddecimalstring` — ToZeroPaddedDecimalString ( _n_: a non-negative integer, _minLength_: a non-negative integer, ): a String: exact disposition and partitions missing.
   - [ ] `sec-string.prototype.repeat` — String.prototype.repeat ( _count_ )
     - [ ] `generic-tostring-count-and-code-unit-fill` (intrinsic, unbounded): Generic receiver ToString, ordered count conversion with RangeError partitions, ordinary method lookup, and UTF-16 code-unit repetition.
-  - [ ] `sec-string.prototype.replace` — String.prototype.replace ( _searchValue_, _replaceValue_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.replace` — String.prototype.replace ( _searchValue_, _replaceValue_ )
+    - [ ] `actual-symbol-dispatch-and-utf16-literal-worklist` (intrinsic, unbounded): Original symbol-method receiver/arguments, ordered literal conversion and UTF-16 position worklist, functional replacement and token substitution, abrupt identity and descriptors.
   - [ ] `sec-getsubstitution` — GetSubstitution ( _matched_: a String, _str_: a String, _position_: a non-negative integer, _captures_: a List of either Strings or undefined, _namedCaptures_: an Object or undefined, _replacementTemplate_: a String, ): either a normal completion containing a String or a throw completion
     - [ ] `utf16-template-token-and-live-named-get-worklist` (algorithm, unbounded): UTF-16 replacement cursor with literal/dollar, matched/prefix/suffix, numbered capture fallback, undefined captures, live named Get/ToString and abrupt identity.
   - [ ] `sec-string.prototype.replaceall` — String.prototype.replaceAll ( _searchValue_, _replaceValue_ ): exact disposition and partitions missing.

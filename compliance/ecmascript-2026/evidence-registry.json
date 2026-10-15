@@ -530,7 +530,8 @@
         "sec-string.prototype.tostring#generic-this-string-value-tostring",
         "sec-string.prototype.valueof#generic-this-string-value-valueof",
         "sec-string.prototype-%symbol.iterator%#generic-tostring-and-code-point-iteration",
-        "sec-getsubstitution#utf16-template-token-and-live-named-get-worklist"
+        "sec-getsubstitution#utf16-template-token-and-live-named-get-worklist",
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
       ]
     },
     {
@@ -5897,7 +5898,8 @@
       "id": "runtime/tsc_regexp_api.c#tsc_string_get_substitution",
       "targets": [
         "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist",
-        "sec-getsubstitution#utf16-template-token-and-live-named-get-worklist"
+        "sec-getsubstitution#utf16-template-token-and-live-named-get-worklist",
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
       ]
     },
     {
@@ -5919,6 +5921,69 @@
       "id": "runtime/tsc_string.c#append_string_substitution",
       "targets": [
         "sec-getsubstitution#utf16-template-token-and-live-named-get-worklist"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/string-replacement-protocol.property.test.ts",
+      "targets": [
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "string_replacement_position_worklist",
+      "targets": [
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
+      ],
+      "stressReview": {
+        "dimension": "UTF-16 literal-match position List and retained callback owner graph",
+        "parameter": "depth",
+        "representativeHighDepth": 4096,
+        "rationale": "One generated input exercises ordinary first-match and complete-position traversal, empty UTF-16 boundaries and retained actual callback Values; successive match or source lengths are not evidence units.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "string_replacement_protocol",
+      "targets": [
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_replace_from_values",
+      "targets": [
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_protocol_call",
+      "targets": [
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_match_position_worklist",
+      "targets": [
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#string_functional_replacement",
+      "targets": [
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_string.c#string_replace_sequence",
+      "targets": [
+        "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist"
       ]
     }
   ]
