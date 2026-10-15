@@ -380,6 +380,8 @@ class SourceValueFlow {
     private readonly executionGuards = new WeakMap<ts.Node, readonly {condition: Cell; truthy: boolean}[]>();
     private readonly capturePhases=new Map<ts.Node,Map<boolean,SourceCapturePhase>>();
     private readonly propertyLocations=new Set<Cell>();
+    private readonly knownWrites=new Map<Cell,Map<ts.Node,Cell>>();
+    private readonly knownWriteOrigins=new WeakMap<Cell,Atom>();
     private readonly ownerCreations=new WeakMap<ObjectOwner,ts.Node>();
     private readonly readCaptures = new Map<Cell, Map<ts.Node | undefined, Map<boolean, Cell>>>();
     private readonly empty = this.newCell();
@@ -600,7 +602,9 @@ class SourceValueFlow {
         const project=(source:Cell):Cell=>{
             const inherited=this.projectedCellPhases.get(source);if(inherited?.has(phase!))return source;
             let cell=projected.get(source);if(!cell){cell=this.newCell();projected.set(source,cell);projected.set(cell,cell);
-                this.projectedCellPhases.set(cell,new Set([...(inherited??[]),phase!]));pending.push(source);}return cell;
+                this.projectedCellPhases.set(cell,new Set([...(inherited??[]),phase!]));
+                const written=this.knownWriteOrigins.get(source);if(written)this.knownWriteOrigins.set(cell,written);
+                pending.push(source);}return cell;
         };
         const result=project(root);this.returnProjections.set(key,result);
         const extend=()=>{while(pending.length){const source=pending.pop()!,target=projected.get(source)!;let read!:Rule;
@@ -743,6 +747,14 @@ class SourceValueFlow {
         into.values.sources.set(from.values,kind);
         let parents=this.primitiveProofParents.get(from);if(!parents){parents=new Set();this.primitiveProofParents.set(from,parents);}parents.add(into);
         this.primitiveChanges.add(into);for(const user of into.users)this.schedule(user);
+    }
+    /** Keep the completion point on the copy edge, rather than attaching it
+     * to an interned value identity shared by unrelated writes. */
+    private copyWrite(from:Cell,into:Cell,context?:ts.Node):void {
+        if(!context){this.copy(from,into);return;}
+        let contexts=this.knownWrites.get(from);if(!contexts){contexts=new Map();this.knownWrites.set(from,contexts);}
+        let written=contexts.get(context);if(!written){written=this.newCell();contexts.set(context,written);this.knownWriteOrigins.set(written,{tag:"unknown",origin:context});this.copy(from,written);}
+        this.copy(written,into);
     }
     private captureOrigins(from:Cell,phase:SourceCapturePhase):Cell {
         let phases=this.capturedOrigins.get(from);if(!phases){phases=new Map();this.capturedOrigins.set(from,phases);}let result=phases.get(phase);if(result)return result;
@@ -939,6 +951,8 @@ class SourceValueFlow {
         const captured=project(from);
         const extend=()=>{while(pending.length){const source=pending.pop()!,target=project(source),atoms=new Map<Atom,Atom>();
             this.rule([source,...(this.enclosingActivation(context)?[this.enclosingActivation(context)!.active,this.activationTiming(this.enclosingActivation(context)!)]:[])],()=>{
+                const written=this.knownWriteOrigins.get(source);
+                if(written&&!this.effectVisible(written,context,argumentsRead))return;
                 const transform=this.returnTransforms.get(source);
                 if(transform){const replay=transform.evaluate(transform.inputs.map(project));
                     if(replay!==source){this.copy(project(replay),target);extend();return;}}
@@ -1458,7 +1472,8 @@ class SourceValueFlow {
         let accessor=owner.accessors.get(key);
         if(!accessor){accessor={get:this.newCell(),set:this.newCell()};this.accessorSlots.add(accessor.get);this.accessorSlots.add(accessor.set);owner.accessors.set(key,accessor);this.publish(owner.shape,{tag:"descriptor",identity:accessor});}
         if(context){this.accessorDefinitions.set(accessor.get,context);this.accessorDefinitions.set(accessor.set,context);}
-        this.copy(value,accessor[kind]);
+        if(context&&(ts.isGetAccessorDeclaration(context)||ts.isSetAccessorDeclaration(context)))this.copy(value,accessor[kind]);
+        else this.copyWrite(value,accessor[kind],context);
         if(key===null)this.publish(owner.shape,this.unknown);
         else {if(context&&(ts.isGetAccessorDeclaration(context)||ts.isSetAccessorDeclaration(context))){const location=this.ownPresence(owner,key);location.initial=true;this.publish(location.enumerable,this.primitive(true));}this.publish(this.presence(owner,key),this.primitive(true));}
         if (typeof key === "symbol" && this.freshSymbols.has(key)) this.publish(this.presence(owner,key),this.primitive(false));
@@ -1532,7 +1547,7 @@ class SourceValueFlow {
                     if(mode==="delete")this.publish(presence,this.primitive(false));
                     if (!presence.values.nonempty) this.publish(presence,this.primitive(false));
                     this.publish(presence,this.primitive(true));
-                    this.copy(value,this.field(owner,key));
+                    this.copyWrite(value,this.field(owner,key),context);
                     const index = typeof key === "string" ? Number(key) : NaN;
                     if (owner.listLength && String(index) === key && Number.isInteger(index) && index >= 0 && index < 0xffffffff) {
                         const length = owner.listLength;
@@ -1546,7 +1561,7 @@ class SourceValueFlow {
             }
             if(atom.tag==="global"){
                 if(key===null)this.copy(this.executionOrigins(context),this.globalMutation);
-                else if (typeof key === "string" && !this.immutableGlobalBinding(key)) this.copy(value,this.realmBinding(atom.realm,key));
+                else if (typeof key === "string" && !this.immutableGlobalBinding(key)) this.copyWrite(value,this.realmBinding(atom.realm,key),context);
             }
             if(unknownGlobal&&(atom.tag==="unknown"||atom.tag==="opaque-object")){this.copy(this.executionOrigins(context),this.globalMutation);if(handler)this.publish(handler,this.unknown);}
         }});
@@ -2155,7 +2170,7 @@ class SourceValueFlow {
                     if(name===null){incomplete();continue;}
                     const presence=this.propertyPresence(owner,name,context);this.watch(rule,presence);
                     if(!presence.values.nonempty)continue;
-                    const data=this.field(owner,name);this.watch(rule,data);
+                    const data=this.captureRead(this.field(owner,name),context);this.watch(rule,data);
                     const accessor=owner.accessors.get(name);
                     const present=presence.values.has(this.primitive(true));
                     if(!present && !data.values.nonempty && !accessor){
@@ -2171,7 +2186,7 @@ class SourceValueFlow {
                         for(const attribute of ["enumerable","configurable"])this.defineBooleanField(descriptor,attribute);
                     }
                     if(accessor){
-                        for(const kind of ["get","set"] as const){this.watch(rule,accessor[kind]);this.defineField(record.owner,kind,accessor[kind]);}
+                        for(const kind of ["get","set"] as const){const value=this.captureRead(accessor[kind],context);this.watch(rule,value);this.defineField(record.owner,kind,value);}
                     }
                     if(data.values.nonempty || !accessor){
                         this.defineField(record.owner,"value",data);
@@ -3496,9 +3511,10 @@ class SourceValueFlow {
             for (const name of [key,null]) {
                 const accessor=owner.accessors.get(name);
                 if(!accessor)continue;
-                if(rule)this.watch(rule,accessor.get);
-                if(accessor.get.values.has(this.primitive(undefined)))this.publish(result,this.primitive(undefined));
-                this.invoke(context ?? this.accessorDefinitions.get(accessor.get)!,this.accessorCallee(accessor.get),base,[],result);
+                const getter=this.captureRead(accessor.get,context);
+                if(rule)this.watch(rule,getter);
+                if(getter.values.has(this.primitive(undefined)))this.publish(result,this.primitive(undefined));
+                this.invoke(context ?? this.accessorDefinitions.get(accessor.get)!,this.accessorCallee(getter),base,[],result);
             }
             const presence=this.propertyPresence(owner,key,context);
             if (rule) this.watch(rule,presence);

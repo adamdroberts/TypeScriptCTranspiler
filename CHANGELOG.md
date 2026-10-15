@@ -1,3 +1,5 @@
+- Retain known property-write completion provenance through saved reads, return projections and descriptor snapshots.
+
 - Preserve abrupt Function.prototype.toString receiver completions through the shared callable projection before source evaluation.
 
 - Map reviewed ES5/ES2015 bind section metadata to the current intrinsic while retaining exact-anchor precedence and open conformance gates.
