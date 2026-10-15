@@ -40,9 +40,11 @@ test('Promise source methods preserve native result and owner semantics against 
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-promise-source-owner-'));
  try{for(const typed of [false,true])for(const noGc of [false,true]){
   const directory=path.join(temporary,`${typed}-${noGc}`);await fs.mkdir(directory);const oracle=path.join(directory,'oracle.mjs');await fs.writeFile(oracle,program);
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=value=>fs.writeSync(1,String(value)+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const oracleOutput=path.join(directory,'oracle.stdout');
+  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=value=>fs.writeSync(1,String(value)+"\\n");import(process.argv[1]);',oracle],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120_000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const expected=await fs.readFile(oracleOutput,'utf8');expect(expected.endsWith('mutable:47:43\n')).toBe(true);
   const entry=path.join(directory,typed?'main.ts':'main.mjs');await fs.writeFile(entry,(typed?'// @ts-nocheck\n':'')+program);const output=path.join(directory,'program'),diagnostics:string[]=[];
   const built=await compile({entry,output,noGc,buildDir:path.join(directory,'build'),moduleRoots:[entry],initializationEntries:[entry],test262Observation:{kind:'test262-native-observation',scenarioId:'promise-source-owner#module',setupEntries:[],testEntry:entry,async:false},diagnosticWriter:message=>diagnostics.push(message)});
-  expect({typed,noGc,code:built.exitCode,diagnostics:diagnostics.join('')}).toEqual({typed,noGc,code:0,diagnostics:''});const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:native.exitCode,stderr:native.stderr.toString()}).toEqual({code:0,stderr:''});expect(parseHostObservation(JSON.parse(native.stdout.toString()))).toMatchObject({kind:'normal',stdout:node.stdout.toString()});
+  expect({typed,noGc,code:built.exitCode,diagnostics:diagnostics.join('')}).toEqual({typed,noGc,code:0,diagnostics:''});const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:native.exitCode,stderr:native.stderr.toString()}).toEqual({code:0,stderr:''});expect(parseHostObservation(JSON.parse(native.stdout.toString()))).toMatchObject({kind:'normal',stdout:expected});
  }}finally{await fs.rm(temporary,{recursive:true,force:true})}
 },900_000);

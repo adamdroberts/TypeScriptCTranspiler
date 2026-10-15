@@ -369,6 +369,7 @@ class SourceValueFlow {
     private readonly unknownString: Atom = {tag:"unknown-string"};
     private readonly opaqueMutation = this.newCell();
     private readonly opaqueEffects = new Map<ts.Node, Atom>();
+    private readonly opaqueEffectActivations=new WeakSet<ts.Node>();
     private readonly originCells = new WeakMap<ts.Node, Cell>();
     private readonly unconstrainedOrigins = this.newCell();
     private readonly scriptOrder = new Map<ts.SourceFile, number>();
@@ -779,6 +780,14 @@ class SourceValueFlow {
             while(nodes.length){const node=nodes.pop()!;if(ts.isIdentifier(node)){const symbol=this.bindingSymbol(node);if(symbol)captured.add(symbol)}node.forEachChild(child=>{nodes.push(child)})}
             for(const symbol of captured){const binding=this.bindings.get(symbol);if(binding)this.copy(this.executionOrigins(context),binding)}
         });
+    }
+    /** One source operation owns one activation/guard dependency. Reactive
+     * consumers may discover its opaque effect repeatedly without allocating
+     * another equivalent rule on each fixed-point revisit. */
+    private activateOpaqueEffect(context:ts.Node):void {
+        if(this.opaqueEffectActivations.has(context))return;
+        this.opaqueEffectActivations.add(context);
+        this.onActive(context,()=>this.opaqueEffect(context));
     }
     private opaqueEffect(context?: ts.Node): void {
         this.copy(this.executionOrigins(context),this.opaqueMutation);
@@ -1469,7 +1478,7 @@ class SourceValueFlow {
                         if(current.proxy&&context&&!proxyEffects.has(current)){
                             proxyEffects.add(current);
                             const trap=this.property(current.proxy.handler,"set",context);
-                            this.opaqueCallableCaptures(trap,context);this.onActive(context,()=>this.opaqueEffect(context));
+                            this.opaqueCallableCaptures(trap,context);this.activateOpaqueEffect(context);
                         }
                         this.watch(rule,current.shape);
                         if(handler && this.opaqueShape(current,context))this.publish(handler,this.unknown);
@@ -1540,7 +1549,7 @@ class SourceValueFlow {
                 const owner = this.ordinaryOwner(atom);
                 if (!owner || !context) {
                     this.publish(result, this.unknown);
-                    if (context) {const handler = this.exceptionHandlers.get(context); if (handler) this.publish(handler, this.unknown); this.onActive(context, () => this.opaqueEffect(context));}
+                    if (context) {const handler = this.exceptionHandlers.get(context); if (handler) this.publish(handler, this.unknown); this.activateOpaqueEffect(context);}
                     continue;
                 }
                 const worklist = [owner], visited = new Set<ObjectOwner>();
@@ -1562,7 +1571,7 @@ class SourceValueFlow {
                         }
                     }
                 }
-                if (opaque) { this.publish(result, this.unknown); const handler = this.exceptionHandlers.get(context); if (handler) this.publish(handler, this.unknown); this.onActive(context, () => this.opaqueEffect(context)); continue; }
+                if (opaque) { this.publish(result, this.unknown); const handler = this.exceptionHandlers.get(context); if (handler) this.publish(handler, this.unknown); this.activateOpaqueEffect(context); continue; }
                 if (!ready || selected.has(atom)) continue;
                 selected.add(atom);
                 const receiver = this.newCell(); this.publish(receiver, atom);
@@ -1626,7 +1635,7 @@ class SourceValueFlow {
                 if (state.pending || !state.unresolved) return;
                 const handler = this.exceptionHandlers.get(context);
                 if (handler) this.publish(handler, this.unknown);
-                this.onActive(context, () => this.opaqueEffect(context));
+                this.activateOpaqueEffect(context);
             });
         }
         return result;
@@ -1644,7 +1653,7 @@ class SourceValueFlow {
         rule = this.rule([input], () => {
             const state = this.primitiveState(input, rule, true), handler = this.exceptionHandlers.get(context);
             if (state.pending) return;
-            if (state.unresolved) {if (handler) this.publish(handler, this.unknown); this.onActive(context, () => this.opaqueEffect(context));}
+            if (state.unresolved) {if (handler) this.publish(handler, this.unknown); this.activateOpaqueEffect(context);}
             if (!handler) return;
             if (!state.proof.primitiveComplete && !this.primitiveNumericConversionSafe(input, conversion)) this.publish(handler, this.nativeException(context!));
             for (const value of state.proof.values) {
@@ -1705,7 +1714,7 @@ class SourceValueFlow {
                 if(opaque)this.publish(handler,this.unknown);
                 else if(kinds&KIND_SYMBOL)this.publish(handler,this.nativeException(context));
             }
-            if (opaque) this.onActive(context, () => this.opaqueEffect(context));
+            if (opaque) this.activateOpaqueEffect(context);
         }
         return null;
     }
@@ -1717,7 +1726,7 @@ class SourceValueFlow {
         if (context && !this.computedKeyDomain(key)) {
             const handler = this.exceptionHandlers.get(context);
             if (handler) this.publish(handler, this.unknown);
-            this.onActive(context, () => this.opaqueEffect(context));
+            this.activateOpaqueEffect(context);
         }
         return null;
     }
@@ -1971,9 +1980,9 @@ class SourceValueFlow {
                 if(atom===this.primitive(null)){this.publish(result,this.primitive(false));continue;}
                 const owner=this.ordinaryOwner(atom);
                 if(owner?.proxy)this.proxyReadEffects(owner,key,"has",context);
-                if(!owner){this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));this.onActive(context,()=>this.opaqueEffect(context));continue;}
+                if(!owner){this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));this.activateOpaqueEffect(context);continue;}
                 if(visited.has(owner))continue;visited.add(owner);this.watch(rule,owner.shape);
-                if(this.opaqueShape(owner,context)){this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));this.onActive(context,()=>this.opaqueEffect(context));continue;}
+                if(this.opaqueShape(owner,context)){this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));this.activateOpaqueEffect(context);continue;}
                 const presence=this.propertyPresence(owner,key,context);this.watch(rule,presence);
                 if(presence.values.has(this.primitive(true)))this.publish(result,this.primitive(true));
                 if(!presence.values.has(this.primitive(false)))continue;
@@ -2113,7 +2122,7 @@ class SourceValueFlow {
                 if(atom.tag==="pending-source"||atom.tag==="abrupt"){this.publish(result,atom);continue;}
                 if(atom.tag==="primitive"&&(atom.value===null||atom.value===undefined)){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.nativeException(context!));continue;}
                 const owner=this.ordinaryOwner(atom);
-                if(!owner){incomplete();if(atom.tag==="unknown"||atom.tag==="opaque-object")this.onActive(context,()=>this.opaqueEffect(context));continue;}
+                if(!owner){incomplete();if(atom.tag==="unknown"||atom.tag==="opaque-object")this.activateOpaqueEffect(context);continue;}
                 this.watch(rule,owner.shape);
                 if(!this.definitionsReady(owner,rule))continue;
                 if(this.opaqueShape(owner,context)){incomplete();continue;}
@@ -2632,7 +2641,7 @@ class SourceValueFlow {
                     if(value===null||value===undefined){owner.ordinary=true;owner.unboxed=true;this.publish(plain,this.primitive(true));this.publish(result,{tag:"object",owner});continue;}
                     const kind=typeof value;this.copy(this.boxedPrimitive(cell(this.primitive(value)),kind,context),result);
                 }
-                if(!state.proof.primitiveComplete){this.publish(result,this.unknown);this.onActive(context,()=>this.opaqueEffect(context));}
+                if(!state.proof.primitiveComplete){this.publish(result,this.unknown);this.activateOpaqueEffect(context);}
             }
         });
         return result;
@@ -2648,7 +2657,7 @@ class SourceValueFlow {
             if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
             const owner=this.ordinaryOwner(atom),boxed=owner?.boxed?.get(kind!),kinds=this.primitiveKinds(cell(atom));
             if(boxed)this.copy(boxed,payload);else if(!(kinds&~mask))this.publish(payload,atom);
-            else if(atom.tag==="unknown"||atom.tag==="opaque-object"){this.publish(result,this.unknown);this.onActive(context,()=>this.opaqueEffect(context));}
+            else if(atom.tag==="unknown"||atom.tag==="opaque-object"){this.publish(result,this.unknown);this.activateOpaqueEffect(context);}
             else {this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}
         }});
         if(role==="primitive-value")this.copy(payload,result);
@@ -2710,7 +2719,7 @@ class SourceValueFlow {
             if(atom.tag==="function"){const definition=atom.owner.definition;this.publish(result,this.primitive(ts.isClassLike(definition)||atom.owner.kind==="ordinary"&&(ts.isFunctionDeclaration(definition)||ts.isFunctionExpression(definition))));}
             else if(atom.tag==="builtin"){const descriptor=runtimePrimitiveDescriptors.get(atom.name);this.publish(result,this.primitive(descriptor?descriptor.constructible:runtimeGlobalBindings.get(atom.name)?.kind==="intrinsic"&&atom.normalResult!=="not-callable"));}
             else if(atom.tag==="intrinsic")this.publish(result,this.primitive(atom.domain==="constructor"));
-            else if(atom.tag==="unknown"||atom.tag==="opaque-object"||atom.tag==="pending-source"){this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));this.onActive(context,()=>this.opaqueEffect(context));}
+            else if(atom.tag==="unknown"||atom.tag==="opaque-object"||atom.tag==="pending-source"){this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));this.activateOpaqueEffect(context);}
             else this.publish(result,this.primitive(false));
         }}});
         return result;
@@ -2920,7 +2929,7 @@ class SourceValueFlow {
         const key="dispatch:"+value.id+":"+target.id,prior=calls.get(key);if(prior)return prior;
         const result=this.newCell(),objects=this.newCell(),callee=this.newCell(),ordinary=this.newCell(),returned=this.newCell();calls.set(key,result);
         const fail=()=>{this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));};
-        this.rule([target],()=>{for(const atom of target.values){if(this.ordinaryOwner(atom))this.publish(objects,atom);else if(atom.tag==="unknown"||atom.tag==="opaque-object"){this.publish(objects,atom);this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));this.onActive(context,()=>this.opaqueEffect(context));}else if(atom.tag!=="pending-source"&&atom.tag!=="abrupt")fail();}});
+        this.rule([target],()=>{for(const atom of target.values){if(this.ordinaryOwner(atom))this.publish(objects,atom);else if(atom.tag==="unknown"||atom.tag==="opaque-object"){this.publish(objects,atom);this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));this.activateOpaqueEffect(context);}else if(atom.tag!=="pending-source"&&atom.tag!=="abrupt")fail();}});
         const method=this.property(objects,this.wellKnownSymbols.get("hasInstance")!,context),atoms=new Map<Atom,Cell>();
         this.rule([method],()=>{for(const atom of method.values){
             if(atom===this.primitive(undefined)||atom===this.primitive(null)){this.copy(objects,ordinary);continue;}
@@ -2944,7 +2953,7 @@ class SourceValueFlow {
             for(const atom of prototype.values){if(!this.ordinaryOwner(atom)){if(atom.tag!=="pending-source"&&atom.tag!=="abrupt"){const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}continue;}
                 for(const input of value.values){const owner=this.ordinaryOwner(input);if(!owner){if(input.tag!=="pending-source"&&input.tag!=="abrupt")this.publish(result,this.primitive(false));continue;}
                     const pending=[owner],visited=new Set<ObjectOwner>();while(pending.length){const current=pending.pop()!;if(visited.has(current))continue;visited.add(current);this.watch(rule,current.shape);
-                        if(current.proxy){this.proxyReadEffects(current,"prototype","get",context);this.onActive(context,()=>this.opaqueEffect(context));}
+                        if(current.proxy){this.proxyReadEffects(current,"prototype","get",context);this.activateOpaqueEffect(context);}
                         if(current.prototype){this.watch(rule,current.prototype);for(const parent of current.prototype.values){if(this.ordinaryOwner(parent)===this.ordinaryOwner(atom))this.publish(result,this.primitive(true));const next=this.ordinaryOwner(parent);if(next)pending.push(next);}}
                     }
                     this.publish(result,this.primitive(false));
@@ -2972,7 +2981,7 @@ class SourceValueFlow {
                 this.rule([target],()=>{for(const atom of target.values){let input=atoms.get(atom);if(!input){input=this.newCell();atoms.set(atom,input);this.publish(input,atom);}const kinds=this.primitiveKinds(input);if(kinds&KIND_FUNCTION)this.publish(callable,atom);if(kinds&~KIND_FUNCTION){this.publish(rejection,this.nativeException(context));this.publish(returned,this.abrupt);}}});
                 this.invoke(callback,callable,this.empty,args.slice(1).map(cell=>({cell,spread:false})),returned);
             }
-            else{this.publish(returned,this.unknown);this.publish(rejection,this.unknown);this.onActive(context,()=>this.opaqueEffect(context));}
+            else{this.publish(returned,this.unknown);this.publish(rejection,this.unknown);this.activateOpaqueEffect(context);}
             const resolved=this.promiseAssimilation(returned,callback);this.copy(resolved.value,value);this.copy(resolved.rejection,rejection);
         }
         return result;
@@ -3072,7 +3081,7 @@ class SourceValueFlow {
             if(!owner){
                 this.publish(value,atom);
                 if(atom.tag==="unknown"||atom.tag==="opaque-object"){
-                    this.publish(rejection,this.unknown);this.onActive(context,()=>this.opaqueEffect(context));
+                    this.publish(rejection,this.unknown);this.activateOpaqueEffect(context);
                 }
                 continue;
             }
@@ -3133,7 +3142,7 @@ class SourceValueFlow {
                 else{
                     this.publish(adopted,atom);
                     if(value.tag==="unknown"||value.tag==="opaque-object"){
-                        this.publish(result,atom);this.onActive(context,()=>this.opaqueEffect(context));
+                        this.publish(result,atom);this.activateOpaqueEffect(context);
                         const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.unknown);
                     }
                 }
@@ -3218,7 +3227,7 @@ class SourceValueFlow {
             if(atom.tag!=="generator"||atom.owner.kind!==kind){
                 if(atom.tag!=="abrupt")fail();
                 if(atom.tag==="unknown"||atom.tag==="opaque-object"){
-                    this.publish(value,this.unknown);this.publish(rejection,this.unknown);this.onActive(context,()=>this.opaqueEffect(context));
+                    this.publish(value,this.unknown);this.publish(rejection,this.unknown);this.activateOpaqueEffect(context);
                     if(kind!=="async-generator")this.copy(record,result);
                 }
                 continue;
@@ -3707,7 +3716,7 @@ class SourceValueFlow {
         const inputs=new Map<Atom,Cell>();const cell=(atom:Atom)=>{let input=inputs.get(atom);if(!input){input=this.newCell();inputs.set(atom,input);this.publish(input,atom);}return input;};
         const holderOwner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()},holder=this.newCell();this.publish(holder,{tag:"object",owner:holderOwner});this.defineField(holderOwner,"",cell(snapshot.value),true);
         const entries=new Map<string,Cell>(),records=new Map<SourceJSONRecord,number>();let nextRecord=0;
-        const fail=(output:Cell)=>{this.publish(output,this.unknown);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.unknown);this.onActive(context,()=>this.opaqueEffect(context));};
+        const fail=(output:Cell)=>{this.publish(output,this.unknown);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.unknown);this.activateOpaqueEffect(context);};
         const visit=(receiver:Cell,key:string,record:SourceJSONRecord|null,ancestors:ReadonlySet<ObjectOwner>):Cell=>{
             if(record&&!records.has(record))records.set(record,nextRecord++);
             const signature=receiver.id+":"+JSON.stringify(key)+":"+(record?records.get(record):"changed")+":"+[...ancestors].map(owner=>owner.shape.id).join(","),prior=entries.get(signature);if(prior)return prior;
@@ -3797,7 +3806,7 @@ class SourceValueFlow {
             }
             for(const atom of text.values)if(atom.tag==="abrupt"||atom.tag==="pending-source")this.publish(result,atom);
             if(state.proof.primitiveComplete||state.pending&&!state.unresolved)return;
-            this.publish(result,this.unknown);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.unknown);this.onActive(context,()=>this.opaqueEffect(context));
+            this.publish(result,this.unknown);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.unknown);this.activateOpaqueEffect(context);
         });
         return result;
     }
@@ -3839,7 +3848,7 @@ class SourceValueFlow {
         const inputs=new Map<Atom,Cell>(),indexed=new Map<Cell,Map<SourcePropertyKey,Cell>>();
         const cell=(atom:Atom)=>{let input=inputs.get(atom);if(!input){input=this.newCell();inputs.set(atom,input);this.publish(input,atom);}return input;};
         const item=(input:Cell,key:SourcePropertyKey)=>{let keys=indexed.get(input);if(!keys){keys=new Map();indexed.set(input,keys);}let value=keys.get(key);if(!value){value=this.property(input,key,context);keys.set(key,value);}return value;};
-        const fail=(output:Cell)=>{this.publish(output,this.unknownString);this.publish(output,this.primitive(undefined));const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.unknown);this.onActive(context,()=>this.opaqueEffect(context));};
+        const fail=(output:Cell)=>{this.publish(output,this.unknownString);this.publish(output,this.primitive(undefined));const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.unknown);this.activateOpaqueEffect(context);};
         const abrupt=(output:Cell)=>{this.publish(output,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));};
         const gap=this.newCell(),spacingInput=this.jsonPrimitive(space,"space",context);let spacing!:Rule;
         spacing=this.rule([spacingInput],()=>{
@@ -4252,7 +4261,7 @@ class SourceValueFlow {
                 rule = this.rule(converted, () => {
                     const states = converted.map(input => this.primitiveState(input,rule,true));
                     if (states.some(state => state.pending || state.proof.primitiveComplete && !state.proof.values.length)) return;
-                    if (operation.conversion === "equality" && states.some(state => state.unresolved)) this.onActive(node,()=>this.opaqueEffect(node));
+                    if (operation.conversion === "equality" && states.some(state => state.unresolved)) this.activateOpaqueEffect(node);
                     if (!handler || operation.conversion === "none") return;
                     if(operation.form==="update"||ts.isBinaryExpression(node)&&operation.assignment===node.operatorToken.kind)
                         this.publish(handler,this.nativeException(node));
@@ -4390,7 +4399,7 @@ class SourceValueFlow {
                 },owner);
             }
         } else if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
-            if(ts.isPropertyAccessExpression(node)&&ts.isPrivateIdentifier(node.name)) {this.publish(result,this.unknown);this.onActive(node,()=>this.opaqueEffect(node));return;}
+            if(ts.isPropertyAccessExpression(node)&&ts.isPrivateIdentifier(node.name)) {this.publish(result,this.unknown);this.activateOpaqueEffect(node);return;}
             if (ts.isElementAccessExpression(node) && node.argumentExpression)
                 this.copy(this.computedProperty(this.cell(node.expression), this.cell(node.argumentExpression), node), result);
             else {
@@ -4743,7 +4752,7 @@ class SourceValueFlow {
                         const normalKinds=operation==="IS_LOCK_FREE"?KIND_BOOLEAN:operation==="NOTIFY"?KIND_NUMBER:KIND_NUMERIC;
                         let normal=this.numericValues.get(normalKinds);if(!normal){normal={tag:"non-string",kinds:normalKinds};this.numericValues.set(normalKinds,normal);}
                         this.normalResults.set(result,operation==="WAIT"?this.unknownString:operation==="WAIT_ASYNC"?this.abrupt:normal);
-                        if(!argv){this.publish(result,this.unknown);this.onActive(node,()=>this.opaqueEffect(node));continue;}
+                        if(!argv){this.publish(result,this.unknown);this.activateOpaqueEffect(node);continue;}
                         // Brand validation does not call user code. Scalar conversion
                         // follows native argument order; an unknown brand remains an
                         // overapproximation of both Number and BigInt normal paths.
@@ -4762,11 +4771,11 @@ class SourceValueFlow {
                     if(atom.tag==="operation"&&atom.operation.startsWith("math-member:")) {
                         const descriptor=runtimeMathMethods.get(atom.operation.slice("math-member:".length))!;
                         if(invocation.construct){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));continue;}
-                        if(!argv){this.publish(result,this.nonString);this.onActive(node,()=>this.opaqueEffect(node));const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.unknown);continue;}
+                        if(!argv){this.publish(result,this.nonString);this.activateOpaqueEffect(node);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.unknown);continue;}
                         if(descriptor.kind==="SUM_PRECISE"){
                             const elements=this.iteratorElements(argument(0)??omittedArgument,node);this.watch(rule,elements);
                             const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));
-                            if(this.primitiveState(elements,rule,true).unresolved){this.onActive(node,()=>this.opaqueEffect(node));if(handler)this.publish(handler,this.unknown);}
+                            if(this.primitiveState(elements,rule,true).unresolved){this.activateOpaqueEffect(node);if(handler)this.publish(handler,this.unknown);}
                             let value=this.numericValues.get(KIND_NUMBER);if(!value){value={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,value);}this.publish(result,value);continue;
                         }
                         const count=descriptor.kind==="RANDOM"?0:descriptor.kind==="UNARY"||descriptor.kind==="BINARY"?descriptor.length:argv.length;
@@ -4780,10 +4789,10 @@ class SourceValueFlow {
                     if(atom.tag==="operation"&&atom.operation.startsWith("callback-timer:")){
                         const descriptor=runtimeCallbackTimerDescriptors.get(atom.operation.slice("callback-timer:".length))!,handler=this.exceptionHandlers.get(node);
                         if(descriptor.action==="CLEAR"){
-                            if(argv?.length){const converted=this.coerceCell(argv[0]!,node,"number");this.watchText(rule,converted);}else if(!argv)this.onActive(node,()=>this.opaqueEffect(node));
+                            if(argv?.length){const converted=this.coerceCell(argv[0]!,node,"number");this.watchText(rule,converted);}else if(!argv)this.activateOpaqueEffect(node);
                             this.publish(result,this.primitive(undefined));continue;
                         }
-                        if(!argv){this.publish(result,this.unknown);this.onActive(node,()=>this.opaqueEffect(node));if(handler)this.publish(handler,this.unknown);continue;}
+                        if(!argv){this.publish(result,this.unknown);this.activateOpaqueEffect(node);if(handler)this.publish(handler,this.unknown);continue;}
                         const callback=argument(0)??omittedArgument;this.watch(rule,callback);const kinds=this.primitiveKinds(callback);
                         if(kinds&~KIND_FUNCTION){if(handler)this.publish(handler,this.nativeException(node));this.publish(result,this.abrupt);}
                         if(!(kinds&KIND_FUNCTION))continue;
@@ -4818,7 +4827,7 @@ class SourceValueFlow {
                             this.watch(rule,invocation.receiver);
                             const receivers=[...invocation.receiver.values];if(!receivers.length)continue;
                             if(receivers.some(receiver=>receiver.tag!=="builtin"||receiver.name!=="Promise")){
-                                this.publish(result,this.unknown);this.opaqueCallableCaptures(invocation.receiver,node);this.onActive(node,()=>this.opaqueEffect(node));const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.unknown);
+                                this.publish(result,this.unknown);this.opaqueCallableCaptures(invocation.receiver,node);this.activateOpaqueEffect(node);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.unknown);
                             }
                             if(!receivers.some(receiver=>receiver.tag==="builtin"&&receiver.name==="Promise"))continue;
                             if(member==="resolve"||member==="reject"){
@@ -4826,7 +4835,7 @@ class SourceValueFlow {
                                 if(member==="resolve")this.copy(this.promiseResolve(input,node),result);
                                 else{let calls=this.promiseConstructions.get(node);if(!calls){calls=new Map();this.promiseConstructions.set(node,calls);}const key="reject:"+input.id;let holder=calls.get(key);if(!holder){holder=this.newCell();calls.set(key,holder);const value=this.newCell(),rejection=this.exceptionCell();this.copy(input,rejection);this.publish(holder,{tag:"promise",value,rejection});}this.copy(holder,result);}
                             }else if(member==="try"||member==="withResolvers")this.copy(this.promiseStaticCapability(member,node,argv),result);
-                            else{this.publish(result,this.opaqueObject);this.onActive(node,()=>this.opaqueEffect(node));}
+                            else{this.publish(result,this.opaqueObject);this.activateOpaqueEffect(node);}
                             continue;
                         }
                         if(member==="catch")this.copy(this.promiseCatch(invocation.receiver,argument(0)??omittedArgument,node),result);
@@ -4921,7 +4930,7 @@ class SourceValueFlow {
                         if (NUMERIC_CONVERSIONS.has(atom.name)) {
                             const handler = this.exceptionHandlers.get(node);
                             if(invocation.construct){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.nativeException(node));continue;}
-                            if (!argv) {this.publish(result, invocation.construct ? this.opaqueObject : this.nonString); if (handler) this.publish(handler, this.unknown); this.onActive(node, () => this.opaqueEffect(node)); continue;}
+                            if (!argv) {this.publish(result, invocation.construct ? this.opaqueObject : this.nonString); if (handler) this.publish(handler, this.unknown); this.activateOpaqueEffect(node); continue;}
                             if (atom.name === "Number" && argv.length === 0) {if (!invocation.construct) this.publish(result, this.primitive(0)); continue;}
                             const converted = this.coerceCell(argv[0] ?? omittedArgument, node, atom.name); this.watchText(rule, converted);
                             if (!invocation.construct) this.copy(converted, result);
@@ -4931,7 +4940,7 @@ class SourceValueFlow {
                             const handler = this.exceptionHandlers.get(node);
                             if (invocation.construct) {this.publish(result, this.abrupt); if (handler) this.publish(handler, this.nativeException(node)); continue;}
                             this.normalResults.set(result, this.nonString);
-                            if (!argv) {this.publish(result, this.nonString); if (handler) this.publish(handler, this.unknown); this.onActive(node, () => this.opaqueEffect(node)); continue;}
+                            if (!argv) {this.publish(result, this.nonString); if (handler) this.publish(handler, this.unknown); this.activateOpaqueEffect(node); continue;}
                             let allocations = this.symbolAllocations.get(node);
                             if (!allocations) {allocations = new Map(); this.symbolAllocations.set(node, allocations);}
                             const descriptions: (string | undefined)[] = [];
@@ -5087,7 +5096,7 @@ class SourceValueFlow {
                                 if(handled(atom,signature+":opaque"))continue;
                                 this.publish(result,this.unknownString);
                                 const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.unknown);
-                                this.onActive(node,()=>this.opaqueEffect(node));
+                                this.activateOpaqueEffect(node);
                                 continue;
                             }
                             for(const extent of state.proof.values){
@@ -5119,7 +5128,7 @@ class SourceValueFlow {
                         }
                         if (atom.operation === "symbol-for") {
                             this.normalResults.set(result, this.nonString);
-                            if (!argv) {this.publish(result, this.nonString); const handler = this.exceptionHandlers.get(node); if (handler) this.publish(handler, this.unknown); this.onActive(node, () => this.opaqueEffect(node)); continue;}
+                            if (!argv) {this.publish(result, this.nonString); const handler = this.exceptionHandlers.get(node); if (handler) this.publish(handler, this.unknown); this.activateOpaqueEffect(node); continue;}
                             const key = this.stringHintCell(argv[0] ?? omittedArgument, node); this.watchText(rule, key);
                             const proof = this.primitiveChoiceProof(key);
                             if (!proof.primitiveComplete) {for (const value of key.values) if (value.tag === "unknown" || value.tag === "pending-source") this.publish(result, value.tag === "unknown" ? this.nonString : value);}
@@ -5214,7 +5223,7 @@ class SourceValueFlow {
                                 this.rule([invocation.receiver], () => {
                                     for (const target of invocation.receiver.values) {
                                         if (target.tag === "abrupt") continue;
-                                        if(target.tag==="unknown"||target.tag==="opaque-object")this.onActive(node,()=>this.opaqueEffect(node));
+                                        if(target.tag==="unknown"||target.tag==="opaque-object")this.activateOpaqueEffect(node);
                                         const owner = this.ordinaryOwner(target);
                                         if (owner?.prototype) this.copy(owner.prototype, fields.prototype!);
                                         else if (target.tag === "operation") this.copy(this.callablePrototype("ordinary"), fields.prototype!);
