@@ -1176,8 +1176,7 @@ class Emitter {
     private isPrunableTopLevelClass(cd: ts.ClassDeclaration): boolean {
         if (!cd.name) return false;
         if (!ts.isSourceFile(cd.parent) && !this.isNamespaceTopLevelDeclaration(cd)) return false;
-        if (!this.classHeritageHasNoDefinitionSideEffects(cd)) return false;
-        if (this.classHasDecorators(cd)) return false;
+        if (!this.classDefinitionHasNoSideEffects(cd)) return false;
         const modifiers = ts.canHaveModifiers(cd) ? ts.getModifiers(cd) : undefined;
         if (modifiers?.some((m) =>
             m.kind === ts.SyntaxKind.ExportKeyword ||
@@ -1186,56 +1185,27 @@ class Emitter {
         )) {
             return false;
         }
-        for (const member of cd.members) {
+        return true;
+    }
+
+    private classDefinitionHasNoSideEffects(definition: ts.ClassLikeDeclaration): boolean {
+        if (this.classHasDecorators(definition)) return false;
+        for (const stage of classDefinitionPlan(definition)) {
+            // A superclass binding is mutable. Get(superclass, "prototype")
+            // and constructor validation belong to definition evaluation.
+            if (stage.kind === "heritage") return false;
+            if (stage.kind !== "element") continue;
+            const member = stage.member;
             if (ts.isClassStaticBlockDeclaration(member)) return false;
-            if (member.name && !this.classMemberNameHasNoDefinitionSideEffects(member.name)) {
-                return false;
-            }
-            if (isStatic(member) && !this.staticClassMemberHasNoDefinitionSideEffects(member)) {
-                return false;
-            }
+            if (stage.key && (this.staticPropertyName(member.name!) === null ||
+                !this.isSideEffectFreeTopLevelConstInitializer(stage.key))) return false;
+            if (!isStatic(member)) continue;
+            // Defining an own static prototype can complete abruptly.
+            if (member.name && this.staticPropertyName(member.name) === "prototype") return false;
+            if (ts.isPropertyDeclaration(member) && member.initializer &&
+                !this.isSideEffectFreeTopLevelConstInitializer(member.initializer)) return false;
         }
         return true;
-    }
-
-    private classMemberNameHasNoDefinitionSideEffects(name: ts.PropertyName): boolean {
-        if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
-            return true;
-        }
-        if (!ts.isComputedPropertyName(name)) return false;
-        return this.staticPropertyName(name) !== null &&
-            this.isSideEffectFreeTopLevelConstInitializer(name.expression);
-    }
-
-    private classHeritageHasNoDefinitionSideEffects(cd: ts.ClassLikeDeclaration): boolean {
-        if (!cd.heritageClauses?.length) return true;
-        for (const clause of cd.heritageClauses) {
-            if (clause.token !== ts.SyntaxKind.ExtendsKeyword) return false;
-            for (const type of clause.types) {
-                const expr = type.expression;
-                if (!ts.isIdentifier(expr)) return false;
-                const sym = this.symbolForIdentifier(expr);
-                const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-                if (!decl || !ts.isClassDeclaration(decl)) return false;
-                const source = cd.getSourceFile();
-                if (decl.getSourceFile() !== source) return false;
-                if (decl.getStart(source) >= cd.getStart(source)) return false;
-            }
-        }
-        return true;
-    }
-
-    private staticClassMemberHasNoDefinitionSideEffects(member: ts.ClassElement): boolean {
-        // A complete member descriptor cannot replace the constructor's
-        // non-configurable own prototype. That abrupt completion is observable.
-        if (member.name && this.staticPropertyName(member.name) === "prototype") return false;
-        if (ts.isPropertyDeclaration(member)) {
-            return !member.initializer ||
-                this.isSideEffectFreeTopLevelConstInitializer(member.initializer);
-        }
-        return ts.isMethodDeclaration(member) ||
-            ts.isGetAccessorDeclaration(member) ||
-            ts.isSetAccessorDeclaration(member);
     }
 
     private moduleRuntimeIndex(moduleId: string): number {
@@ -1271,26 +1241,10 @@ class Emitter {
         return !this.isPrunableTopLevelClass(cd) || this.referencedTopLevelClasses.has(cd);
     }
 
-    private classExpressionHasNoDefinitionSideEffects(expr: ts.ClassExpression): boolean {
-        if (!this.classHeritageHasNoDefinitionSideEffects(expr)) return false;
-        if (this.classHasDecorators(expr)) return false;
-        for (const member of expr.members) {
-            if (ts.isClassStaticBlockDeclaration(member)) return false;
-            if (member.name && !this.classMemberNameHasNoDefinitionSideEffects(member.name)) {
-                return false;
-            }
-            if (isStatic(member) && !this.staticClassMemberHasNoDefinitionSideEffects(member)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     private isPrunableLocalClass(cd: ts.ClassDeclaration): boolean {
         if (!cd.name) return false;
         if (ts.isSourceFile(cd.parent) || this.isNamespaceTopLevelDeclaration(cd)) return false;
-        if (!this.classHeritageHasNoDefinitionSideEffects(cd)) return false;
-        if (this.classHasDecorators(cd)) return false;
+        if (!this.classDefinitionHasNoSideEffects(cd)) return false;
         const modifiers = ts.canHaveModifiers(cd) ? ts.getModifiers(cd) : undefined;
         if (modifiers?.some((m) =>
             m.kind === ts.SyntaxKind.ExportKeyword ||
@@ -1298,15 +1252,6 @@ class Emitter {
             m.kind === ts.SyntaxKind.DeclareKeyword
         )) {
             return false;
-        }
-        for (const member of cd.members) {
-            if (ts.isClassStaticBlockDeclaration(member)) return false;
-            if (member.name && !this.classMemberNameHasNoDefinitionSideEffects(member.name)) {
-                return false;
-            }
-            if (isStatic(member) && !this.staticClassMemberHasNoDefinitionSideEffects(member)) {
-                return false;
-            }
         }
         return true;
     }
@@ -1387,7 +1332,7 @@ class Emitter {
             return true;
         }
         if (ts.isClassExpression(expr)) {
-            return this.classExpressionHasNoDefinitionSideEffects(expr);
+            return this.classDefinitionHasNoSideEffects(expr);
         }
         if (ts.isIdentifier(expr)) {
             if (
@@ -11129,7 +11074,7 @@ class Emitter {
         if (this.sideEffectFreeBigIntLiteralText(unwrapped, seenConsts) !== null) return "bigint";
         if (this.sideEffectFreeStringLiteralText(unwrapped, seenConsts) !== null) return "string";
         if (ts.isArrowFunction(unwrapped) || ts.isFunctionExpression(unwrapped)) return "function";
-        if (ts.isClassExpression(unwrapped) && this.classExpressionHasNoDefinitionSideEffects(unwrapped)) return "function";
+        if (ts.isClassExpression(unwrapped) && this.classDefinitionHasNoSideEffects(unwrapped)) return "function";
         if (
             (
                 ts.isArrayLiteralExpression(unwrapped) ||
@@ -29376,7 +29321,7 @@ class Emitter {
         ) {
             return true;
         }
-        if (ts.isClassExpression(unwrapped) && this.classExpressionHasNoDefinitionSideEffects(unwrapped)) {
+        if (ts.isClassExpression(unwrapped) && this.classDefinitionHasNoSideEffects(unwrapped)) {
             return true;
         }
         if (
@@ -29764,7 +29709,7 @@ class Emitter {
         if (this.sideEffectFreeStringLiteralText(unwrapped, seenConsts) !== null) {
             return "nonNullish";
         }
-        if (ts.isClassExpression(unwrapped) && this.classExpressionHasNoDefinitionSideEffects(unwrapped)) {
+        if (ts.isClassExpression(unwrapped) && this.classDefinitionHasNoSideEffects(unwrapped)) {
             return "nonNullish";
         }
         if (

@@ -1,3 +1,5 @@
+- Preserve observable superclass validation and prototype reads for unused typed classes through one shared definition-effect plan.
+
 - Replace crypto syntax and physical byte selectors with canonical ordinary export owners, actual byte witnesses and ordered option decoding; preserve Error completions on entropy failure.
 
 - Observe inherited Stats lazy-date errors, String field order and retained user Symbol ownership against independent Node.
