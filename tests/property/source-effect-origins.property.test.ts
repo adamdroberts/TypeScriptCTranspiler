@@ -49,9 +49,9 @@ test('activation origins close over the call graph and declared Script order ind
    const directory=join(root,noGc+'-'+typed);await mkdir(directory);
    const depth=typed&&!noGc?64:1;
    const functions=Array.from({length:depth},(_,index)=>`function f${index}(){return ${index+1<depth?'f'+(index+1)+'()':'(0,eval)("Math.random();")'};}`).join('\n');
-   const sources=[`globalThis.setting={body:'return "saved";'};`,functions+'\nconst body=globalThis.setting.body;f0();console.log(Function(body)());',`Math.random();{const owner={body:'return "loop";'};const saved=owner.body;for(let index=0;index<3;index++)Math.random();console.log(Function(saved)());}`];
+   const sources=[`globalThis.setting={body:'return "saved";'};`,functions+'\nconst body=globalThis.setting.body;f0();console.log(Function(body)());',`Math.random();{const owner={body:'return "loop";'};const saved=owner.body;for(let index=0;index<3;index++)Math.random();console.log(Function(saved)());}`,`{const create=Function;const opaque=new Proxy(function(){},{});for(let index=0;index<3;index++)opaque();const owner={body:'return "created";'};console.log(create(owner.body)());}`];
    const reference=join(directory,'reference.js');await writeFile(reference,sources.join('\n'));
-   const oracleOutput=reference+'.stdout';const node=Bun.spawnSync(['node',reference],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120_000});const oracleText=await readFile(oracleOutput,'utf8');expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(oracleText).toBe('saved\nloop\n');
+   const oracleOutput=reference+'.stdout';const node=Bun.spawnSync(['node',reference],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120_000});const oracleText=await readFile(oracleOutput,'utf8');expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(oracleText).toBe('saved\nloop\ncreated\n');
    const entries:string[]=[];
    for(const [index,source] of sources.entries()){const entry=join(directory,index===1&&typed?'main.ts':'script-'+index+'.js');await writeFile(entry,(typed?'// @ts-nocheck\n':'')+source);entries.push(entry);}
    const entry=entries[1]!,output=join(directory,'program'),diagnostics:string[]=[];
@@ -77,4 +77,21 @@ test('top-level repeated effects retain their source phase around saved reads',(
  expect(repeated.error).toContain('direct eval source is not a finite static string expression');
  const across=finiteEvalScriptSourceGraph([{path:'setup.js',goal:'script',source:'var owner={body:"17;"};var saved=owner.body;'}, {path:'later.js',goal:'script',source:'for(let index=0;index<2;index++)opaque(owner);eval(saved);'}]);
  expect(across.error).toBeNull();expect(across.directEvalSources.map(entry=>entry.source)).toEqual(['17;']);
+});
+
+test('completed root effects precede later owner creation',()=>{
+ const effects=['for(let index=0;index<3;index++)opaque();','while(flag){opaque();break;}','do{opaque();}while(false);'];
+ for(const effect of effects){
+  const source=effect+'const owner={body:"var created=17;"};$262.evalScript(owner.body);';
+  const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm"),values=[];new vm.Script(process.argv[1]).runInNewContext({flag:true,opaque(){},$262:{evalScript(value){values.push(value);}}});fs.writeSync(1,JSON.stringify(values));',source],{stdout:'pipe',stderr:'pipe',timeout:30000});
+  expect({code:reference.exitCode,stderr:reference.stderr.toString(),stdout:reference.stdout.toString()}).toEqual({code:0,stderr:'',stdout:'["var created=17;"]'});
+  const graph=finiteEvalScriptSourceGraph([{path:'subject.js',source}]);expect(graph.error).toBeNull();expect(graph.sources).toEqual(['var created=17;']);
+ }
+ const scripts=finiteEvalScriptSourceGraph([{path:'before.js',goal:'script',source:effects[0]!},{path:'after.js',goal:'script',source:'const owner={body:"var created=17;"};$262.evalScript(owner.body);'}]);
+ expect(scripts.error).toBeNull();expect(scripts.sources).toEqual(['var created=17;']);
+ for(const source of [
+  'const owner={body:"17;"};for(let index=0;index<3;index++)opaque();$262.evalScript(owner.body);',
+  'for(let index=0;index<3;index++){const owner={body:"17;"};opaque();$262.evalScript(owner.body);}',
+  'function run(){const owner={body:"17;"};opaque();$262.evalScript(owner.body);}for(let index=0;index<3;index++)run();',
+ ])expect(finiteEvalScriptSourceGraph([{path:'subject.js',source}]).error).toContain('evalScript source is not a finite static string expression');
 });

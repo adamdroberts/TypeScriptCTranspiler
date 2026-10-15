@@ -1338,7 +1338,8 @@ class SourceValueFlow {
         return owner;
     }
     /** An effect cannot mutate an identity whose represented creation is
-     * strictly later. Repeated, suspended and unrepresented timing stays open. */
+     * strictly later, including effects in a completed root loop. Repeated,
+     * suspended and unrepresented creation timing stays open. */
     private ownerMutation(owner:ObjectOwner):void {
         const creation=this.ownerCreations.get(owner);
         const activation=creation?this.enclosingActivation(creation):undefined;
@@ -1347,7 +1348,7 @@ class SourceValueFlow {
         if(!creation||this.repeatedActivationContext(creation)){this.copy(this.opaqueMutation,owner.shape);return;}
         this.rule([this.opaqueMutation,...(activation?[activation.active,this.activationTiming(activation)]:[])],()=>{
             for(const atom of this.opaqueMutation.values){
-                if(creation&&(!activation||!this.activationTiming(activation).values.nonempty)&&atom.tag==="unknown"&&atom.origin&&!this.dynamicContext(atom.origin)&&!this.repeatedActivationContext(creation)){
+                if(creation&&(!activation||!this.activationTiming(activation).values.nonempty)&&atom.tag==="unknown"&&atom.origin&&!this.enclosingActivation(atom.origin)&&!this.repeatedActivationContext(creation)){
                     const points=activation?.kind==="ordinary"?[...activation.active.values].map(origin=>origin.tag==="unknown"?origin.origin:undefined):activation?[undefined]:[creation];
                     if(points.length&&points.every(point=>{
                         if(!point||this.dynamicContext(point))return false;
