@@ -1,3 +1,5 @@
+- Project actual callable bind targets before metadata/prototype reads, retaining abrupt alternatives and successful bound-owner witnesses.
+
 - Compare complete async logical-value observations with independent Node execution before native validation.
 
 - Select canonical array, binding and literal-key representations before optional TypeScript inference, repairing the delegation checker crash.

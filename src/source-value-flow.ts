@@ -355,6 +355,7 @@ class SourceValueFlow {
     private readonly evaluationCallerTargets = new WeakSet<ts.Identifier>();
     private readonly dynamicSourceTexts = new Map<FunctionNode, string>();
     private readonly callablePrototypes = new Map<DynamicFunctionKind, Cell>();
+    private readonly callableTargets = new Map<Cell,Map<ts.Node,{callable:Cell;completion:Cell}>>();
     private ordinaryObjectPrototype?: Cell;
     private ordinaryArrayPrototype?: Cell;
     private readonly generated = new Map<string,{entry:FunctionConstructorEntry;value:Cell;environment:EvaluationEnvironment|null}>();
@@ -2550,11 +2551,36 @@ class SourceValueFlow {
     private callableValidity(input:Cell,context:ts.Node):Cell {
         const result=this.newCell();let rule!:Rule;
         rule=this.rule([input],()=>{const pending=[input],visited=new Set<Cell>();while(pending.length){const cell=pending.pop()!;if(visited.has(cell))continue;visited.add(cell);this.watch(rule,cell);for(const atom of cell.values){
-            if(atom.tag==='bound'){pending.push(atom.target);continue;}const proxy=this.ordinaryOwner(atom)?.proxy;if(proxy){pending.push(proxy.target);continue;}
-            if(atom.tag==='function'||atom.tag==='operation'||atom.tag==='builtin'&&atom.normalResult!=='not-callable'||atom.tag==='intrinsic'&&atom.domain==='constructor')this.publish(result,this.primitive(true));
+            const proxy=this.ordinaryOwner(atom)?.proxy;if(proxy){pending.push(proxy.target);continue;}
+            // Bound owners carry the successful target-callability witness;
+            // their own [[Call]] slot does not depend on a later target read.
+            if(atom.tag==='function'||atom.tag==='bound'||atom.tag==='operation'||atom.tag==='promise-resolver'||atom.tag==='builtin'&&atom.normalResult!=='not-callable'||atom.tag==='intrinsic'&&(atom.domain==='constructor'||atom.domain==='prototype'&&atom.kind==='ordinary'))this.publish(result,this.primitive(true));
             else if(atom.tag==='unknown'||atom.tag==='opaque-object'){this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));}
             else if(atom.tag!=='pending-source'&&atom.tag!=='abrupt')this.publish(result,this.primitive(false));
         }}});return result;
+    }
+    /** Keep the actual callable identities separate from invalid alternatives.
+     * Metadata and prototype reads belong only to the successful IsCallable
+     * branch, including when a binding also has a hoisted undefined value. */
+    private callableTarget(input:Cell,context:ts.Node):{callable:Cell;completion:Cell} {
+        let contexts=this.callableTargets.get(input);
+        if(!contexts){contexts=new Map();this.callableTargets.set(input,contexts);}
+        const previous=contexts.get(context);if(previous)return previous;
+        const record={callable:this.newCell(),completion:this.newCell()},seen=new Set<Atom>();contexts.set(context,record);
+        this.rule([input],()=>{for(const atom of input.values){
+            if(seen.has(atom))continue;seen.add(atom);
+            if(atom.tag==='abrupt'||atom.tag==='pending-source'){this.publish(record.completion,atom);continue;}
+            const value=this.newCell();this.publish(value,atom);
+            const valid=this.callableValidity(value,context);
+            this.rule([valid],()=>{
+                if(valid.values.has(this.primitive(true)))this.publish(record.callable,atom);
+                if(valid.values.has(this.primitive(false))){
+                    this.publish(record.completion,this.abrupt);
+                    const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));
+                }
+            });
+        }});
+        return record;
     }
     private setLikeRecord(input:Cell,context:ts.Node):SourceSetLikeRecord {
         let contexts=this.setLikeRecords.get(input);if(!contexts){contexts=new Map();this.setLikeRecords.set(input,contexts);}const prior=contexts.get(context);if(prior)return prior;
@@ -3030,7 +3056,12 @@ class SourceValueFlow {
     private promiseResolverCells(value:Cell,rejection:Cell):readonly Cell[] {
         let rejections=this.promiseResolvers.get(value);if(!rejections){rejections=new Map();this.promiseResolvers.set(value,rejections);}
         const prior=rejections.get(rejection);if(prior)return prior;
-        const resolvers=[false,true].map(reject=>{const cell=this.newCell(),fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.copy(this.opaqueMutation,fields.shape);this.publish(cell,{tag:"promise-resolver",value,rejection,reject,fields});return cell;});
+        const resolvers=[false,true].map(reject=>{
+            const cell=this.newCell(),fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};
+            const length=this.newCell(),name=this.newCell();this.publish(length,this.primitive(1));this.publish(name,this.primitive(""));
+            this.defineField(fields,"length",length,false);this.defineField(fields,"name",name,false);
+            this.copy(this.opaqueMutation,fields.shape);this.publish(cell,{tag:"promise-resolver",value,rejection,reject,fields});return cell;
+        });
         rejections.set(rejection,resolvers);return resolvers;
     }
     private promiseStaticCapability(member:string,context:ts.Node,args:readonly Cell[]|null):Cell {
@@ -5252,13 +5283,16 @@ class SourceValueFlow {
                             continue;
                         }
                         if (atom.operation === "bind") {
+                            const target=this.callableTarget(invocation.receiver,node);
+                            this.copy(target.completion,result!);this.watch(rule,target.callable);
+                            if(!target.callable.values.nonempty)continue;
                             let value = boundValues.get(signature);
                             if (!value) {
                                 const fields: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.newCell()};
                                 this.copy(this.opaqueMutation,fields.shape);
-                                value = { tag: "bound", target: invocation.receiver, receiver: argv?.[0] ?? this.empty, prefix: argv?.slice(1) ?? null, fields }; boundValues.set(signature, value);
-                                const length=this.property(invocation.receiver,"length",node,true),boundLength=this.newCell();
-                                const name = this.property(invocation.receiver, "name", node), boundName = this.newCell();
+                                value = { tag: "bound", target: target.callable, receiver: argv?.[0] ?? this.empty, prefix: argv?.slice(1) ?? null, fields }; boundValues.set(signature, value);
+                                const length=this.property(target.callable,"length",node,true),boundLength=this.newCell();
+                                const name = this.property(target.callable, "name", node), boundName = this.newCell();
                                 this.defineField(fields, "name", boundName);
                                 const primitiveName = this.newCell();
                                 const derivedName: Atom = {tag:"text-operation",operation:"bound-name",parts:[primitiveName]};
@@ -5286,13 +5320,12 @@ class SourceValueFlow {
                                         this.publish(boundLength,this.primitive(Math.max(integer-(argv?Math.max(argv.length-1,0):0),0)));
                                     }
                                 });
-                                this.rule([invocation.receiver], () => {
-                                    for (const target of invocation.receiver.values) {
-                                        if (target.tag === "abrupt") continue;
-                                        if(target.tag==="unknown"||target.tag==="opaque-object")this.activateOpaqueEffect(node);
-                                        const owner = this.ordinaryOwner(target);
+                                this.rule([target.callable], () => {
+                                    for (const receiver of target.callable.values) {
+                                        if(receiver.tag==="unknown"||receiver.tag==="opaque-object")this.activateOpaqueEffect(node);
+                                        const owner = this.ordinaryOwner(receiver);
                                         if (owner?.prototype) this.copy(owner.prototype, fields.prototype!);
-                                        else if (target.tag === "operation") this.copy(this.callablePrototype("ordinary"), fields.prototype!);
+                                        else if (receiver.tag === "operation") this.copy(this.callablePrototype("ordinary"), fields.prototype!);
                                         else this.publish(fields.prototype!, this.unknown);
                                     }
                                 });
