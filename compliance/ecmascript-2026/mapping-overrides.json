@@ -19,6 +19,14 @@
       "clauses": ["String.prototype.trimright"],
       "reason": "The pinned Annex B scenarios use the camel-case trimRight anchor for the current String.prototype.trimright clause.",
       "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "esid": "sec-regexp.prototype-@@matchall",
+      "clauses": [
+        "sec-regexp-prototype-%symbol.matchall%"
+      ],
+      "reason": "Reviewed historical RegExp prototype @@matchAll anchor denotes the same intrinsic as the pinned canonical %Symbol.matchAll% clause. It preserves the separate RegExp owner for the String-directory Unicode flag forwarding source rather than reassigning it to the outer String protocol.",
+      "reviewedBy": "tsc2c compliance review"
     }
   ],
   "legacyIdRules": [
@@ -581,6 +589,15 @@
         "sec-%regexpstringiteratorprototype%-object"
       ],
       "reason": "Reviewed pinned pending prototype sources retain the IteratorPrototype ancestry; the more specific next semantic directory keeps its own owner. The source-hashed tag ambiguity override records its exact property clause.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "prefix": "test/built-ins/String/prototype/matchAll/",
+      "esid": "pending",
+      "clauses": [
+        "sec-string.prototype.matchall"
+      ],
+      "reason": "Reviewed historical pending sources execute the outer String matchAll receiver, IsRegExp/global-flags gate, original symbol method and ordered RegExp fallback. Exact normative RegExp and standard-built-in construction metadata retain precedence; the placeholder is never interpreted globally.",
       "reviewedBy": "tsc2c compliance review"
     }
   ],

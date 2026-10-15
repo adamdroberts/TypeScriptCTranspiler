@@ -1588,7 +1588,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-string.prototype.localecompare` — String.prototype.localeCompare ( _that_ [ , _reserved1_ [ , _reserved2_ ] ] )
     - [ ] `generic-tostring-and-uca-root-collation` (intrinsic, unbounded): Generic receiver ToString, ordered that conversion, ordinary method lookup, and UCA root collation.
   - [ ] `sec-string.prototype.match` — String.prototype.match ( _regexp_ ): exact disposition and partitions missing.
-  - [ ] `sec-string.prototype.matchall` — String.prototype.matchAll ( _regexp_ ): exact disposition and partitions missing.
+  - [ ] `sec-string.prototype.matchall` — String.prototype.matchAll ( _regexp_ )
+    - [ ] `regexp-global-gate-original-symbol-dispatch-and-lazy-fallback` (intrinsic, unbounded): Generic receiver, object IsRegExp/global-flags gate, original Symbol.matchAll receiver/argument identity, ordered String/RegExp fallback and lazy iterator result.
   - [ ] `sec-string.prototype.normalize` — String.prototype.normalize ( [ _form_ ] )
     - [ ] `generic-tostring-form-and-unicode-normalization` (intrinsic, unbounded): Generic receiver ToString, ordered form conversion with RangeError partitions, ordinary method lookup, and ICU normalization.
   - [ ] `sec-string.prototype.padend` — String.prototype.padEnd ( _maxLength_ [ , _fillString_ ] )

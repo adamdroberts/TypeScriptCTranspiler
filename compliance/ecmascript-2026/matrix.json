@@ -6899,6 +6899,59 @@
         }
       ],
       "rationale": "Scoped reciprocal evidence for the shared ordinary lazy iterator state; no parent or whole-target conformance claim."
+    },
+    {
+      "clause": "sec-string.prototype.matchall",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "regexp-global-gate-original-symbol-dispatch-and-lazy-fallback",
+          "title": "Generic receiver, object IsRegExp/global-flags gate, original Symbol.matchAll receiver/argument identity, ordered String/RegExp fallback and lazy iterator result",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-string.prototype.matchall"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/regexp-match-all.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "regexp_match_all_iterator_worklist"
+            ],
+            "e2e": [
+              "regexp_match_all_protocols"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#String",
+              "stdlib/lib.core.d.ts#RegExpStringIterator"
+            ],
+            "implementation": [
+              "runtime/tsc_value.c#tsc_value_method_match_all",
+              "runtime/tsc_value.c#string_protocol_call",
+              "runtime/tsc_value.c#tsc_value_is_regexp",
+              "runtime/tsc_regexp_api.c#tsc_regexp_match_all_apply"
+            ]
+          },
+          "rationale": "One ordinary outer method validates the receiver and actual object RegExp/global flags, then calls the saved Symbol.matchAll method with the original receiver Value; fallback performs ordered String and RegExp construction before the same lazy iterator. Independent Node properties cover custom method identity, global gating, coercion/errors, fallback and iteration; one registered retained owner worklist and existing CLI consumer verify lazy state and complete traversal in both memory modes. Exact current and reviewed pending source owners preserve separate RegExp/built-in construction metadata; independent Node/native and artifact-byte audits retain the separate Annex B host-object boundary. Iterator creation direct-test annotation, remaining feature readiness, broad compiler-memory repair, full regression, host eligibility and exhaustive signed target coverage remain open."
+        }
+      ],
+      "rationale": "Scoped reciprocal outer String matchAll evidence using the existing ordinary protocol and lazy iterator; no whole-target conformance claim."
     }
   ],
   "groups": [

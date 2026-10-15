@@ -532,7 +532,8 @@
         "sec-string.prototype-%symbol.iterator%#generic-tostring-and-code-point-iteration",
         "sec-getsubstitution#utf16-template-token-and-live-named-get-worklist",
         "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist",
-        "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist"
+        "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist",
+        "sec-string.prototype.matchall#regexp-global-gate-original-symbol-dispatch-and-lazy-fallback"
       ]
     },
     {
@@ -929,7 +930,8 @@
         "sec-string.prototype.includes#generic-tostring-regexp-rejection-position-and-utf16-search",
         "sec-string.prototype.startswith#generic-tostring-regexp-rejection-position-and-utf16-prefix",
         "sec-string.prototype.endswith#generic-tostring-regexp-rejection-end-position-and-utf16-suffix",
-        "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist"
+        "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist",
+        "sec-string.prototype.matchall#regexp-global-gate-original-symbol-dispatch-and-lazy-fallback"
       ]
     },
     {
@@ -5974,7 +5976,8 @@
       "id": "runtime/tsc_value.c#string_protocol_call",
       "targets": [
         "sec-string.prototype.replace#actual-symbol-dispatch-and-utf16-literal-worklist",
-        "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist"
+        "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist",
+        "sec-string.prototype.matchall#regexp-global-gate-original-symbol-dispatch-and-lazy-fallback"
       ]
     },
     {
@@ -6013,7 +6016,8 @@
       "id": "tests/property/regexp-match-all.property.test.ts",
       "targets": [
         "sec-regexp-prototype-%symbol.matchall%#species-flags-matcher-and-lazy-iterator-owner",
-        "sec-%regexpstringiteratorprototype%.next#brand-live-exec-utf16-advance-and-completion"
+        "sec-%regexpstringiteratorprototype%.next#brand-live-exec-utf16-advance-and-completion",
+        "sec-string.prototype.matchall#regexp-global-gate-original-symbol-dispatch-and-lazy-fallback"
       ]
     },
     {
@@ -6021,7 +6025,8 @@
       "id": "regexp_match_all_iterator_worklist",
       "targets": [
         "sec-regexp-prototype-%symbol.matchall%#species-flags-matcher-and-lazy-iterator-owner",
-        "sec-%regexpstringiteratorprototype%.next#brand-live-exec-utf16-advance-and-completion"
+        "sec-%regexpstringiteratorprototype%.next#brand-live-exec-utf16-advance-and-completion",
+        "sec-string.prototype.matchall#regexp-global-gate-original-symbol-dispatch-and-lazy-fallback"
       ],
       "stressReview": {
         "dimension": "retained ordinary RegExp String Iterator owner graph and complete lazy traversal",
@@ -6036,14 +6041,16 @@
       "id": "regexp_match_all_protocols",
       "targets": [
         "sec-regexp-prototype-%symbol.matchall%#species-flags-matcher-and-lazy-iterator-owner",
-        "sec-%regexpstringiteratorprototype%.next#brand-live-exec-utf16-advance-and-completion"
+        "sec-%regexpstringiteratorprototype%.next#brand-live-exec-utf16-advance-and-completion",
+        "sec-string.prototype.matchall#regexp-global-gate-original-symbol-dispatch-and-lazy-fallback"
       ]
     },
     {
       "kind": "implementation",
       "id": "runtime/tsc_regexp_api.c#tsc_regexp_match_all_apply",
       "targets": [
-        "sec-regexp-prototype-%symbol.matchall%#species-flags-matcher-and-lazy-iterator-owner"
+        "sec-regexp-prototype-%symbol.matchall%#species-flags-matcher-and-lazy-iterator-owner",
+        "sec-string.prototype.matchall#regexp-global-gate-original-symbol-dispatch-and-lazy-fallback"
       ]
     },
     {
@@ -6057,7 +6064,8 @@
       "kind": "declarationSurface",
       "id": "stdlib/lib.core.d.ts#RegExpStringIterator",
       "targets": [
-        "sec-%regexpstringiteratorprototype%.next#brand-live-exec-utf16-advance-and-completion"
+        "sec-%regexpstringiteratorprototype%.next#brand-live-exec-utf16-advance-and-completion",
+        "sec-string.prototype.matchall#regexp-global-gate-original-symbol-dispatch-and-lazy-fallback"
       ]
     },
     {
@@ -6079,6 +6087,13 @@
       "id": "runtime/tsc_regexp_api.c#regexp_advance",
       "targets": [
         "sec-%regexpstringiteratorprototype%.next#brand-live-exec-utf16-advance-and-completion"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_method_match_all",
+      "targets": [
+        "sec-string.prototype.matchall#regexp-global-gate-original-symbol-dispatch-and-lazy-fallback"
       ]
     }
   ]

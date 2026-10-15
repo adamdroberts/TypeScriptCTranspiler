@@ -1,3 +1,5 @@
+- Register scoped outer String matchAll evidence using the shared symbol protocol and lazy iterator state.
+
 - Register scoped RegExp matchAll and ordinary iterator-next evidence with one retained lazy-state worklist stress.
 
 - Classify reviewed historical matchAll metadata with distinct source-qualified intrinsic, iterator and prototype owners.
