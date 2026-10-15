@@ -4,11 +4,12 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {compile} from '../../src/compile';
-import {runtimeGlobalBindings} from '../../src/global-bindings';
+import {runtimeGlobalBindings,runtimeCallbackTimerDescriptors} from '../../src/global-bindings';
 import {parseHostObservation} from '../test262/protocol';
 
-function subject(profile:boolean,noGc:boolean):string {
+function subject(profile:boolean,noGc:boolean,nodeOracle=false):string {
  const entries=[...runtimeGlobalBindings].map(([name,descriptor])=>({name,...descriptor}));
+ const platform=new Set(['Buffer',...runtimeCallbackTimerDescriptors.keys()]);
  const accesses=entries.filter(entry=>entry.writable).map(({name})=>{const actuals='marker,symbol',ignored="(events.push('argument'),2),marker,symbol",order='get|argument|call',first='marker',second='symbol';return `{
   const saved=own(host,${JSON.stringify(name)});events.length=0;
   const replacement=function(this:any,...args:any[]):any{events.push('call');return {args,receiver:this};};
@@ -29,8 +30,8 @@ function subject(profile:boolean,noGc:boolean):string {
  function collect():void{${profile&&!noGc?'collectHook();':''}}
  const host=globalThis;const output=host.print,collectHook=${profile&&!noGc?'host.$262.gc':'undefined'};
  const define=Object.defineProperty,own=Object.getOwnPropertyDescriptor,same=Object.is,keys=Object.keys,apply=Reflect.apply,marker={token:83},symbol=Symbol('actual'),events:any[]=[];
- const entries:any[]=${JSON.stringify(entries)};
- for(const entry of entries){const descriptor=own(host,entry.name);check(!!descriptor&&descriptor.writable===entry.writable&&descriptor.configurable===entry.configurable&&descriptor.enumerable===entry.enumerable,'canonical-global-descriptor-'+entry.name);}
+ const entries:any[]=${JSON.stringify(entries)};${nodeOracle?`const platform:any[]=${JSON.stringify([...platform])};`:""}
+ ${nodeOracle?"for(const entry of entries){const descriptor=own(host,entry.name);check(!!descriptor&&(platform.includes(entry.name)?descriptor.configurable===entry.configurable&&(descriptor.writable===true||typeof descriptor.set==='function'):descriptor.writable===entry.writable&&descriptor.configurable===entry.configurable&&descriptor.enumerable===entry.enumerable),'canonical-global-descriptor-'+entry.name);}":"for(const entry of entries){const descriptor=own(host,entry.name);check(!!descriptor&&descriptor.writable===entry.writable&&descriptor.configurable===entry.configurable&&descriptor.enumerable===entry.enumerable,'canonical-global-descriptor-'+entry.name);}"}
  ${accesses}
  let functionError:any;try{Function(symbol);}catch(error){functionError=error;}check(functionError instanceof TypeError,'intrinsic-function-converts-only-after-actual-callee');
  let calls=0;function increment():number{calls+=1;return calls;}check(increment()===1&&increment()===2&&calls===2,'shared-physical-reference-storage');
@@ -50,7 +51,7 @@ test('Canonical Realm bindings share actual References, callable owners and resu
  try {
   const expected=new Map<boolean,string[]>();
   for(const profile of [false,true]){
-   const referenceFile=path.join(temporary,`reference-${profile}.mjs`);await fs.writeFile(referenceFile,erase(subject(profile,true)));
+   const referenceFile=path.join(temporary,`reference-${profile}.mjs`);await fs.writeFile(referenceFile,erase(subject(profile,true,true)));
    const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");globalThis.print=console.log;globalThis.$262={global:globalThis,createRealm(){return {global:vm.runInNewContext("globalThis")};}};import(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});const lines=reference.stdout.toString().trimEnd().split('\n');expect(lines.at(-1)).toBe('saved-canonical-callees-through-suspension:true');expected.set(profile,lines);
   }

@@ -1,3 +1,5 @@
+- Distinguish Node host-global descriptors in the canonical global oracle while preserving byte-identical native inputs and exact native assertions.
+
 - Give Buffer module imports canonical ordinary export owners and complete actual argument Lists, preserving shared constructor and base64 identity.
 
 - Add pinned Annex B RegExp.prototype.compile through shared in-place matcher initialization, retaining owner identity and abrupt lastIndex semantics.
