@@ -54,6 +54,8 @@ test("inherited callable text closes eval sources and matches Node in both memor
   'var convert=f.toString;check("method",eval("("+convert.call(f)+")()"));',
   'var dynamic=Function("value","return value+1;");check("dynamic",dynamic.toString());check("dynamic-eval",eval("("+dynamic.toString()+")(89)"));',
   'var bound=f.bind(null);check("bound",bound.toString());',
+  'var capability=Promise.withResolvers();Object.defineProperty(capability.resolve,"name",{get(){throw "unexpected name read"}});check("resolver",eval(JSON.stringify(Function.prototype.toString.call(capability.resolve))));check("rejecter",eval(JSON.stringify(Function.prototype.toString.call(capability.reject))));',
+  'check("prototype",eval(JSON.stringify(Function.prototype.toString.call(Function.prototype))));',
   'var graph='+ '{next:'.repeat(depth)+'{f:f}'+ '}'.repeat(depth)+';',
   'if(NATIVE_GC)$262.gc();check("deep",eval("("+graph'+'.next'.repeat(depth)+'.f.toString()+")()"));',
  ].join("\n");
@@ -84,4 +86,15 @@ test("non-callable function-text receivers retain abrupt completion before eval"
   const calls=sourceEvaluationInvocations(program(source));
   expect({source,normalSources:calls.flatMap<string|null>(call=>call.choices??[null])}).toEqual({source,normalSources:[]});
  }
+});
+
+test("represented native callable owners retain anonymous text without reading mutable metadata",()=>{
+ const sources=[
+  'const capability=Promise.withResolvers();eval(Function.prototype.toString.call(capability.resolve));',
+  'const capability=Promise.withResolvers();Object.defineProperty(capability.resolve,"name",{get(){throw "unexpected name read"}});eval(Function.prototype.toString.call(capability.resolve));',
+  'const capability=Promise.withResolvers();eval(Function.prototype.toString.call(capability.reject));',
+  'eval(Function.prototype.toString.call(Function.prototype));',
+ ];
+ const expected=oracle(sources);expect(expected).toEqual(sources.map(()=>['function () { [native code] }']));
+ for(const source of sources)expect(sourceEvaluationInvocations(program(source)).map(call=>call.choices)).toEqual([['function () { [native code] }']]);
 });

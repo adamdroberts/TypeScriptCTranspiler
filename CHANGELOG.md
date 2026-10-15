@@ -1,3 +1,5 @@
+- Project existing anonymous native text for Promise resolving functions and Function.prototype without observing mutable names.
+
 - Record independently audited pinned callable-text scenarios while retaining Proxy and host conformance gates.
 
 - Retain known property-write completion provenance through saved reads, return projections and descriptor snapshots.
