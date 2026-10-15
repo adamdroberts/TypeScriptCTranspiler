@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -26,7 +27,7 @@ const definitions=[
 ];
 const adapters=["f.toString()","f.toString.call(f)","f.toString.apply(f,[])","Reflect.apply(f.toString,f,[])","f.toString.bind(f)()"];
 function oracle(sources:string[]):string[][] {
- const result=Bun.spawnSync(["node","-e",'const vm=require("node:vm");require("node:fs").writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(value)});return values;})));',JSON.stringify(sources)],{stdout:"pipe",stderr:"pipe"});
+ const result=nodeReferenceSync(["node","-e",'const vm=require("node:vm");require("node:fs").writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(value)});return values;})));',JSON.stringify(sources)],{stdout:"pipe",stderr:"pipe"});
  expect({exitCode:result.exitCode,stderr:result.stderr.toString()}).toEqual({exitCode:0,stderr:""});
  return JSON.parse(result.stdout.toString());
 }
@@ -59,7 +60,7 @@ test("inherited callable text closes eval sources and matches Node in both memor
  const directory=await fs.mkdtemp(path.join(os.tmpdir(),"tsc2c-callable-text-"));
  try {
   const entry=path.join(directory,"source.js");await fs.writeFile(entry,source.replaceAll("NATIVE_GC","false"));
-  const node=Bun.spawnSync(["node","-e",'const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});',entry],{stdout:"pipe",stderr:"pipe"});
+  const node=nodeReferenceSync(["node","-e",'const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});',entry],{stdout:"pipe",stderr:"pipe"});
   expect({exitCode:node.exitCode,stderr:node.stderr.toString()}).toEqual({exitCode:0,stderr:""});
   for(const noGc of [false,true]){
    await fs.writeFile(entry,source.replaceAll("NATIVE_GC",String(!noGc)));

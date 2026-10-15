@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import { expect, test } from "bun:test";
 import ts from "typescript";
 import * as fs from "node:fs/promises";
@@ -53,7 +54,7 @@ test("ambient imports select native owners while source aliases retain their mod
             await fs.writeFile(entry, typed ? source : erase(source));
             const reference = path.join(directory, "reference.mjs");
             await fs.writeFile(reference, erase(source.replace(`./owner-0${specifierExtension}`, "./reference-owner-0.mjs")));
-            const node = Bun.spawnSync(["node", reference], { stdout: "pipe", stderr: "pipe", timeout: 120_000 });
+            const node = nodeReferenceSync(["node", reference], { stdout: "pipe", stderr: "pipe", timeout: 120_000 });
             expect({ exit: node.exitCode, stderr: node.stderr.toString() }).toEqual({ exit: 0, stderr: "" });
             expect(node.stdout.toString()).toBe("native-0 true true 24 1 1\nnative-1 true true 24 1 1\nsource-owner 37 37\n");
             const output = path.join(directory, "program"), diagnostics: string[] = [];

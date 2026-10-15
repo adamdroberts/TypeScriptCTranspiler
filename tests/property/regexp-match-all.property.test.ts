@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import { expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -114,7 +115,7 @@ test("matchAll uses species construction and one ordinary lazy iterator state", 
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-match-all-"));
     try {
         const entry = path.join(temporary, "subject.js"); await fs.writeFile(entry, source);
-        const reference = Bun.spawnSync(["node", "-e", 'const fs=require("node:fs"),lines=[];new Function("print",fs.readFileSync(process.argv[1],"utf8"))(value=>lines.push(String(value)));fs.writeSync(1,JSON.stringify(lines));', entry],
+        const reference = nodeReferenceSync(["node", "-e", 'const fs=require("node:fs"),lines=[];new Function("print",fs.readFileSync(process.argv[1],"utf8"))(value=>lines.push(String(value)));fs.writeSync(1,JSON.stringify(lines));', entry],
             {stdout:"pipe",stderr:"pipe",timeout:120_000});
         expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:""});
         const expected: string[] = JSON.parse(reference.stdout.toString());

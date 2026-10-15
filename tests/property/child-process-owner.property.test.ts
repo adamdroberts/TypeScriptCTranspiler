@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
@@ -44,7 +45,7 @@ test('child-process exports retain ordinary owners and actual Lists',async()=>{
  const root=await mkdtemp(join(tmpdir(),'tsc2c-child-process-owner-'));
  try{
   const oracle=join(root,'oracle.mjs');await writeFile(oracle,ts.transpileModule(common,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText);
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.map(String).join(" ")+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});
+  const node=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.map(String).join(" ")+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(node.stdout.toString().trimEnd().split('\n').at(-1)).toBe('stored-import-suspension true');
   await native(root,common,'common',node.stdout.toString());
   await native(root,nativeProfile,'profile','native-synchronous-callback-profile true\ncallback-abrupt-identity true\nnative-option-slot-collection true\n');

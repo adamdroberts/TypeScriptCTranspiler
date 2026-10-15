@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import {mkdtemp,writeFile,rm}from'node:fs/promises';
 import {tmpdir}from'node:os';import{join}from'node:path';
@@ -6,7 +7,7 @@ import{sourceEvaluationInvocations}from'../../src/source-value-flow';
 import{finiteEvalScriptSourceGraph as graph}from'../test262/native-host';
 
 test('finite missing relative imports reject without inventing callable namespaces',()=>{
- const oracle=Bun.spawnSync(['node','--input-type=module','-e','const fs=await import("node:fs");let synchronous=true;const promise=import("file:///__tsc2c_missing_source_record__/absent.mjs");const thenable=promise instanceof Promise;synchronous=false;const rejected=await promise.then(()=>false,()=>!synchronous);fs.writeSync(1,String(thenable&&rejected));'],{stdout:'pipe',stderr:'pipe'});
+ const oracle=nodeReferenceSync(['node','--input-type=module','-e','const fs=await import("node:fs");let synchronous=true;const promise=import("file:///__tsc2c_missing_source_record__/absent.mjs");const thenable=promise instanceof Promise;synchronous=false;const rejected=await promise.then(()=>false,()=>!synchronous);fs.writeSync(1,String(thenable&&rejected));'],{stdout:'pipe',stderr:'pipe'});
  expect({code:oracle.exitCode,stderr:oracle.stderr.toString(),stdout:oracle.stdout.toString()}).toEqual({code:0,stderr:'',stdout:'true'});
  for(const specifier of ['./missing.mjs','../missing.json']){
   const source=`const owner={body:'17;'};const saved=owner.body;import(${JSON.stringify(specifier)}).catch(()=>{});eval(saved);`;

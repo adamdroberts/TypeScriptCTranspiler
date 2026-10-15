@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -29,7 +30,7 @@ for(const value of ['"changed"','17','null','{}'])subjects.push(`var fn=function
 subjects.push('var fn=function original(){};Object.defineProperty(fn,"name",{get(){return "getter";}});var bound=fn.bind(null);eval("\'"+bound.name+"\'");');
 test("shared callable names retain syntactic names and reactive bound metadata",()=>{
  for(const source of subjects){
-  const reference=Bun.spawnSync(['node','-e','require("node:fs").writeSync(1,JSON.stringify(require("node:vm").runInNewContext(process.argv[1])))',source],{stdout:'pipe',stderr:'pipe'});
+  const reference=nodeReferenceSync(['node','-e','require("node:fs").writeSync(1,JSON.stringify(require("node:vm").runInNewContext(process.argv[1])))',source],{stdout:'pipe',stderr:'pipe'});
   expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:''});
   const expected="'"+JSON.parse(reference.stdout.toString())+"'";
   expect({source,choices:sourceEvaluationInvocations(program(source)).at(-1)?.choices}).toEqual({source,choices:expect.arrayContaining([expected])});
@@ -49,7 +50,7 @@ test("callable names and deep bound forwarding match Node in both memory modes",
  const source=pieces.join('\n'),directory=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-callable-name-'));
  try{
   const entry=path.join(directory,'source.js');await fs.writeFile(entry,source.replaceAll('NATIVE_GC','false'));
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});',entry],{stdout:'pipe',stderr:'pipe'});expect({exitCode:node.exitCode,stderr:node.stderr.toString()}).toEqual({exitCode:0,stderr:''});
+  const node=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});',entry],{stdout:'pipe',stderr:'pipe'});expect({exitCode:node.exitCode,stderr:node.stderr.toString()}).toEqual({exitCode:0,stderr:''});
   for(const noGc of [false,true]){
    await fs.writeFile(entry,source.replaceAll('NATIVE_GC',String(!noGc)));const output=path.join(directory,'program-'+noGc),diagnostics:string[]=[];
    const result=await compile({entry,output,noGc,buildDir:path.join(directory,'build-'+noGc),isolatedScriptRoots:[entry],initializationEntries:[entry],test262Observation:{kind:'test262-native-observation',scenarioId:'property/callable-name-facts.js#sloppy',setupEntries:[],testEntry:entry,async:false,scriptEntries:[entry]},diagnosticWriter:message=>diagnostics.push(message)});

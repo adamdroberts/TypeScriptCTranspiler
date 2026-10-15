@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
@@ -39,7 +40,7 @@ test('lexical source origin graph agrees with independent Node across typed and 
   const source=lexicalSourceCaptureInput(typed&&!noGc?512:3),program=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText;
   for(const[file,contents]of Object.entries(lexicalSourceCaptureFiles))await writeFile(join(root,file),contents);
   const oracle=join(root,`oracle-${typed}-${noGc}.js`);await writeFile(oracle,program);
-  const node=Bun.spawnSync(['node',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const node=nodeReferenceSync(['node',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const entry=join(root,`main-${typed}-${noGc}.${typed?'ts':'js'}`),output=entry+'-native',diagnostics:string[]=[];await writeFile(entry,typed?source:program);
   const result=await compile({entry,output,noGc,buildDir:output+'-build',diagnosticWriter:message=>diagnostics.push(message)});expect({typed,noGc,code:result.exitCode,diagnostics}).toEqual({typed,noGc,code:0,diagnostics:[]});
   const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:native.exitCode,stderr:native.stderr.toString(),stdout:native.stdout.toString()}).toEqual({code:0,stderr:'',stdout:node.stdout.toString()});

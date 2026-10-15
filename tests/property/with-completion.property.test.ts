@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -23,7 +24,7 @@ const source=partitions.map(({label,source})=>`print(${JSON.stringify(label+":")
 
 test("with completion applies UpdateEmpty independently of nesting and control transfer",async()=>{
     const expected=partitions.map(partition=>partition.label+":"+partition.expected);
-    const oracle=Bun.spawnSync(["node","-e",`const vm=require("node:vm"),fs=require("node:fs");new vm.Script(${JSON.stringify(source)}).runInNewContext({print:line=>fs.writeSync(1,line+"\\n")});`],{stdout:"pipe",stderr:"pipe",timeout:120_000});
+    const oracle=nodeReferenceSync(["node","-e",`const vm=require("node:vm"),fs=require("node:fs");new vm.Script(${JSON.stringify(source)}).runInNewContext({print:line=>fs.writeSync(1,line+"\\n")});`],{stdout:"pipe",stderr:"pipe",timeout:120_000});
     expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});
     expect(oracle.stdout.toString().trimEnd().split("\n")).toEqual(expected);
     const graph=finiteEvalScriptSourceGraph([{path:"completion.js",source}]);expect(graph.error).toBeNull();

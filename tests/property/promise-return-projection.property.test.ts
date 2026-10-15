@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import {mkdtemp,rm,writeFile,readFile} from 'node:fs/promises';
@@ -25,7 +26,7 @@ test('Promise return and await projections retain actual inputs and mutable allo
  const cyclic="const thenable={then(resolve){resolve(flag?thenable:'return 241;')}};async function f(){Function(await thenable)}f();";
  expect(facts(cyclic)).toEqual([{kind:'ordinary',choices:[['return 241;']]}]);
  expect(facts("unknownCall(body=>Function(body));").some(value=>value.choices===null)).toBe(true);
- const counterexample=Bun.spawnSync(['node','-e',`const fs=require('node:fs');async function f(value){return value}const first=f('return 137;');const runtimeInput={get then(){Promise.prototype.then=function(callback){callback('return 139;')};return undefined}};f(runtimeInput);first.then(body=>fs.writeSync(1,String(Function(body)())+'\\n'));`],{stdout:'pipe',stderr:'pipe',timeout:10000});
+ const counterexample=nodeReferenceSync(['node','-e',`const fs=require('node:fs');async function f(value){return value}const first=f('return 137;');const runtimeInput={get then(){Promise.prototype.then=function(callback){callback('return 139;')};return undefined}};f(runtimeInput);first.then(body=>fs.writeSync(1,String(Function(body)())+'\\n'));`],{stdout:'pipe',stderr:'pipe',timeout:10000});
  expect({code:counterexample.exitCode,stderr:counterexample.stderr.toString(),stdout:counterexample.stdout.toString()}).toEqual({code:0,stderr:'',stdout:'139\n'});
 
 });

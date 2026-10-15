@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -50,7 +51,7 @@ test('util text-codec imports share native constructor owners across references 
    await fs.writeFile(path.join(directory,`reference-${index}.mjs`),reference);
   }
   const oracle=path.join(directory,'reference.mjs');await fs.writeFile(oracle,subject('./reference-0.mjs'));
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const node=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const entry=path.join(directory,'main'+extension);await fs.writeFile(entry,(typed?'// @ts-nocheck\n':'')+subject('./owner-0'+extension));
   const output=path.join(directory,'program'),diagnostics:string[]=[];

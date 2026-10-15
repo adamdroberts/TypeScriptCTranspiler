@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import * as fs from 'node:fs/promises';
@@ -78,7 +79,7 @@ test('CommonJS projects actual source values from one retained cached module rec
    const referenceDirectory=path.join(temporary,`reference-${strict}`);await fs.mkdir(referenceDirectory);
    for(const [name,source] of sources(strict))await fs.writeFile(path.join(referenceDirectory,name),source);
    const referenceFile=path.join(referenceDirectory,'main.cjs');await fs.writeFile(referenceFile,erase(subject(false,true),ts.ModuleKind.CommonJS));
-   const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");require(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+   const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");require(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});const expected=reference.stdout.toString().trimEnd().split('\n');expect(expected.at(-1)).toBe('retained-module-callee-through-suspension:true');
    for(const typed of [true,false])for(const profile of [false,true])for(const noGc of [false,true]){
     const directory=path.join(temporary,`${strict}-${typed}-${profile}-${noGc}`);await fs.mkdir(directory);

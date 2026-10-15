@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -17,7 +18,7 @@ const programs=[...statements,...declarations].map(body=>`with({}) ${body}`).con
 
 test("eval request admission shares strict context and Statement grammar with independent Node parsing",()=>{
     const cases=programs.flatMap(source=>[false,true].map(strictCaller=>({source,strictCaller})));
-    const oracle=Bun.spawnSync(["node","-e",`const cases=${JSON.stringify(cases)};const fs=require("node:fs");for(const item of cases){try{Function((item.strictCaller?'"use strict";':'')+'return eval('+JSON.stringify(item.source)+');')();fs.writeSync(1,"true\\n");}catch(error){if(!(error instanceof SyntaxError))throw error;fs.writeSync(1,"false\\n");}}`],{stdout:"pipe",stderr:"pipe"});
+    const oracle=nodeReferenceSync(["node","-e",`const cases=${JSON.stringify(cases)};const fs=require("node:fs");for(const item of cases){try{Function((item.strictCaller?'"use strict";':'')+'return eval('+JSON.stringify(item.source)+');')();fs.writeSync(1,"true\\n");}catch(error){if(!(error instanceof SyntaxError))throw error;fs.writeSync(1,"false\\n");}}`],{stdout:"pipe",stderr:"pipe"});
     expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});
     expect(cases.map(({source,strictCaller})=>evalSourceIsValid(evalSourceRequest("direct",source,strictCaller))))
         .toEqual(oracle.stdout.toString().trimEnd().split("\n").map(value=>value==="true"));

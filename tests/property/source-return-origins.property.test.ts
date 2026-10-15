@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -18,7 +19,7 @@ test('shared returns preserve earlier captures and retain unknown call partition
   'async function run(){const saved=forward("17;");await 0;forward(opaque());eval(saved);}run();',
  ]){
   const result=finiteEvalScriptSourceGraph([{path:'main.js',source:definitions+body}]);expect({body,error:result.error}).toEqual({body,error:null});expect(result.directEvalSources.some(entry=>entry.source==='17;')).toBe(true);
-  const oracle=Bun.spawnSync(['node','-e','const flag=false;function opaque(){return 0}'+definitions+body],{stdout:'pipe',stderr:'pipe'});expect({code:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({code:0,stderr:''});
+  const oracle=nodeReferenceSync(['node','-e','const flag=false;function opaque(){return 0}'+definitions+body],{stdout:'pipe',stderr:'pipe'});expect({code:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({code:0,stderr:''});
  }
  for(const body of [
   'forward("17;");const source=forward(opaque());eval(source);',
@@ -36,7 +37,7 @@ test('return origins close through a deep forwarding graph and match Node in bot
    const forwarding=Array.from({length:depth},(_,index)=>`function f${index}(value){return ${index+1<depth?'f'+(index+1):'forward'}(value);}`).join('\n');
    const source=definitions+forwarding+'\nconst saved=f0("17;");print(eval(saved));f0((0,eval)("Math.random();"));';
    const entry=join(directory,'source-'+noGc+'-'+typed+(typed?'.ts':'.js')),output=join(directory,'program-'+noGc+'-'+typed),diagnostics:string[]=[];
-   const node=Bun.spawnSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});'],{stdin:Buffer.from(source),stdout:'pipe',stderr:'pipe',timeout:120_000});
+   const node=nodeReferenceSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});'],{stdin:Buffer.from(source),stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
    await writeFile(entry,(typed?'// @ts-nocheck\n':'')+source);
    const result=await compile({entry,output,noGc,buildDir:join(directory,'build-'+noGc+'-'+typed),isolatedScriptRoots:[entry],initializationEntries:[entry],test262Observation:{kind:'test262-native-observation',scenarioId:'property/source-return-origins#script',setupEntries:[],testEntry:entry,scriptEntries:[entry],async:false},diagnosticWriter:message=>diagnostics.push(message)});

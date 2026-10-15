@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -64,7 +65,7 @@ test("JSON default import References share their synthetic cell through Module e
             {path:"cycle-b.mjs",source:'export * from "./cycle-a.mjs";',goal:"module" as const}];
         const referenceDir=path.join(temporary,profile?"profile-reference":"cli-reference");await fs.mkdir(referenceDir);
         for(const record of [...roots,...jsonFiles])await fs.writeFile(path.join(referenceDir,record.path),record.source.replaceAll("GC_SITE",""));
-        const reference=Bun.spawnSync(["node","--no-warnings","--input-type=module","-e",
+        const reference=nodeReferenceSync(["node","--no-warnings","--input-type=module","-e",
             `import fs from "node:fs";globalThis.print=line=>fs.writeSync(1,line+"\\n");console.log=globalThis.print;await import(process.argv[1]);`,pathToFileURL(path.join(referenceDir,"main.mjs")).href],
             {stdout:"pipe",stderr:"pipe",timeout:120_000});
         expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:""});

@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
@@ -17,7 +18,7 @@ test('each CaseBlock owns one default production independent of nesting and func
  const deep='{'.repeat(2048)+invalid+'}'.repeat(2048);inputs.push(deep);
  const root=await mkdtemp(join(tmpdir(),'tsc2c-switch-default-'));
  try {
-  const output=join(root,'node.json');const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");fs.writeFileSync(process.argv[1],JSON.stringify(JSON.parse(process.argv[2]).map(source=>{try{new vm.Script(source);return true}catch(error){if(error.name!=="SyntaxError")throw error;return false}})));',output,JSON.stringify(inputs)],{stdout:'pipe',stderr:'pipe'});
+  const output=join(root,'node.json');const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");fs.writeFileSync(process.argv[1],JSON.stringify(JSON.parse(process.argv[2]).map(source=>{try{new vm.Script(source);return true}catch(error){if(error.name!=="SyntaxError")throw error;return false}})));',output,JSON.stringify(inputs)],{stdout:'pipe',stderr:'pipe'});
   expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:''});
   const expected=JSON.parse(await readFile(output,'utf8')) as boolean[];
   expect(inputs.map(source=>evalSourceIsValid(evalSourceRequest('direct',source,false)))).toEqual(expected);

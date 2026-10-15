@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -38,7 +39,7 @@ test('join conversion and a deep source List match Node across typed and erased 
     '\n{let count=0;function extra(){count++;return Symbol.iterator;}print("extra:"+eval(["1","7;"].join("",extra()))+":"+count);}'+
     `\nprint("deep:"+eval(["1",${Array(typed&&!noGc?512:1).fill('null').join(',')},"7;"].join("")));`;
    const entry=join(directory,'source-'+noGc+'-'+typed+(typed?'.ts':'.js')),output=join(directory,'program-'+noGc+'-'+typed),diagnostics:string[]=[];
-   const node=Bun.spawnSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});'],{stdin:Buffer.from(source),stdout:'pipe',stderr:'pipe',timeout:120_000});
+   const node=nodeReferenceSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});'],{stdin:Buffer.from(source),stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
    expect(finiteEvalScriptSourceGraph([{path:'main.js',source}]).error).toBeNull();
    await writeFile(entry,(typed?'// @ts-nocheck\n':'')+source);

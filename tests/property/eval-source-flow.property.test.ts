@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -21,7 +22,7 @@ test("eval and constructor discovery share the source-value and actual-List grap
     const temporary=await fs.mkdtemp(path.join(os.tmpdir(),"tsc2c-eval-source-flow-"));
     try{
         const referenceFile=path.join(temporary,"reference.js");await fs.writeFile(referenceFile,source.replaceAll("NATIVE_GC","false"));
-        const reference=Bun.spawnSync(["node","-e",`const vm=require("node:vm"),fs=require("node:fs");const context=vm.createContext({print:line=>fs.writeSync(1,line+"\\n"),$262:{gc(){},evalScript(text){return new vm.Script(String(text)).runInContext(context);}}});new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInContext(context);`,referenceFile],
+        const reference=nodeReferenceSync(["node","-e",`const vm=require("node:vm"),fs=require("node:fs");const context=vm.createContext({print:line=>fs.writeSync(1,line+"\\n"),$262:{gc(){},evalScript(text){return new vm.Script(String(text)).runInContext(context);}}});new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInContext(context);`,referenceFile],
             {stdout:"pipe",stderr:"pipe",timeout:120_000});
         expect(reference.exitCode).toBe(0);expect(reference.stderr.toString()).toBe("");
         const expected=reference.stdout.toString().trimEnd().split("\n");expect(expected.at(-1)).toBe("deep-source-cell-chain:true");

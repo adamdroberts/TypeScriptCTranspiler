@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -19,7 +20,7 @@ test('execution domains and fresh actual Lists preserve finite sources while exp
   if(iterates)expect(graph.error).toContain('agent.start source is not a finite static string expression');
   else{expect(graph.error).toBeNull();expect(graph.agentSources).toEqual([worker]);}
   const reference=`const fs=require('node:fs');const body='original';function start(value){fs.writeSync(1,value+'\\n');}function opaque(){Array.prototype[Symbol.iterator]=function*(){yield 'changed';};}for(let i=0;i<2;i++){opaque();${call};}`;
-  const node=Bun.spawnSync(['node','-e',reference],{stdout:'pipe',stderr:'pipe'});
+  const node=nodeReferenceSync(['node','-e',reference],{stdout:'pipe',stderr:'pipe'});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   expect(node.stdout.toString()).toBe((iterates?'changed\n':'original\n').repeat(2));
  }
@@ -37,7 +38,7 @@ test('execution domains and fresh actual Lists preserve finite sources while exp
  const lists=[`const list0=[${JSON.stringify(worker)}];`];
  for(let index=1;index<512;index++)lists.push(`const list${index}=[...list${index-1}];`);
  const deep=lists.join('\n')+'Reflect.apply($262.agent.start,undefined,[...list511]);';
- const node=Bun.spawnSync(['node','-e','globalThis.$262={agent:{start:source=>require("node:fs").writeSync(1,source)}};'+deep],{stdout:'pipe',stderr:'pipe'});
+ const node=nodeReferenceSync(['node','-e','globalThis.$262={agent:{start:source=>require("node:fs").writeSync(1,source)}};'+deep],{stdout:'pipe',stderr:'pipe'});
  expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(node.stdout.toString()).toBe(worker);
  const deepGraph=finiteEvalScriptSourceGraph([{path:'main.js',source:deep}]);expect(deepGraph.error).toBeNull();expect(deepGraph.agentSources).toEqual([worker]);
 },1_200_000);
@@ -54,7 +55,7 @@ test('imported worker sources and nested eval/Function bodies retain their execu
    const call=calls[(Number(noGc)*2+Number(typed))]!;
    const source=`globalThis.role='parent';const start=$262.agent.start;const body=${JSON.stringify(body)};for(let i=0;i<2;i++){$262.agent.sleep(0);${call};}(0,eval)(${JSON.stringify(nested)});const reports=[];while(reports.length<2){const value=$262.agent.getReport();if(value===null)$262.agent.sleep(1);else reports.push(value);}console.log(globalThis.result+':'+reports.sort().join('|'));`;
    const reference=join(directory,'reference.js');await writeFile(reference,source);
-   const node=Bun.spawnSync(['node','--no-warnings',resolve('tests/property/helpers/test262-agent-node.cjs'),reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+   const node=nodeReferenceSync(['node','--no-warnings',resolve('tests/property/helpers/test262-agent-node.cjs'),reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(node.stdout.toString()).toBe('parent:worker|worker\n');
    const entry=join(directory,typed?'main.ts':'main.js'),output=join(directory,'program');await writeFile(entry,(typed?'// @ts-nocheck\n':'')+source);
    const diagnostics:string[]=[];
@@ -79,7 +80,7 @@ test('native-host preparation preserves domain ownership for identical nested Sc
   const worker=`globalThis.role='worker';$262.evalScript(${JSON.stringify(nested)});$262.agent.report(globalThis.result);$262.agent.leaving();`;
   const source=`globalThis.role='parent';$262.agent.start(${JSON.stringify(worker)});$262.evalScript(${JSON.stringify(nested)});let report=null;while(report===null){report=$262.agent.getReport();if(report===null)$262.agent.sleep(1);}console.log(globalThis.result+':'+report);`;
   const reference=join(root,'reference.js');await writeFile(reference,source.replaceAll('$262.evalScript(', '(0,eval)('));
-  const node=Bun.spawnSync(['node',resolve('tests/property/helpers/test262-agent-node.cjs'),reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const node=nodeReferenceSync(['node',resolve('tests/property/helpers/test262-agent-node.cjs'),reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(node.stdout.toString()).toBe('parent:worker\n');
   const artifacts=join(root,'artifacts');await mkdir(artifacts);
   const prepared=await prepareNativeRequest({protocolVersion:4,scenarioId:'prepared-agent-domains#raw',testPath:'test/agent-domains.js',moduleBasePath:'test',moduleFiles:[],mode:'raw',goal:'script',raw:true,setupScripts:[],testSource:source,testSourceSha256:createHash('sha256').update(source).digest('hex'),async:false,canBlock:null,timeoutMs:120_000,artifactDirectory:artifacts});

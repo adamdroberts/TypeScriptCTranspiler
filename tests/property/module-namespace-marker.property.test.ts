@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -45,7 +46,7 @@ test('exported name worklists match Node namespace names across graph partitions
   graph.set('test/root.js','import * as namespace from "./aggregate.js";export const result=Object.keys(namespace).join("|");');
   const root=records.get('aggregate')!,imported=(_record:ModuleExportRecord<string>,request:string)=>records.get(request)??null;
   const names=exportedModuleNames<string,ModuleExportRecord<string>>(root,imported).filter(name=>{const result=resolveModuleExport<string,ModuleExportRecord<string>>(root,name,imported);return result!==null&&result!=='ambiguous'}).sort();
-  const node=Bun.spawnSync(['node','--experimental-vm-modules','--no-warnings','-e',oracle],{stdin:Buffer.from(JSON.stringify([...graph])),stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const node=nodeReferenceSync(['node','--experimental-vm-modules','--no-warnings','-e',oracle],{stdin:Buffer.from(JSON.stringify([...graph])),stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({same,explicit,cycle,code:node.exitCode,stderr:node.stderr.toString(),names:names.join('|')}).toEqual({same,explicit,cycle,code:0,stderr:'',names:node.stdout.toString()});
  }
 });
@@ -57,7 +58,7 @@ test('synthetic export records retain String names and direct binding identity',
   while((state&15)!==0){names.push('binding-'+state);state=(Math.imul(state,1664525)+1013904223)>>>0}
   const record:ModuleExportRecord<string>={path:'synthetic',localExports:new Map(names.map(name=>[name,name])),indirectExports:new Map(),starExports:[]};
   const imported=()=>{throw new Error('synthetic record has no imports')};
-  const node=Bun.spawnSync(['node','--experimental-vm-modules','--no-warnings','-e',syntheticOracle],{stdin:Buffer.from(JSON.stringify(names)),stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const node=nodeReferenceSync(['node','--experimental-vm-modules','--no-warnings','-e',syntheticOracle],{stdin:Buffer.from(JSON.stringify(names)),stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({code:node.exitCode,stderr:node.stderr.toString(),names:exportedModuleNames<string,ModuleExportRecord<string>>(record,imported).sort()}).toEqual({code:0,stderr:'',names:JSON.parse(node.stdout.toString())});
   for(const name of names)expect(resolveModuleExport<string,ModuleExportRecord<string>>(record,name,imported)).toEqual({modulePath:'synthetic',bindingName:name});
   expect(resolveModuleExport<string,ModuleExportRecord<string>>(record,'missing',imported)).toBeNull();
@@ -65,7 +66,7 @@ test('synthetic export records retain String names and direct binding identity',
 });
 
 test('Module namespace markers stay distinct from every source binding name',async()=>{
- for(const plan of plans){const graph=sources(plan),failure=analyzeModuleGraph('test/root.js',graph),node=Bun.spawnSync(['node','--experimental-vm-modules','--no-warnings','-e',oracle],{stdin:Buffer.from(JSON.stringify([...graph])),stdout:'pipe',stderr:'pipe',timeout:120_000});expect({plan:plan.name,code:node.exitCode,stderr:node.stderr.toString(),result:node.stdout.toString()}).toEqual({plan:plan.name,code:0,stderr:'',result:plan.expected});
+ for(const plan of plans){const graph=sources(plan),failure=analyzeModuleGraph('test/root.js',graph),node=nodeReferenceSync(['node','--experimental-vm-modules','--no-warnings','-e',oracle],{stdin:Buffer.from(JSON.stringify([...graph])),stdout:'pipe',stderr:'pipe',timeout:120_000});expect({plan:plan.name,code:node.exitCode,stderr:node.stderr.toString(),result:node.stdout.toString()}).toEqual({plan:plan.name,code:0,stderr:'',result:plan.expected});
   if(plan.expected==='SyntaxError')expect(failure).toMatchObject({phase:'resolution',origin:'module-graph'});else expect({plan:plan.name,failure}).toEqual({plan:plan.name,failure:null});
  }
  const missing=new Map([['test/root.js','import {namespace} from "./leaf.js";'],['test/leaf.js','export const other=17;']]);expect(analyzeModuleGraph('test/root.js',missing)).toMatchObject({phase:'resolution',origin:'module-graph'});
@@ -108,7 +109,7 @@ test('emitter export records traverse one representative deep Module graph',asyn
   }
   const body="import * as namespace from './edge-0.js';export const result=Object.keys(namespace).join('|')+':'+namespace.token+':'+(namespace.default===undefined);";
   graph.set('test/root.js',body);
-  const node=Bun.spawnSync(['node','--experimental-vm-modules','--no-warnings','-e',oracle],{stdin:Buffer.from(JSON.stringify([...graph])),stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const node=nodeReferenceSync(['node','--experimental-vm-modules','--no-warnings','-e',oracle],{stdin:Buffer.from(JSON.stringify([...graph])),stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({code:node.exitCode,stderr:node.stderr.toString(),result:node.stdout.toString()}).toEqual({code:0,stderr:'',result:'token:262:true'});
   const entry=path.join(temporary,'root.mjs');await fs.writeFile(entry,body+'\nconsole.log(result);');entries.push(entry);
   for(const noGc of [false,true]){

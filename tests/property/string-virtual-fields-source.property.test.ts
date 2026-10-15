@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import {sourceExpressionTexts} from '../../src/source-value-flow';
@@ -27,7 +28,7 @@ test('virtual String fields conservatively retain independent actual reads and d
  for(const query of ['first[2]','second[2]','Object.getOwnPropertyDescriptor(first,"2")===undefined','Object.getOwnPropertyDescriptor(second,"2")===undefined','Object.getOwnPropertyDescriptors(first)["2"]===undefined','Object.getOwnPropertyDescriptors(second)["2"]===undefined'])cases.push({setup:shared,query,exact:false});
  cases.push({setup:'const owner=Object("ab");owner[2]="added";',query:'owner[2]',exact:false},
   {setup:'const owner=Object("ab");String.prototype[2]="inherited";',query:'owner[2]',exact:true});
- const oracle=Bun.spawnSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");fs.writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(p=>String(new vm.Script(p.setup+";("+p.query+")").runInNewContext()))));',JSON.stringify(cases)],{stdout:'pipe',stderr:'pipe'});
+ const oracle=nodeReferenceSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");fs.writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(p=>String(new vm.Script(p.setup+";("+p.query+")").runInNewContext()))));',JSON.stringify(cases)],{stdout:'pipe',stderr:'pipe'});
  expect({code:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({code:0,stderr:''});const observations:string[]=JSON.parse(oracle.stdout.toString());
  for(const [index,partition]of cases.entries()){
   const actual=proof(partition.setup,[partition.query])[0];expect(actual).not.toBeNull();expect(actual).toContain(observations[index]!);

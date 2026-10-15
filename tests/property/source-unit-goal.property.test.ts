@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import { expect, test } from "bun:test";
 import ts from "typescript";
 import { mkdtemp, writeFile, rm, mkdir } from "node:fs/promises";
@@ -49,7 +50,7 @@ test("source units keep Script and Module identities, private cells and cached e
     references['unit-'+index+'.js']=erase(source(index,depth,false));
    }
    const reference=join(root,'reference.json');await writeFile(reference,JSON.stringify(references));
-   const node=Bun.spawnSync(['node','--experimental-vm-modules','--no-warnings','-e',oracle,reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+   const node=nodeReferenceSync(['node','--experimental-vm-modules','--no-warnings','-e',oracle,reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({exit:node.exitCode,stderr:node.stderr.toString()}).toEqual({exit:0,stderr:''});expect(node.stdout.toString()).toBe('script-module-cells-and-cache:true\n');
    const options={entry:files[0]!,packageRoot:resolvePackageRoot(),additionalRoots:files.slice(1),isolatedScriptRoots:files};
    const built=buildProgram(options),graph=buildModuleGraph(built.program,built.libCoreDts,built.entrySourceFile.fileName);

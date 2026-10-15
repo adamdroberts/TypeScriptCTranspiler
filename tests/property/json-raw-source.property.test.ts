@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import {finiteEvalScriptSourceGraph as graph} from '../test262/native-host';
 
@@ -7,7 +8,7 @@ test('raw JSON source owners retain validated text through ordinary calls',()=>{
   const source=`const text=${JSON.stringify(text)};const raw=${call};eval(JSON.stringify(raw));`;
   const result=graph([{path:'main.js',source}]);
   expect({source,error:result.error}).toEqual({source,error:null});
-  const oracle=Bun.spawnSync(['node','-e','require("node:fs").writeSync(1,JSON.stringify(JSON.rawJSON(process.argv[1])));','--',text],{stdout:'pipe',stderr:'pipe'});
+  const oracle=nodeReferenceSync(['node','-e','require("node:fs").writeSync(1,JSON.stringify(JSON.rawJSON(process.argv[1])));','--',text],{stdout:'pipe',stderr:'pipe'});
   expect({code:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({code:0,stderr:''});
   expect(result.directEvalSources.map(entry=>entry.source)).toEqual([oracle.stdout.toString()]);
  }

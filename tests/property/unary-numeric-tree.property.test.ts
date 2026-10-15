@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import * as fs from 'node:fs/promises';
@@ -8,7 +9,7 @@ import {parseHostObservation} from '../test262/protocol';
 
 const operators=['+','-','~'];
 const values=['undefined','null','true','false','0','-0','NaN','Infinity','-Infinity','5e-324','"0b11"','"  "','"nonumeric"','0n','-7n','Symbol("input")'];
-const oracle=Bun.spawnSync(['node','-e',`const operators=${JSON.stringify(operators)},values=${JSON.stringify(values)};function literal(value){return typeof value==='bigint'?String(value)+'n':Number.isNaN(value)?'NaN':Object.is(value,-0)?'-0':String(value);}require('node:fs').writeSync(1,JSON.stringify(values.map(value=>operators.map(op=>{try{return{value:literal(Function('return '+op+'('+value+');')())};}catch(error){return{error:error.constructor.name};}}))));`],{stdout:'pipe',stderr:'pipe',timeout:30_000});
+const oracle=nodeReferenceSync(['node','-e',`const operators=${JSON.stringify(operators)},values=${JSON.stringify(values)};function literal(value){return typeof value==='bigint'?String(value)+'n':Number.isNaN(value)?'NaN':Object.is(value,-0)?'-0':String(value);}require('node:fs').writeSync(1,JSON.stringify(values.map(value=>operators.map(op=>{try{return{value:literal(Function('return '+op+'('+value+');')())};}catch(error){return{error:error.constructor.name};}}))));`],{stdout:'pipe',stderr:'pipe',timeout:30_000});
 if(oracle.exitCode!==0)throw new Error(oracle.stderr.toString());
 const golden=JSON.parse(oracle.stdout.toString()) as {value?:string,error?:string}[][];
 
@@ -57,7 +58,7 @@ test('Unary numeric forms share actual conversion and the retained numeric tree'
   const expected=new Map<boolean,string[]>();
   for(const profile of [false,true]){
    const entry=path.join(temporary,`reference-${profile}.mjs`);await fs.writeFile(entry,erase(subject(profile,true)));
-   const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");globalThis.print=console.log;import(process.argv[1]);',entry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+   const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");globalThis.print=console.log;import(process.argv[1]);',entry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});const lines=reference.stdout.toString().trimEnd().split('\n');expect(lines.at(-1)).toBe('saved-unary-operand-through-suspension:true');expected.set(profile,lines);
   }
   for(const typed of [true,false])for(const profile of [false,true])for(const noGc of [false,true]){

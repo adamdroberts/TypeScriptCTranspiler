@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
@@ -35,7 +36,7 @@ test('crypto exported owners consume retained actual Lists and byte views agains
  try{
   const erased=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText;
   const oracle=join(root,'reference.mjs');await writeFile(oracle,erased);
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...v)=>fs.writeSync(1,v.map(String).join(" ")+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});
+  const node=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...v)=>fs.writeSync(1,v.map(String).join(" ")+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(node.stdout.toString().trimEnd().split('\n').at(-1)).toBe('deep-retained-export-owner-graph true');
   for(const typed of [true,false])for(const noGc of [false,true]){
    const entry=join(root,`main-${typed}-${noGc}.${typed?'mts':'mjs'}`),output=entry+'-native',diagnostics:string[]=[];await writeFile(entry,typed?source:erased);

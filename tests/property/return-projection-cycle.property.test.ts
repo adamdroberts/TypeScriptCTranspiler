@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -35,7 +36,7 @@ test('recursive capture projections match Node through typed and erased native e
   const source=[false,true].map(parameters=>'{'+captured(parameters,3)+'}').join('\n')+"\nfunction identity(value){return value}console.log('actual:'+eval(identity('29;')));"+stress;
   const program=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText;
   const oracle=path.join(directory,'oracle.mjs');await fs.writeFile(oracle,program);
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const node=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const entry=path.join(directory,typed?'main.ts':'main.mjs');await fs.writeFile(entry,typed?'// @ts-nocheck\nexport {};\n'+source:program);
   const output=path.join(directory,'program'),diagnostics:string[]=[];

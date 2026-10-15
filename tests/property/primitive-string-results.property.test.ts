@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -18,7 +19,7 @@ test("primitive String results stay in the shared text dependency tree across ca
  }
  sources.push('eval(String());','function value(){return "59;";}eval(String(value()));','var convert=String;var input="61;";eval(convert(input));','eval(String("67;",{toString(){throw 71;}}));','String=function(){return "73;";};eval(String(79));');
  const deep="String(".repeat(512)+'"83;"'+")".repeat(512);sources.push(`eval(${deep});`);
- const oracle=Bun.spawnSync(["node","-e",'const vm=require("node:vm");require("node:fs").writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(value)});return values;})));',JSON.stringify(sources)],{stdout:"pipe",stderr:"pipe"});expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});
+ const oracle=nodeReferenceSync(["node","-e",'const vm=require("node:vm");require("node:fs").writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(value)});return values;})));',JSON.stringify(sources)],{stdout:"pipe",stderr:"pipe"});expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});
  const expected:string[][]=JSON.parse(oracle.stdout.toString());
  for(const[index,source]of sources.entries()){
   const choices=sourceEvaluationInvocations(program(source)).filter(call=>ts.isCallExpression(call.node)&&ts.isIdentifier(call.node.expression)&&call.node.expression.text==="eval").map(call=>call.choices);
@@ -51,7 +52,7 @@ test("closed eval consumes primitive conversion text natively in both memory mod
         const entry = path.join(directory, "source.js");
         const oracleSource = pieces.join("\n").replaceAll("NATIVE_GC", "false");
         await fs.writeFile(entry, oracleSource);
-        const oracle = Bun.spawnSync(["node", "-e", 'const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});', entry], { stdout: "pipe", stderr: "pipe" });
+        const oracle = nodeReferenceSync(["node", "-e", 'const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});', entry], { stdout: "pipe", stderr: "pipe" });
         expect({ exitCode: oracle.exitCode, stderr: oracle.stderr.toString() }).toEqual({ exitCode: 0, stderr: "" });
         const expected = oracle.stdout.toString().trimEnd().split("\n");
         for (const noGc of [false, true]) {

@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -52,7 +53,7 @@ test('console host owners retain References and arbitrary actual Lists',async()=
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-console-owner-'));
  try{
   const oracle=path.join(temporary,'reference.mjs');await fs.writeFile(oracle,subject(false,false));
-  const reference=Bun.spawnSync(['node','-e','process.stdout._handle?.setBlocking(true);process.stderr._handle?.setBlocking(true);import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const reference=nodeReferenceSync(['node','-e','process.stdout._handle?.setBlocking(true);process.stderr._handle?.setBlocking(true);import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:'stderr: true\nwarning 5\n'});
   for(const mode of ['typed','javascript'])for(const noGc of [false,true])for(const profile of [false,true]){
    const directory=path.join(temporary,`${mode}-${noGc}-${profile}`);await fs.mkdir(directory);

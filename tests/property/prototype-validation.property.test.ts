@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -49,7 +50,7 @@ test('prototype validation shares actual exception owners and preserves call Rea
  try{for(const typed of [false,true])for(const noGc of [false,true]){
   const stress=!typed&&!noGc?generateE2eCaseSource('{"generator":"prototype-validation-depth","depth":4096}','property/prototype_validation_depth'):'';
   const source=subject(3,!noGc)+stress.replaceAll('console.log(', 'print('),reference=source.replace('$262.gc();','');
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");globalThis.print=value=>fs.writeSync(1,String(value)+"\\n");globalThis.$262={createRealm(){return {global:vm.runInNewContext("globalThis")}}};vm.runInThisContext(fs.readFileSync(0,"utf8"));'],{stdin:Buffer.from(reference),stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const node=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");globalThis.print=value=>fs.writeSync(1,String(value)+"\\n");globalThis.$262={createRealm(){return {global:vm.runInNewContext("globalThis")}}};vm.runInThisContext(fs.readFileSync(0,"utf8"));'],{stdin:Buffer.from(reference),stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const directory=path.join(temporary,`${typed}-${noGc}`);await fs.mkdir(directory);
   const entry=path.join(directory,typed?'main.ts':'main.js'),output=path.join(directory,'program'),diagnostics:string[]=[];await fs.writeFile(entry,(typed?'// @ts-nocheck\n':'')+source);

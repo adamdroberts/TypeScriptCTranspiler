@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -43,7 +44,7 @@ test('userInfo ordinary option Get and complete actual Lists agree with independ
   const stress=!typed&&!noGc?generateE2eCaseSource('{"generator":"os-user-info-option-depth","depth":4096}','property/os_user_info_option_depth'):'';
   const program=subject+stress,js=ts.transpileModule(program,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText;
   const oracle=path.join(directory,'oracle.mjs');await fs.writeFile(oracle,js);
-  const node=Bun.spawnSync(['node',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const node=nodeReferenceSync(['node',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const entry=path.join(directory,typed?'main.ts':'main.mjs');await fs.writeFile(entry,typed?program:js);
   const output=path.join(directory,'program'),diagnostics:string[]=[];const built=await compile({entry,output,noGc,moduleRoots:[entry],initializationEntries:[entry],buildDir:path.join(directory,'build'),diagnosticWriter:message=>diagnostics.push(message)});
   expect({typed,noGc,code:built.exitCode,diagnostics:diagnostics.join('')}).toEqual({typed,noGc,code:0,diagnostics:''});

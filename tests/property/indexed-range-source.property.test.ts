@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -53,7 +54,7 @@ test('generic indexed reads and a deep prototype graph match Node in both memory
     '\ntry{Array.prototype.join.call(null,"");}catch(error){print("null:"+(error instanceof TypeError));}';
    const invalid=source+'\ntry{Reflect.apply(eval,null,"17;");}catch(error){print("primitive:"+(error instanceof TypeError));}';
    const entry=join(directory,'source-'+noGc+'-'+typed+(typed?'.ts':'.js')),output=join(directory,'program-'+noGc+'-'+typed),diagnostics:string[]=[];
-   const node=Bun.spawnSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});'],{stdin:Buffer.from(invalid),stdout:'pipe',stderr:'pipe',timeout:120_000});
+   const node=nodeReferenceSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});'],{stdin:Buffer.from(invalid),stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(finiteEvalScriptSourceGraph([{path:'main.js',source:invalid}]).error).toBeNull();
    await writeFile(entry,(typed?'// @ts-nocheck\n':'')+invalid);
    const result=await compile({entry,output,noGc,buildDir:join(directory,'build-'+noGc+'-'+typed),isolatedScriptRoots:[entry],initializationEntries:[entry],test262Observation:{kind:'test262-native-observation',scenarioId:'property/indexed-range-source#script',setupEntries:[],testEntry:entry,scriptEntries:[entry],async:false},diagnosticWriter:message=>diagnostics.push(message)});

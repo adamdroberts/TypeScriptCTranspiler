@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import * as fs from 'node:fs/promises';
@@ -55,7 +56,7 @@ test('Function own prototypes retain creation Realm across readers, descriptors 
  const erase=(source:string)=>ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText;
  try{
   const referenceFile=path.join(temporary,'reference.js');await fs.writeFile(referenceFile,erase(subject(true)));
-  const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");globalThis.print=(value)=>fs.writeSync(1,String(value)+"\\n");globalThis.$262={createRealm(){return{global:vm.runInNewContext("globalThis")};}};vm.runInThisContext(fs.readFileSync(process.argv[1],"utf8"));',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");globalThis.print=(value)=>fs.writeSync(1,String(value)+"\\n");globalThis.$262={createRealm(){return{global:vm.runInNewContext("globalThis")};}};vm.runInThisContext(fs.readFileSync(process.argv[1],"utf8"));',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});const expected=reference.stdout.toString().trimEnd().split('\n');expect(expected.at(-1)).toBe('reader-realm-restored:true');
   for(const typed of [true,false])for(const noGc of [false,true]){
    const directory=path.join(temporary,`${typed}-${noGc}`);await fs.mkdir(directory);const entry=path.join(directory,typed?'main.ts':'main.js'),output=path.join(directory,'program'),diagnostics:string[]=[];

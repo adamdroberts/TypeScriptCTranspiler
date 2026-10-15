@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import * as fs from 'node:fs/promises';
@@ -106,7 +107,7 @@ test('Symbol owners and object brands share ordinary References and evaluated ke
   // Independently check V8 on the preceding Symbol partitions as well.
   const nodeFile=path.join(temporary,'node-symbol-reference.mjs');
   await fs.writeFile(nodeFile,erase(subject(false,true).split(' const fallbackNames=')[0]+"emit('node-symbol-reference:true');"));
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");import(process.argv[1]);',nodeFile],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const node=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");import(process.argv[1]);',nodeFile],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({exitCode:node.exitCode,stderr:node.stderr.toString()}).toEqual({exitCode:0,stderr:''});
   const nodeLines=node.stdout.toString().trimEnd().split('\n');expect(nodeLines.pop()).toBe('node-symbol-reference:true');
   expect(expected.get(false)!.slice(0,nodeLines.length)).toEqual(nodeLines);

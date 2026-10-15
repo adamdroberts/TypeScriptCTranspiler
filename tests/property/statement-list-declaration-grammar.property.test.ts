@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
@@ -17,7 +18,7 @@ const wide=Array.from({length:2048},(_,index)=>`let n${index};`).join('');inputs
 test('Block and Body lexical conflicts use one StatementList name algorithm with independent scope identity',async()=>{
  const root=await mkdtemp(join(tmpdir(),'tsc2c-statement-list-names-'));
  try {
-  const output=join(root,'oracle.json');const oracle=Bun.spawnSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");fs.writeFileSync(process.argv[1],JSON.stringify(JSON.parse(fs.readFileSync(0,"utf8")).map(source=>{try{new vm.Script(source);return true}catch(error){if(error.name!=="SyntaxError")throw error;return false}})));',output],{stdin:Buffer.from(JSON.stringify(inputs)),stdout:'pipe',stderr:'pipe'});
+  const output=join(root,'oracle.json');const oracle=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");fs.writeFileSync(process.argv[1],JSON.stringify(JSON.parse(fs.readFileSync(0,"utf8")).map(source=>{try{new vm.Script(source);return true}catch(error){if(error.name!=="SyntaxError")throw error;return false}})));',output],{stdin:Buffer.from(JSON.stringify(inputs)),stdout:'pipe',stderr:'pipe'});
   expect({code:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({code:0,stderr:''});const expected=JSON.parse(await readFile(output,'utf8')) as boolean[];
   expect(inputs.map(source=>evalSourceIsValid(evalSourceRequest('direct',source,false)))).toEqual(expected);
   for(const [index,source]of inputs.entries()){

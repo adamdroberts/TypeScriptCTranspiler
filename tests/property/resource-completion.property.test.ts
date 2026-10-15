@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -67,7 +68,7 @@ test("acquired resource records join lexical cells and the completion worklist",
             events=[];${profile?'print':'console.log'}("module-resource-body-finished");
             Promise.resolve().then(()=>{collect();check(events.join("|")==="dispose:module" && readModuleResource()===moduleResource,"resource-module-disposal-and-retained-cell");});`;
         const referenceFile=path.join(temporary,profile?"profile-reference.mjs":"cli-reference.mjs");await fs.writeFile(referenceFile,source.replaceAll("GC_SITE",""));
-        const reference=Bun.spawnSync(["node","--experimental-vm-modules","--no-warnings","-e",
+        const reference=nodeReferenceSync(["node","--experimental-vm-modules","--no-warnings","-e",
             `const vm=require("node:vm"),fs=require("node:fs");const print=line=>fs.writeSync(1,line+"\\n");const context=vm.createContext({print,console:{log:print}});const module=new vm.SourceTextModule(fs.readFileSync(process.argv[1],"utf8"),{context});module.link(()=>{}).then(()=>module.evaluate()).then(()=>print("module-disposed:"+module.namespace.readModuleResource().name)).catch(error=>{fs.writeSync(2,String(error));process.exitCode=1;});`,referenceFile],{stdout:"pipe",stderr:"pipe",timeout:120_000});
         expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:""});
         const expected=reference.stdout.toString().trimEnd().split("\n").slice(0,-1);expect(expected).toContain("deep-resource-scope-tree:true");

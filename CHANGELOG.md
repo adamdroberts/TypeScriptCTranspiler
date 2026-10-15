@@ -1,3 +1,5 @@
+- Share complete file-backed Node reference output capture while preserving original oracle programs, process options and assertions.
+
 - Verify finite activation sources around unrelated generators with independent Node and require complete file-backed native-reference output.
 
 - Preserve observable superclass validation and prototype reads for unused typed classes through one shared definition-effect plan.

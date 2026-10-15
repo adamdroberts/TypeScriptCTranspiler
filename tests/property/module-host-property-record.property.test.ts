@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import {exportedModuleNames,resolveModuleExport,type ModuleExportRecord} from '../../src/module-export-resolution';
 import {compile} from '../../src/compile';
@@ -32,7 +33,7 @@ test('CommonJS owner import profile survives preflight against explicit TypeScri
   // namespace/default interop. The adapter is explicit and independently run.
   const erased=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.CommonJS,esModuleInterop:false}}).outputText;
   const reference=join(root,'reference.cjs');await writeFile(reference,erased);
-  const oracle=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.map(String).join(" ")+"\\n");require(process.argv[1]);',reference],{stdout:'pipe',stderr:'pipe',timeout:120000});
+  const oracle=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.map(String).join(" ")+"\\n");require(process.argv[1]);',reference],{stdout:'pipe',stderr:'pipe',timeout:120000});
   expect({code:oracle.exitCode,stderr:oracle.stderr.toString(),stdout:oracle.stdout.toString()}).toEqual({code:0,stderr:'',stdout:expected});
   for(const noGc of [false,true]){
    const entry=join(root,'main.ts'),output=join(root,'program-'+noGc),diagnostics:string[]=[];await writeFile(entry,source);
@@ -56,7 +57,7 @@ test('indirect host property References keep live reads through a Module namespa
   // adapter; the native input retains the actual Module bridge source.
   await writeFile(join(root,'bridge.cjs'),erase(bridge));
   const reference=join(root,'reference.cjs');await writeFile(reference,erase(source.replaceAll('./bridge.mjs','./bridge.cjs')));
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...v)=>fs.writeSync(1,v.map(String).join(" ")+"\\n");require(process.argv[1]);',reference],{stdout:'pipe',stderr:'pipe',timeout:120000});
+  const node=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...v)=>fs.writeSync(1,v.map(String).join(" ")+"\\n");require(process.argv[1]);',reference],{stdout:'pipe',stderr:'pipe',timeout:120000});
   expect({code:node.exitCode,stderr:node.stderr.toString(),stdout:node.stdout.toString()}).toEqual({code:0,stderr:'',stdout:'7 7\n13 13\n'});
   for(const noGc of [false,true]){
    const entry=join(root,'main.ts'),output=join(root,'program-'+noGc),diagnostics:string[]=[];await writeFile(entry,source);

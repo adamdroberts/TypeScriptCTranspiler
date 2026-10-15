@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import {mkdtemp,writeFile,rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
@@ -12,7 +13,7 @@ test("JSON root source facts retain scalar results, callbacks and opaque boundar
     for(const value of values)for(const call of calls){
         const source=`const value=${value};eval(${call});`,result=graph([{path:"main.js",source}]);
         expect({source,error:result.error}).toEqual({source,error:null});
-        const oracle=Bun.spawnSync(['node','-e','const value=eval("("+process.argv[1]+")");process.stdout.write(JSON.stringify({serialized:JSON.stringify(value)}));',"--",value],{stdout:"pipe",stderr:"pipe"});
+        const oracle=nodeReferenceSync(['node','-e','const value=eval("("+process.argv[1]+")");process.stdout.write(JSON.stringify({serialized:JSON.stringify(value)}));',"--",value],{stdout:"pipe",stderr:"pipe"});
         expect({code:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({code:0,stderr:""});
         const serialized=JSON.parse(oracle.stdout.toString()).serialized;
         expect(result.directEvalSources.map(entry=>entry.source)).toEqual(serialized===undefined?[]:[serialized]);
@@ -42,7 +43,7 @@ test("JSON source closure and callback completions match Node in both memory mod
             '\ntry{JSON.stringify({toJSON(){throw "29;";}});}catch(source){print("throw:"+eval(source));}'+
             '\ntry{JSON.stringify(0,function(){throw "31;";});}catch(source){print("throw:"+eval(source));}';
         expect(graph([{path:"main.js",source}]).error).toBeNull();
-        const node=Bun.spawnSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});'],{stdin:Buffer.from(source),stdout:"pipe",stderr:"pipe",timeout:120000});
+        const node=nodeReferenceSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});'],{stdin:Buffer.from(source),stdout:"pipe",stderr:"pipe",timeout:120000});
         expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:""});
         for(const typed of [false,true])for(const noGc of [false,true]){
             const entry=join(directory,"main-"+typed+"-"+noGc+(typed?".ts":".js")),output=join(directory,"program-"+typed+"-"+noGc),diagnostics:string[]=[];

@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import {mkdtemp,mkdir,writeFile,rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
@@ -33,7 +34,7 @@ test('generated Module storage belongs to the semantic agent across imports, ali
   for(const typed of [false,true])for(const noGc of [false,true]){
    const directory=join(temporary,`${typed}-${noGc}`);await mkdir(directory);const source=await sources(directory,typed&&!noGc?64:3,!noGc);
    const reference=join(directory,'reference.js');await writeFile(reference,source.replace('$262.gc();',''));
-   const node=Bun.spawnSync(['node','--disable-warning=ExperimentalWarning',resolve('tests/property/helpers/test262-agent-node.cjs'),reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({exit:node.exitCode,stderr:node.stderr.toString()}).toEqual({exit:0,stderr:''});
+   const node=nodeReferenceSync(['node','--disable-warning=ExperimentalWarning',resolve('tests/property/helpers/test262-agent-node.cjs'),reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({exit:node.exitCode,stderr:node.stderr.toString()}).toEqual({exit:0,stderr:''});
    const entry=join(directory,typed?'main.ts':'main.js');await writeFile(entry,(typed?'// @ts-nocheck\n':'')+source);const output=join(directory,'program'),diagnostics:string[]=[];
    const result=await compile({entry,output,noGc,buildDir:join(directory,'build'),isolatedScriptRoots:[entry],initializationEntries:[entry],diagnosticWriter:message=>diagnostics.push(message),test262Observation:{kind:'test262-native-observation',scenarioId:'property/agent-module-storage#script',setupEntries:[],testEntry:entry,scriptEntries:[entry],async:false}});
    expect({exit:result.exitCode,diagnostics:diagnostics.join('')}).toEqual({exit:0,diagnostics:''});

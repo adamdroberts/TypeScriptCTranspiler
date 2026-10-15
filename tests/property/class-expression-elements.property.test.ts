@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import * as fs from 'node:fs/promises';
@@ -69,7 +70,7 @@ test('Class declarations and expressions share ordered element definition',async
   for(const key of new Set(plans.map(plan=>`${plan.profile}-${plan.stress}-${plan.typed}`))){
    const [profile,stress]=key.split('-').map(value=>value==='true');
    const entry=path.join(temporary,`reference-${key}.mjs`);await fs.writeFile(entry,erase(subject(profile!,true,stress!)));
-   const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");globalThis.print=console.log;import(process.argv[1]);',entry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+   const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");globalThis.print=console.log;import(process.argv[1]);',entry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});const lines=reference.stdout.toString().trimEnd().split('\n');expect(lines.at(-1)).toBe('deep-class-expression-element-owner-graph:true');expected.set(key,lines);
   }
   for(const {typed,profile,noGc,stress} of plans){
@@ -89,7 +90,7 @@ test('Protected class constructor descriptors preserve abrupt definition',async(
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-class-element-abrupt-'));
  const source=`const host=globalThis;host.print('before');class Unused {static get ['prototype'](){return 1;}}host.print('after');`;
  try{
-  const reference=Bun.spawnSync(['node','-e','globalThis.print=value=>require("node:fs").writeSync(1,String(value)+"\\n");'+source],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const reference=nodeReferenceSync(['node','-e','globalThis.print=value=>require("node:fs").writeSync(1,String(value)+"\\n");'+source],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect(reference.exitCode).toBe(1);expect(reference.stdout.toString()).toBe('before\n');expect(reference.stderr.toString()).toContain('TypeError');
   for(const typed of [true,false])for(const profile of [false,true])for(const noGc of [false,true]){
    const directory=path.join(temporary,`${typed}-${profile}-${noGc}`);await fs.mkdir(directory);const entry=path.join(directory,typed?'main.ts':'main.mjs'),output=path.join(directory,'program'),diagnostics:string[]=[];

@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
@@ -53,7 +54,7 @@ test('transparent References preserve native values, ordering, completion and su
    // Node 26 still repeats conversion on PutValue. The independent reference
    // program explicitly snapshots the known String key for this partition.
    const referenceFile=join(directory,'reference-'+javascript+'.mjs');await writeFile(referenceFile,erase(source(javascript,true).replaceAll('NATIVE_GC','false')));
-   const oracle=Bun.spawnSync(['node','-e','const fs=require("node:fs");globalThis.print=value=>fs.writeSync(1,String(value)+"\\n");import(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:60_000});
+   const oracle=nodeReferenceSync(['node','-e','const fs=require("node:fs");globalThis.print=value=>fs.writeSync(1,String(value)+"\\n");import(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:60_000});
    expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:''});
    for(const noGc of [false,true]){
     const entry=join(directory,javascript?'main.mjs':'main.ts'),output=join(directory,'program-'+javascript+'-'+noGc),diagnostics:string[]=[];

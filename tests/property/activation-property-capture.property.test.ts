@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
@@ -30,7 +31,7 @@ test('caller-origin captures exclude later effects and retain unresolved timing'
  const early="function read(...tail){return Function(...tail)}read('return 17;');async function* later(){yield 1}later().next();";
  const unrelated="async function* prior(){yield 1}prior().next();function read(...tail){return Function(...tail)}read('return 17;');";
  const finite=[early,unrelated];
- const node=Bun.spawnSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");const inputs=JSON.parse(process.argv[1]),Native=Function;const actual=inputs.map(source=>{const calls=[];new vm.Script(source).runInNewContext({Function(...args){calls.push(args.map(String));return Reflect.apply(Native,undefined,args)}});return calls});fs.writeSync(1,JSON.stringify(actual));',JSON.stringify(finite)],{stdout:'pipe',stderr:'pipe'});
+ const node=nodeReferenceSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");const inputs=JSON.parse(process.argv[1]),Native=Function;const actual=inputs.map(source=>{const calls=[];new vm.Script(source).runInNewContext({Function(...args){calls.push(args.map(String));return Reflect.apply(Native,undefined,args)}});return calls});fs.writeSync(1,JSON.stringify(actual));',JSON.stringify(finite)],{stdout:'pipe',stderr:'pipe'});
  expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
  expect(JSON.parse(node.stdout.toString())).toEqual(finite.map(()=>[['return 17;']]));
  for(const input of finite)expect(facts(input)).toEqual([{kind:'ordinary',choices:[['return 17;']]}]);

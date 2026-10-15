@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -39,7 +40,7 @@ test('Script completion closure and a deep statement tree match Node in both mem
    const deep='{'.repeat(depth)+'"71;";'+ '}'.repeat(depth);
    parts.push(`print("deep:"+eval(eval(${JSON.stringify(deep)})));`);
    const source=parts.join('\n'),entry=join(directory,'source-'+noGc+'-'+typed+(typed?'.ts':'.js')),output=join(directory,'program-'+noGc+'-'+typed),diagnostics:string[]=[];
-   const node=Bun.spawnSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");const context=vm.createContext({print:value=>fs.writeSync(1,String(value)+"\\n"),$262:{evalScript(text){return new vm.Script(String(text)).runInContext(context);}}});new vm.Script(fs.readFileSync(0,"utf8")).runInContext(context);'],{stdin:Buffer.from(source),stdout:'pipe',stderr:'pipe',timeout:120_000});
+   const node=nodeReferenceSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");const context=vm.createContext({print:value=>fs.writeSync(1,String(value)+"\\n"),$262:{evalScript(text){return new vm.Script(String(text)).runInContext(context);}}});new vm.Script(fs.readFileSync(0,"utf8")).runInContext(context);'],{stdin:Buffer.from(source),stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(finiteEvalScriptSourceGraph([{path:'main.js',source}]).error).toBeNull();
    await writeFile(entry,(typed?'// @ts-nocheck\n':'')+source);
    const result=await compile({entry,output,noGc,buildDir:join(directory,'build-'+noGc+'-'+typed),isolatedScriptRoots:[entry],initializationEntries:[entry],test262Observation:{kind:'test262-native-observation',scenarioId:'property/script-completion-source#script',setupEntries:[],testEntry:entry,scriptEntries:[entry],async:false},diagnosticWriter:message=>diagnostics.push(message)});

@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';import * as os from 'node:os';import * as path from 'node:path';
 import ts from 'typescript';import {compile} from '../../src/compile';
@@ -43,7 +44,7 @@ test('canonical intrinsic result facts preserve native values, reflected calls a
  const depth=512;pieces.push('var alias0=Number;');for(let index=1;index<depth;index++)pieces.push(`var alias${index}=alias${index-1};`);
  pieces.push(`if(NATIVE_GC)$262.gc();print(eval(alias${depth-1}("73")));`);expected.push('73');
  try{const entry=path.join(directory,'source.js');await fs.writeFile(entry,pieces.join('\n').replaceAll('NATIVE_GC','false'));
-  const oracle=Bun.spawnSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:x=>fs.writeSync(1,String(x)+"\\n")});',entry],{stdout:'pipe',stderr:'pipe'});
+  const oracle=nodeReferenceSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:x=>fs.writeSync(1,String(x)+"\\n")});',entry],{stdout:'pipe',stderr:'pipe'});
   expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:''});expect(oracle.stdout.toString().trimEnd().split('\n')).toEqual(expected);
   for(const noGc of [false,true]){await fs.writeFile(entry,pieces.join('\n').replaceAll('NATIVE_GC',String(!noGc)));
    const output=path.join(directory,'program-'+noGc),diagnostics:string[]=[];

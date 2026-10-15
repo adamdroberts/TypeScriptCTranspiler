@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import { expect, test } from "bun:test";
 import ts from "typescript";
 import * as fs from "node:fs/promises";
@@ -208,7 +209,7 @@ test("synchronous iteration completions drain their resource scopes", async () =
     try {
         const referenceFile=path.join(temporary,'reference.cjs');
         await fs.writeFile(referenceFile,ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.CommonJS}}).outputText);
-        const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");require(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:30_000});
+        const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");require(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:30_000});
         expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});
         for(const noGc of [false,true]) {
             const entry=path.join(temporary,`subject-${noGc}.ts`),output=path.join(temporary,`program-${noGc}`),diagnostics:string[]=[];

@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -34,7 +35,7 @@ test("ordinary and resumed calls retain the direct eval Reference context",async
     try{
       for(const [program,programSource] of [["caller",source],["indirect-only",indirectSource]]){
         const referenceFile=path.join(temporary,program+"-reference.js");await fs.writeFile(referenceFile,programSource.replaceAll("NATIVE_GC","false"));
-        const reference=Bun.spawnSync(["node","-e",`const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:line=>fs.writeSync(1,line+"\\n"),$262:{gc(){}}});`,referenceFile],
+        const reference=nodeReferenceSync(["node","-e",`const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:line=>fs.writeSync(1,line+"\\n"),$262:{gc(){}}});`,referenceFile],
             {stdout:"pipe",stderr:"pipe",timeout:120_000});
         expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:""});
         const expected=reference.stdout.toString().trimEnd().split("\n");

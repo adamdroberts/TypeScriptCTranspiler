@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import { expect, test } from "bun:test";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -67,7 +68,7 @@ test("unbounded numeric domains and a deep owner graph match independent Node", 
             const source = subject(typed && !noGc ? 256 : 1);
             const graph = finiteEvalScriptSourceGraph([{ path: "main.js", source }]);
             expect(graph.error).toBeNull();
-            const node = Bun.spawnSync(["node", "-e", 'const fs=require("node:fs"),vm=require("node:vm");const context=vm.createContext({print:value=>fs.writeSync(1,String(value)+"\\n")});context.$262={evalScript:source=>new vm.Script(String(source)).runInContext(context)};new vm.Script(fs.readFileSync(0,"utf8")).runInContext(context);'],
+            const node = nodeReferenceSync(["node", "-e", 'const fs=require("node:fs"),vm=require("node:vm");const context=vm.createContext({print:value=>fs.writeSync(1,String(value)+"\\n")});context.$262={evalScript:source=>new vm.Script(String(source)).runInContext(context)};new vm.Script(fs.readFileSync(0,"utf8")).runInContext(context);'],
                 { stdin: Buffer.from(source), stdout: "pipe", stderr: "pipe", timeout: 120_000 });
             expect({ code: node.exitCode, stderr: node.stderr.toString() }).toEqual({ code: 0, stderr: "" });
             const entry = join(directory, "main-" + typed + "-" + noGc + (typed ? ".ts" : ".js"));

@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
@@ -33,7 +34,7 @@ partitions.push(...[
 test('Array iterator source records contain independent indexed, owner and effect observations',async()=>{
  const root=await mkdtemp(join(tmpdir(),'tsc2c-array-iterator-source-'));
  try{for(const[index,{source,finite}]of partitions.entries()){
-  const proof=await facts(join(root,index+'.mjs'),source),node=Bun.spawnSync(['node','-e',source+'require("node:fs").writeSync(1,String(query))'],{stdout:'pipe',stderr:'pipe',timeout:120000});
+  const proof=await facts(join(root,index+'.mjs'),source),node=nodeReferenceSync(['node','-e',source+'require("node:fs").writeSync(1,String(query))'],{stdout:'pipe',stderr:'pipe',timeout:120000});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   // Sparse key indices use the complete Number domain, so String projection
   // remains conservatively unknown instead of enumerating logical holes.
@@ -51,7 +52,7 @@ test('Array iterator-derived eval sources execute through one retained alias gra
  const root=await mkdtemp(join(tmpdir(),'tsc2c-array-iterator-source-native-'));
  try{for(const noGc of [false,true]){
   const source=arrayIteratorSourceInput(noGc?3:512),entry=join(root,'main-'+noGc+'.mts'),output=entry+'-program',oracle=join(root,'reference-'+noGc+'.mjs');await writeFile(entry,source);await writeFile(oracle,ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText);
-  const node=Bun.spawnSync(['node',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const node=nodeReferenceSync(['node',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const diagnostics:string[]=[],compiled=await compile({entry,output,noGc,buildDir:output+'-build',diagnosticWriter:m=>diagnostics.push(m)});expect({code:compiled.exitCode,diagnostics}).toEqual({code:0,diagnostics:[]});
   const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:native.exitCode,stderr:native.stderr.toString(),stdout:native.stdout.toString()}).toEqual({code:0,stderr:'',stdout:node.stdout.toString()});
  }}finally{await rm(root,{recursive:true,force:true})}

@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import {mkdtemp,writeFile,rm,mkdir} from 'node:fs/promises';
@@ -36,11 +37,11 @@ test('canonical collection records contain independent Node read, iteration and 
  const directory=await mkdtemp(join(tmpdir(),'tsc2c-collection-source-'));
  try{for(const [index,source]of partitions.entries()){
   const proof=await facts(join(directory,index+'.mjs'),'export {};'+source);
-  const node=Bun.spawnSync(['node','-e',source+'require("node:fs").writeSync(1,String(query));'],{stdout:'pipe',stderr:'pipe'});
+  const node=nodeReferenceSync(['node','-e',source+'require("node:fs").writeSync(1,String(query));'],{stdout:'pipe',stderr:'pipe'});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});if(proof===null)throw new Error("unrepresented source partition: "+source);expect(proof).toContain(node.stdout.toString());
  }
  for(const source of ['function callback(){return typeof this}const query=new Map().getOrInsertComputed("key",callback);','function callback(){return typeof this}const query=callback.call(3);','function callback(){return typeof this}const query=callback.call();']){
-  const proof=await facts(join(directory,'receiver.js'),source),node=Bun.spawnSync(['node','-e',source+'require("node:fs").writeSync(1,String(query));'],{stdout:'pipe',stderr:'pipe'});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(proof).toContain(node.stdout.toString());
+  const proof=await facts(join(directory,'receiver.js'),source),node=nodeReferenceSync(['node','-e',source+'require("node:fs").writeSync(1,String(query));'],{stdout:'pipe',stderr:'pipe'});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(proof).toContain(node.stdout.toString());
  }
  expect(await facts(join(directory,'opaque.mjs'),'export {};const map=new Map([["key","17;"]]);opaque(map);const query=map.get("key");')).toBeNull();
  const composition=await facts(join(directory,'composition.mjs'),'export {};let query="empty";for(const value of new Set(["17;"]).union(new Set(["19;"])))query=value;');expect(composition).toContain('19;');
@@ -52,7 +53,7 @@ test('canonical collection records contain independent Node read, iteration and 
   'let query="17;";const callback=new Proxy(function(){query="79;"},{});new Map().forEach(callback);',
  ];
  for(const [index,source]of proxyPartitions.entries()){
-  const proof=await facts(join(directory,'proxy-'+index+'.mjs'),'export {};'+source),node=Bun.spawnSync(['node','-e',source+'require("node:fs").writeSync(1,String(query));'],{stdout:'pipe',stderr:'pipe'});
+  const proof=await facts(join(directory,'proxy-'+index+'.mjs'),'export {};'+source),node=nodeReferenceSync(['node','-e',source+'require("node:fs").writeSync(1,String(query));'],{stdout:'pipe',stderr:'pipe'});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});if(proof!==null)expect(proof).toContain(node.stdout.toString());
   if(index===0)expect(proof).toBeNull();
  }
@@ -63,7 +64,7 @@ test('collection-derived finite sources execute through native AOT closure in bo
  const root=await mkdtemp(join(tmpdir(),'tsc2c-collection-source-native-'));
  try{for(const noGc of [false,true]){
   const directory=join(root,String(noGc));await mkdir(directory);const source=collectionSourceAliasInput(noGc?3:512),entry=join(directory,'main.mts'),oracle=join(directory,'reference.mjs'),output=join(directory,'program');await writeFile(entry,source);await writeFile(oracle,ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText);
-  const node=Bun.spawnSync(['node',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const node=nodeReferenceSync(['node',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const diagnostics:string[]=[],compiled=await compile({entry,output,buildDir:join(directory,'build'),noGc,diagnosticWriter:message=>diagnostics.push(message)});expect({code:compiled.exitCode,diagnostics}).toEqual({code:0,diagnostics:[]});
   const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:native.exitCode,stderr:native.stderr.toString(),stdout:native.stdout.toString()}).toEqual({code:0,stderr:'',stdout:node.stdout.toString()});
  }}finally{await rm(root,{recursive:true,force:true})}

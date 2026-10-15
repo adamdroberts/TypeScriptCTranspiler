@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';import * as os from 'node:os';import * as path from 'node:path';
 import ts from 'typescript';import {compile} from '../../src/compile';
@@ -44,7 +45,7 @@ test('one exception-value graph routes protected throws, call/getter outcomes an
   await fs.writeFile(entry,knownThrow);
   expect(sourceEvaluationInvocations(ts.createProgram([entry],{allowJs:true,noLib:true})).map(call=>call.choices?.slice().sort())).toEqual([["31;","37;"]]);
   for(const flag of [false,true]){
-   const node=Bun.spawnSync(['node','-e','const vm=require("node:vm");const context={flag:process.argv[1]==="true"};vm.createContext(context);new vm.Script(process.argv[2]).runInContext(context);process.stdout.write(String(context.result));',String(flag),knownThrow.replace('eval(source);','result=eval(source);')],{stdout:'pipe',stderr:'pipe'});
+   const node=nodeReferenceSync(['node','-e','const vm=require("node:vm");const context={flag:process.argv[1]==="true"};vm.createContext(context);new vm.Script(process.argv[2]).runInContext(context);process.stdout.write(String(context.result));',String(flag),knownThrow.replace('eval(source);','result=eval(source);')],{stdout:'pipe',stderr:'pipe'});
    expect({exit:node.exitCode,stderr:node.stderr.toString(),value:node.stdout.toString()}).toEqual({exit:0,stderr:'',value:flag?'31':'37'});
   }
  }finally{await fs.rm(directory,{recursive:true,force:true});}
@@ -59,7 +60,7 @@ test('finite caught source values execute through the ordinary native registry i
  pieces.push(`try{fail${depth-1}();}catch(source){if(NATIVE_GC)$262.gc();print(eval(source));}`);expected.push('79');
  pieces.push(asyncCase.replace('OBSERVE(source)','print(eval(source))'));expected.push('73');
  try{const entry=path.join(directory,'source.js');await fs.writeFile(entry,pieces.join('\n').replaceAll('NATIVE_GC','false'));
-  const oracle=Bun.spawnSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:x=>fs.writeSync(1,String(x)+"\\n")});',entry],{stdout:'pipe',stderr:'pipe'});
+  const oracle=nodeReferenceSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:x=>fs.writeSync(1,String(x)+"\\n")});',entry],{stdout:'pipe',stderr:'pipe'});
   expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:''});expect(oracle.stdout.toString().trimEnd().split('\n')).toEqual(expected);
   for(const noGc of [false,true]){await fs.writeFile(entry,pieces.join('\n').replaceAll('NATIVE_GC',String(!noGc)));
    const output=path.join(directory,'program-'+noGc),diagnostics:string[]=[];

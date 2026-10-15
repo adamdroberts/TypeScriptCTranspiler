@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -66,7 +67,7 @@ test("Module evaluation and eval share retained binding cells and the Module con
         expect(graph.directEvalSources.every(record=>record.strictCaller===module && record.strict===module)).toBe(true);
         const referenceFile=path.join(temporary,name+"-reference.json");
         await fs.writeFile(referenceFile,JSON.stringify(roots.map(root=>({...root,source:root.source.replaceAll("NATIVE_GC","false")}))));
-        const reference=Bun.spawnSync(["node","--experimental-vm-modules","--no-warnings","-e",
+        const reference=nodeReferenceSync(["node","--experimental-vm-modules","--no-warnings","-e",
             `const vm=require("node:vm"),fs=require("node:fs");const context=vm.createContext({print:line=>fs.writeSync(1,line+"\\n"),$262:{gc(){}}});const roots=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(roots[0].goal==="script"){new vm.Script(roots[0].source).runInContext(context);}else{const records=new Map(roots.map(root=>[root.path,new vm.SourceTextModule(root.source,{context,identifier:root.path})]));const entry=records.get(roots[0].path);entry.link(spec=>records.get(spec.slice(2))).then(()=>entry.evaluate()).catch(error=>{fs.writeSync(2,String(error));process.exitCode=1;});}`,referenceFile],
             {stdout:"pipe",stderr:"pipe",timeout:120_000});
         expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:""});

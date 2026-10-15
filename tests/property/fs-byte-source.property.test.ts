@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -50,7 +51,7 @@ test('filesystem reads consume retained byte views and complete actual Lists aga
   const stress=!typed&&!noGc?generateE2eCaseSource('{\"generator\":\"fs-read-actual-list-width\",\"width\":512}','property/fs_read_actual_list_width'):'';
   const program=subject(path.join(directory,'data'),3)+stress;
   const oracle=path.join(directory,'oracle.mjs');await fs.writeFile(oracle,program);
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const node=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const entry=path.join(directory,typed?'main.ts':'main.mjs');await fs.writeFile(entry,(typed?'// @ts-nocheck\n':'')+program);
   const output=path.join(directory,'program'),diagnostics:string[]=[];

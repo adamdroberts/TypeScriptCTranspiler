@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
@@ -27,7 +28,7 @@ test('static derived declarations use retained constructor owners and actual Lis
  try{
   const erased=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText;
   const reference=join(root,'reference.mjs');await writeFile(reference,erased);
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...args)=>fs.writeSync(1,args.map(String).join(" ")+"\\n");import(process.argv[1]);',reference],{stdout:'pipe',stderr:'pipe',timeout:120000});
+  const node=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...args)=>fs.writeSync(1,args.map(String).join(" ")+"\\n");import(process.argv[1]);',reference],{stdout:'pipe',stderr:'pipe',timeout:120000});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(node.stdout.toString().trimEnd().split('\n').at(-1)).toBe('one-deep-constructor-owner-graph true');
   for(const typed of [true,false])for(const noGc of [false,true]){
    const entry=join(root,`main-${typed}-${noGc}.${typed?'mts':'mjs'}`),output=entry+'-native',diagnostics:string[]=[];await writeFile(entry,typed?source:erased);

@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -32,7 +33,7 @@ test('constant enum members retain scalar reads in canonical source contexts',as
   const stress=profile&&!noGc,directory=path.join(temporary,`${profile}-${noGc}`);await fs.mkdir(directory);
   const source=subject(profile,stress),entry=path.join(directory,'main.ts'),reference=path.join(directory,'reference.mjs');await fs.writeFile(entry,source);
   await fs.writeFile(reference,ts.transpileModule(subject(false,stress),{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText);
-  const oracle=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");import(process.argv[1]);',reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:''});
+  const oracle=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");import(process.argv[1]);',reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:''});
   const diagnostics:string[]=[],output=path.join(directory,'program');const result=await compile({entry,output,noGc,buildDir:path.join(directory,'build'),moduleRoots:[entry],initializationEntries:[entry],...(profile?{test262Observation:{kind:'test262-native-observation' as const,scenarioId:'property/enum-constant-reference.ts#module',setupEntries:[],testEntry:entry,async:false}}:{}),diagnosticWriter:message=>diagnostics.push(message)});
   expect({profile,noGc,exitCode:result.exitCode,diagnostics:diagnostics.join('')}).toEqual({profile,noGc,exitCode:0,diagnostics:''});
   const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120_000,env:{...process.env,GC_FREE_SPACE_DIVISOR:'100'}});expect({profile,noGc,exitCode:native.exitCode,stderr:native.stderr.toString()}).toEqual({profile,noGc,exitCode:0,stderr:''});

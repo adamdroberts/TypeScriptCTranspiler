@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import {mkdtemp,writeFile,rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
@@ -16,14 +17,14 @@ test("native Error formatting retains root Types, ordering and genuine callbacks
  for(const record of records)for(const route of routes){
   const source=`const value=${record};eval(${route});`,result=graph([{path:"main.js",source}]);
   expect({source,error:result.error}).toEqual({source,error:null});
-  const node=Bun.spawnSync(['node','-e','process.stdout.write(JSON.stringify(Error.prototype.toString.call(eval("("+process.argv[1]+")"))));','--',record],{stdout:"pipe",stderr:"pipe"});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:""});
+  const node=nodeReferenceSync(['node','-e','process.stdout.write(JSON.stringify(Error.prototype.toString.call(eval("("+process.argv[1]+")"))));','--',record],{stdout:"pipe",stderr:"pipe"});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:""});
   expect(result.directEvalSources.map(entry=>entry.source)).toEqual([JSON.parse(node.stdout.toString())]);
  }
  const pure='let body="37;";try{null.value;}catch(error){String(error);}eval(body);';expect(graph([{path:"main.js",source:pure}]).error).toBeNull();
  const abrupt='let body="41;";const value={name:Symbol.iterator,get message(){body=opaque();return "";}};try{Error.prototype.toString.call(value);}catch(error){}eval(body);';expect(graph([{path:"main.js",source:abrupt}]).error).toBeNull();
  const boxed='try{throw Object(0);}catch(error){eval(String(error));}',boxedProof=graph([{path:"main.js",source:boxed}]);
  expect(boxedProof.error).toBeNull();expect(boxedProof.directEvalSources.map(entry=>entry.source)).toEqual(['0']);
- const boxedNode=Bun.spawnSync(['node','-e',boxed],{stdout:'pipe',stderr:'pipe'});expect({code:boxedNode.exitCode,stderr:boxedNode.stderr.toString()}).toEqual({code:0,stderr:''});
+ const boxedNode=nodeReferenceSync(['node','-e',boxed],{stdout:'pipe',stderr:'pipe'});expect({code:boxedNode.exitCode,stderr:boxedNode.stderr.toString()}).toEqual({code:0,stderr:''});
  for(const source of [
   'let body="43;";Error.prototype.toString=function(){body=opaque();return "";};try{null.value;}catch(error){String(error);}eval(body);',
   'let body="47;";Object.defineProperty(Error.prototype,"name",{get(){body=opaque();return "";}});try{null.value;}catch(error){String(error);}eval(body);',
@@ -47,7 +48,7 @@ test("Error formatting and one deep property graph match Node through native sou
  const directory=await mkdtemp(join(tmpdir(),"tsc2c-native-error-source-"));
  try{for(const typed of [false,true])for(const noGc of [false,true]){
   const source=subject(typed&&!noGc?256:1);expect(graph([{path:"main.js",source}]).error).toBeNull();
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});'],{stdin:Buffer.from(source),stdout:"pipe",stderr:"pipe",timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:""});
+  const node=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});'],{stdin:Buffer.from(source),stdout:"pipe",stderr:"pipe",timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:""});
   const entry=join(directory,"main-"+typed+"-"+noGc+(typed?'.ts':'.js')),output=join(directory,"program-"+typed+"-"+noGc),diagnostics:string[]=[];await writeFile(entry,(typed?'// @ts-nocheck\n':'')+source);
   const built=await compile({entry,output,noGc,buildDir:output+'-build',isolatedScriptRoots:[entry],initializationEntries:[entry],test262Observation:{kind:"test262-native-observation",scenarioId:"property/native-error-source#script",setupEntries:[],testEntry:entry,scriptEntries:[entry],async:false},diagnosticWriter:message=>diagnostics.push(message)});expect({code:built.exitCode,diagnostics:diagnostics.join('')}).toEqual({code:0,diagnostics:""});
   const native=Bun.spawnSync([output],{stdout:"pipe",stderr:"pipe",timeout:120000});expect({code:native.exitCode,stderr:native.stderr.toString()}).toEqual({code:0,stderr:""});const observation=parseHostObservation(JSON.parse(native.stdout.toString()));expect(observation.kind).toBe('normal');expect(observation.stdout).toBe(node.stdout.toString());

@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import { expect, test } from 'bun:test';
 import ts from 'typescript';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
@@ -41,7 +42,7 @@ test('timer native owners preserve actual calls, identities, mutation, receivers
  const directory=await mkdtemp(join(tmpdir(),'tsc2c-timer-callable-owners-'));
  try{
   const text=source(true),erased=ts.transpileModule(text,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText,reference=join(directory,'reference.mjs');await writeFile(reference,erased);
-  const oracle=Bun.spawnSync(['node','-e','const fs=require("node:fs");globalThis.print=value=>fs.writeSync(1,String(value)+"\\n");import(process.argv[1]);',reference],{stdout:'pipe',stderr:'pipe',timeout:60_000});expect({exit:oracle.exitCode,err:oracle.stderr.toString()}).toEqual({exit:0,err:''});
+  const oracle=nodeReferenceSync(['node','-e','const fs=require("node:fs");globalThis.print=value=>fs.writeSync(1,String(value)+"\\n");import(process.argv[1]);',reference],{stdout:'pipe',stderr:'pipe',timeout:60_000});expect({exit:oracle.exitCode,err:oracle.stderr.toString()}).toEqual({exit:0,err:''});
   for(const noGc of [false,true])for(const erasedInput of [false,true]){
    const entry=join(directory,erasedInput?'main.js':'main.ts'),variant=String(noGc)+'-'+String(erasedInput),output=join(directory,'program-'+variant),diagnostics:string[]=[];const input=source(noGc);await writeFile(entry,erasedInput?ts.transpileModule(input,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText:input);const result=await compile({entry,output,noGc,buildDir:join(directory,'build-'+variant),moduleRoots:[entry],initializationEntries:[entry],test262Observation:{kind:'test262-native-observation',scenarioId:'property/timer-callable-owners#module',setupEntries:[],testEntry:entry,async:false},diagnosticWriter:message=>diagnostics.push(message)});
    expect({exit:result.exitCode,diagnostics:diagnostics.join('')}).toEqual({exit:0,diagnostics:''});const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({exit:native.exitCode,err:native.stderr.toString()}).toEqual({exit:0,err:''});const observation=parseHostObservation(JSON.parse(native.stdout.toString()));expect(observation).toEqual(expect.objectContaining({kind:'normal'}));expect(observation.stdout).toBe(oracle.stdout.toString());

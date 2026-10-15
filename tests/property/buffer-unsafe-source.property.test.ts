@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test}from'bun:test';
 import ts from'typescript';
 import {staticStringExpressionTexts}from'../../src/module-specifiers';
@@ -17,7 +18,7 @@ test('unknown allocation bytes remain unknown across shared Buffer source projec
   const source=transform(allocation)+'.toString('+JSON.stringify(encoding)+')';expect({source,proof:staticStringExpressionTexts(expression(source))}).toEqual({source,proof:[]});
  }
  for(const source of ["Buffer.alloc(3).toString('hex')","Buffer.alloc(3,65).toString('utf8')","Buffer.concat([Buffer.alloc(1),Buffer.from('41','hex')]).toString('hex')"]){
-  const node=Bun.spawnSync(['node','-e','require("node:fs").writeSync(1,'+source+')'],{stdout:'pipe',stderr:'pipe'});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(staticStringExpressionTexts(expression(source))).toContain(node.stdout.toString());
+  const node=nodeReferenceSync(['node','-e','require("node:fs").writeSync(1,'+source+')'],{stdout:'pipe',stderr:'pipe'});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(staticStringExpressionTexts(expression(source))).toContain(node.stdout.toString());
  }
 });
 

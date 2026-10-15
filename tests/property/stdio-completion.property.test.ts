@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -42,7 +43,7 @@ test('Stdio completions share next-tick worklists, argument Lists and retained c
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-stdio-completion-'));
  try{
   const oracle=path.join(temporary,'reference.mjs');await fs.writeFile(oracle,subject(false));
-  const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...args)=>fs.writeSync(1,require("node:util").format(...args)+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...args)=>fs.writeSync(1,require("node:util").format(...args)+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});
   for(const mode of ['typed','javascript'])for(const noGc of [false,true])for(const profile of [false,true]){
    const directory=path.join(temporary,`${mode}-${noGc}-${profile}`);await fs.mkdir(directory);

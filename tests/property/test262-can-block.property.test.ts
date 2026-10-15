@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import { expect, test } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -60,7 +61,7 @@ test('Test262 blocking selection reaches the owning agent before every source go
  try {
   // Node independently verifies the permitted-blocking semantic partition;
   // the nonblocking partition follows the pinned DoWait TypeError rule.
-  const oracle=Bun.spawnSync(['node','-e',probe+'console.log(probe());'],{stdout:'pipe',stderr:'pipe'});
+  const oracle=nodeReferenceSync(['node','-e',probe+'console.log(probe());'],{stdout:'pipe',stderr:'pipe'});
   expect({code:oracle.exitCode,stderr:oracle.stderr.toString(),stdout:oracle.stdout.toString()})
    .toEqual({code:0,stderr:'',stdout:'timed-out/not-equal\n'});
   for(const canBlock of [null,false,true]) {

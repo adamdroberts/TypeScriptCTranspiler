@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -34,7 +35,7 @@ test('namespace factory worklists retain graph identity and complete export plan
    const directory=path.join(temporary,String(index));await fs.mkdir(directory);
    const oracleDirectory=path.join(directory,'oracle');await fs.mkdir(oracleDirectory);
    for(const [name,source]of sources(plan.depth,plan.cyclic,'.mjs',false,false))await fs.writeFile(path.join(oracleDirectory,name),source);
-   const node=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=value=>fs.writeSync(1,String(value)+"\\n");import(process.argv[1]);',path.join(oracleDirectory,'main.mjs')],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+   const node=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=value=>fs.writeSync(1,String(value)+"\\n");import(process.argv[1]);',path.join(oracleDirectory,'main.mjs')],{stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({plan,code:node.exitCode,stderr:node.stderr.toString(),stdout:node.stdout.toString()}).toEqual({plan,code:0,stderr:'',stdout:'namespace-factory:true\n'});
    const extension=plan.typed?'.ts':'.mjs',entries:string[]=[];
    for(const [name,source]of sources(plan.depth,plan.cyclic,extension,true,!plan.noGc)){

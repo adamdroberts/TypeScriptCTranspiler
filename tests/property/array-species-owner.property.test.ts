@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import ts from "typescript";
 import * as fs from "node:fs/promises";
@@ -49,7 +50,7 @@ test("Array species retain an actual constructor and result property owner",asyn
     try{
         for(const strict of [false,true]){
             const referenceFile=path.join(temporary,`reference-${strict}.cjs`);await fs.writeFile(referenceFile,erase(subject(strict,false,true),ts.ModuleKind.CommonJS));
-            const reference=Bun.spawnSync(["node","-e",'const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");require(process.argv[1]);',referenceFile],{stdout:"pipe",stderr:"pipe",timeout:120_000});
+            const reference=nodeReferenceSync(["node","-e",'const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");require(process.argv[1]);',referenceFile],{stdout:"pipe",stderr:"pipe",timeout:120_000});
             expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:""});
             const expected=reference.stdout.toString().trimEnd().split("\n");expect(expected.at(-1)).toBe("deep-species-constructor-owner:true");
             for(const typed of [true,false])for(const profile of [false,true])for(const noGc of [false,true]){
@@ -85,7 +86,7 @@ test("Array species distinguish the active Realm's intrinsic constructor from fo
  const erase=(source:string)=>ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.CommonJS}}).outputText;
  try{
   const referenceFile=path.join(temporary,'reference.cjs');await fs.writeFile(referenceFile,erase(program.replace('GC','')));
-  const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");globalThis.print=value=>fs.writeSync(1,String(value)+"\\n");globalThis.$262={createRealm(){const context=vm.createContext({});return{evalScript(source){return vm.runInContext(source,context);}};}};require(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");globalThis.print=value=>fs.writeSync(1,String(value)+"\\n");globalThis.$262={createRealm(){const context=vm.createContext({});return{evalScript(source){return vm.runInContext(source,context);}};}};require(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});
   const expected=reference.stdout.toString().trimEnd().split('\n');expect(expected.at(-1)).toBe('revoked-constructor-abrupt:true');
   for(const noGc of [false,true]){

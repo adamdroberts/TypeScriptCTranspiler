@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -19,7 +20,7 @@ test("direct eval projects caller scope bindings through retained cell aliases",
     const source=fixture.replace("finish();",partitions+"\nfinish();");
     // Use the real Node engine rather than Bun's VM emulation. Synchronous
     // writes retain every observation when the oracle process exits.
-    const reference=Bun.spawnSync(["node","-e",`const vm=require("node:vm"),fs=require("node:fs");new vm.Script(${JSON.stringify(source.replaceAll("NATIVE_GC","false"))}).runInNewContext({print:line=>fs.writeSync(1,line+"\\n"),$262:{gc(){}}});`],
+    const reference=nodeReferenceSync(["node","-e",`const vm=require("node:vm"),fs=require("node:fs");new vm.Script(${JSON.stringify(source.replaceAll("NATIVE_GC","false"))}).runInNewContext({print:line=>fs.writeSync(1,line+"\\n"),$262:{gc(){}}});`],
         {stdout:"pipe",stderr:"pipe",timeout:120_000});
     expect(reference.exitCode).toBe(0);expect(reference.stderr.toString()).toBe("");
     const expected=reference.stdout.toString().trimEnd().split("\n");

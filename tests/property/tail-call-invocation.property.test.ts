@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import { expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -41,7 +42,7 @@ test("canonical invocation records hand off strict tail calls without retaining 
         const entry = path.join(directory, "source.js");
         const oracleSource = pieces.join("\n").replaceAll("NATIVE_GC", "false").replaceAll("TAIL_DEPTH", "17");
         await fs.writeFile(entry, oracleSource);
-        const oracle = Bun.spawnSync(["node", "-e", 'const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});', entry], { stdout: "pipe", stderr: "pipe" });
+        const oracle = nodeReferenceSync(["node", "-e", 'const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});', entry], { stdout: "pipe", stderr: "pipe" });
         expect({ exitCode: oracle.exitCode, stderr: oracle.stderr.toString() }).toEqual({ exitCode: 0, stderr: "" });
         const expected = oracle.stdout.toString().trimEnd().split("\n");
         for (const noGc of [false, true]) {

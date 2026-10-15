@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -71,7 +72,7 @@ test('Raw JSON scalar grammar and immutable owners share the serialization workl
   const referenceSource=subject.replaceAll('COLLECT','').replace('const serialized=JSON.stringify(deep),expected=', 'const serialized=\'{"child":\'.repeat(16384)+\'9007199254740993123456789\'+\'}\'.repeat(16384),expected=');
   const nodeHost=`import vm from 'node:vm';globalThis.$262={createRealm(){const context=vm.createContext();return {global:vm.runInContext('globalThis',context),evalScript(source){return vm.runInContext(source,context)}}}};\n`;
   await fs.writeFile(referenceEntry,nodeHost+referenceSource);
-  const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...args)=>fs.writeSync(1,require("node:util").format(...args)+"\\n");import(process.argv[1]);',referenceEntry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...args)=>fs.writeSync(1,require("node:util").format(...args)+"\\n");import(process.argv[1]);',referenceEntry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});
   for(const mode of ['typed','javascript'])for(const noGc of [false,true]){
    const directory=path.join(temporary,`${mode}-${noGc}`);await fs.mkdir(directory);

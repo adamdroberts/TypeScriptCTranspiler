@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -41,7 +42,7 @@ test('source descriptor conversion retains ordered field effects and abrupt gate
 test('descriptor conversion effects match Node through native source modes',async()=>{
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-descriptor-conversion-'));
  try{
-  const referenceEntry=path.join(temporary,'reference.mjs');await fs.writeFile(referenceEntry,program().replaceAll('COLLECT',''));const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...args)=>fs.writeSync(1,require("node:util").format(...args)+"\\n");import(process.argv[1]);',referenceEntry],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:''});
+  const referenceEntry=path.join(temporary,'reference.mjs');await fs.writeFile(referenceEntry,program().replaceAll('COLLECT',''));const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...args)=>fs.writeSync(1,require("node:util").format(...args)+"\\n");import(process.argv[1]);',referenceEntry],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:''});
   for(const mode of ['typed','javascript'])for(const noGc of [false,true]){
    const directory=path.join(temporary,`${mode}-${noGc}`);await fs.mkdir(directory);const entry=path.join(directory,mode==='typed'?'main.ts':'main.mjs');await fs.writeFile(entry,(mode==='typed'?'// @ts-nocheck\n':'')+program().replaceAll('COLLECT',noGc?'':'$262.gc();'));
    const output=path.join(directory,'program'),diagnostics:string[]=[];const result=await compile({entry,output,noGc,moduleRoots:[entry],initializationEntries:[entry],buildDir:path.join(directory,'build'),test262Observation:{kind:'test262-native-observation',scenarioId:'descriptor-conversion-source#module',setupEntries:[],testEntry:entry,async:false},diagnosticWriter:message=>diagnostics.push(message)});expect({mode,noGc,code:result.exitCode,diagnostics:diagnostics.join('')}).toEqual({mode,noGc,code:0,diagnostics:''});

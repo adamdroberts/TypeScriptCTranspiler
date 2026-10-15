@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -38,7 +39,7 @@ test('deferred Module failures reject before all static bodies and preserve load
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-module-load-'));
  try{for(const noGc of [false,true]){
   const directory=path.join(temporary,String(noGc));await fs.mkdir(directory);const source=await files(directory,noGc?1:512),entry=path.join(directory,'main.mjs');await fs.writeFile(entry,source);
-  const node=Bun.spawnSync(['node',entry],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const node=nodeReferenceSync(['node',entry],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const output=path.join(directory,'program'),diagnostics:string[]=[];const built=await compile({entry,output,noGc,diagnosticWriter:message=>diagnostics.push(message)});expect({code:built.exitCode,diagnostics:diagnostics.join('')}).toEqual({code:0,diagnostics:''});
   const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:native.exitCode,stderr:native.stderr.toString(),stdout:native.stdout.toString()}).toEqual({code:0,stderr:'',stdout:node.stdout.toString()});
   const eager=path.join(directory,'eager.mjs');await fs.writeFile(eager,"import './parent.mjs';console.log('unreachable');\n");const eagerDiagnostics:string[]=[];const rejected=await compile({entry:eager,output:output+'-eager',noGc,diagnosticWriter:message=>eagerDiagnostics.push(message)});expect(rejected.exitCode).toBe(2);expect(eagerDiagnostics.join('')).toContain("LexicallyDeclaredNames and VarDeclaredNames both contain 'value'");

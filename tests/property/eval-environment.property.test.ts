@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import { expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -180,7 +181,7 @@ static void install_environment_probe(void) {
 `;
 
 async function oracle(): Promise<string[]> {
-    const reference = Bun.spawnSync(["node", "-e", `
+    const reference = nodeReferenceSync(["node", "-e", `
     const vm=require("node:vm"),fs=require("node:fs"),lines=[];
     const context = vm.createContext({print:line=>lines.push(line), $262:{gc(){},createRealm(){
         const realm = vm.createContext({}); return {global:new vm.Script("globalThis").runInContext(realm),evalScript:code=>new vm.Script(code).runInContext(realm)};

@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -40,7 +41,7 @@ test('dynamic import option effects match independent Node and native execution'
    const program="function opaque(){return /.*/.exec('67;')[0]}\n"+plans.map(plan=>'{'+source(plan)+'}').join('\n')+`\n{let body='17;';${chain}import('./data.json',owner${depth-1}).catch(()=>{});console.log('deep:'+eval(body));}`;
    const directory=path.join(temporary,`${typed}-${noGc}`);await fs.mkdir(directory);await fs.writeFile(path.join(directory,'data.json'),'262');
    const oracle=path.join(directory,'oracle.mjs');await fs.writeFile(oracle,program);
-   const node=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=value=>fs.writeSync(1,String(value)+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:node.exitCode,stderr:node.stderr.toString(),stdout:node.stdout.toString()}).toEqual({code:0,stderr:'',stdout:expected});
+   const node=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=value=>fs.writeSync(1,String(value)+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:node.exitCode,stderr:node.stderr.toString(),stdout:node.stdout.toString()}).toEqual({code:0,stderr:'',stdout:expected});
    const entry=path.join(directory,typed?'main.ts':'main.mjs');await fs.writeFile(entry,(typed?'// @ts-nocheck\n':'')+program);const output=path.join(directory,'program'),diagnostics:string[]=[];
    const built=await compile({entry,output,noGc,buildDir:path.join(directory,'build'),moduleRoots:[entry,path.join(directory,'data.json')],initializationEntries:[entry],test262Observation:{kind:'test262-native-observation',scenarioId:'dynamic-import-source-effects#module',setupEntries:[],testEntry:entry,async:false},diagnosticWriter:message=>diagnostics.push(message)});
    expect({typed,noGc,code:built.exitCode,diagnostics:diagnostics.join('')}).toEqual({typed,noGc,code:0,diagnostics:''});const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:native.exitCode,stderr:native.stderr.toString()}).toEqual({code:0,stderr:''});expect(parseHostObservation(JSON.parse(native.stdout.toString()))).toMatchObject({kind:'normal',stdout:expected});

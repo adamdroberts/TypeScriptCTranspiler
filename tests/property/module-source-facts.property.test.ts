@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import { expect, test } from "bun:test";
 import ts from "typescript";
 import { mkdtemp, writeFile, mkdir, rm } from "node:fs/promises";
@@ -43,7 +44,7 @@ test('module source facts project JSON data, namespace graphs and live export ce
    const files=sources(depth,!noGc),oracle=sources(depth,false);
    for(const[name,source]of Object.entries(files))await writeFile(join(directory,name==='main.ts'&&!typed?'main.mjs':name),name==='main.ts'&&!typed?ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText:source);
    for(const[name,source]of Object.entries(oracle))await writeFile(join(reference,name==='main.ts'?'main.mjs':name),name==='main.ts'?ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText:source);
-   const node=Bun.spawnSync(['node','-e','const fs=require("node:fs");globalThis.print=value=>fs.writeSync(1,String(value)+"\\n");import(process.argv[1]);',join(reference,'main.mjs')],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+   const node=nodeReferenceSync(['node','-e','const fs=require("node:fs");globalThis.print=value=>fs.writeSync(1,String(value)+"\\n");import(process.argv[1]);',join(reference,'main.mjs')],{stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({exit:node.exitCode,stderr:node.stderr.toString()}).toEqual({exit:0,stderr:''});
    const entry=join(directory,typed?'main.ts':'main.mjs'),output=join(directory,'program'),diagnostics:string[]=[];
    const result=await compile({entry,output,noGc,moduleRoots:[entry],initializationEntries:[entry],buildDir:join(directory,'build'),test262Observation:{kind:'test262-native-observation',scenarioId:'property/module-source-facts#module',setupEntries:[],testEntry:entry,async:false},diagnosticWriter:message=>diagnostics.push(message)});

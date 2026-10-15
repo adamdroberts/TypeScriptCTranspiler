@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect, test} from 'bun:test';
 import ts from 'typescript';
 import * as fs from 'node:fs/promises';
@@ -71,7 +72,7 @@ test('ordinary native results retain actual values across source ABI slots, writ
     try {
         const referenceFile=path.join(temporary,'reference.cjs');
         await fs.writeFile(referenceFile,ts.transpileModule(subject(),{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.CommonJS}}).outputText);
-        const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");require(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe'});
+        const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");require(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe'});
         expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});
         const expected=reference.stdout.toString().trimEnd().split('\n');expect(expected.at(-1)).toBe('deep-source-flow true effects 9');
         for(const profile of [false,true])for(const noGc of [false,true]){

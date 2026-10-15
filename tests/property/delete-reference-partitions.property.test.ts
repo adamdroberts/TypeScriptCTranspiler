@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import { expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -15,7 +16,7 @@ test("delete distinguishes declarative References and expression values without 
         syntax.push(`class C{method(){delete ${operand};}}`);
     }
     syntax.push('"use strict";delete ' + "(".repeat(256) + "x" + ")".repeat(256) + ";");
-    const oracleSyntax = Bun.spawnSync(["node", "-e", 'const fs=require("node:fs"),vm=require("node:vm");process.stdout.write(JSON.stringify(JSON.parse(fs.readFileSync(0,"utf8")).map(source=>{try{new vm.Script(source);return true;}catch(error){if(error instanceof SyntaxError)return false;throw error;}})));'],
+    const oracleSyntax = nodeReferenceSync(["node", "-e", 'const fs=require("node:fs"),vm=require("node:vm");process.stdout.write(JSON.stringify(JSON.parse(fs.readFileSync(0,"utf8")).map(source=>{try{new vm.Script(source);return true;}catch(error){if(error instanceof SyntaxError)return false;throw error;}})));'],
         { stdin: new Blob([JSON.stringify(syntax)]), stdout: "pipe", stderr: "pipe" });
     expect({ exitCode: oracleSyntax.exitCode, stderr: oracleSyntax.stderr.toString() }).toEqual({ exitCode: 0, stderr: "" });
     const accepted = syntax.map(source => {
@@ -41,7 +42,7 @@ test("delete distinguishes declarative References and expression values without 
     try {
         const entry = path.join(directory, "source.js");
         await fs.writeFile(entry, pieces.join("\n"));
-        const oracle = Bun.spawnSync(["node", "-e", 'const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});', entry], { stdout: "pipe", stderr: "pipe" });
+        const oracle = nodeReferenceSync(["node", "-e", 'const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});', entry], { stdout: "pipe", stderr: "pipe" });
         expect({ exitCode: oracle.exitCode, stderr: oracle.stderr.toString() }).toEqual({ exitCode: 0, stderr: "" });
         const expected = oracle.stdout.toString().trimEnd().split("\n");
         for (const noGc of [false, true]) {

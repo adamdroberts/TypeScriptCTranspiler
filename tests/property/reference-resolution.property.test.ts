@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -81,7 +82,7 @@ suspendedReference();
 `;
 
 test("source References retain their binding before RHS evaluation inserts another binding",async()=>{
-    const oracle=Bun.spawnSync(["node","-e",`const vm=require("node:vm"),fs=require("node:fs");new vm.Script(${JSON.stringify(source.replaceAll("NATIVE_GC","false"))}).runInNewContext({print:line=>fs.writeSync(1,line+"\\n")});`],{stdout:"pipe",stderr:"pipe",timeout:120_000});
+    const oracle=nodeReferenceSync(["node","-e",`const vm=require("node:vm"),fs=require("node:fs");new vm.Script(${JSON.stringify(source.replaceAll("NATIVE_GC","false"))}).runInNewContext({print:line=>fs.writeSync(1,line+"\\n")});`],{stdout:"pipe",stderr:"pipe",timeout:120_000});
     expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});
     const node=oracle.stdout.toString().trimEnd().split("\n");
     // The pinned PutValue algorithm and S11.13.1_A6_T2 require the original

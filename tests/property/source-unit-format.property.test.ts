@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import { expect, test } from "bun:test";
 import ts from "typescript";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
@@ -42,7 +43,7 @@ test('host source formats preserve Script wrappers and ECMAScript Module goals o
    const erase=(value:string)=>ts.transpileModule(value,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText;
    await writeFile(entry,typed?source:erase(source));
    const reference=join(directory,'reference.mjs');await writeFile(reference,erase(source.replace('(globalThis as any).$262.gc();','')));
-   const node=Bun.spawnSync(['node','--disable-warning=MODULE_TYPELESS_PACKAGE_JSON',reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({exit:node.exitCode,stderr:node.stderr.toString()}).toEqual({exit:0,stderr:''});
+   const node=nodeReferenceSync(['node','--disable-warning=MODULE_TYPELESS_PACKAGE_JSON',reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({exit:node.exitCode,stderr:node.stderr.toString()}).toEqual({exit:0,stderr:''});
    const built=buildProgram({entry,packageRoot:resolvePackageRoot()});
    for(const partition of partitions){const file=built.program.getSourceFile(join(directory,partition.directory,'value'+partition.extension))!;expect(sourceUnitFormat(file)).toBe(partition.commonjs?'commonjs':'ecmascript');expect(ecmaParseGoal(file)).toBe(partition.commonjs?'script':'module');}
    const output=join(directory,'program'),diagnostics:string[]=[];

@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join} from 'node:path';
 import {compile} from '../../src/compile';import {parseHostObservation} from '../test262/protocol';
@@ -22,7 +23,7 @@ test('grouping Evaluation preserves values, References, receiver, direct eval an
  const directory=await mkdtemp(join(tmpdir(),'tsc2c-grouping-evaluation-'));
  try{
   const entry=join(directory,'source.js');await writeFile(entry,source(true));
-  const oracle=Bun.spawnSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});',entry],{stdout:'pipe',stderr:'pipe',timeout:60_000});expect({exit:oracle.exitCode,err:oracle.stderr.toString()}).toEqual({exit:0,err:''});
+  const oracle=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});',entry],{stdout:'pipe',stderr:'pipe',timeout:60_000});expect({exit:oracle.exitCode,err:oracle.stderr.toString()}).toEqual({exit:0,err:''});
   for(const noGc of [false,true]){
    await writeFile(entry,source(noGc));const output=join(directory,'program-'+noGc),diagnostics:string[]=[];
    const result=await compile({entry,output,noGc,buildDir:join(directory,'build-'+noGc),isolatedScriptRoots:[entry],initializationEntries:[entry],test262Observation:{kind:'test262-native-observation',scenarioId:'property/grouping-evaluation.js#sloppy',setupEntries:[],testEntry:entry,async:false,scriptEntries:[entry]},diagnosticWriter:message=>diagnostics.push(message)});

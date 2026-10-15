@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -31,7 +32,7 @@ const booleanSubjects=[
 ] as const;
 const booleanSources=booleanSubjects.flatMap(([definition,descriptor,attributes])=>attributes.map(attribute=>definition+'eval('+descriptor+'.'+attribute+');'));
 test("descriptor normal attribute results are Boolean independently of their values",()=>{
- const oracle=Bun.spawnSync(["node","-e",'const vm=require("node:vm");require("node:fs").writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(typeof value)});return values;})));',JSON.stringify(booleanSources)],{stdout:"pipe",stderr:"pipe"});
+ const oracle=nodeReferenceSync(["node","-e",'const vm=require("node:vm");require("node:fs").writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(typeof value)});return values;})));',JSON.stringify(booleanSources)],{stdout:"pipe",stderr:"pipe"});
  expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});expect(JSON.parse(oracle.stdout.toString())).toEqual(booleanSources.map(()=>["boolean"]));
  for(const source of booleanSources)expect(sourceEvaluationInvocations(program(source)).map(call=>call.choices)).toEqual([[]]);
  for(const value of ['"101;"','external']){
@@ -40,7 +41,7 @@ test("descriptor normal attribute results are Boolean independently of their val
  }
 });
 test("own descriptor projections retain callable cells without activating accessors",()=>{
- const oracle=Bun.spawnSync(["node","-e",'const vm=require("node:vm");require("node:fs").writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(value)});return values;})));',JSON.stringify(subjects)],{stdout:"pipe",stderr:"pipe"});
+ const oracle=nodeReferenceSync(["node","-e",'const vm=require("node:vm");require("node:fs").writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(value)});return values;})));',JSON.stringify(subjects)],{stdout:"pipe",stderr:"pipe"});
  expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});const expected:string[][]=JSON.parse(oracle.stdout.toString());
  for(const[index,source]of subjects.entries())expect({source,complete:sourceEvaluationInvocations(program(source)).some(call=>call.choices!==null&&expected[index]!.every(value=>call.choices!.includes(value)))}).toEqual({source,complete:true});
  for(const source of ['class C {}var reader={get mark(){C.toString=external;return 1;}};Object.getOwnPropertyDescriptor(reader,"mark");eval(C.toString());','class C {}var reader={get mark(){C.toString=external;return 1;}};Object.getOwnPropertyDescriptors(reader);eval(C.toString());','class C {}var reader={__proto__:{get mark(){C.toString=external;return 1;}}};Object.getOwnPropertyDescriptor(reader,"mark");eval(C.toString());'])expect(sourceEvaluationInvocations(program(source)).find(call=>call.node.getText()==='eval(C.toString())')?.choices).toEqual(['class C {}']);
@@ -58,7 +59,7 @@ test("descriptor callable projection and one deep owner graph match Node in both
  const source=pieces.join('\n'),directory=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-source-descriptors-'));
  try{
   const entry=path.join(directory,'source.js');await fs.writeFile(entry,source.replaceAll('NATIVE_GC','false'));
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});',entry],{stdout:'pipe',stderr:'pipe'});expect({exitCode:node.exitCode,stderr:node.stderr.toString()}).toEqual({exitCode:0,stderr:''});
+  const node=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});',entry],{stdout:'pipe',stderr:'pipe'});expect({exitCode:node.exitCode,stderr:node.stderr.toString()}).toEqual({exitCode:0,stderr:''});
   for(const noGc of [false,true]){
    await fs.writeFile(entry,source.replaceAll('NATIVE_GC',String(!noGc)));const output=path.join(directory,'program-'+noGc),diagnostics:string[]=[];
    const result=await compile({entry,output,noGc,buildDir:path.join(directory,'build-'+noGc),isolatedScriptRoots:[entry],initializationEntries:[entry],test262Observation:{kind:'test262-native-observation',scenarioId:'property/source-descriptor-facts.js#sloppy',setupEntries:[],testEntry:entry,async:false,scriptEntries:[entry]},diagnosticWriter:message=>diagnostics.push(message)});

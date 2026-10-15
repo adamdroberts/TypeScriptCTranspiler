@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -83,7 +84,7 @@ test('Test262 agents share canonical source closure, mailbox lifecycle, Realm is
   const absent=finiteEvalScriptSourceGraph([{path:'absent.js',source:'$262.agent.start(globalThis.unknownSource);'}]);expect(absent.agentSources).toEqual(['undefined']);
   const unknown=finiteEvalScriptSourceGraph([{path:'main.js',source:'$262.agent.start(readSource());'}]);expect(unknown.error).toContain('agent.start source is not a finite static string expression');
   const reference=path.join(root,'reference.js');await fs.writeFile(reference,source);
-  const trace=path.join(root,'oracle.trace');const node=Bun.spawnSync(['node',path.resolve('tests/property/helpers/test262-agent-node.cjs'),reference],{stdout:'pipe',stderr:'pipe',timeout:120_000,env:{...process.env,TSC2C_AGENT_ORACLE_TRACE:trace}});expect({code:node.exitCode,stderr:node.stderr.toString(),trace:node.exitCode?await fs.readFile(trace,'utf8'):''}).toEqual({code:0,stderr:'',trace:''});
+  const trace=path.join(root,'oracle.trace');const node=nodeReferenceSync(['node',path.resolve('tests/property/helpers/test262-agent-node.cjs'),reference],{stdout:'pipe',stderr:'pipe',timeout:120_000,env:{...process.env,TSC2C_AGENT_ORACLE_TRACE:trace}});expect({code:node.exitCode,stderr:node.stderr.toString(),trace:node.exitCode?await fs.readFile(trace,'utf8'):''}).toEqual({code:0,stderr:'',trace:''});
   for(const noGc of [false,true])for(const typed of [false,true]){
    const directory=path.join(root,noGc+'-'+typed);await fs.mkdir(directory);const entry=path.join(directory,typed?'main.ts':'main.js'),output=path.join(directory,'program');await fs.writeFile(entry,(typed?'// @ts-nocheck\n':'')+source);
    const diagnostics:string[]=[];const result=await compile({entry,output,buildDir:path.join(directory,'build'),noGc,isolatedScriptRoots:[entry],initializationEntries:[entry],test262Observation:{kind:'test262-native-observation',scenarioId:'agent-property#script',setupEntries:[],testEntry:entry,scriptEntries:[entry],async:false},diagnosticWriter:message=>diagnostics.push(message)});

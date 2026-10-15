@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import ts from "typescript";
 import {earlyControlFlowStaticSemanticsFailure} from "../../src/control-static-semantics";
@@ -74,7 +75,7 @@ test("with grammar rejection follows strict code contexts",()=>{
         (body:string)=>`function f(){function g(){${body}}}`, (body:string)=>`class C{method(){${body}}}`];
     for(const directive of directives)for(const wrap of wrappers){
         const source=wrap(directive+"with({}){}");
-        const native=Bun.spawnSync(["node","-e",`try{new Function(${JSON.stringify(source)});process.stdout.write("accepted");}catch(error){process.stdout.write(error.constructor.name);}`],{stdout:"pipe",stderr:"pipe"});
+        const native=nodeReferenceSync(["node","-e",`try{new Function(${JSON.stringify(source)});process.stdout.write("accepted");}catch(error){process.stdout.write(error.constructor.name);}`],{stdout:"pipe",stderr:"pipe"});
         expect(native.exitCode).toBe(0);
         const tree=ts.createSourceFile("with-grammar.js",source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
         const failure=earlyControlFlowStaticSemanticsFailure(tree);
@@ -84,7 +85,7 @@ test("with grammar rejection follows strict code contexts",()=>{
 });
 
 test("object Environment Records share captured References and completion lowering",async()=>{
-    const oracle=Bun.spawnSync(["node","-e",`const vm=require("node:vm"),fs=require("node:fs");new vm.Script(${JSON.stringify(source)}).runInNewContext({print:line=>fs.writeSync(1,line+"\\n")});`],{stdout:"pipe",stderr:"pipe",timeout:120_000});
+    const oracle=nodeReferenceSync(["node","-e",`const vm=require("node:vm"),fs=require("node:fs");new vm.Script(${JSON.stringify(source)}).runInNewContext({print:line=>fs.writeSync(1,line+"\\n")});`],{stdout:"pipe",stderr:"pipe",timeout:120_000});
     expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});
     // Node 26 re-resolves the assignment after RHS inserts object.value.
     // The pinned S11.13.1_A6_T3 and captured-Reference model retain the

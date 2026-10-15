@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import * as fs from 'node:fs/promises';
@@ -10,7 +11,7 @@ const dividends=['NaN','Infinity','-Infinity','0','-0','4','-4','5e-324','-5e-32
 const divisors=['NaN','Infinity','-Infinity','0','-0','2','-2','3','5e-324'];
 const pairs=dividends.flatMap(left=>divisors.map(right=>({left,right})));
 const arithmetic=['(9007199254740992 + 1) - 9007199254740992','(9007199254740992 + 1) % 3','(9223372036854775808 - 1) % 3','(-0) * 7','(-4) * 0','(9007199254740991 + 2) - 9007199254740991'];
-const literalOracle=Bun.spawnSync(['node','-e',`const pairs=${JSON.stringify(pairs)},arithmetic=${JSON.stringify(arithmetic)};function literal(value){return Number.isNaN(value)?'NaN':Object.is(value,-0)?'-0':String(value);}require("node:fs").writeSync(1,JSON.stringify({remainders:pairs.map(({left,right})=>literal(Function('return ('+left+') % ('+right+');')())),arithmetic:arithmetic.map(source=>literal(Function('return '+source+';')()))}));`],{stdout:'pipe',stderr:'pipe',timeout:30_000});
+const literalOracle=nodeReferenceSync(['node','-e',`const pairs=${JSON.stringify(pairs)},arithmetic=${JSON.stringify(arithmetic)};function literal(value){return Number.isNaN(value)?'NaN':Object.is(value,-0)?'-0':String(value);}require("node:fs").writeSync(1,JSON.stringify({remainders:pairs.map(({left,right})=>literal(Function('return ('+left+') % ('+right+');')())),arithmetic:arithmetic.map(source=>literal(Function('return '+source+';')()))}));`],{stdout:'pipe',stderr:'pipe',timeout:30_000});
 if(literalOracle.exitCode!==0)throw new Error(literalOracle.stderr.toString());
 const golden=JSON.parse(literalOracle.stdout.toString()) as {remainders:string[],arithmetic:string[]};
 
@@ -51,7 +52,7 @@ test('Source Numbers retain binary64 storage, intermediates and canonical remain
   const expected=new Map<boolean,string[]>();
   for(const profile of [false,true]){
    const entry=path.join(temporary,`reference-${profile}.mjs`);await fs.writeFile(entry,erase(subject(profile,true)));
-   const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");globalThis.print=console.log;import(process.argv[1]);',entry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+   const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");globalThis.print=console.log;import(process.argv[1]);',entry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});const lines=reference.stdout.toString().trimEnd().split('\n');expect(lines.at(-1)).toBe('deep-retained-number-dependency-graph:true');expected.set(profile,lines);
   }
   for(const typed of [true,false])for(const profile of [false,true])for(const noGc of [false,true]){

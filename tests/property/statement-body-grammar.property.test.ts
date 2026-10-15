@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -16,7 +17,7 @@ test("Statement slots preserve contextual let identifiers and lexical-declaratio
         ['{}','identifier;','[identifier];'].flatMap(tail=>[false,true].map(strict=>
             `${strict?'"use strict";':''}{${wrap(identifier+separator+tail)}}`)))));
     sources.push('l\\u0065t\n[identifier];','l\\u0065t identifier;','"use strict";l\\u0065t;');
-    const oracle=Bun.spawnSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");fs.writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{try{new vm.Script(source);return true}catch(e){if(e.name!=="SyntaxError")throw e;return false}})));',JSON.stringify(sources)],{stdout:'pipe',stderr:'pipe'});
+    const oracle=nodeReferenceSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");fs.writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{try{new vm.Script(source);return true}catch(e){if(e.name!=="SyntaxError")throw e;return false}})));',JSON.stringify(sources)],{stdout:'pipe',stderr:'pipe'});
     expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:''});
     expect(sources.map(source=>evalSourceIsValid(evalSourceRequest('direct',source,false)))).toEqual(JSON.parse(oracle.stdout.toString()));
     for(const source of ['with({})let\n{}','with({})let\nidentifier;','with({})l\\u0065t\n{}'])for(const parents of [false,true]){
@@ -46,7 +47,7 @@ test("normalized contextual statements retain scope and ASI execution in both me
     const expected=['31','object,block,global','global,global,block','escaped'];
     try{
         const entry=path.join(directory,'source.js');await fs.writeFile(entry,source);
-        const oracle=Bun.spawnSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:x=>fs.writeSync(1,String(x)+"\\n")});',entry],{stdout:'pipe',stderr:'pipe'});
+        const oracle=nodeReferenceSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:x=>fs.writeSync(1,String(x)+"\\n")});',entry],{stdout:'pipe',stderr:'pipe'});
         expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:''});
         expect(oracle.stdout.toString().trimEnd().split('\n')).toEqual(expected);
         for(const noGc of [false,true]){

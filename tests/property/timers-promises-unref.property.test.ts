@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import * as fs from 'node:fs/promises';
@@ -24,7 +25,7 @@ test('Unreferenced timer Promise jobs preserve microtasks without keeping the pr
   const expected=new Map<boolean,string>();
   for(const profile of [false,true]){
    const entry=path.join(temporary,`reference-${profile}.mjs`);await fs.writeFile(entry,erase(subject(profile)));
-   const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");globalThis.print=console.log;import(process.argv[1]);',entry],{stdout:'pipe',stderr:'pipe',timeout:10_000});
+   const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");globalThis.print=console.log;import(process.argv[1]);',entry],{stdout:'pipe',stderr:'pipe',timeout:10_000});
    expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});expect(reference.stdout.toString()).toBe('synchronous:true\nmicrotask:true\n');expected.set(profile,reference.stdout.toString());
   }
   for(const typed of [true,false])for(const profile of [false,true].filter(profile=>typed||!profile))for(const noGc of [false,true]){

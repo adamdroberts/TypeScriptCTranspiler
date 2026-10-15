@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -44,7 +45,7 @@ test('direct eval retains lexical private-name identities in the shared environm
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-private-eval-'));
  try {
   const reference=path.join(temporary,'reference.cjs');await fs.writeFile(reference,source);
-  const oracle=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");require(process.argv[1]);',reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const oracle=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");require(process.argv[1]);',reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:''});
   const graph=finiteEvalScriptSourceGraph([{path:'caller.js',source}]);expect(graph.error).toBeNull();
   for(const noGc of [false,true]){

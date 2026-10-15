@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -19,7 +20,7 @@ test('Environment reads preserve runtime absence across static narrowing and com
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-process-env-boxed-'));
  try{
   const oracle=path.join(temporary,'reference.mjs');await fs.writeFile(oracle,subject(false));
-  const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...args)=>fs.writeSync(1,require("node:util").format(...args)+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...args)=>fs.writeSync(1,require("node:util").format(...args)+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});
   const missingOwnerEntry=path.join(temporary,'missing-owner.mjs');await fs.writeFile(missingOwnerEntry,"import {env} from 'node:process'; console.log(env.TSC2C_ENV_BOXED_NARROW);\n");
   const missingOwnerDiagnostics:string[]=[];const missingOwner=await compile({entry:missingOwnerEntry,output:path.join(temporary,'missing-owner'),emitCOnly:true,moduleRoots:[missingOwnerEntry],initializationEntries:[missingOwnerEntry],buildDir:path.join(temporary,'missing-owner-build'),test262Observation:{kind:'test262-native-observation',scenarioId:'process-env-import.mjs#module',setupEntries:[],testEntry:missingOwnerEntry,async:false},diagnosticWriter:message=>missingOwnerDiagnostics.push(message)});

@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import { expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -49,7 +50,7 @@ test("one expression graph preserves optional-chain References, guards and opera
         const entry = path.join(directory, "source.js");
         const oracleSource = pieces.join("\n").replaceAll("NATIVE_GC", "false");
         await fs.writeFile(entry, oracleSource);
-        const oracle = Bun.spawnSync(["node", "-e", 'const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});', entry], { stdout: "pipe", stderr: "pipe" });
+        const oracle = nodeReferenceSync(["node", "-e", 'const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});', entry], { stdout: "pipe", stderr: "pipe" });
         expect({ exitCode: oracle.exitCode, stderr: oracle.stderr.toString() }).toEqual({ exitCode: 0, stderr: "" });
         const expected = oracle.stdout.toString().trimEnd().split("\n");
         for (const noGc of [false, true]) {
@@ -78,7 +79,7 @@ test("optional-chain grammar distinguishes transparent boundaries from tag and c
     for (const source of ["root?.`tag`;", "root?.`tag${value}`;"])
         for (const strict of [false, true]) sources.push((strict ? '"use strict";' : "") + source);
     sources.push("root?" + ".next".repeat(512) + "`tag`;");
-    const oracle = Bun.spawnSync(["node", "-e", 'const vm=require("node:vm");process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).map(source=>{try{new vm.Script(source);return true;}catch(error){if(error.name!=="SyntaxError")throw error;return false;}})));', JSON.stringify(sources)], { stdout: "pipe", stderr: "pipe" });
+    const oracle = nodeReferenceSync(["node", "-e", 'const vm=require("node:vm");process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).map(source=>{try{new vm.Script(source);return true;}catch(error){if(error.name!=="SyntaxError")throw error;return false;}})));', JSON.stringify(sources)], { stdout: "pipe", stderr: "pipe" });
     expect({exitCode: oracle.exitCode, stderr: oracle.stderr.toString()}).toEqual({exitCode: 0, stderr: ""});
     const expected: boolean[] = JSON.parse(oracle.stdout.toString());
     for (const [index, source] of sources.entries()) {

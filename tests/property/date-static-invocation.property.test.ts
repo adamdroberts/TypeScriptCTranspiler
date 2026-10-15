@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect, test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -72,7 +73,7 @@ test("Date statics share ordinary lookup and one presence-sensitive argument/def
     try{
         const source=subject(),referenceFile=path.join(temporary,"reference.mjs");
         await fs.writeFile(referenceFile,source.replaceAll("PRINT","print").replaceAll("COLLECT",""));
-        const reference=Bun.spawnSync(["node","--experimental-vm-modules","--no-warnings","-e",
+        const reference=nodeReferenceSync(["node","--experimental-vm-modules","--no-warnings","-e",
             'const vm=require("node:vm"),fs=require("node:fs");const print=line=>fs.writeSync(1,line+"\\n");const module=new vm.SourceTextModule(fs.readFileSync(process.argv[1],"utf8"),{context:vm.createContext({print})});module.link(()=>{}).then(()=>module.evaluate()).catch(error=>{fs.writeSync(2,String(error));process.exitCode=1;});',referenceFile],{stdout:"pipe",stderr:"pipe"});
         expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:""});
         const expected=reference.stdout.toString().trimEnd().split("\n");expect(expected.at(-1)).toBe("date-static-complete");

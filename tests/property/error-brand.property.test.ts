@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -42,7 +43,7 @@ test('Error.isError observes private ErrorData independently of prototypes, real
   const stress=!typed&&!noGc&&!profile?generateE2eCaseSource('{"generator":"error-brand-depth","depth":4096}','property/error_brand_depth'):'';
   const source=subject(profile&&!noGc,profile)+stress,program=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText;
   const directory=path.join(temporary,`${typed}-${noGc}-${profile}`);await fs.mkdir(directory);const oracle=path.join(directory,'oracle.mjs');await fs.writeFile(oracle,program.replaceAll('$262.gc();',''));
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs");globalThis.$262={createRealm(){return {global:require("node:vm").runInNewContext("globalThis")}}};console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const node=nodeReferenceSync(['node','-e','const fs=require("node:fs");globalThis.$262={createRealm(){return {global:require("node:vm").runInNewContext("globalThis")}}};console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const entry=path.join(directory,typed?'main.ts':'main.mjs'),output=path.join(directory,'program'),diagnostics:string[]=[];await fs.writeFile(entry,(typed?'// @ts-nocheck\n':'')+(typed?source:program));
   const built=await compile({entry,output,noGc,buildDir:path.join(directory,'build'),...(profile?{moduleRoots:[entry],initializationEntries:[entry],test262Observation:{kind:'test262-native-observation' as const,scenarioId:'property/error-brand#module',setupEntries:[],testEntry:entry,async:false}}:{}),diagnosticWriter:message=>diagnostics.push(message)});expect({code:built.exitCode,diagnostics:diagnostics.join('')}).toEqual({code:0,diagnostics:''});
   const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:native.exitCode,stderr:native.stderr.toString()}).toEqual({code:0,stderr:''});

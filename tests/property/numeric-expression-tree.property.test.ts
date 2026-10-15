@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import * as fs from 'node:fs/promises';
@@ -10,7 +11,7 @@ const operators=['&','|','^','<<','>>','>>>'];
 const values=['NaN','Infinity','-Infinity','0','-0','5e-324','-3.5','2147483648','-2147483649','4294967297','9223372036854775808','1.7976931348623157e308'];
 const shifts=['NaN','Infinity','-1','0','1','31','32','33','4294967297','3.5'];
 const pairs=values.flatMap(left=>shifts.map(right=>({left,right})));
-const oracle=Bun.spawnSync(['node','-e',`const operators=${JSON.stringify(operators)},pairs=${JSON.stringify(pairs)};require('node:fs').writeSync(1,JSON.stringify(pairs.map(({left,right})=>operators.map(op=>Function('return ('+left+')'+op+'('+right+');')()))));`],{stdout:'pipe',stderr:'pipe',timeout:30_000});
+const oracle=nodeReferenceSync(['node','-e',`const operators=${JSON.stringify(operators)},pairs=${JSON.stringify(pairs)};require('node:fs').writeSync(1,JSON.stringify(pairs.map(({left,right})=>operators.map(op=>Function('return ('+left+')'+op+'('+right+');')()))));`],{stdout:'pipe',stderr:'pipe',timeout:30_000});
 if(oracle.exitCode!==0)throw new Error(oracle.stderr.toString());
 const golden=JSON.parse(oracle.stdout.toString()) as number[][];
 
@@ -55,7 +56,7 @@ test('Numeric expression trees share ordered value kernels and portable bitwise 
   const expected=new Map<boolean,string[]>();
   for(const profile of [false,true]){
    const entry=path.join(temporary,`reference-${profile}.mjs`);await fs.writeFile(entry,erase(subject(profile,true)));
-   const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");globalThis.print=console.log;import(process.argv[1]);',entry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+   const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");globalThis.print=console.log;import(process.argv[1]);',entry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});const lines=reference.stdout.toString().trimEnd().split('\n');expect(lines.at(-1)).toBe('saved-compound-reference-through-suspension:true');expected.set(profile,lines);
   }
   for(const typed of [true,false])for(const profile of [false,true])for(const noGc of [false,true]){

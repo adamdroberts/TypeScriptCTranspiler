@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -35,7 +36,7 @@ const skippedFallbacks=[
 const functionSubjects=['Function(first,body)','Function.call(null,first,body)','Function.apply(null,[first,body])','Reflect.apply(Function,null,[first,body])','Function.bind(null,first)(body)','new Function(first,body)'].map(expression=>`var trace="";var first={toString(){trace+="value|";return "value";}};var body={toString(){trace+="return value;|";return "return value;";}};var fn=${expression};`);
 test("string-hint consumers retain receiver, callable and fallback dependencies",()=>{
  for(const source of subjects){
-  const reference=Bun.spawnSync(['node','-e','const values=[];require("node:vm").runInNewContext(process.argv[1],{eval:value=>values.push(value)});require("node:fs").writeSync(1,JSON.stringify(values))',source],{stdout:'pipe',stderr:'pipe'});expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:''});
+  const reference=nodeReferenceSync(['node','-e','const values=[];require("node:vm").runInNewContext(process.argv[1],{eval:value=>values.push(value)});require("node:fs").writeSync(1,JSON.stringify(values))',source],{stdout:'pipe',stderr:'pipe'});expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:''});
   const expected:string[]=JSON.parse(reference.stdout.toString());expect({source,choices:sourceEvaluationInvocations(program(source)).at(-1)?.choices}).toEqual({source,choices:expect.arrayContaining(expected)});
  }
  for(const source of skippedFallbacks)expect({source,choices:sourceEvaluationInvocations(program(source)).at(-1)?.choices}).toEqual({source,choices:['class C {}']});
@@ -43,7 +44,7 @@ test("string-hint consumers retain receiver, callable and fallback dependencies"
 });
 test("dynamic source operations share string-hint conversion facts",()=>{
  for(const source of functionSubjects){
-  const oracle=Bun.spawnSync(['node','-e','const vm=require("node:vm"),context={};new vm.Script(process.argv[1]).runInNewContext(context);require("node:fs").writeSync(1,JSON.stringify(context.trace.split("|").slice(0,-1)));',source],{stdout:'pipe',stderr:'pipe'});
+  const oracle=nodeReferenceSync(['node','-e','const vm=require("node:vm"),context={};new vm.Script(process.argv[1]).runInNewContext(context);require("node:fs").writeSync(1,JSON.stringify(context.trace.split("|").slice(0,-1)));',source],{stdout:'pipe',stderr:'pipe'});
   expect({code:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({code:0,stderr:''});
   const expected:string[]=JSON.parse(oracle.stdout.toString());expect(sourceConstructorInvocations(program(source)).some(call=>call.choices!==null&&expected.every((value,index)=>call.choices![index]?.includes(value)))).toBe(true);
  }
@@ -64,7 +65,7 @@ test("string-hint source admission and ordered argument conversion match Node in
  const source=pieces.join('\n'),directory=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-string-hint-'));
  try{
   const entry=path.join(directory,'source.js');await fs.writeFile(entry,source.replaceAll('NATIVE_GC','false'));
-  const node=Bun.spawnSync(['node','-e',"const fs=require(\"node:fs\"),vm=require(\"node:vm\"),context={print:value=>fs.writeSync(1,String(value)+\"\\n\")};context.$262={evalScript:source=>new vm.Script(String(source)).runInNewContext(context)};new vm.Script(fs.readFileSync(process.argv[1],\"utf8\")).runInNewContext(context);",entry],{stdout:'pipe',stderr:'pipe'});expect({exitCode:node.exitCode,stderr:node.stderr.toString()}).toEqual({exitCode:0,stderr:''});
+  const node=nodeReferenceSync(['node','-e',"const fs=require(\"node:fs\"),vm=require(\"node:vm\"),context={print:value=>fs.writeSync(1,String(value)+\"\\n\")};context.$262={evalScript:source=>new vm.Script(String(source)).runInNewContext(context)};new vm.Script(fs.readFileSync(process.argv[1],\"utf8\")).runInNewContext(context);",entry],{stdout:'pipe',stderr:'pipe'});expect({exitCode:node.exitCode,stderr:node.stderr.toString()}).toEqual({exitCode:0,stderr:''});
   for(const noGc of [false,true]){
    await fs.writeFile(entry,source.replaceAll('NATIVE_GC',String(!noGc)));const output=path.join(directory,'program-'+noGc),diagnostics:string[]=[];
    const result=await compile({entry,output,noGc,buildDir:path.join(directory,'build-'+noGc),isolatedScriptRoots:[entry],initializationEntries:[entry],test262Observation:{kind:'test262-native-observation',scenarioId:'property/string-hint-source.js#sloppy',setupEntries:[],testEntry:entry,async:false,scriptEntries:[entry]},diagnosticWriter:message=>diagnostics.push(message)});

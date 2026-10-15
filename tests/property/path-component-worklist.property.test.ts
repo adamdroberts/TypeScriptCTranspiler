@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
@@ -31,7 +32,7 @@ test('POSIX paths use one unbounded component record and actual argument List ag
  try{for(const typed of [true,false])for(const noGc of [false,true]){
   const source=partitions()+(typed&&!noGc?pathComponentInput(8192).replace("import path from 'node:path';",''):''),entry=join(root,typed?'main-'+noGc+'.ts':'main-'+noGc+'.mjs'),oracle=join(root,'reference-'+typed+'-'+noGc+'.mjs'),output=entry+'-program';
   const erased=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText;await writeFile(entry,typed?source:erased);await writeFile(oracle,'import fs from "node:fs";console.log=(...values)=>fs.writeSync(1,values.map(String).join(" ")+"\\n");\n'+erased);
-  const node=Bun.spawnSync(['node',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const node=nodeReferenceSync(['node',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const diagnostics:string[]=[],r=await compile({entry,output,noGc,buildDir:output+'-build',diagnosticWriter:m=>diagnostics.push(m)});expect({code:r.exitCode,diagnostics}).toEqual({code:0,diagnostics:[]});
   const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120000});if(native.stdout.toString()!==node.stdout.toString()){await writeFile('/tmp/tsc2c-path-components-actual.stdout',native.stdout);await writeFile('/tmp/tsc2c-path-components-expected.stdout',node.stdout);}expect({code:native.exitCode,stderr:native.stderr.toString(),stdout:native.stdout.toString()}).toEqual({code:0,stderr:'',stdout:node.stdout.toString()});
  }}finally{await rm(root,{recursive:true,force:true})}

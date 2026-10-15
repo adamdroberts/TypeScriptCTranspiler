@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -24,7 +25,7 @@ function bindingModel(names:string[],actual:number[]):string[]{
 test('duplicate formal grammar retains the simple sloppy parameter partition',()=>{
     const sources=['function f(x,x){}','(function(x,x){})','function* f(x,x){}','async function f(x,x){}','async function* f(x,x){}',
         '"use strict";function f(x,x){}','function f(x,x){"use strict";}','function f(x,x=0){}','function f(x,...x){}','({m(x,x){}})','(x,x)=>x'];
-    const oracle=Bun.spawnSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");fs.writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{try{new vm.Script(source);return true}catch(e){if(e.name!=="SyntaxError")throw e;return false}})));',JSON.stringify(sources)],{stdout:'pipe',stderr:'pipe'});
+    const oracle=nodeReferenceSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");fs.writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{try{new vm.Script(source);return true}catch(e){if(e.name!=="SyntaxError")throw e;return false}})));',JSON.stringify(sources)],{stdout:'pipe',stderr:'pipe'});
     expect(oracle.exitCode).toBe(0);expect(oracle.stderr.toString()).toBe('');
     expect(sources.map(source=>evalSourceIsValid(evalSourceRequest('direct',source,false)))).toEqual(JSON.parse(oracle.stdout.toString()));
 });
@@ -52,7 +53,7 @@ test('ordered ABI slots feed one source binding and mapped arguments model in bo
     try{
         const entry=path.join(directory,'source.js');
         await fs.writeFile(entry,pieces.join('\n').replaceAll('NATIVE_GC','false'));
-        const oracle=Bun.spawnSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:x=>fs.writeSync(1,String(x)+"\\n")});',entry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+        const oracle=nodeReferenceSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:x=>fs.writeSync(1,String(x)+"\\n")});',entry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
         expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:''});
         expect(oracle.stdout.toString().trimEnd().split('\n')).toEqual(expected);
         for(const noGc of [false,true]){

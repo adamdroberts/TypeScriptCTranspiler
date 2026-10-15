@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -33,7 +34,7 @@ test('Iterator helper worklist preserves captured method Realms and abrupt resto
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-iterator-helper-realm-'));
  try{
   const oracle=path.join(temporary,'reference.mjs');await fs.writeFile(oracle,'import vm from "node:vm"; globalThis.$262={createRealm(){return {global:vm.runInNewContext("globalThis")}}};\n'+subject(false));
-  const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...args)=>fs.writeSync(1,require("node:util").format(...args)+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...args)=>fs.writeSync(1,require("node:util").format(...args)+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});
   for(const mode of ['typed','javascript'])for(const noGc of [false,true])for(const profile of [true]){
    const directory=path.join(temporary,`${mode}-${noGc}-${profile}`);await fs.mkdir(directory);

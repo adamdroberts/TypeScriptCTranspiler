@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import { expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -59,7 +60,7 @@ test("shared Script bindings retain global-object separation and deep source for
                 ...Array.from({ length: depth }, (_, index) => `function forward${index}(){return ${index ? `forward${index - 1}()` : '"83;"'};}`),
                 `print(eval(objectBody));print(eval(globalThis.objectBody));print(eval(lexicalBody));print(eval(globalThis.lexicalBody));print(eval(constantBody));print(eval(declaredBody()));print(eval(Carrier.body));print(eval(destructuredBody));print(eval(forward${depth - 1}()));`,
             ];
-            const node = Bun.spawnSync(["node", "-e", 'const fs=require("node:fs"),vm=require("node:vm"),context=vm.createContext({print:value=>fs.writeSync(1,String(value)+"\\n")});for(const source of JSON.parse(fs.readFileSync(0,"utf8")))new vm.Script(source).runInContext(context);'],
+            const node = nodeReferenceSync(["node", "-e", 'const fs=require("node:fs"),vm=require("node:vm"),context=vm.createContext({print:value=>fs.writeSync(1,String(value)+"\\n")});for(const source of JSON.parse(fs.readFileSync(0,"utf8")))new vm.Script(source).runInContext(context);'],
                 { stdin: Buffer.from(JSON.stringify(sources)), stdout: "pipe", stderr: "pipe", timeout: 120_000 });
             expect({ code: node.exitCode, stderr: node.stderr.toString() }).toEqual({ code: 0, stderr: "" });
             expect(node.stdout.toString()).toBe("71\n71\n59\n73\n61\n71\n67\n79\n83\n");

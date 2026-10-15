@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -11,7 +12,7 @@ test('JSON parse source facts retain scalar roots and actual reviver effects',()
  for(const text of texts)for(const call of calls){
   const source=`const text=${JSON.stringify(text)},reviver=function(key,value,context){return context.source};eval(${call});`;
   const result=graph([{path:'main.js',source}]);expect({source,error:result.error}).toEqual({source,error:null});
-  const oracle=Bun.spawnSync(['node','-e','require("node:fs").writeSync(1,JSON.parse(process.argv[1],(key,value,context)=>context.source));','--',text],{stdout:'pipe',stderr:'pipe'});
+  const oracle=nodeReferenceSync(['node','-e','require("node:fs").writeSync(1,JSON.parse(process.argv[1],(key,value,context)=>context.source));','--',text],{stdout:'pipe',stderr:'pipe'});
   expect({code:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({code:0,stderr:''});expect(result.directEvalSources.map(entry=>entry.source)).toEqual([oracle.stdout.toString()]);
  }
  for(const [source,expected] of [
@@ -35,7 +36,7 @@ test('finite JSON parse scalar closure runs through native CLI and observation p
  try{
   const source=`console.log('plain:'+eval(JSON.parse('"67;"')));\nconsole.log('source:'+eval(JSON.parse(' 71e0 ',function(key,value,context){return context.source})));\ntry{JSON.parse('1',function(){throw '73;'})}catch(body){console.log('thrown:'+eval(body))}\n`;
   const referenceEntry=path.join(temporary,'reference.mjs');await fs.writeFile(referenceEntry,source);
-  const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...args)=>fs.writeSync(1,require("node:util").format(...args)+"\\n");import(process.argv[1]);',referenceEntry],{stdout:'pipe',stderr:'pipe'});
+  const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...args)=>fs.writeSync(1,require("node:util").format(...args)+"\\n");import(process.argv[1]);',referenceEntry],{stdout:'pipe',stderr:'pipe'});
   expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:''});
   for(const mode of ['typed','javascript'])for(const noGc of [false,true]){
    const directory=path.join(temporary,`${mode}-${noGc}`);await fs.mkdir(directory);const entry=path.join(directory,mode==='typed'?'main.ts':'main.mjs');await fs.writeFile(entry,(mode==='typed'?'// @ts-nocheck\n':'')+source);

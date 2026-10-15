@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import { expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -148,7 +149,7 @@ test("module lexical bindings share one TDZ-aware exporter slot plan", async () 
     ]);
     try {
         await fs.writeFile(path.join(temporary, "package.json"), '{"type":"module"}\n');
-        const oracle = Bun.spawnSync(["node", "--no-warnings", entry], { stdout: "pipe", stderr: "pipe", timeout: 120_000 });
+        const oracle = nodeReferenceSync(["node", "--no-warnings", entry], { stdout: "pipe", stderr: "pipe", timeout: 120_000 });
         expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});
         expect(oracle.stdout.toString()).toBe("module-lexical-binding-ok\nimport-immutable-await:true\n");
         for (const noGc of [false, true]) {

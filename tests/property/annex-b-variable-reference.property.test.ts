@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -29,7 +30,7 @@ test('Annex B updates retain the actual variable environment across lexical and 
  const root=await mkdtemp(join(tmpdir(),'tsc2c-annex-b-variable-reference-'));
  try{
   const program=source(),reference=join(root,'reference.js');await writeFile(reference,program);
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");vm.runInThisContext(fs.readFileSync(process.argv[1],"utf8"));',reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(node.stdout.toString().trimEnd().split('\n').at(-1)).toBe('deep-variable-target:true');
+  const node=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");vm.runInThisContext(fs.readFileSync(process.argv[1],"utf8"));',reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(node.stdout.toString().trimEnd().split('\n').at(-1)).toBe('deep-variable-target:true');
   for(const noGc of [false,true]){
    const entry=join(root,'main.js'),output=join(root,'program-'+noGc),diagnostics:string[]=[];await writeFile(entry,program);
    const result=await compile({entry,output,buildDir:join(root,'build-'+noGc),noGc,isolatedScriptRoots:[entry],initializationEntries:[entry],test262Observation:{kind:'test262-native-observation',scenarioId:'annex-b-variable-reference#script',setupEntries:[],testEntry:entry,scriptEntries:[entry],async:false},diagnosticWriter:message=>diagnostics.push(message)});

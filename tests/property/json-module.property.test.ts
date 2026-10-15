@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import { expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -79,7 +80,7 @@ test("JSON Modules derive every root partition and import form from one syntheti
             ),
             fs.writeFile(path.join(temporary, "identity.json"), '{"token":"identity"}\n', "utf8"),
         ]);
-        const oracle = Bun.spawnSync(["node", entry], { stdout: "pipe", stderr: "pipe", timeout: 120_000 });
+        const oracle = nodeReferenceSync(["node", entry], { stdout: "pipe", stderr: "pipe", timeout: 120_000 });
         expect({ exitCode: oracle.exitCode, stderr: oracle.stderr.toString() }).toEqual({ exitCode: 0, stderr: "" });
         expect(oracle.stdout.toString()).toBe(expected);
         for (const noGc of [false, true]) {

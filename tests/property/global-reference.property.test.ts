@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect, test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -97,7 +98,7 @@ test("source References observe mutable Realm cells, descriptors, shadows and re
                 .replaceAll("PRINT",profile ? "print" : "console.log")
                 .replace(/delete (generated_\w+|createdGlobal)/g, (_,name:string)=>`Function(${JSON.stringify(`return delete ${name};`)})()`);
             const referenceFile=path.join(temporary,`reference-${goal}-${profile}.js`);await fs.writeFile(referenceFile,source);
-            const reference=Bun.spawnSync(["node","--experimental-vm-modules","--no-warnings","-e",
+            const reference=nodeReferenceSync(["node","--experimental-vm-modules","--no-warnings","-e",
                 'const vm=require("node:vm"),fs=require("node:fs");const print=line=>fs.writeSync(1,line+"\\n"),source=fs.readFileSync(process.argv[1],"utf8"),context=vm.createContext({print,console:{log:print}});if(process.argv[2]==="script")new vm.Script(source).runInContext(context);else{const module=new vm.SourceTextModule(source,{context});module.link(()=>{}).then(()=>module.evaluate()).catch(error=>{fs.writeSync(2,String(error));process.exitCode=1;});}',referenceFile,goal],
                 {stdout:"pipe",stderr:"pipe"});
             expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:""});

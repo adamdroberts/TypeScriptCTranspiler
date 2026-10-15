@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
@@ -25,7 +26,7 @@ test('primitive source writes retain inherited setter and opaque Proxy effects',
  ].entries()){
   const entry=join(root,index+'.mjs');await writeFile(entry,'export {};'+source+'console.log(query);');const built=buildProgram({entry,packageRoot:resolvePackageRoot()}),pending:ts.Node[]=[built.entrySourceFile];let query:ts.Expression|undefined;
   while(pending.length){const node=pending.pop()!;if(ts.isCallExpression(node)&&node.getText().startsWith('console.log'))query=node.arguments[0];node.forEachChild(child=>{pending.push(child)});}
-  const proof=sourceExpressionTexts(built.program,[query!],{roots:[entry]}).get(query!),node=Bun.spawnSync(['node','-e',source+'require("node:fs").writeSync(1,String(query));'],{stdout:'pipe',stderr:'pipe'});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});if(index===1)expect(proof).toBeNull();else {expect(proof).not.toBeNull();expect(proof!).toContain(node.stdout.toString());}
+  const proof=sourceExpressionTexts(built.program,[query!],{roots:[entry]}).get(query!),node=nodeReferenceSync(['node','-e',source+'require("node:fs").writeSync(1,String(query));'],{stdout:'pipe',stderr:'pipe'});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});if(index===1)expect(proof).toBeNull();else {expect(proof).not.toBeNull();expect(proof!).toContain(node.stdout.toString());}
  }}finally{await rm(root,{recursive:true,force:true})}
 });
 
@@ -39,7 +40,7 @@ test('primitive property References preserve receivers, key order, failure and R
    for(const plan of plans){
     const source=javascript?erase(plan.source):plan.source,entry=join(root,plan.name+'-'+javascript+'-'+noGc+(javascript?(plan.name==='sloppy'?'.js':'.mjs'):(plan.name==='sloppy'?'.ts':'.mts'))),reference=entry+'.reference.js',output=entry+'-program';
     const nodeSource=erase(plan.source);await writeFile(entry,source);await writeFile(reference,nodeSource);
-    const node=Bun.spawnSync(['node',...(plan.host?['-e',vmOracle,reference]:[...(plan.name==='sloppy'?[]:['--input-type=module']),'-e',nodeSource])],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+    const node=nodeReferenceSync(['node',...(plan.host?['-e',vmOracle,reference]:[...(plan.name==='sloppy'?[]:['--input-type=module']),'-e',nodeSource])],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
     const diagnostics:string[]=[],result=await compile({entry,output,buildDir:output+'-build',noGc,...(plan.host?{isolatedScriptRoots:[entry],initializationEntries:[entry],test262Observation:{kind:'test262-native-observation' as const,scenarioId:'property/primitive-property#sloppy',setupEntries:[],testEntry:entry,async:false,scriptEntries:[entry]}}:{}),diagnosticWriter:message=>diagnostics.push(message)});expect({code:result.exitCode,diagnostics}).toEqual({code:0,diagnostics:[]});
     const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:native.exitCode,stderr:native.stderr.toString()}).toEqual({code:0,stderr:''});
     if(plan.host){const observation=parseHostObservation(JSON.parse(native.stdout.toString()));expect(observation.kind).toBe('normal');expect(observation.stdout).toBe(node.stdout.toString());}else expect(native.stdout.toString()).toBe(node.stdout.toString());

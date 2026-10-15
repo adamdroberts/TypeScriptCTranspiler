@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
@@ -31,7 +32,7 @@ test('wrapped unary operands consume saved await/yield values once and preserve 
   const typedSource=source();
   const transpiled=ts.transpileModule(typedSource,{reportDiagnostics:true,compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}});expect((transpiled.diagnostics??[]).map(diagnostic=>ts.flattenDiagnosticMessageText(diagnostic.messageText," "))).toEqual([]);const erased=transpiled.outputText;
   const reference=join(root,'reference.js');await writeFile(reference,erased);
-  const node=Bun.spawnSync(['node',reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(node.stdout.toString().trimEnd().split('\n').at(-1)).toBe('deep:object');
+  const node=nodeReferenceSync(['node',reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(node.stdout.toString().trimEnd().split('\n').at(-1)).toBe('deep:object');
   for(const noGc of [false,true])for(const typed of [false,true]){
    const directory=join(root,noGc+'-'+typed);await mkdir(directory);
    const entry=join(directory,typed?'main.ts':'main.js'),output=join(directory,'program'),diagnostics:string[]=[];

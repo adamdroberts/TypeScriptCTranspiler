@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -41,7 +42,7 @@ test('global declarations share class definition semantics across source records
    const profile=mode==='script',directory=path.join(temporary,`${mode}-${noGc}-${stress}`);await fs.mkdir(directory);
    const entry=path.join(directory,mode==='module'?'main.mjs':mode==='commonjs'?'main.cjs':'main.js'),output=path.join(directory,'program');
    const source=subject(profile,profile&&!noGc,stress);await fs.writeFile(entry,source);
-   const oracle=Bun.spawnSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");globalThis.print=console.log;globalThis.$262={gc(){}};if(process.argv[2]==="script")vm.runInThisContext(fs.readFileSync(process.argv[1],"utf8"));else import(process.argv[1]);',entry,mode],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+   const oracle=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");globalThis.print=console.log;globalThis.$262={gc(){}};if(process.argv[2]==="script")vm.runInThisContext(fs.readFileSync(process.argv[1],"utf8"));else import(process.argv[1]);',entry,mode],{stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({mode,stress,exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({mode,stress,exitCode:0,stderr:''});
    const diagnostics:string[]=[];
    const result=await compile({entry,output,noGc,moduleRoots:[entry],initializationEntries:[entry],buildDir:path.join(directory,'build'),...(profile?{test262Observation:{kind:'test262-native-observation' as const,scenarioId:'property/global-class-definition.js#strict',setupEntries:[],testEntry:entry,async:false}}:{}),diagnosticWriter:message=>diagnostics.push(message)});

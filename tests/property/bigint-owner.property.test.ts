@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import * as fs from 'node:fs/promises';
@@ -70,10 +71,10 @@ test('BigInt conversion and width intrinsics share one actual owner and coercion
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-bigint-owner-'));
  const erase=(source:string)=>ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText;
  try{
-  const referenceAnswers=Bun.spawnSync(['node','-e',`const texts=${JSON.stringify(strings)},widths=${JSON.stringify(widths)},integers=${JSON.stringify(integers)};require('node:fs').writeSync(1,JSON.stringify({strings:texts.map(text=>String(BigInt(text))),widths:widths.flatMap(bits=>integers.map(text=>[String(BigInt.asIntN(bits,BigInt(text))),String(BigInt.asUintN(bits,BigInt(text)))]))}));`],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const referenceAnswers=nodeReferenceSync(['node','-e',`const texts=${JSON.stringify(strings)},widths=${JSON.stringify(widths)},integers=${JSON.stringify(integers)};require('node:fs').writeSync(1,JSON.stringify({strings:texts.map(text=>String(BigInt(text))),widths:widths.flatMap(bits=>integers.map(text=>[String(BigInt.asIntN(bits,BigInt(text))),String(BigInt.asUintN(bits,BigInt(text)))]))}));`],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({exitCode:referenceAnswers.exitCode,stderr:referenceAnswers.stderr.toString()}).toEqual({exitCode:0,stderr:''});const answers=JSON.parse(referenceAnswers.stdout.toString());
   const referenceFile=path.join(temporary,'reference.mjs');await fs.writeFile(referenceFile,erase(subject(answers,false,true)));
-  const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");import(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");import(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});const expected=reference.stdout.toString().trimEnd().split('\n');expect(expected.at(-1)).toBe('saved-bigint-callee-through-suspension:true');
   for(const typed of [true,false])for(const profile of [false,true])for(const noGc of [false,true]){
    const directory=path.join(temporary,`${typed}-${profile}-${noGc}`);await fs.mkdir(directory);const entry=path.join(directory,typed?'main.ts':'main.mjs'),output=path.join(directory,'program'),diagnostics:string[]=[];

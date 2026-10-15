@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -39,7 +40,7 @@ test('Module linking rejects before bodies and distinguishes ambiguity from shar
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-module-link-'));
  try{for(const noGc of [false,true]){
   const directory=path.join(temporary,String(noGc));await fs.mkdir(directory);const source=await files(directory,noGc?1:512),entry=path.join(directory,'main.mjs');await fs.writeFile(entry,source);
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.map(String).join(" ")+"\\n");import(process.argv[1]);',entry],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(node.stdout.toString().trimEnd().split('\n').at(-1)).toBe('healthy 17 true');
+  const node=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.map(String).join(" ")+"\\n");import(process.argv[1]);',entry],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(node.stdout.toString().trimEnd().split('\n').at(-1)).toBe('healthy 17 true');
   const output=path.join(directory,'program'),diagnostics:string[]=[];const built=await compile({entry,output,noGc,diagnosticWriter:message=>diagnostics.push(message)});expect({code:built.exitCode,diagnostics:diagnostics.join('')}).toEqual({code:0,diagnostics:''});
   const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:native.exitCode,stderr:native.stderr.toString(),stdout:native.stdout.toString()}).toEqual({code:0,stderr:'',stdout:node.stdout.toString()});
   const eager=path.join(directory,'eager.mjs');await fs.writeFile(eager,"import './ambiguous.mjs';console.log('unreachable');");const messages:string[]=[];const rejected=await compile({entry:eager,output:output+'-eager',noGc,diagnosticWriter:message=>messages.push(message)});expect(rejected.exitCode).toBe(2);expect(messages.join('')).toContain('cannot resolve indirect export');

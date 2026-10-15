@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -76,7 +77,7 @@ test('console Error headers share descriptor inspection without user conversion'
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-console-error-'));
  try{
   const referenceEntry=path.join(temporary,'reference.mjs');await fs.writeFile(referenceEntry,oracle+subject.replace('COLLECT',''));
-  const reference=Bun.spawnSync(['node',referenceEntry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const reference=nodeReferenceSync(['node',referenceEntry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});
   for(const mode of ['typed','javascript'])for(const noGc of [false,true]){
    const directory=path.join(temporary,`${mode}-${noGc}`);await fs.mkdir(directory);

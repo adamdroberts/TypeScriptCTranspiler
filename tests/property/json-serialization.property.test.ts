@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import {mkdtemp,writeFile,rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
@@ -46,7 +47,7 @@ test("JSON Serialization Record matches Node across callbacks, options and one d
             const nativeDeep=`let value=0;for(let index=0;index<${typed&&!noGc?16384:1};index++)value=[value];const result=JSON.stringify(value);print("deep:"+result);`;
             const nodeSource=source.replace(nativeDeep,`print("deep:"+"[".repeat(${typed&&!noGc?16384:1})+"0"+"]".repeat(${typed&&!noGc?16384:1}));`);
             expect(nodeSource).not.toBe(source);
-            const node=Bun.spawnSync(["node","-e",'const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});'],{stdin:Buffer.from(nodeSource),stdout:"pipe",stderr:"pipe",timeout:120000});
+            const node=nodeReferenceSync(["node","-e",'const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});'],{stdin:Buffer.from(nodeSource),stdout:"pipe",stderr:"pipe",timeout:120000});
             expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:""});
             await writeFile(entry,(typed?"// @ts-nocheck\n":"")+source);
             const result=await compile({entry,output,noGc,buildDir:output+"-build",isolatedScriptRoots:[entry],initializationEntries:[entry],test262Observation:{kind:"test262-native-observation",scenarioId:"property/json-serialization#script",setupEntries:[],testEntry:entry,scriptEntries:[entry],async:false},diagnosticWriter:message=>diagnostics.push(message)});

@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -39,7 +40,7 @@ test("class definitions and prototype identities use the shared callable graph",
  'class C {}try{eval(C());}catch(error){}',
  'class C {}eval(Object.getPrototypeOf(C.prototype));',
  'class C extends null {}eval(String(Object.getPrototypeOf(C.prototype)));');
- const oracle=Bun.spawnSync(["node","-e",'const vm=require("node:vm");require("node:fs").writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>{if(typeof value==="string")values.push(value);}});return values;})));',JSON.stringify(sources)],{stdout:"pipe",stderr:"pipe"});
+ const oracle=nodeReferenceSync(["node","-e",'const vm=require("node:vm");require("node:fs").writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>{if(typeof value==="string")values.push(value);}});return values;})));',JSON.stringify(sources)],{stdout:"pipe",stderr:"pipe"});
  expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:""});const expected:string[][]=JSON.parse(oracle.stdout.toString());
  for(const[index,source]of sources.entries()){
   const calls=sourceEvaluationInvocations(program(source));
@@ -67,7 +68,7 @@ test("retained class source closes AOT eval and deep static inheritance matches 
  const source=pieces.join("\n"),directory=await fs.mkdtemp(path.join(os.tmpdir(),"tsc2c-class-source-"));
  try {
   const entry=path.join(directory,"source.js");await fs.writeFile(entry,source.replaceAll("NATIVE_GC","false"));
-  const node=Bun.spawnSync(["node","-e",'const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});',entry],{stdout:"pipe",stderr:"pipe"});expect({exitCode:node.exitCode,stderr:node.stderr.toString()}).toEqual({exitCode:0,stderr:""});
+  const node=nodeReferenceSync(["node","-e",'const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});',entry],{stdout:"pipe",stderr:"pipe"});expect({exitCode:node.exitCode,stderr:node.stderr.toString()}).toEqual({exitCode:0,stderr:""});
   for(const noGc of [false,true]){
    await fs.writeFile(entry,source.replaceAll("NATIVE_GC",String(!noGc)));const output=path.join(directory,"program-"+noGc),diagnostics:string[]=[];
    const result=await compile({entry,output,noGc,buildDir:path.join(directory,"build-"+noGc),isolatedScriptRoots:[entry],initializationEntries:[entry],test262Observation:{kind:"test262-native-observation",scenarioId:"property/class-callable-source.js#sloppy",setupEntries:[],testEntry:entry,async:false,scriptEntries:[entry]},diagnosticWriter:message=>diagnostics.push(message)});

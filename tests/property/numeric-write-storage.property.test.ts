@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import * as fs from 'node:fs/promises';
@@ -15,7 +16,7 @@ const inputs=[
  {type:'bigint',expression:'7n'}, {type:'null',expression:'null'},
  {type:'undefined',expression:'undefined'}, {type:'symbol',expression:'Symbol("input")'},
 ];
-const oracle=Bun.spawnSync(['node','-e',`const inputs=${JSON.stringify(inputs)},forms=${JSON.stringify(forms)};function literal(value){return typeof value==='bigint'?String(value)+'n':Number.isNaN(value)?'NaN':Object.is(value,-0)?'-0':String(value);}require('node:fs').writeSync(1,JSON.stringify(inputs.map(input=>forms.map(form=>{try{const [returned,stored]=Function('let value='+input.expression+';const returned='+form+';return[returned,value];')();return{returned:literal(returned),stored:literal(stored)};}catch(error){return{error:error.constructor.name};}}))));`],{stdout:'pipe',stderr:'pipe',timeout:30_000});
+const oracle=nodeReferenceSync(['node','-e',`const inputs=${JSON.stringify(inputs)},forms=${JSON.stringify(forms)};function literal(value){return typeof value==='bigint'?String(value)+'n':Number.isNaN(value)?'NaN':Object.is(value,-0)?'-0':String(value);}require('node:fs').writeSync(1,JSON.stringify(inputs.map(input=>forms.map(form=>{try{const [returned,stored]=Function('let value='+input.expression+';const returned='+form+';return[returned,value];')();return{returned:literal(returned),stored:literal(stored)};}catch(error){return{error:error.constructor.name};}}))));`],{stdout:'pipe',stderr:'pipe',timeout:30_000});
 if(oracle.exitCode!==0)throw new Error(oracle.stderr.toString());
 const golden=JSON.parse(oracle.stdout.toString()) as {returned?:string,stored?:string,error?:string}[][];
 
@@ -73,7 +74,7 @@ test('Numeric writes preserve the actual value domain through the canonical depe
   for(const key of new Set(plans.map(plan=>`${plan.profile}-${plan.stressInput}`))){
    const [profile,stressInput]=key.split('-').map(value=>value==='true');
    const entry=path.join(temporary,`reference-${key}.mjs`);await fs.writeFile(entry,erase(subject(profile!,true,stressInput!)));
-   const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");globalThis.print=console.log;import(process.argv[1]);',entry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+   const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");globalThis.print=console.log;import(process.argv[1]);',entry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});const lines=reference.stdout.toString().trimEnd().split('\n');expect(lines.at(-1)).toBe('captured-write-domain-through-suspension:true');expected.set(key,lines);
   }
   for(const {typed,profile,noGc,stressInput} of plans){

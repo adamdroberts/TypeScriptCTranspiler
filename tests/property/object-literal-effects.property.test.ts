@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import ts from "typescript";
 import {mkdtemp,writeFile,rm} from "node:fs/promises";
@@ -31,7 +32,7 @@ test("object construction and enumerable reads preserve effects, abrupt order an
  try{for(const noGc of [false,true])for(const plan of [{name:"partitions",source:partitionSource},{name:"property-tree",source:objectLiteralEffectInput(noGc?3:512)}]){
   const entry=join(directory,plan.name+"-"+noGc+".mts"),reference=entry+".mjs",output=entry+"-program";
   await writeFile(entry,plan.source);await writeFile(reference,ts.transpileModule(plan.source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText);
-  const node=Bun.spawnSync(["node",reference],{stdout:"pipe",stderr:"pipe",timeout:120000});
+  const node=nodeReferenceSync(["node",reference],{stdout:"pipe",stderr:"pipe",timeout:120000});
   expect({exit:node.exitCode,stderr:node.stderr.toString()}).toEqual({exit:0,stderr:""});
   const diagnostics:string[]=[],result=await compile({entry,output,buildDir:output+"-build",noGc,diagnosticWriter:message=>diagnostics.push(message)});
   expect({exit:result.exitCode,diagnostics}).toEqual({exit:0,diagnostics:[]});

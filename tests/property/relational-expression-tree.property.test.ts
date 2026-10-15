@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import * as fs from 'node:fs/promises';
@@ -8,7 +9,7 @@ import {parseHostObservation} from '../test262/protocol';
 
 const operators=['<','<=','>','>='];
 const values=['undefined','null','true','false','-0','NaN','Infinity','-Infinity','7.5','9007199254740992','7n','9007199254740993n','"2"','"10"','"0x10"','"1.5"','"invalid"','"\\uD83D\\uDE00"','"\\uFFFF"','"\\uD800"','Symbol("input")'];
-const oracle=Bun.spawnSync(['node','-e',`const operators=${JSON.stringify(operators)},values=${JSON.stringify(values)};require('node:fs').writeSync(1,JSON.stringify(values.map(left=>values.map(right=>operators.map(op=>{try{return{value:Function('return ('+left+')'+op+'('+right+');')()};}catch(error){return{error:error.constructor.name};}})))));`],{stdout:'pipe',stderr:'pipe',timeout:30_000});
+const oracle=nodeReferenceSync(['node','-e',`const operators=${JSON.stringify(operators)},values=${JSON.stringify(values)};require('node:fs').writeSync(1,JSON.stringify(values.map(left=>values.map(right=>operators.map(op=>{try{return{value:Function('return ('+left+')'+op+'('+right+');')()};}catch(error){return{error:error.constructor.name};}})))));`],{stdout:'pipe',stderr:'pipe',timeout:30_000});
 if(oracle.exitCode!==0)throw new Error(oracle.stderr.toString());
 const golden=JSON.parse(oracle.stdout.toString()) as {value?:boolean,error?:string}[][][];
 
@@ -58,7 +59,7 @@ test('Relational forms share ordered conversion and the retained operation tree'
   for(const key of new Set(plans.map(plan=>`${plan.profile}-${plan.stress}`))){
    const [profile,stress]=key.split('-').map(value=>value==='true');
    const entry=path.join(temporary,`reference-${key}.mjs`);await fs.writeFile(entry,erase(subject(profile!,true,stress!)));
-   const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");globalThis.print=console.log;import(process.argv[1]);',entry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+   const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(value)=>fs.writeSync(1,String(value)+"\\n");globalThis.print=console.log;import(process.argv[1]);',entry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});const lines=reference.stdout.toString().trimEnd().split('\n');expect(lines.at(-1)).toBe('saved-relational-operand-through-suspension:true');expected.set(key,lines);
   }
   for(const {typed,profile,noGc,stress} of plans){

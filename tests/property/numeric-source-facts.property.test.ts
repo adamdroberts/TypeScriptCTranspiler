@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';import * as os from 'node:os';import * as path from 'node:path';
 import ts from 'typescript';import {compile} from '../../src/compile';
@@ -23,7 +24,7 @@ expressions.push(...['+','-','~'].flatMap(operator=>['0','-0','3','3n','"7"','nu
 expressions.push('1/(true?0:-0)','1/-0','({valueOf(){return 7;}})*({[Symbol.toPrimitive](hint){return hint==="number"?3:11;}})','({valueOf(){return {};},toString(){return "12";}})<"9"');
 expressions.push('`value:${({toString(){return "12";}})}`');
 function oracle():Array<{normal:boolean;value?:string}> {
- const child=Bun.spawnSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");const input=JSON.parse(process.argv[1]);fs.writeSync(1,JSON.stringify(input.map(source=>{try{return {normal:true,value:String(vm.runInNewContext(source))};}catch{return {normal:false};}})));',JSON.stringify(expressions)],{stdout:'pipe',stderr:'pipe'});
+ const child=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");const input=JSON.parse(process.argv[1]);fs.writeSync(1,JSON.stringify(input.map(source=>{try{return {normal:true,value:String(vm.runInNewContext(source))};}catch{return {normal:false};}})));',JSON.stringify(expressions)],{stdout:'pipe',stderr:'pipe'});
  expect({exitCode:child.exitCode,stderr:child.stderr.toString()}).toEqual({exitCode:0,stderr:''});return JSON.parse(child.stdout.toString());
 }
 test('finite numeric source facts preserve operand Types, signed zero and abrupt completion',()=>{
@@ -39,7 +40,7 @@ test('finite numeric source facts preserve operand Types, signed zero and abrupt
  const template='class C {}var first={toString(){throw "1065;";}},second={toString(){C.toString=external;return "bad";}};try{`${first}${second}`;}catch(source){eval(source);}eval(C.toString());';
  expect(Object.fromEntries(sourceEvaluationInvocations(program(template)).map(call=>[call.node.getText(),call.choices]))).toEqual({'eval(source)':['1065;'],'eval(C.toString())':['class C {}']});
  for(const source of initializationSources){
-  const node=Bun.spawnSync(['node','-e','const values=[];require("node:vm").runInNewContext(process.argv[1],{eval:source=>values.push(source)});require("node:fs").writeSync(1,JSON.stringify(values));',source],{stdout:'pipe',stderr:'pipe'});
+  const node=nodeReferenceSync(['node','-e','const values=[];require("node:vm").runInNewContext(process.argv[1],{eval:source=>values.push(source)});require("node:fs").writeSync(1,JSON.stringify(values));',source],{stdout:'pipe',stderr:'pipe'});
   expect(node.exitCode).toBe(0);const expected:string[]=JSON.parse(node.stdout.toString()),choices=sourceEvaluationInvocations(program(source)).flatMap(call=>call.choices??[]);
   expect({source,missing:expected.filter(value=>!choices.includes(value))}).toEqual({source,missing:[]});
  }
@@ -59,7 +60,7 @@ test('numeric source expressions and a deep operation tree match Node in both me
  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-numeric-source-'));
  try{
   const entry=path.join(directory,'source.js');await fs.writeFile(entry,pieces.join('\n'));
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});',entry],{stdout:'pipe',stderr:'pipe'});
+  const node=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});',entry],{stdout:'pipe',stderr:'pipe'});
   expect({exitCode:node.exitCode,stderr:node.stderr.toString()}).toEqual({exitCode:0,stderr:''});
   for(const noGc of [false,true]){
    const output=path.join(directory,'program-'+noGc),diagnostics:string[]=[];

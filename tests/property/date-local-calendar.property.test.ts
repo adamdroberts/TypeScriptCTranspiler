@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -60,7 +61,7 @@ test('local construction and setters compose exact calendar Numbers before time-
         const records=probes(),expected=new Map<string,string[]>();
         for(const zone of ['UTC','Etc/GMT-1','Etc/GMT+1']){
             const entry=path.join(temporary,'reference.mjs');await fs.writeFile(entry,subject(records,true,false,true).replaceAll('PRINT','print'));
-            const reference=Bun.spawnSync(['node','--experimental-vm-modules','--no-warnings','-e','const vm=require("node:vm"),fs=require("node:fs");const print=line=>fs.writeSync(1,line+"\\n");const module=new vm.SourceTextModule(fs.readFileSync(process.argv[1],"utf8"),{context:vm.createContext({print})});module.link(()=>{}).then(()=>module.evaluate()).catch(error=>{fs.writeSync(2,String(error));process.exitCode=1;});',entry],{stdout:'pipe',stderr:'pipe',env:{...process.env,TZ:zone}});
+            const reference=nodeReferenceSync(['node','--experimental-vm-modules','--no-warnings','-e','const vm=require("node:vm"),fs=require("node:fs");const print=line=>fs.writeSync(1,line+"\\n");const module=new vm.SourceTextModule(fs.readFileSync(process.argv[1],"utf8"),{context:vm.createContext({print})});module.link(()=>{}).then(()=>module.evaluate()).catch(error=>{fs.writeSync(2,String(error));process.exitCode=1;});',entry],{stdout:'pipe',stderr:'pipe',env:{...process.env,TZ:zone}});
             expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});expected.set(zone,reference.stdout.toString().trimEnd().split('\n'));
         }
         expect(expected.get('UTC')).toContain('negative-epoch-second -1000 false');expect(expected.get('UTC')).toContain('ordered-time-number 29312 false');

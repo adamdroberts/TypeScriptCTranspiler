@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -61,7 +62,7 @@ test("finite object-environment source flow executes through the shared eval reg
     const source=parts.join('\n');
     try{
         const entry=path.join(directory,"source.js");await fs.writeFile(entry,source);
-        const reference=Bun.spawnSync(["node","-e",'const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:x=>fs.writeSync(1,String(x)+"\\n")});',entry],{stdout:"pipe",stderr:"pipe",timeout:120_000});
+        const reference=nodeReferenceSync(["node","-e",'const vm=require("node:vm"),fs=require("node:fs");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:x=>fs.writeSync(1,String(x)+"\\n")});',entry],{stdout:"pipe",stderr:"pipe",timeout:120_000});
         expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:""});
         expect(reference.stdout.toString().trimEnd().split('\n')).toEqual(expected);
         const graph=finiteEvalScriptSourceGraph([{path:"source.js",source}]);expect(graph.error).toBeNull();

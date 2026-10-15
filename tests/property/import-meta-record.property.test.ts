@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from "bun:test";
 import ts from "typescript";
 import {mkdtemp,mkdir,writeFile,rm} from "node:fs/promises";
@@ -37,7 +38,7 @@ test('import.meta follows retained Module identity and ordinary null-prototype o
  try{for(const typed of [false,true])for(const noGc of [false,true]){
   const directory=join(temporary,`${typed}-${noGc}`);await mkdir(directory);const source=await files(directory,typed&&!noGc?128:3,!noGc);
   const reference=join(directory,'reference.mjs');await writeFile(reference,erase(source.replace('(globalThis as any).$262.gc();','')));
-  const node=Bun.spawnSync(['node',reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({exit:node.exitCode,stderr:node.stderr.toString()}).toEqual({exit:0,stderr:''});
+  const node=nodeReferenceSync(['node',reference],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({exit:node.exitCode,stderr:node.stderr.toString()}).toEqual({exit:0,stderr:''});
   const entry=join(directory,typed?'main.ts':'main.mjs');await writeFile(entry,typed?'// @ts-nocheck\n'+source:erase(source));
   const output=join(directory,'program'),diagnostics:string[]=[];
   const result=await compile({entry,output,noGc,moduleRoots:[entry],initializationEntries:[entry],buildDir:join(directory,'build'),diagnosticWriter:message=>diagnostics.push(message),test262Observation:{kind:'test262-native-observation',scenarioId:'property/import-meta-record#module',setupEntries:[],testEntry:entry,async:false}});
@@ -57,7 +58,7 @@ test('Module metadata source cells preserve finite source selection',async()=>{
 
 test('import.meta admission follows the parse goal through the source tree',()=>{
  for(const source of ['import.meta;','function read(){return import.meta;}','()=>import.meta;','class C {read(){return import.meta;}}']) {
-  const oracle=Bun.spawnSync(['node','-e','const vm=require("node:vm");try{new vm.Script(process.argv[1]);process.exitCode=1}catch(error){if(!(error instanceof SyntaxError))throw error;}',source],{stdout:'pipe',stderr:'pipe'});
+  const oracle=nodeReferenceSync(['node','-e','const vm=require("node:vm");try{new vm.Script(process.argv[1]);process.exitCode=1}catch(error){if(!(error instanceof SyntaxError))throw error;}',source],{stdout:'pipe',stderr:'pipe'});
   expect({exit:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exit:0,stderr:''});
   for(const goal of ['script','module'] as const){const file=createEcmaSourceFile('source.js',source,ts.ScriptTarget.ESNext,true,ts.ScriptKind.JS,goal);expect(earlyFunctionStaticSemanticsFailure(file)?.message??null).toBe(goal==='script'?'import.meta requires the Module parse goal':null);}
   expect(evalSourceIsValid(evalSourceRequest('direct',source,true))).toBe(false);

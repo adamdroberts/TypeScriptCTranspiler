@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import * as fs from 'node:fs/promises';
@@ -23,7 +24,7 @@ test('native emission follows the canonical Script or Module goal independently 
  try{for(const goal of ['script','module'] as const)for(const strict of goal==='script'?[false,true]:[false])for(const typed of [false,true])for(const noGc of [false,true]){
   const deep=goal==='script'&&!strict&&!typed&&!noGc?generateE2eCaseSource('{"generator":"parse-goal-source-depth","depth":512}','property/parse_goal_source_depth'):'';
   const source=subject(strict)+deep,program=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText;
-  const node=Bun.spawnSync(['node','--experimental-vm-modules','--no-warnings','-e',oracle],{stdin:Buffer.from(JSON.stringify({goal,source:program})),stdout:'pipe',stderr:'pipe',timeout:120000});expect({goal,strict,code:node.exitCode,stderr:node.stderr.toString()}).toEqual({goal,strict,code:0,stderr:''});
+  const node=nodeReferenceSync(['node','--experimental-vm-modules','--no-warnings','-e',oracle],{stdin:Buffer.from(JSON.stringify({goal,source:program})),stdout:'pipe',stderr:'pipe',timeout:120000});expect({goal,strict,code:node.exitCode,stderr:node.stderr.toString()}).toEqual({goal,strict,code:0,stderr:''});
   const directory=path.join(temporary,`${goal}-${strict}-${typed}-${noGc}`);await fs.mkdir(directory);const entry=path.join(directory,typed?'main.ts':'main.js'),output=path.join(directory,'program');await fs.writeFile(entry,(typed?'// @ts-nocheck\n':'')+(typed?source:program));
   const goalOptions=goal==='script'?{isolatedScriptRoots:[entry]}:{moduleRoots:[entry]},built=buildProgram({entry,packageRoot:resolvePackageRoot(),...goalOptions});expect(ecmaParseGoal(built.entrySourceFile)).toBe(goal);if(goal==='script')expect(ts.isExternalModule(built.entrySourceFile)).toBe(true);
   const diagnostics:string[]=[];const compiled=await compile({entry,output,noGc,buildDir:path.join(directory,'build'),...goalOptions,diagnosticWriter:message=>diagnostics.push(message)});expect({goal,strict,typed,noGc,code:compiled.exitCode,diagnostics:diagnostics.join('')}).toEqual({goal,strict,typed,noGc,code:0,diagnostics:''});

@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect, test} from "bun:test";
 import {mkdtemp, writeFile, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
@@ -61,7 +62,7 @@ test("Iterator calls, terminal reads and deep forwarding match independent Node"
         for(const typed of [false,true]) for(const noGc of [false,true]) {
             const source=program(typed&&!noGc?256:1);
             expect(graph([{path:"main.js",source}]).error).toBeNull();
-            const node=Bun.spawnSync(["node","-e",'const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});'],{stdin:Buffer.from(source),stdout:"pipe",stderr:"pipe",timeout:120_000});
+            const node=nodeReferenceSync(["node","-e",'const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});'],{stdin:Buffer.from(source),stdout:"pipe",stderr:"pipe",timeout:120_000});
             expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:""});
             const entry=join(directory,"main-"+typed+"-"+noGc+(typed?".ts":".js")),output=join(directory,"program-"+typed+"-"+noGc),diagnostics:string[]=[];
             await writeFile(entry,(typed?"// @ts-nocheck\n":"")+source);

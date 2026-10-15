@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -69,7 +70,7 @@ test('JSON reviver reads live properties against retained parse records',async()
   // recursive reviver limit and is verified by the independent scalar/depth projection.
   const referenceSource=subject.replaceAll('COLLECT','').replace("const deep=JSON.parse(text,function(key,value,context){calls++;if(Object.hasOwn(context,'source')){sourceCount++;check(context.source==='17'&&value===17,'deep-source')}return value});","let deep=17;for(let index=0;index<depth;index++)deep=[deep];calls=depth+1;sourceCount=1;");
   await fs.writeFile(referenceEntry,nodeHost+referenceSource);
-  const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...args)=>fs.writeSync(1,require("node:util").format(...args)+"\\n");import(process.argv[1]);',referenceEntry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...args)=>fs.writeSync(1,require("node:util").format(...args)+"\\n");import(process.argv[1]);',referenceEntry],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});
   for(const mode of ['typed','javascript'])for(const noGc of [false,true]){
    const directory=path.join(temporary,`${mode}-${noGc}`);await fs.mkdir(directory);

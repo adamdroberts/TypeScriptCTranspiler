@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import {createEcmaSourceFile} from '../../src/ecmascript-source';
@@ -38,7 +39,7 @@ test('defaulted captured scalar formatter facts contain independent Node results
  for(const [index,body]of bodies.entries())for(const value of ['undefined','null','false','0',"''","'23;'"]){
   const expression=index===0?value:'{source:'+value+'}',source=body+'const query=choose('+expression+');';
   const input=query("import {format} from 'node:util';"+source+'opaque();'),proof=sourceFileExpressionTexts(input.call);
-  const oracle=Bun.spawnSync(['node','-e',"const vm=require('node:vm');const context=vm.createContext({format:require('node:util').format});new vm.Script(process.argv[1]).runInContext(context);require('node:fs').writeSync(1,String(vm.runInContext('query',context)))",source],{stdout:'pipe',stderr:'pipe',timeout:30000});
+  const oracle=nodeReferenceSync(['node','-e',"const vm=require('node:vm');const context=vm.createContext({format:require('node:util').format});new vm.Script(process.argv[1]).runInContext(context);require('node:fs').writeSync(1,String(vm.runInContext('query',context)))",source],{stdout:'pipe',stderr:'pipe',timeout:30000});
   expect({code:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({code:0,stderr:''});expect(proof).not.toBeNull();expect(proof).toContain(oracle.stdout.toString());
   if(value!=='undefined')expect(proof).not.toContain(index===0?'17;':'19;');
  }

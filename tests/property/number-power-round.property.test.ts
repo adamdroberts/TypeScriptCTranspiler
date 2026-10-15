@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import * as fs from 'node:fs/promises';
@@ -62,10 +63,10 @@ test('Number exponentiation and Math.round share prescribed binary64 partitions'
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-number-power-round-'));
  const erase=(source:string)=>ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText;
  try{
-  const answers=Bun.spawnSync(['node','-e',`const encode=value=>Number.isNaN(value)?'NaN':Object.is(value,-0)?'-0':String(value);require('node:fs').writeSync(1,JSON.stringify({power:[${baseSources.join(',')}].flatMap(base=>[${exponentSources.join(',')}].map(exponent=>encode(Math.pow(base,exponent)))),round:[${roundSources.join(',')}].map(value=>encode(Math.round(value))),compound:[${compoundOperators.map(op=>`(()=>{let value=2;function rhs(){value=3;return 2;}return encode(value${op}rhs());})()`).join(',')}]}));`],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const answers=nodeReferenceSync(['node','-e',`const encode=value=>Number.isNaN(value)?'NaN':Object.is(value,-0)?'-0':String(value);require('node:fs').writeSync(1,JSON.stringify({power:[${baseSources.join(',')}].flatMap(base=>[${exponentSources.join(',')}].map(exponent=>encode(Math.pow(base,exponent)))),round:[${roundSources.join(',')}].map(value=>encode(Math.round(value))),compound:[${compoundOperators.map(op=>`(()=>{let value=2;function rhs(){value=3;return 2;}return encode(value${op}rhs());})()`).join(',')}]}));`],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({exitCode:answers.exitCode,stderr:answers.stderr.toString()}).toEqual({exitCode:0,stderr:''});const expectedValues=JSON.parse(answers.stdout.toString()) as {power:string[];round:string[];compound:string[]};
   const referenceFile=path.join(temporary,'reference.mjs');await fs.writeFile(referenceFile,erase(subject([...expectedValues.power],expectedValues.round,expectedValues.compound,false,true)));
-  const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");import(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");import(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});const expected=reference.stdout.toString().trimEnd().split('\n');expect(expected.at(-1)).toBe('saved-numeric-callee-through-suspension:true');
   for(const typed of [true,false])for(const profile of [false,true])for(const noGc of [false,true]){
    const directory=path.join(temporary,`${typed}-${profile}-${noGc}`);await fs.mkdir(directory);

@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -39,10 +40,10 @@ test('CLI and native host close one eval source graph with retained environments
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-eval-cli-'));
  try{
   const oracleEntry=path.join(temporary,'oracle.cjs');await fs.writeFile(oracleEntry,'const fs = require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");\n'+source);
-  const oracle=Bun.spawnSync(['node',oracleEntry],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({exit:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exit:0,stderr:''});
+  const oracle=nodeReferenceSync(['node',oracleEntry],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({exit:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exit:0,stderr:''});
   const moduleOracleEntry=path.join(temporary,'oracle.mjs');
   await fs.writeFile(moduleOracleEntry,'import fs from "node:fs";console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");\n'+moduleSource);
-  const moduleOracle=Bun.spawnSync(['node',moduleOracleEntry],{stdout:'pipe',stderr:'pipe',timeout:120000});
+  const moduleOracle=nodeReferenceSync(['node',moduleOracleEntry],{stdout:'pipe',stderr:'pipe',timeout:120000});
   expect({exit:moduleOracle.exitCode,stderr:moduleOracle.stderr.toString(),stdout:moduleOracle.stdout.toString()}).toEqual({exit:0,stderr:'',stdout:oracle.stdout.toString()});
   for(const {observation,module} of [{observation:false,module:false},{observation:false,module:true},{observation:true,module:false}])for(const noGc of [false,true]){
    const directory=path.join(temporary,`${observation}-${module}-${noGc}`);await fs.mkdir(directory);const entry=path.join(directory,module?'caller.mjs':'caller.js');

@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -24,7 +25,7 @@ function program():string{
 }
 
 test('boxed JSON source facts use retained payloads and actual coercion methods',()=>{
- for(const value of values){const source=`const value=${value};eval(JSON.stringify(value));`,result=graph([{path:'main.js',source}]);expect({source,error:result.error}).toEqual({source,error:null});const oracle=Bun.spawnSync(['node','-e',`const value=${value};require('node:fs').writeSync(1,JSON.stringify(value));`],{stdout:'pipe',stderr:'pipe'});expect({code:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({code:0,stderr:''});expect(result.directEvalSources.some(entry=>entry.source===oracle.stdout.toString())).toBe(true);}
+ for(const value of values){const source=`const value=${value};eval(JSON.stringify(value));`,result=graph([{path:'main.js',source}]);expect({source,error:result.error}).toEqual({source,error:null});const oracle=nodeReferenceSync(['node','-e',`const value=${value};require('node:fs').writeSync(1,JSON.stringify(value));`],{stdout:'pipe',stderr:'pipe'});expect({code:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({code:0,stderr:''});expect(result.directEvalSources.some(entry=>entry.source===oracle.stdout.toString())).toBe(true);}
  for(const source of [
   'let body="47;";const box=new Number(1);box.valueOf=function(){body=opaque();return 2};JSON.stringify(box);eval(body);',
   'let body="53;";const space=new String(" ");space.toString=function(){body=opaque();return " "};JSON.stringify({x:1},undefined,space);eval(body);',
@@ -41,7 +42,7 @@ test('boxed JSON source facts use retained payloads and actual coercion methods'
 test('boxed owners and JSON option coercions agree with independent Node',async()=>{
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-boxed-json-source-'));
  try{
-  const entry=path.join(temporary,'reference.mjs');await fs.writeFile(entry,program().replaceAll('COLLECT',''));const reference=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...args)=>fs.writeSync(1,require("node:util").format(...args)+"\\n");import(process.argv[1]);',entry],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:''});
+  const entry=path.join(temporary,'reference.mjs');await fs.writeFile(entry,program().replaceAll('COLLECT',''));const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...args)=>fs.writeSync(1,require("node:util").format(...args)+"\\n");import(process.argv[1]);',entry],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:''});
   for(const typed of [false,true])for(const noGc of [false,true]){
    const directory=path.join(temporary,`${typed}-${noGc}`);await fs.mkdir(directory);const input=path.join(directory,typed?'main.ts':'main.mjs');await fs.writeFile(input,(typed?'// @ts-nocheck\n':'')+program().replaceAll('COLLECT',noGc?'':'$262.gc();'));const output=path.join(directory,'program'),diagnostics:string[]=[];
    const compiled=await compile({entry:input,output,noGc,moduleRoots:[input],initializationEntries:[input],buildDir:path.join(directory,'build'),test262Observation:{kind:'test262-native-observation',scenarioId:'boxed-json-source#module',setupEntries:[],testEntry:input,async:false},diagnosticWriter:message=>diagnostics.push(message)});expect({typed,noGc,code:compiled.exitCode,diagnostics:diagnostics.join('')}).toEqual({typed,noGc,code:0,diagnostics:''});

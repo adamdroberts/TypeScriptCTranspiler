@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -29,7 +30,7 @@ test('emitter References retain the host-resolved ModuleRequest attribute identi
   for(const typed of [false,true])for(const noGc of [false,true]){
    const directory=path.join(temporary,`${typed}-${noGc}`);await fs.mkdir(directory);
    const graphSources=sources(!typed&&!noGc?512:3),entries:string[]=[];
-   const node=Bun.spawnSync(['node','--experimental-vm-modules','--no-warnings','-e',oracle],{stdin:Buffer.from(JSON.stringify(Object.fromEntries(graphSources))),stdout:'pipe',stderr:'pipe',timeout:120_000});
+   const node=nodeReferenceSync(['node','--experimental-vm-modules','--no-warnings','-e',oracle],{stdin:Buffer.from(JSON.stringify(Object.fromEntries(graphSources))),stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({code:node.exitCode,stderr:node.stderr.toString(),stdout:node.stdout.toString()}).toEqual({code:0,stderr:'',stdout:'direct 17 23 17 23 17 23\nforwarded 17 23 true true true true\nlive 17 24 17 24 24\n'});
    for(const [name,source]of graphSources){const filename=path.join(directory,typed&&name==='main.mjs'?'main.ts':name);await fs.writeFile(filename,(typed&&name==='main.mjs'?'// @ts-nocheck\n':'')+source);entries.push(filename)}
    const entry=path.join(directory,typed?'main.ts':'main.mjs'),buildDir=path.join(directory,'build'),output=path.join(directory,'program'),diagnostics:string[]=[];

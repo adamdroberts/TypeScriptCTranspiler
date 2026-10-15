@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -58,7 +59,7 @@ test('Date text grammar projects optional fields, expanded years and runtime tex
             // Node rejects negative civil-year text. The native roundtrip below
             // instead uses independent millisecond values required by the pin.
             const entry=path.join(temporary,'reference.mjs');await fs.writeFile(entry,subject(texts,values).replace('ROUNDTRIP',"PRINT('runtime-produced-text-roundtrip');").replaceAll('COLLECT','').replaceAll('PRINT','print'));
-            const reference=Bun.spawnSync(['node','--experimental-vm-modules','--no-warnings','-e',
+            const reference=nodeReferenceSync(['node','--experimental-vm-modules','--no-warnings','-e',
                 'const vm=require("node:vm"),fs=require("node:fs");const print=line=>fs.writeSync(1,line+"\\n");const module=new vm.SourceTextModule(fs.readFileSync(process.argv[1],"utf8"),{context:vm.createContext({print})});module.link(()=>{}).then(()=>module.evaluate()).catch(error=>{fs.writeSync(2,String(error));process.exitCode=1;});',entry],{stdout:'pipe',stderr:'pipe',env:{...process.env,TZ:zone}});
             expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});// The selected implementation-specific grammar rejects embedded NUL
             // rather than Node's truncating legacy fallback.

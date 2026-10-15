@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import { expect, test } from "bun:test";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -53,7 +54,7 @@ test("primitive kind and actual exception partitions match Node through native s
             const graph = finiteEvalScriptSourceGraph([{ path: "main.js", source }]); expect(graph.error).toBeNull();
             const setup='Object.defineProperty(globalThis,"globalValue",{configurable:true,get(){throw "43;";}});';
             const program=source+'\nvar globalValue;try{globalValue/2;}catch(error){print("global:"+eval(error));}';
-            const node = Bun.spawnSync(["node", "-e", 'const fs=require("node:fs"),vm=require("node:vm"),context=vm.createContext({print:value=>fs.writeSync(1,String(value)+"\\n")});for(const source of JSON.parse(fs.readFileSync(0,"utf8")))new vm.Script(source).runInContext(context);'],
+            const node = nodeReferenceSync(["node", "-e", 'const fs=require("node:fs"),vm=require("node:vm"),context=vm.createContext({print:value=>fs.writeSync(1,String(value)+"\\n")});for(const source of JSON.parse(fs.readFileSync(0,"utf8")))new vm.Script(source).runInContext(context);'],
                 { stdin: Buffer.from(JSON.stringify([setup,program])), stdout: "pipe", stderr: "pipe", timeout: 120_000 });
             expect({ code: node.exitCode, stderr: node.stderr.toString() }).toEqual({ code: 0, stderr: "" });
             const entry = join(root, "main-" + typed + "-" + noGc + (typed ? ".ts" : ".js")), output = entry + "-program", diagnostics: string[] = [];

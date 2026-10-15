@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
 import {mkdtemp,rm,writeFile} from 'node:fs/promises';
@@ -32,7 +33,7 @@ async function main(){const owner=/before/;const callee=owner.compile;const resu
 test('RegExp compile reinitializes the retained matcher owner through ordered internal-slot intake',async()=>{
  const root=await mkdtemp(join(tmpdir(),'tsc2c-regexp-compile-'));
  try{const program=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText;
- const oracle=join(root,'oracle.mjs');await writeFile(oracle,program);const node=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.map(String).join(" ")+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(node.stdout.toString().trimEnd().split('\n').at(-1)).toBe('retained-callee-suspension true');
+ const oracle=join(root,'oracle.mjs');await writeFile(oracle,program);const node=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.map(String).join(" ")+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(node.stdout.toString().trimEnd().split('\n').at(-1)).toBe('retained-callee-suspension true');
  for(const typed of [true,false])for(const noGc of [false,true]){
   const entry=join(root,`main-${typed}-${noGc}.${typed?'mts':'mjs'}`),output=entry+'-native',diagnostics:string[]=[];await writeFile(entry,typed?source:program);
   const result=await compile({entry,output,noGc,buildDir:output+'-build',diagnosticWriter:message=>diagnostics.push(message)});expect({typed,noGc,code:result.exitCode,diagnostics}).toEqual({typed,noGc,code:0,diagnostics:[]});
@@ -46,7 +47,7 @@ test('borrowed RegExp compile retains target prototype and uses method Realm for
  const input=`const foreign=$262.createRealm().global;const method=foreign.RegExp.prototype.compile;const local=/before/g;const result=Reflect.apply(method,local,['after','i']);if(result!==local||Object.getPrototypeOf(local)!==RegExp.prototype||!local.test('AFTER'))throw 'owner';let error;try{Reflect.apply(method,{},[])}catch(value){error=value}if(error?.constructor!==foreign.TypeError)throw 'Realm';console.log('borrowed Realm',true);`;
  try{
   const oracle=join(root,'oracle.js');await writeFile(oracle,input);
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");console.log=(...values)=>fs.writeSync(1,values.map(String).join(" ")+"\\n");globalThis.$262={createRealm(){const context=vm.createContext();return {global:vm.runInContext("globalThis",context)}}};vm.runInThisContext(fs.readFileSync(process.argv[1],"utf8"));',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});
+  const node=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");console.log=(...values)=>fs.writeSync(1,values.map(String).join(" ")+"\\n");globalThis.$262={createRealm(){const context=vm.createContext();return {global:vm.runInContext("globalThis",context)}}};vm.runInThisContext(fs.readFileSync(process.argv[1],"utf8"));',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});
   expect({code:node.exitCode,stderr:node.stderr.toString(),stdout:node.stdout.toString()}).toEqual({code:0,stderr:'',stdout:'borrowed Realm true\n'});
   for(const noGc of [false,true]){
    const entry=join(root,`main-${noGc}.js`),output=entry+'-native',diagnostics:string[]=[];await writeFile(entry,input);

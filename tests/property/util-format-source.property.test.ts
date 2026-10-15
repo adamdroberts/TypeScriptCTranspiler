@@ -1,3 +1,4 @@
+import {nodeReferenceSync} from './node-reference';
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -56,7 +57,7 @@ test('formatter request admission matches independent Node and native execution'
   const stress=!typed&&!noGc&&scenario===0?generateE2eCaseSource('{"generator":"util-format-source-depth","depth":512}','property/util_format_source_depth'):'';
   const source=stress||imports+setup+`console.log(require(${expression}).label);`,program=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText;
   const oracle=path.join(directory,'oracle.mjs');await fs.writeFile(oracle,"import {createRequire} from 'node:module';const originalRequire=createRequire(import.meta.url);const require=value=>originalRequire(value+'.cjs');\n"+program);
-  const node=Bun.spawnSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const node=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");import(process.argv[1]);',oracle],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const entry=path.join(directory,typed?'main.ts':'main.mjs');await fs.writeFile(entry,(typed?'// @ts-nocheck\n':'')+(typed?source:program));
   const output=path.join(directory,'program'),diagnostics:string[]=[];
