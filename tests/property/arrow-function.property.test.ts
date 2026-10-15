@@ -7,6 +7,7 @@ import { compile } from "../../src/compile";
 import { createEcmaSourceFile } from "../../src/ecmascript-source";
 import { earlyFunctionStaticSemanticsFailure } from "../../src/function-static-semantics";
 import { hostProtocolVersion, parseHostObservation } from "../test262/protocol";
+import { nodeReferenceSync } from "./node-reference";
 
 function parsedScript(source: string): ts.SourceFile {
     return createEcmaSourceFile(
@@ -300,10 +301,10 @@ function subjectSource(): string {
         var callerDescriptor = Object.getOwnPropertyDescriptor(Function.prototype, "caller");
         var argumentsDescriptor = Object.getOwnPropertyDescriptor(Function.prototype, "arguments");
         check(callerDescriptor.get !== undefined && callerDescriptor.set !== undefined &&
-            callerDescriptor.enumerable === false && callerDescriptor.configurable === false,
+            callerDescriptor.enumerable === false && callerDescriptor.configurable === true,
             "caller-descriptor");
         check(argumentsDescriptor.get !== undefined && argumentsDescriptor.set !== undefined &&
-            argumentsDescriptor.enumerable === false && argumentsDescriptor.configurable === false,
+            argumentsDescriptor.enumerable === false && argumentsDescriptor.configurable === true,
             "arguments-descriptor");
 
         print(failures.length === 0 ? "arrow-function-ok" : failures.join(","));
@@ -315,6 +316,11 @@ test("arrow functions share one formal-binding and lexical-environment runtime p
     const entry = path.join(temporary, "subject.js");
     const scenarioId = "property/arrow-function.js#sloppy";
     try {
+        const reference = nodeReferenceSync(["node", "-e",
+            'globalThis.print = (...args) => process.stdout.write(args.join(" ") + "\\n");\n' + subjectSource()],
+            { stdout: "pipe", stderr: "pipe" });
+        expect({ code: reference.exitCode, stdout: reference.stdout.toString(), stderr: reference.stderr.toString() })
+            .toEqual({ code: 0, stdout: "arrow-function-ok\n", stderr: "" });
         await fs.writeFile(entry, subjectSource(), "utf8");
         for (const noGc of [false, true]) {
             const mode = noGc ? "no-gc" : "gc";

@@ -1,3 +1,5 @@
+- Align arrow restricted-accessor descriptor expectations with the pinned specification and independent Node execution.
+
 - Snapshot Script declarative binding state through the shared closure-capture descriptor collection, preserving TDZ and nested captures.
 
 - Retain privately branded DispatchQueue owners across Value storage, captures, native tasks and Realm changes; validate actual handles through one decoder.
