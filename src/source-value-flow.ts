@@ -329,6 +329,7 @@ class SourceValueFlow {
     private readonly accessorSlots = new Set<Cell>();
     private readonly callResults = new Map<ts.Node,Map<string,Cell>>();
     private readonly invocations = new Map<Rule, Map<string, { kind: DynamicFunctionKind; args: readonly Cell[] | null }>>();
+    private readonly inactiveEvaluationCandidates=new Map<ts.Node,Set<boolean>>();
     private readonly evaluationInvocations = new Map<Rule, Map<string, EvaluationRecord>>();
     private readonly primitives = new Map<string, Atom>();
     private readonly symbolPrimitives = new Map<symbol, Atom>();
@@ -4348,6 +4349,10 @@ class SourceValueFlow {
     }
     private initialize(node: ts.Node, result: Cell): void {
         const guards=this.guards(node);
+        if(guards.length&&ts.isCallExpression(node)){
+            const target=unwrap(node.expression);
+            if(ts.isIdentifier(target)&&target.text==="eval")this.inactiveEvaluationCandidates.set(node,new Set([!node.questionDotToken]));
+        }
         if(guards.length){
             let initialized=false,rule!:Rule;
             rule=this.rule(guards.map(guard=>guard.condition),()=>{if(!initialized&&this.guardsAllow(guards,rule)){initialized=true;this.initializeActive(node,result);}});
@@ -4734,12 +4739,9 @@ class SourceValueFlow {
             if (!evaluations) { evaluations = new Map(); this.evaluationInvocations.set(rule,evaluations); }
             evaluations.clear();
             if (!this.guardsAllow(guards,rule)) {
-                const unreachable=guards.some(guard=>{
-                    const proof=this.primitiveChoiceProof(guard.condition);
-                    return proof.primitiveComplete&&!proof.values.some(value=>!!value===guard.truthy);
-                });
-                if(unreachable)for(const atom of callee.values)if(atom.tag==="operation"&&atom.operation==="eval")
-                    evaluations.set("unreachable",{node,operation:"eval",direct,source:null,unknown:false});
+                for(const atom of callee.values)if(atom.tag==="operation"&&atom.operation==="eval"){
+                    let candidates=this.inactiveEvaluationCandidates.get(node);if(!candidates){candidates=new Set();this.inactiveEvaluationCandidates.set(node,candidates);}candidates.add(direct);
+                }
                 return;
             }
             this.allArgumentValues(sequence);
@@ -5628,12 +5630,19 @@ class SourceValueFlow {
             }
             if (!changed) break;
         }
+        // A guarded call may never initialize its callee/invocation rule.
+        // Retain the empty source result from the same closed guard graph so
+        // downstream syntax admission does not invent an unknown call.
+        const inactiveEvaluations:EvaluationInvocation[]=[];
+        for(const [node,possibilities]of this.inactiveEvaluationCandidates)if(this.guards(node).some(guard=>{
+            const proof=this.primitiveChoiceProof(guard.condition);return proof.primitiveComplete&&!proof.values.some(value=>!!value===guard.truthy);
+        }))for(const direct of possibilities)inactiveEvaluations.push({node,operation:"eval",direct,choices:[],...(this.domain?{domain:this.domain}:{})});
         return {
             constructors: [...this.invocations.values()].flatMap(records => [...records.values()]).map(invocation => {
                 const choices = invocation.args?.map(cell => this.choices(cell));
                 return {kind: invocation.kind, choices: choices && choices.every(value => value !== null) ? choices : null,...(this.domain?{domain:this.domain}:{})};
             }),
-            evaluations: [...this.evaluationInvocations.values()].flatMap(records => [...records.values()]).map(invocation => {
+            evaluations: [...inactiveEvaluations,...[...this.evaluationInvocations.values()].flatMap(records => [...records.values()]).map(invocation => {
                 const { source, operation, unknown } = invocation;
                 const proof = source ? this.primitiveChoiceProof(source) : undefined;
                 const primitives = proof?.values ?? [];
@@ -5644,7 +5653,7 @@ class SourceValueFlow {
                     ? [...new Set(primitives.filter(value => operation !== "eval" || typeof value === "string").map(String))]
                     : operation !== "eval" ? ["undefined"] : [];
                 return { node: invocation.node, operation, direct: invocation.direct, choices,...(this.domain?{domain:this.domain}:{}) };
-            }),
+            })],
         };
     }
 }

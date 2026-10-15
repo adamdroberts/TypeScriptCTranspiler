@@ -1,3 +1,5 @@
+- Preserve empty eval source results for provably inactive guarded calls through one canonical candidate collection.
+
 - Preserve earlier own-property presence across later deletes while retaining repeated and suspended alternatives.
 
 - Reuse canonical descriptor conversion and projection subscriptions as source facts grow.

@@ -4,6 +4,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import {compile} from "../../src/compile";
+import {finiteEvalScriptSourceGraph} from "../test262/native-host";
 import {evalSourceIsValid,evalSourceRequest} from "../../src/eval-source";
 import {parseHostObservation} from "../test262/protocol";
 
@@ -54,3 +55,18 @@ test("provided eval entries undergo the same admission before native binding ins
         expect((observation.stdout??"").trimEnd().split("\n")).toEqual(["SyntaxError:undefined","SyntaxError:undefined","29"]);
     }}finally{await fs.rm(directory,{recursive:true,force:true});}
 },300_000);
+
+test("inactive eval calls retain an empty source result while live unknown guards fail closed",()=>{
+    const inactive=[
+        'if(false)eval(opaque());',
+        'const indirect=eval;if(false)indirect(opaque());',
+        'true?17:eval(opaque());',
+        'try{17/2;}catch(error){eval(opaque());}',
+        'const owner={read(){return 17}};try{owner.read();}catch(error){eval(opaque());}',
+    ];
+    const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");for(const source of JSON.parse(process.argv[1]))new vm.Script(source).runInNewContext({opaque(){throw "unexpected"}});fs.writeSync(1,"complete\\n");',JSON.stringify(inactive)],{stdout:'pipe',stderr:'pipe',timeout:30_000});
+    expect({code:reference.exitCode,stderr:reference.stderr.toString(),stdout:reference.stdout.toString()}).toEqual({code:0,stderr:'',stdout:'complete\n'});
+    for(const source of inactive){const graph=finiteEvalScriptSourceGraph([{path:'subject.js',source}]);expect({source,error:graph.error,sources:graph.directEvalSources}).toEqual({source,error:null,sources:[]});}
+    for(const source of ['if(flag)eval(opaque());','try{throw 17;}catch(error){eval(opaque());}','try{external();}catch(error){eval(opaque());}'])
+        expect(finiteEvalScriptSourceGraph([{path:'subject.js',source}]).error).toContain('direct eval source is not a finite static string expression');
+});
