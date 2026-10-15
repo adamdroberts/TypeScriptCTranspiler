@@ -17,25 +17,77 @@ struct tsc_dispatch_queue {
 #endif
     tsc_str_t* label;
     bool concurrent;
+    tsc_object_t* object;
 };
+
+/* The private name is shared by native queue owners, never exposed as an own
+ * property or inherited by an object copying a queue's public shape. */
+static tsc_symbol_t* g_dispatch_queue_brand;
+static tsc_value_t tsc_dispatch_queue_brand(void) {
+    tsc_runtime_lock();
+    if (!g_dispatch_queue_brand)
+        g_dispatch_queue_brand = tsc_symbol_new(tsc_str_from_cstr("DispatchQueue"));
+    tsc_value_t brand = tsc_value_symbol(g_dispatch_queue_brand);
+    tsc_runtime_unlock();
+    return brand;
+}
+
+static tsc_dispatch_queue_t* tsc_dispatch_queue_new(tsc_str_t* label, bool concurrent) {
+    tsc_dispatch_queue_t* q = (tsc_dispatch_queue_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_queue_t));
+    memset(q, 0, sizeof(*q));
+    q->label = label ? label : tsc_str_from_lit("", 0);
+    q->concurrent = concurrent;
+    return q;
+}
+
+tsc_value_t tsc_value_dispatch_queue(tsc_dispatch_queue_t* q) {
+    if (!q) return tsc_value_null();
+    tsc_dispatch_queue_t* volatile queue_root = q;
+    (void)queue_root;
+    tsc_runtime_lock();
+    if (!q->object) {
+        tsc_object_t* object = tsc_object_new();
+        object->class_ptr = q;
+        tsc_value_private_add(tsc_value_object(object), tsc_dispatch_queue_brand(),
+            TSC_PRIVATE_FIELD, tsc_value_bool(true), tsc_value_undefined(), tsc_value_undefined());
+        tsc_object_define(object, tsc_str_from_lit("label", 5),
+            tsc_value_string(q->label), false, true, false);
+        q->object = object;
+    }
+    tsc_value_t value = tsc_value_object(q->object);
+    tsc_runtime_unlock();
+    return value;
+}
+
+static bool tsc_value_is_dispatch_queue(tsc_value_t value) {
+    return value_is_box(value) && value_tag(value) == TSC_VALUE_TAG_OBJECT &&
+        tsc_value_private_has(value, tsc_dispatch_queue_brand());
+}
+
+tsc_dispatch_queue_t* tsc_value_as_dispatch_queue(tsc_value_t value) {
+    if (!tsc_value_is_dispatch_queue(value))
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("dispatch queue must be a DispatchQueue"));
+    return ((tsc_object_t*)value_ptr(value))->class_ptr;
+}
+
+/* Queue captures are shared host handles; other captures retain the existing
+ * structured-clone boundary, including rejection of nested host handles. */
+tsc_value_t tsc_dispatch_capture(tsc_value_t value) {
+    return tsc_value_is_dispatch_queue(value) ? value : tsc_structured_clone(value);
+}
 
 #ifdef TSC_DISPATCH_SERIAL
 
 tsc_dispatch_queue_t* tsc_dispatch_queue_serial(tsc_str_t* label) {
-    tsc_dispatch_queue_t* q = (tsc_dispatch_queue_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_queue_t));
-    q->label = label ? label : tsc_str_from_lit("", 0);
-    q->concurrent = false;
-    return q;
+    return tsc_dispatch_queue_new(label, false);
 }
 
 tsc_dispatch_queue_t* tsc_dispatch_queue_concurrent(void) {
-    tsc_dispatch_queue_t* q = (tsc_dispatch_queue_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_queue_t));
-    q->label = tsc_str_from_lit("concurrent", 10);
-    q->concurrent = true;
-    return q;
+    return tsc_dispatch_queue_new(tsc_str_from_lit("concurrent", 10), true);
 }
 
 typedef struct {
+    tsc_dispatch_queue_t* queue;
     tsc_dispatch_task_fn_t fn;
     void* env;
     tsc_promise_t* promise;
@@ -63,6 +115,7 @@ tsc_promise_t* tsc_dispatch_async(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_
     if (!q || !fn) tsc_throw_str(tsc_str_from_cstr("dispatch.async: invalid queue or task"));
     tsc_dispatch_serial_task_t* task =
         (tsc_dispatch_serial_task_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_serial_task_t));
+    task->queue = q;
     task->fn = fn;
     task->env = env;
     task->promise = tsc_promise_pending();
@@ -81,6 +134,7 @@ tsc_promise_t* tsc_dispatch_after(
     if (!(delay_ms > 0.0)) delay_ms = 0.0;
     tsc_dispatch_serial_task_t* task =
         (tsc_dispatch_serial_task_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_serial_task_t));
+    task->queue = q;
     task->fn = fn;
     task->env = env;
     task->promise = tsc_promise_pending();
@@ -94,6 +148,7 @@ tsc_promise_t* tsc_dispatch_barrier(tsc_dispatch_queue_t* q, tsc_dispatch_task_f
     if (!q->concurrent) tsc_throw_str(tsc_str_from_cstr("dispatch.barrier requires a concurrent queue"));
     tsc_dispatch_serial_task_t* task =
         (tsc_dispatch_serial_task_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_serial_task_t));
+    task->queue = q;
     task->fn = fn;
     task->env = env;
     task->promise = tsc_promise_pending();
@@ -189,27 +244,22 @@ static void tsc_dispatch_unregister_gc_thread(bool registered_here) {
 }
 
 tsc_dispatch_queue_t* tsc_dispatch_queue_serial(tsc_str_t* label) {
-    tsc_dispatch_queue_t* q = (tsc_dispatch_queue_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_queue_t));
-    char name[128];
-    size_t n = label && label->len < sizeof(name) - 1 ? label->len : sizeof(name) - 1;
-    if (label && n > 0) memcpy(name, label->data, n);
-    name[n] = '\0';
+    tsc_dispatch_queue_t* q = tsc_dispatch_queue_new(label, false);
+    char* name = cstr_dup(q->label);
     q->queue = dispatch_queue_create(name, DISPATCH_QUEUE_SERIAL);
+    free(name);
     dispatch_queue_set_specific(q->queue, &g_tsc_queue_key, q, NULL);
-    q->label = label ? label : tsc_str_from_lit("", 0);
-    q->concurrent = false;
     return q;
 }
 
 tsc_dispatch_queue_t* tsc_dispatch_queue_concurrent(void) {
-    tsc_dispatch_queue_t* q = (tsc_dispatch_queue_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_queue_t));
+    tsc_dispatch_queue_t* q = tsc_dispatch_queue_new(tsc_str_from_lit("concurrent", 10), true);
     q->queue = dispatch_queue_create("concurrent", DISPATCH_QUEUE_CONCURRENT);
-    q->label = tsc_str_from_lit("concurrent", 10);
-    q->concurrent = true;
     return q;
 }
 
 typedef struct {
+    tsc_dispatch_queue_t* queue;
     tsc_dispatch_task_fn_t fn;
     void* env;
     tsc_promise_t* promise;
@@ -238,6 +288,7 @@ tsc_promise_t* tsc_dispatch_async(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_
     if (!q || !fn) tsc_throw_str(tsc_str_from_cstr("dispatch.async: invalid queue or task"));
     tsc_dispatch_async_task_t* task =
         (tsc_dispatch_async_task_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_async_task_t));
+    task->queue = q;
     task->fn = fn;
     task->env = env;
     task->promise = tsc_promise_pending();
@@ -259,6 +310,7 @@ tsc_promise_t* tsc_dispatch_after(
     if (delay_ms > max_delay_ms) delay_ms = max_delay_ms;
     tsc_dispatch_async_task_t* task =
         (tsc_dispatch_async_task_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_async_task_t));
+    task->queue = q;
     task->fn = fn;
     task->env = env;
     task->promise = tsc_promise_pending();
@@ -278,6 +330,7 @@ tsc_promise_t* tsc_dispatch_barrier(tsc_dispatch_queue_t* q, tsc_dispatch_task_f
     if (!q->concurrent) tsc_throw_str(tsc_str_from_cstr("dispatch.barrier requires a concurrent queue"));
     tsc_dispatch_async_task_t* task =
         (tsc_dispatch_async_task_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_async_task_t));
+    task->queue = q;
     task->fn = fn;
     task->env = env;
     task->promise = tsc_promise_pending();

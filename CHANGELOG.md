@@ -1,3 +1,5 @@
+- Retain privately branded DispatchQueue owners across Value storage, captures, native tasks and Realm changes; validate actual handles through one decoder.
+
 - Record the locally verified libdispatch toolchain and expose the remaining queue Value/capture representation blockers.
 
 - Apply shared initializer reachability before lexical-slot initialization and preserve observable class-definition effects and Script bindings.

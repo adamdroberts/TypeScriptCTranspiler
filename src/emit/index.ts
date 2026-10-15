@@ -34305,7 +34305,7 @@ class Emitter {
                 if (cloneDispatchCapture) {
                     const storage = this.freshTemp("_dispatch_capture");
                     const boxed = this.coerce({ c: `*${ptr}`, ty: cap.type }, T_VALUE, fn);
-                    const cloned = this.coerce({ c: `tsc_structured_clone(${boxed})`, ty: T_VALUE }, cap.type, fn);
+                    const cloned = this.coerce({ c: `tsc_dispatch_capture(${boxed})`, ty: T_VALUE }, cap.type, fn);
                     pieces.push(`${cap.type.c}* ${storage} = (${cap.type.c}*)TSC_GC_MALLOC(sizeof(${cap.type.c}))`);
                     pieces.push(
                         `*${storage} = ${clonedInitializationPtr
@@ -37845,9 +37845,6 @@ class Emitter {
         }
         this.validateDispatchTask(taskFn);
         const queue = this.emitExpr(queueNode);
-        if (this.prepareType(queue.ty).kind !== "dispatchqueue") {
-            unsupported(queueNode, `dispatch.${name} queue must be a DispatchQueue`);
-        }
         // Emit the task closure outside the enclosing async/try context: its
         // body runs on a worker thread where throw/return must lower to plain
         // tsc_throw_str/typed returns (the dispatch trampoline adds the try
@@ -37871,7 +37868,7 @@ class Emitter {
         const envType = `${adapter}_env_t`;
         const specs: SequencedCallArg[] = [
             ...(delayNode ? [{ value: this.emitExpr(delayNode), target: T_NUMBER, node: delayNode }] : []),
-            { value: queue, target: queue.ty, node: queueNode },
+            { value: queue, target: T_DISPATCH_QUEUE, node: queueNode },
             { value: task, target: task.ty, node: taskArgNode },
             ...this.ignoredArgumentSpecs(call.arguments, isAfter ? 3 : 2),
         ];
@@ -37921,9 +37918,6 @@ class Emitter {
             unsupported(tasksNode, "dispatch.group task list must be an array literal in this subset");
         }
         const queue = this.emitExpr(queueNode);
-        if (this.prepareType(queue.ty).kind !== "dispatchqueue") {
-            unsupported(queueNode, "dispatch.group queue must be a DispatchQueue");
-        }
         const taskNodes = tasksNode.elements.map((element) => {
             if (ts.isSpreadElement(element)) {
                 unsupported(element, "dispatch.group task list does not support spread elements in this subset");
@@ -37960,7 +37954,7 @@ class Emitter {
             unsupported(call, "dispatch.group must return Promise<T[]>");
         }
         const specs: SequencedCallArg[] = [
-            { value: queue, target: queue.ty, node: queueNode },
+            { value: queue, target: T_DISPATCH_QUEUE, node: queueNode },
             ...taskResults.map((task, i) => ({ value: task, target: task.ty, node: taskNodes[i]!.node })),
             ...this.ignoredArgumentSpecs(call.arguments, 2),
         ];
@@ -40557,6 +40551,9 @@ class Emitter {
                     return `tsc_value_as_event_target(${r.c})`;
                 case "event":
                     return `tsc_value_as_event(${r.c})`;
+                case "dispatchqueue":
+                    this.usesDispatch = true;
+                    return `tsc_value_as_dispatch_queue(${r.c})`;
                 case "fsstats":
                     return `((tsc_fs_stats_t*)tsc_value_as_class(${r.c}))`;
                 case "promise":
@@ -40608,6 +40605,9 @@ class Emitter {
                 return `tsc_value_event_target(${r.c})`;
             case "event":
                 return `tsc_value_event(${r.c})`;
+            case "dispatchqueue":
+                this.usesDispatch = true;
+                return `tsc_value_dispatch_queue(${r.c})`;
             case "fsstats":
                 return `tsc_value_fs_stats(${r.c})`;
             case "date":
