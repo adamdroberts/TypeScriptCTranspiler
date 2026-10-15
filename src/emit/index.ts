@@ -597,7 +597,6 @@ class Emitter {
     private asyncFunctionStack: AsyncFunctionContext[] = [];
     private tryDepth = 0;
     private currentClass: string | null = null;
-    private currentBaseClass: string | null = null;
     private functionThisStack: EmitResult[] = [];
     private arrowLexicalBindingsByOwner = new WeakMap<
         ts.ArrowFunction,
@@ -1253,26 +1252,16 @@ class Emitter {
     }
 
     private isCanonicalClassDeclaration(declaration: ts.ClassDeclaration): boolean {
-        const pending: ts.ClassDeclaration[] = [declaration];
-        const seen = new Set<ts.ClassDeclaration>();
-        while (pending.length) {
-            const current = pending.pop()!;
-            if (seen.has(current) || this.isAmbientDeclaration(current)) continue;
-            seen.add(current);
-            if (this.isJavaScriptSourceFile(current.getSourceFile()) || this.sourceHasTopLevelAwait(current.getSourceFile()) ||
-                classPrivateNames(current).length || this.sourceEnvironmentEnabled(current.getSourceFile())) return true;
-            for (const clause of current.heritageClauses ?? []) {
-                if (clause.token !== ts.SyntaxKind.ExtendsKeyword) continue;
-                for (const heritage of clause.types) {
-                    const expression = unwrapTransparentExpression(heritage.expression);
-                    if (!ts.isIdentifier(expression)) return true;
-                    const base = this.classDeclForConstructorIdentifier(expression);
-                    if (base) pending.push(base);
-                    else return true;
-                }
-            }
-        }
-        return false;
+        if (this.isAmbientDeclaration(declaration)) return false;
+        // Every derived definition uses the retained constructor Environment
+        // Record and actual List, including the implicit forwarding constructor.
+        // Physical base initializers cannot represent live superclass lookup,
+        // arbitrary actuals, alternate new.target or object-returning parents.
+        return this.isJavaScriptSourceFile(declaration.getSourceFile()) ||
+            this.sourceHasTopLevelAwait(declaration.getSourceFile()) ||
+            classPrivateNames(declaration).length > 0 ||
+            this.sourceEnvironmentEnabled(declaration.getSourceFile()) ||
+            !!declaration.heritageClauses?.some(clause => clause.token === ts.SyntaxKind.ExtendsKeyword);
     }
 
     private shouldEmitClassDeclaration(cd: ts.ClassDeclaration): boolean {
@@ -22476,22 +22465,10 @@ class Emitter {
     private emitClassStruct(cd: ts.ClassDeclaration): void {
         if (!cd.name) unsupported(cd, "anonymous class declaration");
         const name = nativeTypeName(cd);
-        const baseFields = this.collectInheritedFields(cd);
         this.structDecls.open(`struct ${name}_t`);
         this.structDecls.line("tsc_native_object_owner_t __tsc_object_owner;");
         this.structDecls.line(`const char* __tsc_type;`);
-        // Each inherited value/root pair retains the same prefix in subclasses.
-        const inheritedFields = new Map(baseFields.map(field => [field.name, field]));
-        for (const field of this.classOwnInstanceFields(cd)) {
-            const previous = inheritedFields.get(field.name);
-            if (previous && !sameCType(previous.type, field.type)) {
-                unsupported(cd, "native inherited field redeclaration changes physical storage");
-            }
-        }
-        this.emitNativeAggregateFields([
-            ...baseFields,
-            ...this.classOwnInstanceFields(cd).filter(field => !inheritedFields.has(field.name)),
-        ]);
+        this.emitNativeAggregateFields(this.classOwnInstanceFields(cd));
         this.structDecls.close(";");
         this.structDecls.line();
     }
@@ -22509,7 +22486,6 @@ class Emitter {
         for (const parameter of ctor?.parameters ?? []) {
             if (!ts.isParameterPropertyDeclaration(parameter, ctor!)) continue;
             if (!ts.isIdentifier(parameter.name)) unsupported(parameter, "native parameter property requires an identifier binding");
-            if (this.baseClassDecl(cd)) unsupported(parameter, "derived parameter properties require the canonical class initialization plan");
             if (!fields.has(parameter.name.text)) {
                 fields.set(parameter.name.text, { name: parameter.name.text, type: mapType(parameter, this.checker), parameter });
             }
@@ -22534,56 +22510,6 @@ class Emitter {
         return [...fields.values()];
     }
 
-    private baseClassName(cd: ts.ClassDeclaration): string | null {
-        const base = this.baseClassDecl(cd);
-        return base ? nativeTypeName(base) : null;
-    }
-
-    private baseClassDecl(cd: ts.ClassDeclaration): ts.ClassDeclaration | null {
-        if (!cd.heritageClauses) return null;
-        for (const h of cd.heritageClauses) {
-            if (h.token !== ts.SyntaxKind.ExtendsKeyword) continue;
-            const t = h.types[0];
-            if (!t) continue;
-            let sym = this.checker.getSymbolAtLocation(t.expression);
-            if (sym && (sym.flags & ts.SymbolFlags.Alias) !== 0) sym = this.resolveAliasSymbol(sym);
-            const base = sym?.getDeclarations()?.find(ts.isClassDeclaration);
-            if (base && base.name) return base;
-        }
-        return null;
-    }
-
-    private classTypeChain(cd: ts.ClassDeclaration): string {
-        const names: string[] = [];
-        const visited = new Set<ts.ClassDeclaration>();
-        for (let current: ts.ClassDeclaration | null = cd; current; current = this.baseClassDecl(current)) {
-            if (visited.has(current)) unsupported(current, "cyclic native class inheritance");
-            visited.add(current); names.push(nativeTypeName(current));
-        }
-        return `|${names.reverse().join("|")}|`;
-    }
-
-    private collectInheritedFields(cd: ts.ClassDeclaration): { name: string; type: CType }[] {
-        const ancestry: ts.ClassDeclaration[] = [];
-        const visited = new Set<ts.ClassDeclaration>();
-        for (let base = this.baseClassDecl(cd); base; base = this.baseClassDecl(base)) {
-            if (visited.has(base)) unsupported(cd, "cyclic native class inheritance");
-            visited.add(base);
-            ancestry.push(base);
-        }
-        const fields = new Map<string, { name: string; type: CType }>();
-        for (const ancestor of ancestry.reverse()) {
-            for (const field of this.classOwnInstanceFields(ancestor)) {
-                const previous = fields.get(field.name);
-                if (previous && !sameCType(previous.type, field.type)) {
-                    unsupported(ancestor, "native inherited field redeclaration changes physical storage");
-                }
-                if (!previous) fields.set(field.name, field);
-            }
-        }
-        return [...fields.values()];
-    }
-
     private emitClassPrototypes(cd: ts.ClassDeclaration): void {
         if (!cd.name) return;
         const name = nativeTypeName(cd), ctor = cd.members.find(ts.isConstructorDeclaration);
@@ -22599,7 +22525,6 @@ class Emitter {
             ownFields.add(field.name);
         }
 
-        const inheritedFields = new Set(this.collectInheritedFields(cd).map((f) => f.name));
         const initialized = new Set<string>();
         for (const field of this.classOwnInstanceFields(cd)) {
             if (field.initializer) initialized.add(field.name);
@@ -22608,15 +22533,8 @@ class Emitter {
         const ctor = cd.members.find((m) => ts.isConstructorDeclaration(m)) as
             | ts.ConstructorDeclaration
             | undefined;
-        let callsSuper = false;
         if (ctor?.body) {
             const visit = (n: ts.Node): void => {
-                if (
-                    ts.isCallExpression(n) &&
-                    n.expression.kind === ts.SyntaxKind.SuperKeyword
-                ) {
-                    callsSuper = true;
-                }
                 if (
                     ts.isBinaryExpression(n) &&
                     n.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
@@ -22628,11 +22546,8 @@ class Emitter {
                 ts.forEachChild(n, visit);
             };
             visit(ctor.body);
-        } else if (inheritedFields.size > 0) {
-            callsSuper = true;
         }
 
-        if (inheritedFields.size > 0 && !callsSuper) return false;
         for (const field of ownFields) {
             if (!initialized.has(field)) return false;
         }
@@ -22655,7 +22570,7 @@ class Emitter {
             return null;
         }
         const decl = this.findClassDecl(cls);
-        if (!decl || decl.typeParameters?.length || !this.classConstructorInitializesAllFields(decl)) {
+        if (!decl || this.isCanonicalClassDeclaration(decl) || decl.typeParameters?.length || !this.classConstructorInitializesAllFields(decl)) {
             return null;
         }
         const sym = this.symbolForIdentifier(d.name);
@@ -23845,10 +23760,10 @@ class Emitter {
 
     private emitClassInstanceInitializers(cd: ts.ClassDeclaration): void {
         const name = nativeTypeName(cd);
-        const previousClass = this.currentClass, previousBase = this.currentBaseClass;
+        const previousClass = this.currentClass;
         const initialize = this.ensureNativeObjectValueInitializer(classType(name), cd);
         this.defs.open(`static inline void ${name}_fields(${name}_t* self)`);
-        this.defs.line(`self->__tsc_type = "${escapeCString(this.classTypeChain(cd))}";`);
+        this.defs.line(`self->__tsc_type = "${escapeCString(`|${name}|`)}";`);
         const owner = this.freshTemp("_field_owner");
         this.defs.line(`tsc_object_t* volatile ${owner} = tsc_native_object_owner_get(&self->__tsc_object_owner, self, ${initialize});`);
         const receiver = { c: `tsc_value_object(${owner})`, ty: T_VALUE };
@@ -23857,7 +23772,6 @@ class Emitter {
             ["this", receiver], ["new-target", { c: "tsc_value_undefined()", ty: T_VALUE }],
         ]));
         this.currentClass = name;
-        this.currentBaseClass = this.baseClassName(cd);
         try {
             for (const member of cd.members) {
                 if (!ts.isPropertyDeclaration(member) || isStatic(member)) continue;
@@ -23874,7 +23788,6 @@ class Emitter {
             }
         } finally {
             this.currentClass = previousClass;
-            this.currentBaseClass = previousBase;
             this.functionActivationBindings.pop();
             this.functionThisStack.pop();
         }
@@ -23891,7 +23804,6 @@ class Emitter {
     private emitNativeClassBodies(cd: ts.ClassDeclaration): void {
         if (!cd.name) return;
         const name = nativeTypeName(cd);
-        const baseName = this.baseClassName(cd);
         const ctor = cd.members.find((m) => ts.isConstructorDeclaration(m)) as
             | ts.ConstructorDeclaration
             | undefined;
@@ -23941,21 +23853,21 @@ class Emitter {
         this.argumentValueTypeScopes.push(parameterTypes);
         this.cellScopes.push(capturedCells);
         if (formalPlans) this.formalParameterScopes.push(formalPlans);
-        const baseReceiver = ctor && !baseName ? { c: "self", ty: classType(name) } : null;
+        const baseReceiver = ctor ? { c: "self", ty: classType(name) } : null;
         if (baseReceiver) {
             this.functionThisStack.push(baseReceiver);
             this.functionActivationBindings.push(new Map<ArrowLexicalCaptureKind, EmitResult>([
                 ["this", baseReceiver], ["new-target", { c: "tsc_value_current_new_target()", ty: T_VALUE }],
             ]));
         }
-        const typeChain = this.classTypeChain(cd);
+        const typeChain = `|${name}|`;
         this.defs.line(`self->__tsc_type = "${escapeCString(typeChain)}";`);
         for (const field of this.classOwnInstanceFields(cd)) {
             if (field.type.kind === "value") this.defs.line(
                 `${this.nativeFieldStore("self", name, field.name, field.type, "tsc_value_undefined()")};`,
             );
         }
-        if (!baseName) this.defs.line(`${name}_fields(self);`);
+        this.defs.line(`${name}_fields(self);`);
         if (ctor && formalPlans) this.emitSourceFormalParameterInitialization(this.defs, ctor, rawParameterNames, formalPlans);
         for (const field of this.classOwnInstanceFields(cd)) {
             if (field.parameter && ts.isIdentifier(field.parameter.name)) {
@@ -23966,19 +23878,13 @@ class Emitter {
         }
         if (ctor && ctor.body) {
             this.currentClass = name;
-            this.currentBaseClass = baseName;
             this.returnStack.push(T_VOID);
             try {
                 this.emitStmtList(this.defs, ctor.body.statements);
             } finally {
                 this.returnStack.pop();
                 this.currentClass = null;
-                this.currentBaseClass = null;
             }
-        } else if (baseName) {
-            // Default implicit super() when no ctor and base exists.
-            this.defs.line(`${baseName}_init((${baseName}_t*)self);`);
-            this.defs.line(`${name}_fields(self);`);
         }
         this.defs.line(`self->__tsc_type = "${escapeCString(typeChain)}";`);
         if (baseReceiver) {
@@ -24573,12 +24479,6 @@ class Emitter {
             `tsc_str_from_lit("${escapeCString(runtimeName)}", ${utf8ByteLen(runtimeName)}))`, cd);
         if (!initializeMembers) return { c: constructor, ty: T_VALUE };
         const definitions: string[] = [];
-        const base = this.baseClassDecl(cd);
-        if (base) {
-            const parent = this.classConstructorValue(base).c;
-            definitions.push(`if (!tsc_value_set_prototype_of(_class_constructor, ${parent})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class constructor prototype definition failed"))`);
-            definitions.push(`if (!tsc_value_set_prototype_of(_class_prototype, tsc_value_get_prop(${parent}, ${this.stringLit("prototype")}))) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class instance prototype definition failed"))`);
-        }
         definitions.push(...this.emitClassElementDefinitions(cd, "_class_constructor", "_class_prototype", true));
         definitions.push(...this.initializeClassNameEnvironment(this.nativeClassNameEnvironment(cd), "_class_constructor"));
         return { c: `({ tsc_value_t _class_constructor = ${constructor}; void* volatile _class_constructor_root = tsc_value_gc_root(_class_constructor); (void)_class_constructor_root; tsc_value_t _class_prototype = tsc_value_get_prop(_class_constructor, ${this.stringLit("prototype")}); void* volatile _class_prototype_root = tsc_value_gc_root(_class_prototype); (void)_class_prototype_root; ${definitions.join("; ")}; _class_constructor; })`, ty: T_VALUE };
@@ -33439,20 +33339,8 @@ class Emitter {
             if (environment) return this.emitDynamicValueCall(call,
                 { c: `tsc_environment_super_constructor(${environment.c})`, ty: T_VALUE });
         }
-        // super(args) inside a subclass ctor -> Base_init((Base*)self, args)
-        if (call.expression.kind === ts.SyntaxKind.SuperKeyword) {
-            if (!this.currentBaseClass) {
-                unsupported(call, "super() outside a subclass constructor");
-            }
-            const base = this.currentBaseClass;
-            const specs: SequencedCallArg[] = [];
-            // Resolve base's signature from the class decl.
-            const sig = this.checker.getResolvedSignature(call);
-            if (!sig) unsupported(call, "unresolved super signature");
-            specs.push(...this.callSpecsFromSignature(call, call.arguments, sig.getParameters()));
-            const initialize = this.emitSequencedCall(`${base}_init`, T_VOID, specs, [`(${base}_t*)self`]);
-            return { c: `({ ${initialize.c}; ${this.currentClass}_fields(self); })`, ty: T_VOID };
-        }
+        if (call.expression.kind === ts.SyntaxKind.SuperKeyword)
+            unsupported(call, "super() requires the canonical constructor Environment Record");
 
         if (ts.isIdentifier(call.expression) && this.commonJsWrapperBindingName(call.expression) === "require")
             return this.emitDynamicValueCall(call, this.emitExpr(call.expression));

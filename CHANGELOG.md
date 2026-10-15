@@ -1,3 +1,5 @@
+- Route typed static derived classes through retained constructor environments and complete actual Lists; remove physical superclass initializer predecessors.
+
 - Verify the explicit fork AOT/IPC failure on the ordinary callable owner after actual argument evaluation.
 
 - Replace child-process syntax and physical-type selectors with canonical ordinary export owners and actual-List runtime decoding.
