@@ -135,6 +135,7 @@ class SourceFacts extends Set<Atom> {
         }
         return false;
     }
+    get nonempty():boolean{for(const _ of this)return true;return false;}
     override get size(): number {let size=0; for (const _ of this) size++; return size;}
 }
 interface Cell { readonly id: number; readonly values: SourceFacts; readonly users: Set<Rule>; }
@@ -653,7 +654,7 @@ class SourceValueFlow {
         else {
             let rule!: Rule;
             rule = this.rule([...(owner ? [owner.active] : source?[source]:[]), ...guards.map(guard => guard.condition)],()=>{
-                if ((!owner || owner.active.values.size) && (!source || source.values.size) && this.guardsAllow(guards,rule)) action();
+                if ((!owner || owner.active.values.nonempty) && (!source || source.values.nonempty) && this.guardsAllow(guards,rule)) action();
             });
         }
     }
@@ -866,7 +867,7 @@ class SourceValueFlow {
         if (atom.tag !== "unknown" || !atom.origin || !context) return true;
         const effect = atom.origin;
         const activation=this.enclosingActivation(context);
-        if(activation&&activation.kind==="ordinary"&&!this.activationTiming(activation).values.size&&!this.repeatedActivationContext(context)&&!this.dynamicContext(effect)){
+        if(activation&&activation.kind==="ordinary"&&!this.activationTiming(activation).values.nonempty&&!this.repeatedActivationContext(context)&&!this.dynamicContext(effect)){
             const origins=[...activation.active.values];
             if(origins.length&&origins.every(origin=>origin.tag==="unknown"&&origin.origin&&origin.origin!==effect&&
                 !this.dynamicContext(origin.origin)&&!this.effectVisible(atom,origin.origin,true)))return false;
@@ -915,7 +916,7 @@ class SourceValueFlow {
                 if(prior.kind!=="capture"||prior.argumentsRead!==argumentsRead||this.sourceFile(prior.context)!==this.sourceFile(context)||prior.context.getEnd()>context.getStart())return false;
                 const before=this.enclosingActivation(prior.context),after=this.enclosingActivation(context);
                 return before===after&&!this.repeatedActivationContext(prior.context)&&!this.repeatedActivationContext(context)&&
-                    (!before||!this.activationTiming(before).values.size);
+                    (!before||!this.activationTiming(before).values.nonempty);
             }))return source;
             let contexts=this.readCaptures.get(source);if(!contexts){contexts=new Map();this.readCaptures.set(source,contexts);}
             let phases=contexts.get(context);if(!phases){phases=new Map();contexts.set(context,phases);}
@@ -1277,7 +1278,7 @@ class SourceValueFlow {
         if(!creation||this.repeatedActivationContext(creation)){this.copy(this.opaqueMutation,owner.shape);return;}
         this.rule([this.opaqueMutation,...(activation?[activation.active,this.activationTiming(activation)]:[])],()=>{
             for(const atom of this.opaqueMutation.values){
-                if(creation&&(!activation||!this.activationTiming(activation).values.size)&&atom.tag==="unknown"&&atom.origin&&!this.dynamicContext(atom.origin)&&!this.repeatedActivationContext(creation)){
+                if(creation&&(!activation||!this.activationTiming(activation).values.nonempty)&&atom.tag==="unknown"&&atom.origin&&!this.dynamicContext(atom.origin)&&!this.repeatedActivationContext(creation)){
                     const points=activation?.kind==="ordinary"?[...activation.active.values].map(origin=>origin.tag==="unknown"?origin.origin:undefined):activation?[undefined]:[creation];
                     if(points.length&&points.every(point=>{
                         if(!point||this.dynamicContext(point))return false;
@@ -1449,7 +1450,7 @@ class SourceValueFlow {
             this.rule([base],()=>{
                 for(const atom of base.values)if(!this.ordinaryOwner(atom)&&atom!==this.primitive(null)&&atom!==this.primitive(undefined)&&
                     (atom.tag==="primitive"||atom.tag==="text-operation"||atom.tag==="non-string"||atom.tag==="unknown-string"))this.publish(primitives,atom);
-                if(opened||!primitives.values.size)return;opened=true;
+                if(opened||!primitives.values.nonempty)return;opened=true;
                 const conversion=ts.setTextRange(ts.factory.createEmptyStatement(),context);(conversion as ts.Node&{parent:ts.Node}).parent=context;
                 this.writeProperty(this.objectValue(primitives,conversion),key,value,unknownGlobal,mode,context,receiver);
             });
@@ -1497,9 +1498,9 @@ class SourceValueFlow {
                 else {
                     const presence=this.presence(owner,key);
                     if(context)this.ownPresence(owner,key).writes.set(context,{base,receiver,mode});
-                    if(mode==="set"){const location=this.ownPresence(owner,key);if(!location.initial&&!location.enumerable.values.size)this.publish(location.enumerable,this.primitive(true));}
+                    if(mode==="set"){const location=this.ownPresence(owner,key);if(!location.initial&&!location.enumerable.values.nonempty)this.publish(location.enumerable,this.primitive(true));}
                     if(mode==="delete")this.publish(presence,this.primitive(false));
-                    if (!presence.values.size) this.publish(presence,this.primitive(false));
+                    if (!presence.values.nonempty) this.publish(presence,this.primitive(false));
                     this.publish(presence,this.primitive(true));
                     this.copy(value,this.field(owner,key));
                     const index = typeof key === "string" ? Number(key) : NaN;
@@ -1552,7 +1553,7 @@ class SourceValueFlow {
                     opaque ||= this.opaqueShape(current,context);
                     if (current.prototype) {
                         this.watch(rule, current.prototype);
-                        ready &&= current.prototype.values.size > 0;
+                        ready &&= current.prototype.values.nonempty;
                         for (const prototype of current.prototype.values) {
                             const parent = this.ordinaryOwner(prototype);
                             if (parent) worklist.push(parent);
@@ -1734,7 +1735,7 @@ class SourceValueFlow {
         while (pending.length) {
             const cell = pending.pop()!;
             if (states.has(cell) || this.primitiveReadyCache.has(cell)) continue;
-            const state:PrimitiveReadiness = {pending:!cell.values.size,pendingSource:false,unresolved:false,scalarUnresolved:false};
+            const state:PrimitiveReadiness = {pending:!cell.values.nonempty,pendingSource:false,unresolved:false,scalarUnresolved:false};
             for (const value of cell.values) {
                 if (value.tag === "text-operation") for (const part of value.parts) pending.push(part);
                 else if (value.tag === "pending-source") state.pending = state.pendingSource = true;
@@ -1840,7 +1841,7 @@ class SourceValueFlow {
         return result;
     }
     private computedKeyDomain(key: Cell): {numeric: boolean; keys: readonly SourcePropertyKey[]} | null {
-        if (!key.values.size) return null;
+        if (!key.values.nonempty) return null;
         let numeric = false;
         const keys = new Set<SourcePropertyKey>();
         for (const atom of key.values) {
@@ -2062,7 +2063,7 @@ class SourceValueFlow {
                     else if(atom.tag==="unknown"||atom.tag==="opaque-object") {this.publish(this.globalMutation,this.unknown);this.opaqueEffect(context);}
                     else if(atom.tag!=="abrupt"&&atom.tag!=="pending-source"){const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context!));}
                 }}
-                if(data&&getter.values.size&&setter.values.size)this.writeProperty(base,name,value,true,"define",context);
+                if(data&&getter.values.nonempty&&setter.values.nonempty)this.writeProperty(base,name,value,true,"define",context);
             }
         });
     }
@@ -2123,11 +2124,11 @@ class SourceValueFlow {
                 for(const name of names){
                     if(name===null){incomplete();continue;}
                     const presence=this.propertyPresence(owner,name,context);this.watch(rule,presence);
-                    if(!presence.values.size)continue;
+                    if(!presence.values.nonempty)continue;
                     const data=this.field(owner,name);this.watch(rule,data);
                     const accessor=owner.accessors.get(name);
                     const present=presence.values.has(this.primitive(true));
-                    if(!present && !data.values.size && !accessor){
+                    if(!present && !data.values.nonempty && !accessor){
                         if(key && atom.tag==="object")this.publish(result,this.primitive(undefined));
                         continue;
                     }
@@ -2142,7 +2143,7 @@ class SourceValueFlow {
                     if(accessor){
                         for(const kind of ["get","set"] as const){this.watch(rule,accessor[kind]);this.defineField(record.owner,kind,accessor[kind]);}
                     }
-                    if(data.values.size || !accessor){
+                    if(data.values.nonempty || !accessor){
                         this.defineField(record.owner,"value",data);
                         this.defineBooleanField(record.owner,"writable");
                     }
@@ -2259,7 +2260,7 @@ class SourceValueFlow {
             if (key === "NaN") this.publish(cell,this.primitive(NaN));
             if (key === "Infinity") this.publish(cell,this.primitive(Infinity));
             const descriptor = runtimeGlobalBindings.get(key);
-            if (descriptor?.normalResult && cell.values.size === 0) {
+            if (descriptor?.normalResult && !cell.values.nonempty) {
                 const fields: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell()};this.copy(this.opaqueMutation,fields.shape);
                 for (const [name, operation] of INITIAL_SOURCE_OPERATIONS.get(key) ?? []) {
                     const value = this.newCell();this.publish(value,this.operation(operation));this.defineField(fields,name,value);
@@ -2377,7 +2378,7 @@ class SourceValueFlow {
         const iterable=this.newCell();let opened=false;
         this.rule([input],()=>{
             for(const atom of input.values)if(atom!==this.primitive(null)&&atom!==this.primitive(undefined))this.publish(iterable,atom);
-            if(opened||!iterable.values.size)return;opened=true;
+            if(opened||!iterable.values.nonempty)return;opened=true;
             const elements=this.iteratorElements(iterable,context),adder=this.property(result,kind==="Map"?"set":"add",context);
             if(kind==="Set")this.invoke(context,adder,result,[{cell:elements,spread:false}],this.newCell());
             else {
@@ -2500,13 +2501,13 @@ class SourceValueFlow {
     }
     private setComposition(operation:string,receiver:Cell,input:Cell,context:ts.Node,result:Cell):void {
         const branded=this.newCell();this.rule([receiver],()=>{for(const atom of receiver.values){if(this.ordinaryOwner(atom)?.collections?.has('Set'))this.publish(branded,atom);else {if(atom.tag==='unknown'||atom.tag==='opaque-object'){this.publish(branded,atom);this.publish(result,this.unknown);this.opaqueEffect(context);}const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}}});
-        const accepted=this.newCell();this.rule([branded],()=>{if(branded.values.size)this.copy(input,accepted);});
+        const accepted=this.newCell();this.rule([branded],()=>{if(branded.values.nonempty)this.copy(input,accepted);});
         const other=this.setLikeRecord(accepted,context),predicate=['SUBSET','SUPERSET','DISJOINT'].includes(operation);
         const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.collectionPrototype('Set')};
         const output:SourceCollectionRecord={kind:'Set',entries:new Map(),changes:this.newCell(),shape:this.newCell()};owner.collections=new Map([['Set',output]]);this.copy(this.opaqueMutation,output.shape);
         const source=this.collectionView(branded,'Set','VALUES',context),seen=new Set<SourceCollectionRecord>();let opened=false;
         let rule!:Rule;rule=this.rule([branded,other.normal,source.elements,source.activity],()=>{
-            if(!branded.values.size||!other.normal.values.has(this.primitive(true)))return;
+            if(!branded.values.nonempty||!other.normal.values.has(this.primitive(true)))return;
             if(predicate){this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));}else this.publish(result,{tag:'object',owner});
             for(const atom of branded.values){const record=this.ordinaryOwner(atom)?.collections?.get('Set');if(!record)continue;this.watch(rule,record.changes);this.watch(rule,record.shape);
                 if(this.opaqueShape({fields:new Map(),accessors:new Map(),shape:record.shape},context))this.publish(output.shape,this.unknown);
@@ -2617,7 +2618,7 @@ class SourceValueFlow {
         const result=this.newCell(),plain=this.newCell(),owner=this.owner(context);calls.set(signature,result);owner.prototype??=this.newCell();
         this.returnTransforms.set(result,{inputs:[input,...(newTarget?[newTarget]:[])],evaluate:inputs=>this.objectValue(inputs[0]!,context,inputs[1])});
         const prototype=newTarget?this.property(newTarget,"prototype",context):this.objectPrototype();
-        this.rule([prototype,plain],()=>{if(!plain.values.size)return;for(const atom of prototype.values)if(this.ordinaryOwner(atom)||atom.tag==="unknown"||atom.tag==="opaque-object")this.publish(owner.prototype!,atom);else if(atom.tag!=="abrupt"&&atom.tag!=="pending-source")this.copy(this.objectPrototype(),owner.prototype!);});
+        this.rule([prototype,plain],()=>{if(!plain.values.nonempty)return;for(const atom of prototype.values)if(this.ordinaryOwner(atom)||atom.tag==="unknown"||atom.tag==="opaque-object")this.publish(owner.prototype!,atom);else if(atom.tag!=="abrupt"&&atom.tag!=="pending-source")this.copy(this.objectPrototype(),owner.prototype!);});
         const inputs=new Map<Atom,Cell>();const cell=(atom:Atom)=>{let value=inputs.get(atom);if(!value){value=this.newCell();inputs.set(atom,value);this.publish(value,atom);}return value;};
         let convert!:Rule;convert=this.rule([input,...(newTarget?[newTarget]:[])],()=>{
             const targets=newTarget?[...newTarget.values]:[],standard=!newTarget||targets.some(atom=>atom.tag==="builtin"&&atom.name==="Object"),custom=targets.some(atom=>atom.tag!=="builtin"||atom.name!=="Object");
@@ -2830,7 +2831,7 @@ class SourceValueFlow {
             }
             this.watch(rule,objects);
             receiver=objects;
-            if(!receiver.values.size)return empty;
+            if(!receiver.values.nonempty)return empty;
         }
         const literal=[...receiver.values].map(atom=>atom.tag==="object"?this.literalLists.get(atom.owner):undefined);
         if(literal.length===1&&literal[0]&&!literal[0].holes.size){
@@ -2892,7 +2893,7 @@ class SourceValueFlow {
             const names=this.ownerKeys(owner,rule);if(names===null||names===undefined)return names;for(const key of names)add(key);
             if(owner.prototype){
                 this.watch(rule,owner.prototype);
-                if(!owner.prototype.values.size)return undefined;
+                if(!owner.prototype.values.nonempty)return undefined;
                 for(const prototype of owner.prototype.values){
                     if(prototype===this.primitive(null))continue;
                     if(prototype.tag==="pending-source")return undefined;
@@ -3374,7 +3375,7 @@ class SourceValueFlow {
         const firstOwner = this.ordinaryOwner(atom), worklist = firstOwner ? [firstOwner] : [];
         if(atom.tag==="global" && typeof key === "string" && !firstOwner!.accessors.has(key)) {
             const binding=this.realmBinding(atom.realm,key);this.copy(binding,this.field(firstOwner!,key));
-            if(runtimeGlobalBindings.has(key)||binding.values.size)this.ownPresence(firstOwner!,key).initial=true;
+            if(runtimeGlobalBindings.has(key)||binding.values.nonempty)this.ownPresence(firstOwner!,key).initial=true;
         }
         const visited = new Set<ObjectOwner>();
         while (worklist.length) {
@@ -3395,7 +3396,7 @@ class SourceValueFlow {
             }
             const presence=this.propertyPresence(owner,key,context);
             if (rule) this.watch(rule,presence);
-            if(!presence.values.size)continue;
+            if(!presence.values.nonempty)continue;
             // The native builtin's unrepresented own members are opaque.
             // A closed prototype chain must not turn them into known absence.
             const closedIndex=owner.closedIndices&&typeof key==="string"&&Number.isSafeInteger(Number(key))&&Number(key)>=0&&String(Number(key))===key;
@@ -3592,7 +3593,7 @@ class SourceValueFlow {
         // those same cells; the rule worklist closes their dependencies.
         const alternatives: Array<readonly Cell[] | null> = [];
         const method=this.iterationMethod(cell,context);
-        if(!method.values.size)return alternatives;
+        if(!method.values.nonempty)return alternatives;
         if([...method.values].some(value=>value.tag!=="operation"||value.operation!=="array-values"))return [null];
         for (const atom of cell.values) {
             if (atom.tag !== "object" || !atom.owner.listLength) {
@@ -3744,7 +3745,7 @@ class SourceValueFlow {
                     const names:string[]=[],choices:Primitive[][]=[];let ready=true;
                     for(const key of keys){
                         const location=this.ownPresence(owner,key),presence=this.propertyPresence(owner,key,context);this.watch(open,presence);
-                        if(!presence.values.size){ready=false;continue;}
+                        if(!presence.values.nonempty){ready=false;continue;}
                         if(!presence.values.has(this.primitive(true)))continue;
                         const enumerable=this.primitiveState(location.enumerable,open,true);if(enumerable.pending&&!enumerable.unresolved){ready=false;continue;}
                         if(!enumerable.proof.primitiveComplete){fail(result);ready=false;continue;}
@@ -3762,8 +3763,8 @@ class SourceValueFlow {
                         if(previous){const prior=previous;let advance!:Rule;advance=this.rule([prior],()=>{const state=this.primitiveState(prior,advance,true);if(state.pending&&!state.unresolved)return;if(state.proof.values.length||!state.proof.primitiveComplete&&state.unresolved)this.publish(selected,atom);});}else this.publish(selected,atom);
                         const child=visit(selected,key,unmodified?record?.children.get(key)??null:null,path),stored=this.newCell(),removed=this.newCell();
                         this.rule([child],()=>{for(const value of child.values){if(value.tag==="abrupt"||value.tag==="pending-source")continue;if(value===this.primitive(undefined))this.publish(removed,value);else this.publish(stored,value);}});
-                        this.rule([stored],()=>{if(stored.values.size)this.writeProperty(selected,key,stored,true,"define",context);});
-                        this.rule([removed],()=>{if(removed.values.size)this.writeProperty(selected,key,removed,true,"delete",context);});
+                        this.rule([stored],()=>{if(stored.values.nonempty)this.writeProperty(selected,key,stored,true,"define",context);});
+                        this.rule([removed],()=>{if(removed.values.nonempty)this.writeProperty(selected,key,removed,true,"delete",context);});
                         previous=child;
                     }
                     if(previous){const prior=previous;let finish!:Rule;finish=this.rule([prior],()=>{const state=this.primitiveState(prior,finish,true);if(state.pending&&!state.unresolved)return;if(state.proof.values.length||!state.proof.primitiveComplete&&state.unresolved){this.publish(callbackValue,atom);this.copy(contextValue,callbackContext);}});}
@@ -3916,14 +3917,14 @@ class SourceValueFlow {
                             if(selection.length===null&&plan.keys===null){
                                 const location=this.ownPresence(owner,name),presence=this.propertyPresence(owner,name,context);let choose!:Rule;
                                 choose=this.rule([active,presence,location.enumerable],()=>{
-                                    if(!active.values.size)return;
+                                    if(!active.values.nonempty)return;
                                     if(presence.values.has(this.primitive(false)))this.publish(child,this.primitive(undefined));
                                     if(!presence.values.has(this.primitive(true)))return;
                                     const enumerable=new Set<boolean>(),state=this.primitiveState(location.enumerable,choose,true);if(state.pending&&!state.unresolved)return;if(!state.proof.primitiveComplete){if(presence.values.has(this.primitive(true)))fail(child);return;}for(const value of state.proof.values)enumerable.add(Boolean(value));
                                     if(presence.values.has(this.primitive(false))||enumerable.has(false))this.publish(child,this.primitive(undefined));
                                     if(presence.values.has(this.primitive(true))&&enumerable.has(true))this.copy(cell(atom),selected);
                                 });
-                            }else this.rule([active],()=>{if(active.values.size)this.copy(cell(atom),selected);});
+                            }else this.rule([active],()=>{if(active.values.nonempty)this.copy(cell(atom),selected);});
                             const read=this.property(selected,name,context),serialized=serialize(read,selected,name,plan,path,level+1);this.copy(serialized,child);predecessor=child;
                         }
                         this.publish(output,{tag:"text-operation",operation:"json-container",parts,keys:selection.keys,arrayLength:selection.length,level});
@@ -4726,7 +4727,7 @@ class SourceValueFlow {
                     }
                     if (atom.tag === "operation" && PROPERTY_MUTATIONS.has(atom.operation)) {
                         const activation = this.enclosingActivation(node);
-                        if (activation) {this.watch(rule,activation.active);if(!activation.active.values.size)continue;}
+                        if (activation) {this.watch(rule,activation.active);if(!activation.active.values.nonempty)continue;}
                     }
                     if (atom.tag === "bound") {
                         if (invocation.boundPath.has(atom)) continue;
@@ -5198,7 +5199,7 @@ class SourceValueFlow {
                                 this.defineField(fields,"length",boundLength);
                                 let lengthRule!:Rule;
                                 lengthRule=this.rule([length],()=>{
-                                    if(!length.values.size)return;
+                                    if(!length.values.nonempty)return;
                                     this.watchText(lengthRule,length);
                                     const proof=this.primitiveChoiceProof(length);
                                     if(!argv || [...length.values].some(value=>value.tag==="unknown"||value.tag==="non-string"))this.publish(boundLength,this.nonString);
@@ -5336,7 +5337,7 @@ class SourceValueFlow {
                 positions.delete(task.cell); path.pop();
                 const choices = new Map<Atom, Primitive>();
                 const add = (value: Primitive): void => {choices.set(this.primitive(value),value);};
-                let primitiveComplete = task.cell.values.size > 0, textComplete = true;
+                let primitiveComplete = task.cell.values.nonempty, textComplete = true;
                 for (const atom of task.cell.values) {
                     if (atom.tag === "primitive") add(atom.value);
                     else if (atom.tag === "abrupt") continue;
@@ -5462,23 +5463,23 @@ class SourceValueFlow {
                 // Unresolved external bindings are value inputs, rather than
                 // owner absence dependencies. Wake their guarded mutations
                 // before sealing any contextual own-location absence.
-                for(const [node,cell]of this.cells)if(ts.isIdentifier(node)&&!cell.values.size&&this.isAmbientIdentifier(node)){
+                for(const [node,cell]of this.cells)if(ts.isIdentifier(node)&&!cell.values.nonempty&&this.isAmbientIdentifier(node)){
                     const origins=this.sourceOrigins.get(this.sourceFile(node));
-                    if(origins&&!origins.values.size)continue;
+                    if(origins&&!origins.values.nonempty)continue;
                     const binding=this.binding(node);
                     if(!binding.values.has(this.unknown)){this.publish(binding,this.unknown);changed=true;}
                 }
                 if(changed)continue;
                 this.presenceClosed=true;for(const rule of this.presenceRules)this.schedule(rule);continue;
             }
-            for (const cell of this.exceptionCells) if (!cell.values.size) {this.publish(cell, this.abrupt); changed = true;}
-            for (const cell of this.accessorSlots) if (!cell.values.size) {this.publish(cell, this.primitive(undefined)); changed = true;}
+            for (const cell of this.exceptionCells) if (!cell.values.nonempty) {this.publish(cell, this.abrupt); changed = true;}
+            for (const cell of this.accessorSlots) if (!cell.values.nonempty) {this.publish(cell, this.primitive(undefined)); changed = true;}
             if (changed) continue;
-            for (const [node, cell] of this.cells) if (!cell.values.size) {
+            for (const [node, cell] of this.cells) if (!cell.values.nonempty) {
                 const activation = this.enclosingActivation(node);
-                if (activation && !activation.active.values.size) continue;
+                if (activation && !activation.active.values.nonempty) continue;
                 const origins=this.sourceOrigins.get(this.sourceFile(node));
-                if(!activation&&origins&&!origins.values.size)continue;
+                if(!activation&&origins&&!origins.values.nonempty)continue;
                 if(this.guards(node).some(guard=>{
                     const proof=this.primitiveChoiceProof(guard.condition);
                     return proof.primitiveComplete&&!proof.values.some(value=>!!value===guard.truthy);
@@ -5499,7 +5500,7 @@ class SourceValueFlow {
                 const { source, operation, unknown } = invocation;
                 const proof = source ? this.primitiveChoiceProof(source) : undefined;
                 const primitives = proof?.values ?? [];
-                const unresolved = unknown || source && (!source.values.size ||
+                const unresolved = unknown || source && (!source.values.nonempty ||
                     [...source.values].some(value => value.tag === "unknown" || value.tag === "pending-source") ||
                     !proof!.textComplete || operation !== "eval" && !proof!.primitiveComplete);
                 const choices = unresolved ? null : source

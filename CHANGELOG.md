@@ -1,3 +1,5 @@
+- Stop source fact existence queries on the first reachable value instead of counting the entire dependency graph.
+
 - Register scoped String replacement protocol and UTF-16 position-worklist evidence with independent Node/native and pinned artifact-byte validation.
 
 - Retain source mutation origins on canonical filtered dependency edges and share capture-phase origin projections.
