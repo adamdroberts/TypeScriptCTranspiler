@@ -1,3 +1,5 @@
+- Classify reviewed historical matchAll metadata with distinct source-qualified intrinsic, iterator and prototype owners.
+
 - Resolve unresolved Test262 metadata through reviewed source-qualified path rules while retaining exact anchor precedence and fail-closed unmatched owners.
 
 - Register scoped String replaceAll evidence on the shared symbol protocol and UTF-16 position worklist.

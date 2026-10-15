@@ -1162,11 +1162,11 @@ export async function loadAndValidateMatrix(test262Checkout?: string): Promise<{
                 (
                     typeof esid === "string" &&
                     esid.trim() !== "" &&
-                    (esidClassification === "informative" || esidClassification === "example")
+                    (!esidClause || esidClassification === "informative" || esidClassification === "example")
                 )
             )
         ) {
-            throw new Error("path rules must be unique exact semantic directory prefixes; an esid qualifier may name only pinned non-normative material");
+            throw new Error("path rules must be unique exact semantic directory prefixes; an esid qualifier may name only unresolved or pinned non-normative metadata");
         }
         prefixes.add(key);
     }

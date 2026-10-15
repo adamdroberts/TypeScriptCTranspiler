@@ -555,6 +555,33 @@
       ],
       "reason": "Legacy scenarios without current esid in this pinned semantic directory exercise the String replacement intrinsic, including historical ES5 and ES6 source records. The rule applies only when esid is absent, preserving exact RegExp replacement and standard-built-in construction metadata as their separate canonical owners.",
       "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "prefix": "test/built-ins/RegExp/prototype/Symbol.matchAll/",
+      "esid": "pending",
+      "clauses": [
+        "sec-regexp-prototype-%symbol.matchall%"
+      ],
+      "reason": "Reviewed pinned historical pending sources exercise the RegExp matchAll intrinsic, including ordered SpeciesConstructor/flags/Construct/lastIndex intake and intrinsic metadata. The source-qualified rule preserves exact normative standard-built-in construction metadata; it does not interpret pending globally.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "prefix": "test/built-ins/RegExpStringIteratorPrototype/next/",
+      "esid": "pending",
+      "clauses": [
+        "sec-%regexpstringiteratorprototype%.next"
+      ],
+      "reason": "Reviewed pinned pending sources execute the ordinary RegExp String Iterator next operation, live RegExpExec, empty-match advancement, abrupt completion, brand and method metadata. The structural next directory identifies one exact owner independently of fixture names and cardinality.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "prefix": "test/built-ins/RegExpStringIteratorPrototype/",
+      "esid": "pending",
+      "clauses": [
+        "sec-%regexpstringiteratorprototype%-object"
+      ],
+      "reason": "Reviewed pinned pending prototype sources retain the IteratorPrototype ancestry; the more specific next semantic directory keeps its own owner. The source-hashed tag ambiguity override records its exact property clause.",
+      "reviewedBy": "tsc2c compliance review"
     }
   ],
   "testOverrides": [
@@ -892,6 +919,16 @@
         "sec-date.now"
       ],
       "reason": "The pinned generic standard-built-in metadata establishes constructability rules but does not identify Date.now; retain that generic clause and add the exact intrinsic owner backed by this source hash.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "test": "test/built-ins/RegExpStringIteratorPrototype/Symbol.toStringTag.js",
+      "sourceSha256": "f54eee14af550f0bbe0c68a2860794170428c71ad58b06ad4b5ce1b8b2f635a5",
+      "reasonKind": "ambiguous-metadata",
+      "clauses": [
+        "sec-%regexpstringiteratorprototype%-%symbol.tostringtag%"
+      ],
+      "reason": "The pinned pending metadata and prototype semantic directory do not identify the exact tag property clause. Reviewed source asserts the RegExp String Iterator String value and complete descriptor attributes; add its pinned exact property owner while retaining the prototype and independently mapped Symbol owner. Historical info text says String Iterator, while the actual source and pinned clause require RegExp String Iterator.",
       "reviewedBy": "tsc2c compliance review"
     }
   ]
