@@ -3,6 +3,11 @@ export interface RegexpPatternDepthSpec {
     depth: number;
 }
 
+export interface RegexpMatchAllIteratorWorklistSpec {
+    generator: "regexp-match-all-iterator-worklist";
+    depth: number;
+}
+
 export interface StringReplacementPositionWorklistSpec {
     generator: "string-replacement-position-worklist";
     depth: number;
@@ -291,6 +296,7 @@ export type GeneratedCaseSpec =
     | RegexpPatternDepthSpec
     | RegexpSplitCaptureWorklistSpec
     | RegexpReplaceCaptureWorklistSpec
+    | RegexpMatchAllIteratorWorklistSpec
     | StringReplacementPositionWorklistSpec
     | StringSubstitutionTokenWorklistSpec
     | AsyncLeadingAwaitChainSpec
@@ -573,6 +579,11 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     if(spec.generator==='module-failure-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<2||!['load','link'].includes(String(spec.phase)))throw new Error(`invalid generated Module failure spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth,phase:spec.phase as 'load'|'link'};
+    }
+    if (spec.generator === "regexp-match-all-iterator-worklist") {
+        if (typeof spec.depth !== "number" || !Number.isInteger(spec.depth) || spec.depth < 2)
+            throw new Error(`invalid generated lazy RegExp iterator worklist spec ${filename}`);
+        return { generator: spec.generator, depth: spec.depth };
     }
     if (spec.generator === "string-replacement-position-worklist") {
         if (typeof spec.depth !== "number" || !Number.isInteger(spec.depth) || spec.depth < 2)
@@ -2070,6 +2081,33 @@ const valid = evaluated === ${spec.width} && raw.rawJSON === text &&
     Object.isFrozen(raw) && Object.getPrototypeOf(raw) === null;
 console.log("raw JSON text width:", valid);
 `;
+        case "regexp-match-all-iterator-worklist":
+            return [
+                "const depth: number = DEPTH;",
+                "const source = 'a😀'.repeat(depth);",
+                "const regexp = /a/dg;",
+                "const iterator = source.matchAll(regexp);",
+                "const next = iterator.next;",
+                "let chain: any = null;",
+                "for (let index = 0; index < depth; index++) chain = { iterator, next, previous: chain };",
+                "let cursor: any = chain, valid = iterator[Symbol.iterator]() === iterator;",
+                "for (let index = 0; index < depth; index++) {",
+                "    const step: any = cursor.next.call(cursor.iterator);",
+                "    valid = valid && !step.done && step.value[0] === 'a' && step.value.index === index * 3 && step.value.input === source && step.value.indices[0][0] === index * 3 && step.value.indices[0][1] === index * 3 + 1;",
+                "    cursor = cursor.previous;",
+                "}",
+                "valid = valid && cursor === null && next.call(iterator).done && next.call(iterator).done && regexp.lastIndex === 0;",
+                "let index = 0, calls = 0;",
+                "const matcher: any = { exec() { calls++; return index < depth ? { 0: 'a', index: index++ * 3, length: 1 } : null; } };",
+                "const original: any = { flags: 'g', lastIndex: 0, constructor: { [Symbol.species]: function() { return matcher; } } };",
+                "const custom: any = RegExp.prototype[Symbol.matchAll].call(original, source);",
+                "valid = valid && calls === 0;",
+                "for (let position = 0; position < depth; position++) {",
+                "    const step: any = custom.next(); valid = valid && !step.done && step.value.index === position * 3;",
+                "}",
+                "valid = valid && custom.next().done && custom.next().done && calls === depth + 1;",
+                "console.log('lazy iterator worklist:', valid);"
+            ].join("\n").replace("DEPTH",String(spec.depth))+"\n";
         case "string-replacement-position-worklist":
             return [
                 "const depth: number = DEPTH;",

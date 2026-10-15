@@ -5802,7 +5802,8 @@
       "targets": [
         "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist",
         "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist",
-        "sec-getsubstitution#utf16-template-token-and-live-named-get-worklist"
+        "sec-getsubstitution#utf16-template-token-and-live-named-get-worklist",
+        "sec-regexp-prototype-%symbol.matchall%#species-flags-matcher-and-lazy-iterator-owner"
       ]
     },
     {
@@ -5817,7 +5818,8 @@
       "id": "runtime/tsc_regexp_api.c#regexp_exec_value",
       "targets": [
         "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist",
-        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist"
+        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist",
+        "sec-%regexpstringiteratorprototype%.next#brand-live-exec-utf16-advance-and-completion"
       ]
     },
     {
@@ -5825,14 +5827,16 @@
       "id": "runtime/tsc_regexp_api.c#regexp_set_last_index_value",
       "targets": [
         "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist",
-        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist"
+        "sec-regexp.prototype-%symbol.replace%#exec-result-capture-and-substitution-worklist",
+        "sec-regexp-prototype-%symbol.matchall%#species-flags-matcher-and-lazy-iterator-owner"
       ]
     },
     {
       "kind": "implementation",
       "id": "runtime/tsc_value.c#tsc_value_species_constructor",
       "targets": [
-        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist"
+        "sec-regexp.prototype-%symbol.split%#species-exec-capture-and-utf16-cursor-worklist",
+        "sec-regexp-prototype-%symbol.matchall%#species-flags-matcher-and-lazy-iterator-owner"
       ]
     },
     {
@@ -6002,6 +6006,79 @@
       "id": "runtime/tsc_value.c#string_require_global_regexp",
       "targets": [
         "sec-string.prototype.replaceall#regexp-gate-symbol-dispatch-and-complete-position-worklist"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/regexp-match-all.property.test.ts",
+      "targets": [
+        "sec-regexp-prototype-%symbol.matchall%#species-flags-matcher-and-lazy-iterator-owner",
+        "sec-%regexpstringiteratorprototype%.next#brand-live-exec-utf16-advance-and-completion"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "regexp_match_all_iterator_worklist",
+      "targets": [
+        "sec-regexp-prototype-%symbol.matchall%#species-flags-matcher-and-lazy-iterator-owner",
+        "sec-%regexpstringiteratorprototype%.next#brand-live-exec-utf16-advance-and-completion"
+      ],
+      "stressReview": {
+        "dimension": "retained ordinary RegExp String Iterator owner graph and complete lazy traversal",
+        "parameter": "depth",
+        "representativeHighDepth": 4096,
+        "rationale": "One input borrows next through a deep retained owner chain and traverses native/custom exec results with UTF-16 positions and terminal completion; no result-count family or count-dependent lowering.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "regexp_match_all_protocols",
+      "targets": [
+        "sec-regexp-prototype-%symbol.matchall%#species-flags-matcher-and-lazy-iterator-owner",
+        "sec-%regexpstringiteratorprototype%.next#brand-live-exec-utf16-advance-and-completion"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_regexp_api.c#tsc_regexp_match_all_apply",
+      "targets": [
+        "sec-regexp-prototype-%symbol.matchall%#species-flags-matcher-and-lazy-iterator-owner"
+      ]
+    },
+    {
+      "kind": "property",
+      "id": "tests/property/regexp-iterator-gc.property.test.ts",
+      "targets": [
+        "sec-%regexpstringiteratorprototype%.next#brand-live-exec-utf16-advance-and-completion"
+      ]
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#RegExpStringIterator",
+      "targets": [
+        "sec-%regexpstringiteratorprototype%.next#brand-live-exec-utf16-advance-and-completion"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_regexp_api.c#regexp_string_iterator_next",
+      "targets": [
+        "sec-%regexpstringiteratorprototype%.next#brand-live-exec-utf16-advance-and-completion"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_regexp_api.c#regexp_string_iterator_complete",
+      "targets": [
+        "sec-%regexpstringiteratorprototype%.next#brand-live-exec-utf16-advance-and-completion"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_regexp_api.c#regexp_advance",
+      "targets": [
+        "sec-%regexpstringiteratorprototype%.next#brand-live-exec-utf16-advance-and-completion"
       ]
     }
   ]

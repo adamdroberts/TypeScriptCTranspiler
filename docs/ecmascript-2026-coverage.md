@@ -1711,7 +1711,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-get-regexp.prototype.hasIndices` — get RegExp.prototype.hasIndices: exact disposition and partitions missing.
   - [ ] `sec-get-regexp.prototype.ignorecase` — get RegExp.prototype.ignoreCase: exact disposition and partitions missing.
   - [ ] `sec-regexp.prototype-%symbol.match%` — RegExp.prototype [ %Symbol.match% ] ( _string_ ): exact disposition and partitions missing.
-  - [ ] `sec-regexp-prototype-%symbol.matchall%` — RegExp.prototype [ %Symbol.matchAll% ] ( _string_ ): exact disposition and partitions missing.
+  - [ ] `sec-regexp-prototype-%symbol.matchall%` — RegExp.prototype [ %Symbol.matchAll% ] ( _string_ )
+    - [ ] `species-flags-matcher-and-lazy-iterator-owner` (intrinsic, unbounded): Ordered species/flags/constructor/lastIndex and one ordinary lazy iterator owner.
   - [ ] `sec-get-regexp.prototype.multiline` — get RegExp.prototype.multiline: exact disposition and partitions missing.
   - [ ] `sec-regexp.prototype-%symbol.replace%` — RegExp.prototype [ %Symbol.replace% ] ( _string_, _replaceValue_ )
     - [ ] `exec-result-capture-and-substitution-worklist` (intrinsic, unbounded): Ordered receiver/input/replacement/flags conversion, RegExpExec result collection, live capture and callback Lists, GetSubstitution, UTF-16 cursor advancement, abrupt completion and intrinsic metadata.
@@ -1739,7 +1740,8 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-regexp-string-iterator-objects` — RegExp String Iterator Objects: exact disposition and partitions missing.
   - [ ] `sec-createregexpstringiterator` — CreateRegExpStringIterator ( _R_: an Object, _S_: a String, _global_: a Boolean, _fullUnicode_: a Boolean, ): an Object: exact disposition and partitions missing.
   - [ ] `sec-%regexpstringiteratorprototype%-object` — The %RegExpStringIteratorPrototype% Object: exact disposition and partitions missing.
-  - [ ] `sec-%regexpstringiteratorprototype%.next` — %RegExpStringIteratorPrototype%.next ( ): exact disposition and partitions missing.
+  - [ ] `sec-%regexpstringiteratorprototype%.next` — %RegExpStringIteratorPrototype%.next ( )
+    - [ ] `brand-live-exec-utf16-advance-and-completion` (intrinsic, unbounded): Branded next, live RegExpExec, exact returned match, global/single and UTF-16 empty advancement, abrupt retry and terminal completion.
   - [ ] `sec-%regexpstringiteratorprototype%-%symbol.tostringtag%` — %RegExpStringIteratorPrototype% [ %Symbol.toStringTag% ]: exact disposition and partitions missing.
   - [ ] `sec-properties-of-regexp-string-iterator-instances` — Properties of RegExp String Iterator Instances: exact disposition and partitions missing.
 - [ ] **Indexed Collections** (`sec-indexed-collections`) — tracking: `in-progress`, scope: `required`

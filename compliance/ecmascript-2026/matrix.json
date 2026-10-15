@@ -6795,6 +6795,110 @@
         }
       ],
       "rationale": "Scoped reciprocal replaceAll worklist evidence on the shared String protocol implementation; no whole-target conformance claim."
+    },
+    {
+      "clause": "sec-regexp-prototype-%symbol.matchall%",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "species-flags-matcher-and-lazy-iterator-owner",
+          "title": "Ordered species/flags/constructor/lastIndex and one ordinary lazy iterator owner",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-regexp-prototype-%symbol.matchall%"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/regexp-match-all.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "regexp_match_all_iterator_worklist"
+            ],
+            "e2e": [
+              "regexp_match_all_protocols"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#RegExp"
+            ],
+            "implementation": [
+              "runtime/tsc_regexp_api.c#tsc_regexp_match_all_apply",
+              "runtime/tsc_value.c#tsc_value_species_constructor",
+              "runtime/tsc_regexp_api.c#regexp_set_last_index_value"
+            ]
+          },
+          "rationale": "One retained matcher/String/global/Unicode/done record implements ordinary lazy iteration. Ordered SpeciesConstructor, flags conversion, construction and lastIndex initialization are separate from next-time live RegExpExec, empty UTF-16 advancement and terminal-state release. Independent Node properties cover species/metadata/receiver/protocol/abrupt/reentrant/completion partitions; one generated retained owner graph and complete traversal stress checks the same state without match-count lowering. Exact historical pending sources are source-qualified to their reviewed semantic owners with independent Node/native and corpus/request/containment/artifact-byte audits. Existing lifecycle weak-root checks retain pending matcher/input and release completed state. The exact creation-clause annotation gap, other iterator/RegExp/String clauses, feature readiness, broad memory repair, host eligibility and exhaustive signed target coverage remain open."
+        }
+      ],
+      "rationale": "Scoped reciprocal evidence for the shared ordinary lazy iterator state; no parent or whole-target conformance claim."
+    },
+    {
+      "clause": "sec-%regexpstringiteratorprototype%.next",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "brand-live-exec-utf16-advance-and-completion",
+          "title": "Branded next, live RegExpExec, exact returned match, global/single and UTF-16 empty advancement, abrupt retry and terminal completion",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "worklist",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-%regexpstringiteratorprototype%.next"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/regexp-match-all.property.test.ts",
+              "tests/property/regexp-iterator-gc.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "regexp_match_all_iterator_worklist"
+            ],
+            "e2e": [
+              "regexp_match_all_protocols"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [
+              "stdlib/lib.core.d.ts#RegExpStringIterator"
+            ],
+            "implementation": [
+              "runtime/tsc_regexp_api.c#regexp_string_iterator_next",
+              "runtime/tsc_regexp_api.c#regexp_string_iterator_complete",
+              "runtime/tsc_regexp_api.c#regexp_exec_value",
+              "runtime/tsc_regexp_api.c#regexp_advance"
+            ]
+          },
+          "rationale": "One retained matcher/String/global/Unicode/done record implements ordinary lazy iteration. Ordered SpeciesConstructor, flags conversion, construction and lastIndex initialization are separate from next-time live RegExpExec, empty UTF-16 advancement and terminal-state release. Independent Node properties cover species/metadata/receiver/protocol/abrupt/reentrant/completion partitions; one generated retained owner graph and complete traversal stress checks the same state without match-count lowering. Exact historical pending sources are source-qualified to their reviewed semantic owners with independent Node/native and corpus/request/containment/artifact-byte audits. Existing lifecycle weak-root checks retain pending matcher/input and release completed state. The exact creation-clause annotation gap, other iterator/RegExp/String clauses, feature readiness, broad memory repair, host eligibility and exhaustive signed target coverage remain open."
+        }
+      ],
+      "rationale": "Scoped reciprocal evidence for the shared ordinary lazy iterator state; no parent or whole-target conformance claim."
     }
   ],
   "groups": [

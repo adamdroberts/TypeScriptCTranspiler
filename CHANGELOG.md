@@ -1,3 +1,5 @@
+- Register scoped RegExp matchAll and ordinary iterator-next evidence with one retained lazy-state worklist stress.
+
 - Classify reviewed historical matchAll metadata with distinct source-qualified intrinsic, iterator and prototype owners.
 
 - Resolve unresolved Test262 metadata through reviewed source-qualified path rules while retaining exact anchor precedence and fail-closed unmatched owners.
