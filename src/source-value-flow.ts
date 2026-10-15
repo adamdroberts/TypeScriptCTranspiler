@@ -775,16 +775,14 @@ class SourceValueFlow {
             if(activation)return activation.active;
             const source=this.sourceOrigins.get(this.sourceFile(context));
             if(source)return source;
-            if(!this.dynamicContext(context)){
-                let cell=this.originCells.get(context);
-                if(!cell){
-                    cell=this.newCell();this.originCells.set(context,cell);
-                    let effect=this.opaqueEffects.get(context);
-                    if(!effect){effect={tag:"unknown",origin:context};this.opaqueEffects.set(context,effect);}
-                    this.publish(cell,effect);
-                }
-                return cell;
+            let cell=this.originCells.get(context);
+            if(!cell){
+                cell=this.newCell();this.originCells.set(context,cell);
+                let effect=this.opaqueEffects.get(context);
+                if(!effect){effect={tag:"unknown",origin:context};this.opaqueEffects.set(context,effect);}
+                this.publish(cell,effect);
             }
+            return cell;
         }
         this.publish(this.unconstrainedOrigins,this.unknown);
         return this.unconstrainedOrigins;
@@ -901,7 +899,18 @@ class SourceValueFlow {
                 !this.dynamicContext(origin.origin)&&!this.effectVisible(atom,origin.origin,true)))return false;
         }
         // Unrepresented, repeated or overlapping activations remain opaque.
-        if (this.dynamicContext(effect) || this.dynamicContext(context)) return true;
+        if (this.dynamicContext(effect) || this.dynamicContext(context)) {
+            // Repetition cannot move an operation before an earlier read in
+            // the surrounding source activation. Reads inside a repeated or
+            // overlapping activation retain the conservative origin union.
+            if(!this.enclosingActivation(effect)&&!activation&&!this.repeatedActivationContext(context)){
+                if(this.sourceFile(effect)!==this.sourceFile(context)){
+                    const before=this.scriptOrder.get(this.sourceFile(context)),after=this.scriptOrder.get(this.sourceFile(effect));
+                    if(before!==undefined&&after!==undefined&&before<after)return false;
+                }else if(context.getEnd()<=effect.getStart())return false;
+            }
+            return true;
+        }
         if (this.sourceFile(effect) !== this.sourceFile(context)) {
             const before=this.scriptOrder.get(this.sourceFile(context)),after=this.scriptOrder.get(this.sourceFile(effect));
             return before===undefined||after===undefined||after<=before;
