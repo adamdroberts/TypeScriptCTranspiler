@@ -76,6 +76,30 @@ tsc_value_t tsc_dispatch_capture(tsc_value_t value) {
     return tsc_value_is_dispatch_queue(value) ? value : tsc_structured_clone(value);
 }
 
+typedef struct {
+    tsc_value_t value;
+    void* volatile root;
+    bool abrupt;
+} tsc_dispatch_completion_t;
+
+/* Leave the catch frame before a caller rethrows or settles the original
+ * value. The decoded root also survives handoff from a worker's stack. */
+static void tsc_dispatch_invoke(tsc_dispatch_task_fn_t fn, void* env,
+    tsc_dispatch_completion_t* completion) {
+    completion->value = tsc_value_undefined();
+    completion->root = NULL;
+    completion->abrupt = false;
+    TSC_TRY_FRAME(frame);
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) == 0) completion->value = fn(env);
+    else {
+        completion->abrupt = true;
+        completion->value = tsc_current_error_value();
+    }
+    completion->root = tsc_value_gc_root(completion->value);
+    tsc_try_pop();
+}
+
 #ifdef TSC_DISPATCH_SERIAL
 
 tsc_dispatch_queue_t* tsc_dispatch_queue_serial(tsc_str_t* label) {
@@ -96,19 +120,10 @@ typedef struct {
 
 static void tsc_dispatch_serial_trampoline(void* ctx) {
     tsc_dispatch_serial_task_t* task = (tsc_dispatch_serial_task_t*)ctx;
-    tsc_value_t result = tsc_value_undefined();
-    bool is_error = false;
-    TSC_TRY_FRAME(eh);
-    tsc_try_push(&eh);
-    if (setjmp(eh.jb) == 0) {
-        result = task->fn(task->env);
-        tsc_try_pop();
-    } else {
-        is_error = true;
-        result = tsc_value_string(tsc_current_error());
-    }
-    if (is_error) tsc_promise_reject_in_place(task->promise, result);
-    else tsc_promise_fulfill_in_place(task->promise, result);
+    tsc_dispatch_completion_t completion;
+    tsc_dispatch_invoke(task->fn, task->env, &completion);
+    if (completion.abrupt) tsc_promise_reject_in_place(task->promise, completion.value);
+    else tsc_promise_fulfill_in_place(task->promise, completion.value);
 }
 
 tsc_promise_t* tsc_dispatch_async(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_t fn, void* env) {
@@ -159,18 +174,10 @@ tsc_promise_t* tsc_dispatch_barrier(tsc_dispatch_queue_t* q, tsc_dispatch_task_f
 
 tsc_value_t tsc_dispatch_sync(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_t fn, void* env) {
     if (!q || !fn) tsc_throw_str(tsc_str_from_cstr("dispatch.sync: invalid queue or task"));
-    tsc_value_t result = tsc_value_undefined();
-    tsc_str_t* error = NULL;
-    TSC_TRY_FRAME(eh);
-    tsc_try_push(&eh);
-    if (setjmp(eh.jb) == 0) {
-        result = fn(env);
-        tsc_try_pop();
-    } else {
-        error = tsc_current_error();
-    }
-    if (error) tsc_throw_str(error);
-    return result;
+    tsc_dispatch_completion_t completion;
+    tsc_dispatch_invoke(fn, env, &completion);
+    if (completion.abrupt) tsc_throw_value(completion.value);
+    return completion.value;
 }
 
 #else
@@ -268,18 +275,9 @@ typedef struct {
 static void tsc_dispatch_async_trampoline(void* ctx) {
     tsc_dispatch_async_task_t* task = (tsc_dispatch_async_task_t*)ctx;
     bool registered_here = tsc_dispatch_register_gc_thread();
-    tsc_value_t result = tsc_value_undefined();
-    bool is_error = false;
-    TSC_TRY_FRAME(eh);
-    tsc_try_push(&eh);
-    if (setjmp(eh.jb) == 0) {
-        result = task->fn(task->env);
-        tsc_try_pop();
-    } else {
-        is_error = true;
-        result = tsc_value_string(tsc_current_error());
-    }
-    tsc_cross_post_settle(task->promise, result, is_error);
+    tsc_dispatch_completion_t completion;
+    tsc_dispatch_invoke(task->fn, task->env, &completion);
+    tsc_cross_post_settle(task->promise, completion.value, completion.abrupt);
     tsc_dispatch_inflight_remove(task);
     tsc_dispatch_unregister_gc_thread(registered_here);
 }
@@ -343,21 +341,13 @@ tsc_promise_t* tsc_dispatch_barrier(tsc_dispatch_queue_t* q, tsc_dispatch_task_f
 typedef struct {
     tsc_dispatch_task_fn_t fn;
     void* env;
-    tsc_value_t result;
-    tsc_str_t* error;
+    tsc_dispatch_completion_t completion;
 } tsc_dispatch_sync_task_t;
 
 static void tsc_dispatch_sync_trampoline(void* ctx) {
     tsc_dispatch_sync_task_t* task = (tsc_dispatch_sync_task_t*)ctx;
     bool registered_here = tsc_dispatch_register_gc_thread();
-    TSC_TRY_FRAME(eh);
-    tsc_try_push(&eh);
-    if (setjmp(eh.jb) == 0) {
-        task->result = task->fn(task->env);
-        tsc_try_pop();
-    } else {
-        task->error = tsc_current_error();
-    }
+    tsc_dispatch_invoke(task->fn, task->env, &task->completion);
     tsc_dispatch_unregister_gc_thread(registered_here);
 }
 
@@ -369,11 +359,9 @@ tsc_value_t tsc_dispatch_sync(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_t fn
     tsc_dispatch_sync_task_t task;
     task.fn = fn;
     task.env = env;
-    task.result = tsc_value_undefined();
-    task.error = NULL;
     dispatch_sync_f(q->queue, &task, tsc_dispatch_sync_trampoline);
-    if (task.error) tsc_throw_str(task.error);
-    return task.result;
+    if (task.completion.abrupt) tsc_throw_value(task.completion.value);
+    return task.completion.value;
 }
 
 #endif /* TSC_DISPATCH_SERIAL */

@@ -1,3 +1,5 @@
+- Carry original dispatch completion Values through one rooted invocation record and leave catch frames before rethrowing.
+
 - Align arrow restricted-accessor descriptor expectations with the pinned specification and independent Node execution.
 
 - Snapshot Script declarative binding state through the shared closure-capture descriptor collection, preserving TDZ and nested captures.
