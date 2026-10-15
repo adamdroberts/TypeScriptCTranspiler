@@ -3,6 +3,80 @@
   "artifacts": [
     {
       "kind": "property",
+      "id": "tests/property/throw-type-error-owner.property.test.ts",
+      "targets": [
+        "sec-%throwtypeerror%#immutable-realm-poison-function-owner",
+        "sec-addrestrictedfunctionproperties#shared-poison-accessor-descriptor-collection"
+      ]
+    },
+    {
+      "kind": "stress",
+      "id": "throw_type_error_owner_worklist",
+      "targets": [
+        "sec-%throwtypeerror%#immutable-realm-poison-function-owner",
+        "sec-addrestrictedfunctionproperties#shared-poison-accessor-descriptor-collection"
+      ],
+      "stressReview": {
+        "dimension": "retained immutable poison-function owner graph and actual throwing invocation worklist",
+        "parameter": "depth",
+        "representativeHighDepth": 4096,
+        "rationale": "One generated native graph retains original strict/non-simple descriptor owners and calls the same actual owner through complete argument Lists; cardinality does not change the Realm owner or descriptor lowering.",
+        "reviewedBy": "tsc2c compliance review"
+      }
+    },
+    {
+      "kind": "e2e",
+      "id": "throw_type_error_owner",
+      "targets": [
+        "sec-%throwtypeerror%#immutable-realm-poison-function-owner",
+        "sec-addrestrictedfunctionproperties#shared-poison-accessor-descriptor-collection"
+      ]
+    },
+    {
+      "kind": "declarationSurface",
+      "id": "stdlib/lib.core.d.ts#Function",
+      "targets": [
+        "sec-%throwtypeerror%#immutable-realm-poison-function-owner"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_core.c#ensure_function_intrinsics",
+      "targets": [
+        "sec-%throwtypeerror%#immutable-realm-poison-function-owner",
+        "sec-addrestrictedfunctionproperties#shared-poison-accessor-descriptor-collection"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_core.c#throw_type_error_body",
+      "targets": [
+        "sec-%throwtypeerror%#immutable-realm-poison-function-owner"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_core.c#tsc_call_arguments",
+      "targets": [
+        "sec-%throwtypeerror%#immutable-realm-poison-function-owner"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_core.c#define_restricted_accessor",
+      "targets": [
+        "sec-addrestrictedfunctionproperties#shared-poison-accessor-descriptor-collection"
+      ]
+    },
+    {
+      "kind": "implementation",
+      "id": "runtime/tsc_value.c#tsc_value_define_property_descriptor",
+      "targets": [
+        "sec-addrestrictedfunctionproperties#shared-poison-accessor-descriptor-collection"
+      ]
+    },
+    {
+      "kind": "property",
       "id": "tests/property/strict-equality.property.test.ts",
       "targets": ["sec-isstrictlyequal#ecmascript-type-partition"]
     },

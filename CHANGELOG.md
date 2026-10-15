@@ -1,3 +1,5 @@
+- Register scoped immutable ThrowTypeError and restricted-accessor evidence with one retained poison-owner worklist stress.
+
 - Share one frozen Realm-owned ThrowTypeError intrinsic across restricted function and unmapped-arguments accessors.
 
 - Replace the obsolete switch-class rejection assertion with independent Node/native canonical member and lexical-owner behavior checks.

@@ -478,7 +478,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-canbeheldweakly` — CanBeHeldWeakly ( _v_: an ECMAScript language value, ): a Boolean: exact disposition and partitions missing.
 - [ ] **Ordinary and Exotic Objects Behaviours** (`sec-ordinary-and-exotic-objects-behaviours`) — tracking: `in-progress`, scope: `required`
   - Semantic partitions: ordinary internal methods; function objects; arguments; arrays; proxies; module namespace objects.
-  - Linked local regression evidence: property: tests/property/module-namespace-exotic.property.test.ts, tests/property/symbol-coercion.property.test.ts; stress: module_namespace_export_width; E2E: object_descriptors, array_property_descriptors, proxy, proxy_ownkeys_invariants, proxy_get_own_property_symbols, proxy_object_assign_source.
+  - Linked local regression evidence: property: tests/property/module-namespace-exotic.property.test.ts, tests/property/symbol-coercion.property.test.ts, tests/property/throw-type-error-owner.property.test.ts; stress: module_namespace_export_width, throw_type_error_owner_worklist; E2E: object_descriptors, array_property_descriptors, proxy, proxy_ownkeys_invariants, proxy_get_own_property_symbols, proxy_object_assign_source, throw_type_error_owner.
   - Known blockers: Pinned namespace scenarios that depend on general super lowering remain unsupported; exact ordinary/Proxy/Symbol PropertyKey clause partitions and namespace-proxy interactions are not yet clause-verified.
   - [ ] `sec-ordinary-and-exotic-objects-behaviours` — Ordinary and Exotic Objects Behaviours: exact disposition and partitions missing.
   - [ ] `sec-ordinary-object-internal-methods-and-internal-slots` — Ordinary Object Internal Methods and Internal Slots: exact disposition and partitions missing.
@@ -520,8 +520,10 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
   - [ ] `sec-ecmascript-function-objects-construct-argumentslist-newtarget` — [[Construct]] ( _argumentsList_: a List of ECMAScript language values, _newTarget_: a constructor, ): either a normal completion containing an Object or a throw completion
     - [ ] `caller-context-postbody-completion` (algorithm, unbounded): Caller context post-body completion.
   - [ ] `sec-ordinaryfunctioncreate` — OrdinaryFunctionCreate ( _functionPrototype_: an Object, _sourceText_: a sequence of Unicode code points, _ParameterList_: a Parse Node, _Body_: a Parse Node, _thisMode_: ~lexical-this~ or ~non-lexical-this~, _env_: an Environment Record, _privateEnv_: a PrivateEnvironment Record or null, ): an ECMAScript function object: exact disposition and partitions missing.
-  - [ ] `sec-addrestrictedfunctionproperties` — AddRestrictedFunctionProperties ( _F_: a function object, _realm_: a Realm Record, ): ~unused~: exact disposition and partitions missing.
-  - [ ] `sec-%throwtypeerror%` — %ThrowTypeError% ( ): exact disposition and partitions missing.
+  - [ ] `sec-addrestrictedfunctionproperties` — AddRestrictedFunctionProperties ( _F_: a function object, _realm_: a Realm Record, ): ~unused~
+    - [ ] `shared-poison-accessor-descriptor-collection` (algorithm, unbounded): Restricted property descriptor collection shares actual get/set poison owner.
+  - [ ] `sec-%throwtypeerror%` — %ThrowTypeError% ( )
+    - [ ] `immutable-realm-poison-function-owner` (intrinsic, unbounded): Immutable anonymous Realm poison function identity, metadata and throwing call.
   - [ ] `sec-makeconstructor` — MakeConstructor ( _F_: an ECMAScript function object or a built-in function object, optional _writablePrototype_: a Boolean, optional _prototype_: an Object, ): ~unused~: exact disposition and partitions missing.
   - [ ] `sec-makeclassconstructor` — MakeClassConstructor ( _F_: an ECMAScript function object, ): ~unused~: exact disposition and partitions missing.
   - [ ] `sec-makemethod` — MakeMethod ( _F_: an ECMAScript function object, _homeObject_: an Object, ): ~unused~: exact disposition and partitions missing.

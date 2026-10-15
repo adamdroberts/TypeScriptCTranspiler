@@ -42,6 +42,104 @@
   "normativeOptionalEvidence": [],
   "clauseEvidence": [
     {
+      "clause": "sec-%throwtypeerror%",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "immutable-realm-poison-function-owner",
+          "title": "Immutable anonymous Realm poison function identity, metadata and throwing call",
+          "surface": "intrinsic",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "canonical-collection",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-%throwtypeerror%"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/throw-type-error-owner.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "throw_type_error_owner_worklist"
+            ],
+            "e2e": [
+              "throw_type_error_owner"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": ["stdlib/lib.core.d.ts#Function"],
+            "implementation": [
+              "runtime/tsc_core.c#ensure_function_intrinsics",
+              "runtime/tsc_core.c#throw_type_error_body",
+              "runtime/tsc_core.c#tsc_call_arguments"
+            ]
+          },
+          "rationale": "One Function Realm state owns the anonymous non-constructable frozen builtin; one canonical descriptor collection installs the same actual owner for both accessor halves. The independent property retains strict and non-simple unmapped arguments, mapped callee behavior, immutable name/length and property order, rejected mutation, calls/errors, foreign Realm identity and a retained owner graph across typed/erased and both memory modes. The generated worklist independently retains original descriptor owners and repeated throwing invocation. Exact pinned native scenarios and runner-owned artifact bytes pass after retained baseline failures. Current Node differs on the pinned Function.prototype shared poison-identity assertion; those assertions remain spec-backed and unchanged. Source arguments precision, host/feature eligibility and exhaustive signed target coverage remain open."
+        }
+      ],
+      "rationale": "Scoped poison owner and descriptor algorithm evidence; no whole Function or Realm capability promotion."
+    },
+    {
+      "clause": "sec-addrestrictedfunctionproperties",
+      "disposition": "evidence",
+      "partitions": [
+        {
+          "id": "shared-poison-accessor-descriptor-collection",
+          "title": "Restricted property descriptor collection shares actual get/set poison owner",
+          "surface": "algorithm",
+          "cardinality": "unbounded",
+          "cardinalityMechanism": "canonical-collection",
+          "choiceObligation": null,
+          "definition": null,
+          "normativeOptionalFamilies": [],
+          "normativeOptionalSites": [],
+          "test262Queries": [
+            {
+              "allOf": [
+                {
+                  "field": "clause",
+                  "equals": "sec-addrestrictedfunctionproperties"
+                }
+              ]
+            }
+          ],
+          "coveredBy": [],
+          "localEvidence": {
+            "property": [
+              "tests/property/throw-type-error-owner.property.test.ts"
+            ],
+            "generatedRegression": [],
+            "stress": [
+              "throw_type_error_owner_worklist"
+            ],
+            "e2e": [
+              "throw_type_error_owner"
+            ],
+            "negativeDiagnostics": [],
+            "declarationSurface": [],
+            "implementation": [
+              "runtime/tsc_core.c#define_restricted_accessor",
+              "runtime/tsc_core.c#ensure_function_intrinsics",
+              "runtime/tsc_value.c#tsc_value_define_property_descriptor"
+            ]
+          },
+          "rationale": "One Function Realm state owns the anonymous non-constructable frozen builtin; one canonical descriptor collection installs the same actual owner for both accessor halves. The independent property retains strict and non-simple unmapped arguments, mapped callee behavior, immutable name/length and property order, rejected mutation, calls/errors, foreign Realm identity and a retained owner graph across typed/erased and both memory modes. The generated worklist independently retains original descriptor owners and repeated throwing invocation. Exact pinned native scenarios and runner-owned artifact bytes pass after retained baseline failures. Current Node differs on the pinned Function.prototype shared poison-identity assertion; those assertions remain spec-backed and unchanged. Source arguments precision, host/feature eligibility and exhaustive signed target coverage remain open."
+        }
+      ],
+      "rationale": "Scoped poison owner and descriptor algorithm evidence; no whole Function or Realm capability promotion."
+    },
+    {
       "clause": "sec-conditional-operator-runtime-semantics-evaluation",
       "disposition": "evidence",
       "partitions": [
@@ -7107,7 +7205,7 @@
       "scope": "required",
       "tracking": "in-progress",
       "semanticPartitions": ["ordinary internal methods", "function objects", "arguments", "arrays", "proxies", "module namespace objects"],
-      "localEvidence": { "property": ["tests/property/module-namespace-exotic.property.test.ts", "tests/property/symbol-coercion.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width"], "e2e": ["object_descriptors", "array_property_descriptors", "proxy", "proxy_ownkeys_invariants", "proxy_get_own_property_symbols", "proxy_object_assign_source"], "negativeDiagnostics": [], "declarationSurface": [], "implementation": ["runtime/tsc_object.c", "runtime/tsc_value.c", "runtime/tsc_builtin.c", "runtime/tsc_string.c", "src/emit/index.ts"] },
+      "localEvidence": {"property": ["tests/property/module-namespace-exotic.property.test.ts", "tests/property/symbol-coercion.property.test.ts", "tests/property/throw-type-error-owner.property.test.ts"], "generatedRegression": [], "stress": ["module_namespace_export_width", "throw_type_error_owner_worklist"], "e2e": ["object_descriptors", "array_property_descriptors", "proxy", "proxy_ownkeys_invariants", "proxy_get_own_property_symbols", "proxy_object_assign_source", "throw_type_error_owner"], "negativeDiagnostics": [], "declarationSurface": ["stdlib/lib.core.d.ts#Function"], "implementation": ["runtime/tsc_object.c", "runtime/tsc_value.c", "runtime/tsc_builtin.c", "runtime/tsc_string.c", "src/emit/index.ts", "runtime/tsc_core.c#ensure_function_intrinsics", "runtime/tsc_core.c#throw_type_error_body", "runtime/tsc_core.c#define_restricted_accessor", "runtime/tsc_core.c#tsc_call_arguments"]},
       "knownGaps": ["Pinned namespace scenarios that depend on general super lowering remain unsupported; exact ordinary/Proxy/Symbol PropertyKey clause partitions and namespace-proxy interactions are not yet clause-verified."]
     },
     {

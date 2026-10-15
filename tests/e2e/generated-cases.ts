@@ -1,3 +1,5 @@
+export interface ThrowTypeErrorOwnerWorklistSpec { generator: "throw-type-error-owner-worklist"; depth: number; }
+
 export interface RegexpPatternDepthSpec {
     generator: "regexp-pattern-depth";
     depth: number;
@@ -293,6 +295,7 @@ export interface SwitchCaseBlockClassWorklistWidthSpec {
 }
 
 export type GeneratedCaseSpec =
+    | ThrowTypeErrorOwnerWorklistSpec
     | RegexpPatternDepthSpec
     | RegexpSplitCaptureWorklistSpec
     | RegexpReplaceCaptureWorklistSpec
@@ -579,6 +582,11 @@ export function parseGeneratedCaseSpec(raw: string, filename: string): Generated
     if(spec.generator==='module-failure-depth'){
         if(typeof spec.depth!=='number'||!Number.isInteger(spec.depth)||spec.depth<2||!['load','link'].includes(String(spec.phase)))throw new Error(`invalid generated Module failure spec ${filename}`);
         return {generator:spec.generator,depth:spec.depth,phase:spec.phase as 'load'|'link'};
+    }
+    if (spec.generator === "throw-type-error-owner-worklist") {
+        if (typeof spec.depth !== "number" || !Number.isInteger(spec.depth) || spec.depth < 2)
+            throw new Error(`invalid generated poison owner worklist spec ${filename}`);
+        return { generator: spec.generator, depth: spec.depth };
     }
     if (spec.generator === "regexp-match-all-iterator-worklist") {
         if (typeof spec.depth !== "number" || !Number.isInteger(spec.depth) || spec.depth < 2)
@@ -2080,6 +2088,28 @@ const valid = evaluated === ${spec.width} && raw.rawJSON === text &&
     JSON.stringify(raw) === text && Reflect.apply(JSON.isRawJSON, null, brandArgs) &&
     Object.isFrozen(raw) && Object.getPrototypeOf(raw) === null;
 console.log("raw JSON text width:", valid);
+`;
+        case "throw-type-error-owner-worklist":
+            return `// @ts-nocheck
+function strictArgs() { "use strict"; return arguments; }
+function nonSimple(value = 17) { return arguments; }
+const original = Object.getOwnPropertyDescriptor(strictArgs(), "callee").get;
+const producers = [strictArgs, nonSimple];
+let tree = null;
+for (let index = 0; index < ${spec.depth}; index++) {
+    const descriptor = Object.getOwnPropertyDescriptor(producers[index % producers.length](), "callee");
+    tree = { owner: descriptor.get, setter: descriptor.set, previous: tree };
+}
+let cursor = tree;
+while (cursor) {
+    if (cursor.owner !== original || cursor.setter !== original || !Object.isFrozen(cursor.owner))
+        throw new Error("poison owner worklist");
+    let caught;
+    try { Reflect.apply(cursor.owner, null, [17, 23]); } catch (error) { caught = error; }
+    if (!(caught instanceof TypeError)) throw new Error("poison owner call");
+    cursor = cursor.previous;
+}
+console.log("throw-type-error-owner-worklist-ok");
 `;
         case "regexp-match-all-iterator-worklist":
             return [
