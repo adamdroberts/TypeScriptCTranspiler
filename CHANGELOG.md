@@ -1,3 +1,5 @@
+- Verify finite activation sources around unrelated generators with independent Node and require complete file-backed native-reference output.
+
 - Preserve observable superclass validation and prototype reads for unused typed classes through one shared definition-effect plan.
 
 - Replace crypto syntax and physical byte selectors with canonical ordinary export owners, actual byte witnesses and ordered option decoding; preserve Error completions on entropy failure.

@@ -1,6 +1,6 @@
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
-import {mkdtemp,rm,writeFile} from 'node:fs/promises';
+import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {compile} from '../../src/compile';
@@ -28,12 +28,16 @@ unrelated().next();`;
 
 test('caller-origin captures exclude later effects and retain unresolved timing',()=>{
  const early="function read(...tail){return Function(...tail)}read('return 17;');async function* later(){yield 1}later().next();";
- expect(facts(early)).toEqual([{kind:'ordinary',choices:[['return 17;']]}]);
+ const unrelated="async function* prior(){yield 1}prior().next();function read(...tail){return Function(...tail)}read('return 17;');";
+ const finite=[early,unrelated];
+ const node=Bun.spawnSync(['node','-e','const vm=require("node:vm"),fs=require("node:fs");const inputs=JSON.parse(process.argv[1]),Native=Function;const actual=inputs.map(source=>{const calls=[];new vm.Script(source).runInNewContext({Function(...args){calls.push(args.map(String));return Reflect.apply(Native,undefined,args)}});return calls});fs.writeSync(1,JSON.stringify(actual));',JSON.stringify(finite)],{stdout:'pipe',stderr:'pipe'});
+ expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+ expect(JSON.parse(node.stdout.toString())).toEqual(finite.map(()=>[['return 17;']]));
+ for(const input of finite)expect(facts(input)).toEqual([{kind:'ordinary',choices:[['return 17;']]}]);
  for(const input of [
   "function read(...tail){opaque(tail);return Function(...tail)}read('return 17;');",
   "function read(...tail){return Function(...tail)}const list=['return 17;'];read((opaque(list),list[0]));",
   "function* read(...tail){yield 0;return Function(...tail)}read('return 17;');opaque();",
-  "async function* prior(){yield 1}prior().next();function read(...tail){return Function(...tail)}read('return 17;');",
   "function read(){return Function(...list)}const list=['return 17;'];read();opaque(list);read();",
   "function read(){if(flag)read();return Function(...list)}const list=['return 17;'];read();opaque(list);",
   "async function read(){await 0;return Function(...list)}const list=['return 17;'];read();opaque(list);",
@@ -45,11 +49,12 @@ test('caller-origin property captures match independent Node across later genera
  const root=await mkdtemp(join(tmpdir(),'tsc2c-activation-property-capture-'));
  try{for(const typed of [true,false])for(const noGc of [false,true]){
   const input=restSourceLocationInput(typed&&!noGc?512:3)+'\n'+source,erased=ts.transpileModule(input,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText;
-  const oracle=join(root,`oracle-${typed}-${noGc}.js`);await writeFile(oracle,erased);
-  const node=Bun.spawnSync(['node',oracle],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const oracle=join(root,`oracle-${typed}-${noGc}.js`),oracleOutput=oracle+'.stdout';await writeFile(oracle,erased);
+  const node=Bun.spawnSync(['node',oracle],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const expected=await readFile(oracleOutput,'utf8');expect(expected.endsWith('rest: 67\ndirect: 17\nreflected: 19\nmember: 23\n')).toBe(true);
   const entry=join(root,`main-${typed}-${noGc}.${typed?'ts':'js'}`),output=entry+'-native',diagnostics:string[]=[];await writeFile(entry,typed?input:erased);
   const result=await compile({entry,output,noGc,initializationEntries:[entry],buildDir:output+'-build',test262Observation:{kind:'test262-native-observation',scenarioId:'property/activation-property-capture.js#sloppy',setupEntries:[],testEntry:entry,async:false},diagnosticWriter:message=>diagnostics.push(message)});expect({typed,noGc,code:result.exitCode,diagnostics}).toEqual({typed,noGc,code:0,diagnostics:[]});
-  const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:native.exitCode,stderr:native.stderr.toString()}).toEqual({code:0,stderr:''});const observation=parseHostObservation(JSON.parse(native.stdout.toString()));expect(observation.kind).toBe('normal');expect(observation.stdout).toBe(node.stdout.toString());
+  const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:native.exitCode,stderr:native.stderr.toString()}).toEqual({code:0,stderr:''});const observation=parseHostObservation(JSON.parse(native.stdout.toString()));expect(observation.kind).toBe('normal');expect(observation.stdout).toBe(expected);
  }
  expect(facts("function forward(...tail){mutate(tail);return Function(...tail)}forward('return 43;');")).toEqual([{kind:'ordinary',choices:null}]);
  }finally{await rm(root,{recursive:true,force:true})}
