@@ -1,5 +1,7 @@
 # TODO — `dispatch.async` / `dispatch.sync` explicit concurrency (GCD-style)
 
+Current validation checkpoint: the workspace now has a pinned libdispatch SDK at `artifacts/source628-libdispatch-sdk`; use its absolute path as `TSC2C_LIBDISPATCH_PREFIX`. GCC synchronous and worker-thread probes pass. Project dispatch validation still fails at queue Value boxing/decoding and capture representation before native execution. The historical MVP and implementation notes below do not establish current passing coverage. See the leading `docs/todo.md` checkpoint for the exact source and evidence.
+
 Status: **MVP implemented (2026-07-19).** Stages 1–4 below are landed except the items still
 unchecked; `todo.md` carries the remaining work under "Dispatch concurrency (optional,
 libdispatch-backed) — remainder". Capture safety now follows one canonical descriptor collection
