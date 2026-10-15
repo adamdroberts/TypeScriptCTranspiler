@@ -1,0 +1,5 @@
+/* One export collection supplies ordinary module owners and source admission. */
+TSC_BUFFER_EXPORT(Buffer, tsc_buffer_constructor_value())
+TSC_BUFFER_EXPORT(atob, buffer_module_global_function(TSC_GLOBAL_FUNCTION_ATOB))
+TSC_BUFFER_EXPORT(btoa, buffer_module_global_function(TSC_GLOBAL_FUNCTION_BTOA))
+TSC_BUFFER_EXPORT(transcode, buffer_module_transcode_value())

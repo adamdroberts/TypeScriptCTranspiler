@@ -11,7 +11,7 @@ import ts from "typescript";
 import {moduleLinkRecord} from "../module-source-record";
 import { ecmaDirectivePrologueHasUseStrict, ecmaParseGoal } from "../ecmascript-source";
 import { sourceUnitFormat } from "../program";
-import { runtimeGlobalBindings, runtimeUtilExports, runtimeFsExports, runtimePathPosixOperations } from "../global-bindings";
+import { runtimeGlobalBindings, runtimeUtilExports, runtimeFsExports, runtimePathPosixOperations, runtimeBufferExports } from "../global-bindings";
 import { canonicalParameterBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding } from "../source-bindings";
 import { timersPromiseOperations, callbackTimerOperations } from "../timers-promises-operations";
 import { directLexicalDeclarations, lexicalDeclarationsFromList, type ScopeLexicalDeclaration, type NamedScopeLexicalDeclaration } from "./lexical-declarations";
@@ -19073,13 +19073,6 @@ class Emitter {
         );
     }
 
-    private isBufferModuleIdentifier(expr: ts.Expression): boolean {
-        return ts.isIdentifier(expr) && (
-            this.isNamespaceImportFrom(expr, ["buffer", "node:buffer"]) ||
-            this.isDefaultImportFrom(expr, ["buffer", "node:buffer"])
-        );
-    }
-
     private isProcessEnvObject(expr: ts.Expression): boolean {
         if (ts.isIdentifier(expr)) {
             return this.isNamedImportFrom(expr, ["process", "node:process"], "env");
@@ -32898,6 +32891,7 @@ class Emitter {
             return {c:"tsc_value_get_prop(tsc_crypto_digest_module_value("+namespaceImport+"), "+this.stringLit(expr.name.text)+")",ty:T_VALUE};
         }
         const modules = [
+            { names: ["buffer", "node:buffer"], value: "tsc_buffer_module_value", export: "tsc_buffer_module_export_value", members: runtimeBufferExports },
             { names: ["util", "node:util"], value: "tsc_util_module_value", export: "tsc_util_export_value", members: runtimeUtilExports },
             { names: ["timers", "node:timers"], value: "tsc_callback_timers_module_value", export: "tsc_callback_timers_export_value", members: callbackTimerOperations },
             { names: ["timers/promises", "node:timers/promises"], value: "tsc_timers_promises_module_value", export: "tsc_timers_promises_export_value", members: new Set([...timersPromiseOperations.keys()].map(name => name.split(".")[0]!)) },
@@ -33548,15 +33542,6 @@ class Emitter {
         }
         if (this.ordinaryNativeGlobalConstructor(calleeId)) {
             return this.emitDynamicValueCall(call, this.emitExpr(calleeId));
-        }
-        const bufferBase64Named = ["atob", "btoa"]
-            .find((exported) => this.isNamedImportFrom(calleeId, ["buffer", "node:buffer"], exported));
-        if (bufferBase64Named) {
-            return this.emitBase64Call(call, bufferBase64Named);
-        }
-        const bufferTranscodeNamed = this.isNamedImportFrom(calleeId, ["buffer", "node:buffer"], "transcode");
-        if (bufferTranscodeNamed) {
-            return this.emitBufferTranscodeCall(call);
         }
         const eventsNamed = ["listenerCount", "getEventListeners", "once", "on", "setMaxListeners", "getMaxListeners"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["events", "node:events"], exported));
@@ -35417,14 +35402,6 @@ class Emitter {
                 ],
                 ([inputC]) => `tsc_net_socket_address_parse(${inputC})`,
             );
-        }
-
-        if (this.isBufferModuleIdentifier(recvExpr) && (memberName === "atob" || memberName === "btoa")) {
-            return this.emitBase64Call(call, memberName);
-        }
-
-        if (this.isBufferModuleIdentifier(recvExpr) && memberName === "transcode") {
-            return this.emitBufferTranscodeCall(call);
         }
 
         if (this.isStreamModuleIdentifier(recvExpr)) {
@@ -38840,48 +38817,11 @@ class Emitter {
     }
 
 
-    private emitBase64Call(call: ts.CallExpression, name: string): EmitResult {
-        if (name !== "btoa" && name !== "atob") unsupported(call, `${name}`);
-        if (call.arguments.length < 1) unsupported(call, `${name} expects at least 1 arg`);
-        const value = this.emitExpr(call.arguments[0]!);
-        const fn = name === "btoa" ? "tsc_btoa" : "tsc_atob";
-        return this.emitSequencedExpr(T_STRING, [
-            { value, target: T_STRING, node: call.arguments[0]! },
-            ...this.ignoredArgumentSpecs(call.arguments, 1),
-        ], ([input]) => `${fn}(${input!})`);
-    }
-
     private childProcessStringArguments(value: EmitResult, node: ts.Expression): EmitResult {
         if (value.ty.kind !== "value" && value.ty.kind !== "array")
             unsupported(node, "child_process arguments require a canonical Array value");
         return {c: this.nativeArrayRepresentation(value, arrayType(T_STRING), node), ty: arrayType(T_STRING)};
     }
-
-    private emitBufferTranscodeCall(call: ts.CallExpression): EmitResult {
-        if (call.arguments.length < 3) {
-            unsupported(call, "buffer.transcode expects 3 arguments: source, fromEnc, toEnc");
-        }
-        const source = this.emitExpr(call.arguments[0]!);
-        if (source.ty.kind !== "buffer") {
-            unsupported(call.arguments[0]!, "buffer.transcode expects source to be a Buffer");
-        }
-        const fromEnc = this.emitExpr(call.arguments[1]!);
-        if (fromEnc.ty.kind !== "string") {
-            unsupported(call.arguments[1]!, "buffer.transcode expects fromEnc to be a string");
-        }
-        const toEnc = this.emitExpr(call.arguments[2]!);
-        if (toEnc.ty.kind !== "string") {
-            unsupported(call.arguments[2]!, "buffer.transcode expects toEnc to be a string");
-        }
-
-        return this.emitSequencedExpr(T_BUFFER, [
-            { value: source, target: T_BUFFER, node: call.arguments[0]! },
-            { value: fromEnc, target: T_STRING, node: call.arguments[1]! },
-            { value: toEnc, target: T_STRING, node: call.arguments[2]! },
-            ...this.ignoredArgumentSpecs(call.arguments, 3),
-        ], ([sourceVal, fromVal, toVal]) => `tsc_buffer_transcode(${sourceVal}, ${fromVal}, ${toVal})`);
-    }
-
 
     private emitImmediateCallbackSchedule(
         call: ts.CallExpression,

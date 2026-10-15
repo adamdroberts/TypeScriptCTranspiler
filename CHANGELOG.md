@@ -1,3 +1,5 @@
+- Give Buffer module imports canonical ordinary export owners and complete actual argument Lists, preserving shared constructor and base64 identity.
+
 - Add pinned Annex B RegExp.prototype.compile through shared in-place matcher initialization, retaining owner identity and abrupt lastIndex semantics.
 
 - Preserve external emitter callback roots through a declaration graph and remove independently audited dormant private predecessors.

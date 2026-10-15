@@ -3108,13 +3108,27 @@ static tsc_value_t global_function_apply(void* raw_descriptor, tsc_value_t this_
     return tsc_value_undefined();
 }
 
+static const char global_function_intrinsics_key;
+typedef struct {tsc_value_t* values;void** roots;} global_function_intrinsics_t;
 static tsc_value_t global_function_intrinsic_value(const tsc_global_function_descriptor_t* descriptor) {
-    return tsc_value_function_named_kind(
-        global_function_apply, NULL, (void*)descriptor,
-        descriptor->function_length,
-        tsc_str_from_lit(descriptor->name, descriptor->name_length),
-        descriptor->constructible ? TSC_FUNCTION_IDENTITY_GENERIC : TSC_FUNCTION_IDENTITY_BUILTIN
-    );
+    global_function_intrinsics_t* volatile state=tsc_realm_state_get(&global_function_intrinsics_key);
+    if(!state){
+        state=TSC_GC_MALLOC(sizeof(*state));
+        memset(state,0,sizeof(*state));
+        tsc_realm_state_set(&global_function_intrinsics_key,state);
+        size_t count=sizeof(global_function_descriptors)/sizeof(*global_function_descriptors);
+        state->values=TSC_GC_MALLOC(count*sizeof(*state->values));
+        state->roots=TSC_GC_MALLOC(count*sizeof(*state->roots));
+        memset(state->roots,0,count*sizeof(*state->roots));
+    }
+    size_t index=(size_t)(descriptor-global_function_descriptors);
+    if(!state->roots[index]){
+        state->values[index]=tsc_value_function_named_kind(global_function_apply,NULL,(void*)descriptor,
+            descriptor->function_length,tsc_str_from_lit(descriptor->name,descriptor->name_length),
+            descriptor->constructible?TSC_FUNCTION_IDENTITY_GENERIC:TSC_FUNCTION_IDENTITY_BUILTIN);
+        state->roots[index]=tsc_value_gc_root(state->values[index]);
+    }
+    return state->values[index];
 }
 
 tsc_value_t tsc_eval_intrinsic_value(void) {
@@ -9405,6 +9419,80 @@ tsc_value_t tsc_buffer_constructor_value(void) {
     }
     tsc_runtime_unlock();
     return state->constructor;
+}
+
+typedef struct {
+    tsc_object_t* ordinary;
+    tsc_object_t* namespace_object;
+    tsc_value_t transcode;
+    void* transcode_root;
+} buffer_module_intrinsics_t;
+static const char buffer_module_key;
+static buffer_module_intrinsics_t* buffer_module_state(void) {
+    buffer_module_intrinsics_t* state = tsc_realm_state_get(&buffer_module_key);
+    if (!state) {
+        state = TSC_GC_MALLOC(sizeof(*state)); memset(state, 0, sizeof(*state));
+        tsc_realm_state_set(&buffer_module_key, state);
+    }
+    return state;
+}
+static tsc_value_t buffer_module_transcode_apply(void* environment, tsc_value_t receiver, tsc_array_t* args) {
+    (void)environment; (void)receiver;
+    tsc_buffer_t* volatile bytes = tsc_value_as_buffer(buffer_argument(args, 0));
+    tsc_str_t* volatile from = tsc_value_to_string(buffer_argument(args, 1));
+    tsc_str_t* volatile to = tsc_value_to_string(buffer_argument(args, 2));
+    return tsc_value_buffer(tsc_buffer_transcode(bytes, from, to));
+}
+static tsc_value_t buffer_module_transcode_value(void) {
+    buffer_module_intrinsics_t* volatile state = buffer_module_state();
+    if (!state->transcode_root) {
+        state->transcode = tsc_value_function_builtin_named(buffer_module_transcode_apply, NULL,
+            3, tsc_str_from_lit("transcode", 9));
+        state->transcode_root = tsc_value_gc_root(state->transcode);
+    }
+    return state->transcode;
+}
+static tsc_value_t buffer_module_global_function(tsc_global_function_kind_t kind) {
+    for (size_t index = 0; index < sizeof(global_function_descriptors) / sizeof(*global_function_descriptors); ++index) {
+        const tsc_global_function_descriptor_t* descriptor = &global_function_descriptors[index];
+        if (descriptor->kind == kind) return global_function_intrinsic_value(descriptor);
+    }
+    tsc_panic("missing Buffer module global function owner");
+}
+static tsc_value_t buffer_module_default(void* environment, tsc_value_t receiver) {
+    (void)environment; (void)receiver; return tsc_buffer_module_value(false);
+}
+#define TSC_BUFFER_EXPORT(name, value) \
+    static tsc_value_t buffer_module_export_##name(void* environment, tsc_value_t receiver) { \
+        (void)environment; (void)receiver; return value; \
+    }
+#include "tsc_buffer_exports.def"
+#undef TSC_BUFFER_EXPORT
+static const struct {const char* name; tsc_accessor_getter_t getter;} buffer_module_exports[] = {
+#define TSC_BUFFER_EXPORT(name, value) {#name, buffer_module_export_##name},
+#include "tsc_buffer_exports.def"
+#undef TSC_BUFFER_EXPORT
+};
+tsc_value_t tsc_buffer_module_value(bool namespace_object) {
+    buffer_module_intrinsics_t* volatile state = buffer_module_state();
+    if (!state->ordinary) {
+        state->ordinary = tsc_object_new();
+        state->namespace_object = tsc_module_namespace_new();
+        for (size_t index = 0; index < sizeof(buffer_module_exports) / sizeof(*buffer_module_exports); ++index) {
+            tsc_str_t* name = tsc_str_from_cstr(buffer_module_exports[index].name);
+            tsc_value_t value = buffer_module_exports[index].getter(NULL, tsc_value_undefined());
+            void* volatile root = tsc_value_gc_root(value);
+            tsc_object_define(state->ordinary, name, value, true, true, true);
+            (void)tsc_module_namespace_define(state->namespace_object, name, buffer_module_exports[index].getter);
+            (void)root;
+        }
+        (void)tsc_module_namespace_define(state->namespace_object, tsc_str_from_lit("default", 7), buffer_module_default);
+        tsc_module_namespace_finalize(state->namespace_object);
+    }
+    return tsc_value_object(namespace_object ? state->namespace_object : state->ordinary);
+}
+tsc_value_t tsc_buffer_module_export_value(tsc_str_t* name) {
+    return tsc_value_get_prop(tsc_buffer_module_value(true), name);
 }
 
 tsc_value_t tsc_value_buffer(tsc_buffer_t* b) {

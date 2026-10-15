@@ -232,3 +232,10 @@ export const runtimeGlobalBindings: ReadonlyMap<string, RuntimeGlobalBinding> = 
             }] as const;
         }),
 );
+
+/** Buffer module admission shares the native export owner collection. */
+export const runtimeBufferExports: ReadonlySet<string> = new Set(
+    [...fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_buffer_exports.def"), "utf8")
+        .matchAll(/^TSC_BUFFER_EXPORT\((\w+), /gm)].map(match => match[1]!),
+);
+if (!runtimeBufferExports.size) throw new Error("missing canonical Buffer module exports");

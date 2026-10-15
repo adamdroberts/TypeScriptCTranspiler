@@ -656,6 +656,8 @@ tsc_value_t tsc_text_encoder_constructor_value(void);
 tsc_value_t tsc_text_decoder_constructor_value(void);
 tsc_value_t tsc_util_module_value(bool namespace_object);
 tsc_value_t tsc_util_export_value(tsc_str_t* name);
+tsc_value_t tsc_buffer_module_value(bool namespace_object);
+tsc_value_t tsc_buffer_module_export_value(tsc_str_t* name);
 tsc_value_t tsc_text_encoder_prototype_value(void);
 tsc_value_t tsc_text_decoder_prototype_value(void);
 tsc_text_encoder_t* tsc_text_encoder_new(void);
