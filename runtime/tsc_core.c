@@ -336,6 +336,7 @@ void tsc_function_identity_set_own_prototype(tsc_function_identity_t* entry, tsc
 typedef struct {
     tsc_function_identity_t* prototype_identity;
     tsc_function_identity_t* constructor_identity;
+    tsc_function_identity_t* throw_type_error_identity;
     int initialization_state;
 } tsc_function_intrinsics_t;
 
@@ -544,19 +545,23 @@ static tsc_value_t function_prototype_to_string(void* env, tsc_value_t this_arg,
     return tsc_value_string(source);
 }
 
-static tsc_value_t function_prototype_restricted_get(void* env, tsc_value_t receiver) {
-    (void)env;
-    (void)receiver;
+static tsc_value_t throw_type_error_body(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)receiver; (void)args;
     tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("restricted function property"));
     return tsc_value_undefined();
 }
 
-static bool function_prototype_restricted_set(void* env, tsc_value_t receiver, tsc_value_t value) {
-    (void)env;
-    (void)receiver;
-    (void)value;
-    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("restricted function property"));
-    return false;
+/* Every restricted accessor retains the same actual Realm intrinsic. */
+static void define_restricted_accessor(tsc_value_t target, tsc_str_t* name,
+        tsc_value_t thrower, bool configurable) {
+    tsc_descriptor_record_t descriptor = { .present = TSC_DESCRIPTOR_BIT(GET) |
+        TSC_DESCRIPTOR_BIT(SET) | TSC_DESCRIPTOR_BIT(ENUMERABLE) | TSC_DESCRIPTOR_BIT(CONFIGURABLE) };
+    descriptor.values[TSC_DESCRIPTOR_GET] = thrower;
+    descriptor.values[TSC_DESCRIPTOR_SET] = thrower;
+    descriptor.values[TSC_DESCRIPTOR_ENUMERABLE] = tsc_value_bool(false);
+    descriptor.values[TSC_DESCRIPTOR_CONFIGURABLE] = tsc_value_bool(configurable);
+    if (!tsc_value_define_property_descriptor(target, name, tsc_descriptor_record_object(&descriptor)))
+        tsc_panic("restricted accessor definition failed");
 }
 
 static tsc_value_t function_prototype_has_instance(void* env,tsc_value_t receiver,tsc_array_t* args) {
@@ -661,24 +666,24 @@ static tsc_function_intrinsics_t* ensure_function_intrinsics(void) {
         function_prototype_define_method(intrinsics->prototype_identity, "toString", 8, 0.0, function_prototype_to_string);
         tsc_object_define(intrinsics->prototype_identity->props,tsc_symbol_property_key(tsc_symbol_has_instance()),
             tsc_value_function_builtin_named(function_prototype_has_instance,NULL,1.0,tsc_str_from_lit("[Symbol.hasInstance]",20)),false,false,false);
+        intrinsics->throw_type_error_identity = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
+        memset(intrinsics->throw_type_error_identity, 0, sizeof(tsc_function_identity_t));
+        tsc_function_identity_t* thrower_identity = intrinsics->throw_type_error_identity;
+        thrower_identity->kind = TSC_FUNCTION_IDENTITY_BUILTIN;
+        thrower_identity->realm = tsc_realm_current();
+        thrower_identity->code.generic = throw_type_error_body;
+        tsc_function_identity_set_prototype(thrower_identity, prototype);
+        tsc_function_identity_set_own_prototype(thrower_identity, tsc_value_undefined());
+        tsc_function_init_metadata(thrower_identity, 0.0, tsc_str_from_lit("", 0));
+        tsc_object_define(thrower_identity->props, tsc_str_from_lit("length", 6), tsc_value_num(0), false, false, false);
+        tsc_object_define(thrower_identity->props, tsc_str_from_lit("name", 4), tsc_value_string(tsc_str_from_lit("", 0)), false, false, false);
+        tsc_object_prevent_extensions(thrower_identity->props);
+        thrower_identity->extensible = false;
+        tsc_value_t thrower = value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)thrower_identity);
         const char* restricted_names[] = { "caller", "arguments" };
         const size_t restricted_lengths[] = { 6, 9 };
-        for (size_t index = 0; index < 2; index++) {
-            tsc_object_define_accessor(
-                intrinsics->prototype_identity->props,
-                tsc_str_from_lit(restricted_names[index], restricted_lengths[index]),
-                function_prototype_restricted_get,
-                NULL,
-                true,
-                function_prototype_restricted_set,
-                NULL,
-                true,
-                false,
-                true,
-                false,
-                true
-            );
-        }
+        for (size_t index = 0; index < sizeof(restricted_names) / sizeof(*restricted_names); index++)
+            define_restricted_accessor(prototype, tsc_str_from_lit(restricted_names[index], restricted_lengths[index]), thrower, true);
 
         tsc_function_identity_set_prototype(intrinsics->constructor_identity, prototype);
         tsc_function_identity_set_own_prototype(intrinsics->constructor_identity, prototype);
@@ -2499,19 +2504,6 @@ tsc_value_t tsc_call_receiver(void) {
     return g_call_activation_top ? g_call_activation_top->this_arg : tsc_value_undefined();
 }
 
-static tsc_value_t call_arguments_thrower(void* env, tsc_value_t receiver) {
-    (void)env;
-    (void)receiver;
-    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("restricted arguments property"));
-}
-
-static bool call_arguments_set_thrower(void* env, tsc_value_t receiver, tsc_value_t value) {
-    (void)env;
-    (void)receiver;
-    (void)value;
-    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("restricted arguments property"));
-}
-
 tsc_value_t tsc_call_arguments(void) {
     tsc_call_activation_t* activation = g_call_activation_top;
     if (!activation) {
@@ -2549,21 +2541,10 @@ tsc_value_t tsc_call_arguments(void) {
         false,
         true
     );
-    if (activation->strict) {
-        tsc_object_define_accessor(
-            object,
-            tsc_str_from_lit("callee", 6),
-            call_arguments_thrower,
-            NULL,
-            true,
-            call_arguments_set_thrower,
-            NULL,
-            true,
-            false,
-            true,
-            false,
-            true
-        );
+    if (!object->arguments_parameter_cells) {
+        tsc_function_identity_t* thrower = ensure_function_intrinsics()->throw_type_error_identity;
+        define_restricted_accessor(tsc_value_object(object), tsc_str_from_lit("callee", 6),
+            value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)thrower), false);
     } else {
         tsc_object_define(
             object,

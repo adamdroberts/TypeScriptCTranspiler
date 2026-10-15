@@ -1,3 +1,5 @@
+- Share one frozen Realm-owned ThrowTypeError intrinsic across restricted function and unmapped-arguments accessors.
+
 - Replace the obsolete switch-class rejection assertion with independent Node/native canonical member and lexical-owner behavior checks.
 
 - Keep function declaration binding identity stable across checker expando/prototype inference so lexical reads and captures share the original cell.
