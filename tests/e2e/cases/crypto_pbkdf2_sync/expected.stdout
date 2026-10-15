@@ -5,5 +5,5 @@ sha256 bb: 632c2812e46d4604102ba7618e9d6d7d
 named import: true
 namespace import: true
 ignored args: true 42
-error: crypto.pbkdf2Sync: iterations must be a positive finite number
-error: crypto.pbkdf2Sync: keylen must be a non-negative finite number
+error: RangeError
+error: RangeError

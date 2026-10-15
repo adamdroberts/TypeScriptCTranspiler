@@ -365,21 +365,12 @@ tsc_value_t tsc_regexp_prototype_value(void);
 /* ------------- crypto ------------- */
 tsc_value_t tsc_crypto_digest_create_value(bool hmac,struct tsc_array* args);
 tsc_value_t tsc_crypto_digest_prototype_value(bool hmac);
-tsc_value_t tsc_crypto_digest_module_value(bool namespace_import);
-tsc_value_t tsc_crypto_digest_export_value(tsc_str_t* name);
-double tsc_crypto_number_input(tsc_value_t value);
+tsc_value_t tsc_crypto_module_value(bool namespace_import);
+tsc_value_t tsc_crypto_export_value(tsc_str_t* name);
 struct tsc_buffer* tsc_crypto_random_bytes(double size);
 struct tsc_buffer* tsc_crypto_random_fill_sync(struct tsc_buffer* buffer, double offset, double size, bool offset_is_null, bool size_is_null);
 tsc_str_t* tsc_crypto_random_uuid(void);
 bool tsc_crypto_timing_safe_equal(const struct tsc_buffer* a, const struct tsc_buffer* b);
-struct tsc_buffer* tsc_crypto_pbkdf2_sync_ss(const tsc_str_t* password, const tsc_str_t* salt, double iterations, double keylen, const tsc_str_t* digest);
-struct tsc_buffer* tsc_crypto_pbkdf2_sync_sb(const tsc_str_t* password, const struct tsc_buffer* salt, double iterations, double keylen, const tsc_str_t* digest);
-struct tsc_buffer* tsc_crypto_pbkdf2_sync_bs(const struct tsc_buffer* password, const tsc_str_t* salt, double iterations, double keylen, const tsc_str_t* digest);
-struct tsc_buffer* tsc_crypto_pbkdf2_sync_bb(const struct tsc_buffer* password, const struct tsc_buffer* salt, double iterations, double keylen, const tsc_str_t* digest);
-struct tsc_buffer* tsc_crypto_scrypt_sync_ss(const tsc_str_t* password, const tsc_str_t* salt, double keylen, double N, double r, double p, double maxmem);
-struct tsc_buffer* tsc_crypto_scrypt_sync_sb(const tsc_str_t* password, const struct tsc_buffer* salt, double keylen, double N, double r, double p, double maxmem);
-struct tsc_buffer* tsc_crypto_scrypt_sync_bs(const struct tsc_buffer* password, const tsc_str_t* salt, double keylen, double N, double r, double p, double maxmem);
-struct tsc_buffer* tsc_crypto_scrypt_sync_bb(const struct tsc_buffer* password, const struct tsc_buffer* salt, double keylen, double N, double r, double p, double maxmem);
 struct tsc_array* tsc_crypto_get_hashes(void);
 
 struct tsc_buffer* tsc_child_process_exec_sync(const tsc_str_t* command, const tsc_str_t* cwd, const tsc_str_t* input, const struct tsc_array* env, const tsc_str_t* shell, double uid, double gid, double max_buffer, double timeout_ms, int timeout_signal);

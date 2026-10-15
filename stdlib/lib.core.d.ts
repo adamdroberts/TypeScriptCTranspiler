@@ -2461,6 +2461,8 @@ declare module "node:path/win32" {
     export default defaultPath;
 }
 
+type CryptoByteOwner = Buffer | TypedArray<any> | DataView | ArrayBuffer | SharedArrayBuffer;
+type CryptoData = string | CryptoByteOwner;
 type CryptoHashAlgorithm = string;
 interface CryptoRandomUUIDOptions {
     disableEntropyCache?: boolean;
@@ -2509,11 +2511,11 @@ interface Crypto {
     createHmac(algorithm: CryptoHashAlgorithm, key: string | Buffer | DataView, ...ignored: any[]): CryptoHmac;
     getHashes(...ignored: any[]): string[];
     randomBytes(size: number, ...ignored: any[]): Buffer;
-    randomFillSync(buffer: Buffer, offset?: number, size?: number, ...ignored: any[]): Buffer;
+    randomFillSync<T extends CryptoByteOwner>(buffer: T, offset?: number, size?: number, ...ignored: any[]): T;
     randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
-    timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
-    pbkdf2Sync(password: string | Buffer, salt: string | Buffer, iterations: number, keylen: number, digest: CryptoHashAlgorithm, ...ignored: any[]): Buffer;
-    scryptSync(password: string | Buffer, salt: string | Buffer, keylen: number, options?: CryptoScryptOptions, ...ignored: any[]): Buffer;
+    timingSafeEqual(a: CryptoByteOwner, b: CryptoByteOwner, ...ignored: any[]): boolean;
+    pbkdf2Sync(password: CryptoData, salt: CryptoData, iterations: number, keylen: number, digest: CryptoHashAlgorithm, ...ignored: any[]): Buffer;
+    scryptSync(password: CryptoData, salt: CryptoData, keylen: number, options?: CryptoScryptOptions, ...ignored: any[]): Buffer;
 }
 declare const crypto: Crypto;
 declare module "crypto" {
@@ -2523,11 +2525,11 @@ declare module "crypto" {
     export function createHmac(algorithm: CryptoHashAlgorithm, key: string | Buffer | DataView, ...ignored: any[]): CryptoHmac;
     export function getHashes(...ignored: any[]): string[];
     export function randomBytes(size: number, ...ignored: any[]): Buffer;
-    export function randomFillSync(buffer: Buffer, offset?: number, size?: number, ...ignored: any[]): Buffer;
+    export function randomFillSync<T extends CryptoByteOwner>(buffer: T, offset?: number, size?: number, ...ignored: any[]): T;
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
-    export function timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
-    export function pbkdf2Sync(password: string | Buffer, salt: string | Buffer, iterations: number, keylen: number, digest: CryptoHashAlgorithm, ...ignored: any[]): Buffer;
-    export function scryptSync(password: string | Buffer, salt: string | Buffer, keylen: number, options?: CryptoScryptOptions, ...ignored: any[]): Buffer;
+    export function timingSafeEqual(a: CryptoByteOwner, b: CryptoByteOwner, ...ignored: any[]): boolean;
+    export function pbkdf2Sync(password: CryptoData, salt: CryptoData, iterations: number, keylen: number, digest: CryptoHashAlgorithm, ...ignored: any[]): Buffer;
+    export function scryptSync(password: CryptoData, salt: CryptoData, keylen: number, options?: CryptoScryptOptions, ...ignored: any[]): Buffer;
     const defaultCrypto: Crypto;
     export default defaultCrypto;
 }
@@ -2538,11 +2540,11 @@ declare module "node:crypto" {
     export function createHmac(algorithm: CryptoHashAlgorithm, key: string | Buffer | DataView, ...ignored: any[]): CryptoHmac;
     export function getHashes(...ignored: any[]): string[];
     export function randomBytes(size: number, ...ignored: any[]): Buffer;
-    export function randomFillSync(buffer: Buffer, offset?: number, size?: number, ...ignored: any[]): Buffer;
+    export function randomFillSync<T extends CryptoByteOwner>(buffer: T, offset?: number, size?: number, ...ignored: any[]): T;
     export function randomUUID(options?: CryptoRandomUUIDOptions, ...ignored: any[]): string;
-    export function timingSafeEqual(a: Buffer, b: Buffer, ...ignored: any[]): boolean;
-    export function pbkdf2Sync(password: string | Buffer, salt: string | Buffer, iterations: number, keylen: number, digest: CryptoHashAlgorithm, ...ignored: any[]): Buffer;
-    export function scryptSync(password: string | Buffer, salt: string | Buffer, keylen: number, options?: CryptoScryptOptions, ...ignored: any[]): Buffer;
+    export function timingSafeEqual(a: CryptoByteOwner, b: CryptoByteOwner, ...ignored: any[]): boolean;
+    export function pbkdf2Sync(password: CryptoData, salt: CryptoData, iterations: number, keylen: number, digest: CryptoHashAlgorithm, ...ignored: any[]): Buffer;
+    export function scryptSync(password: CryptoData, salt: CryptoData, keylen: number, options?: CryptoScryptOptions, ...ignored: any[]): Buffer;
     const defaultCrypto: Crypto;
     export default defaultCrypto;
 }

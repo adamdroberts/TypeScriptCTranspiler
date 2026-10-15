@@ -1,6 +1,6 @@
 import {sourceNumericOperation, SOURCE_NUMERIC_OPERATION_FUNCTIONS, SOURCE_BINARY_NUMERIC_OPERATIONS, SOURCE_PREFIX_NUMERIC_OPERATIONS, SOURCE_UPDATE_NUMERIC_OPERATIONS} from "../source-numeric-operations";
 import { consoleOperations } from "../console-operations";
-import { cryptoDigestExports } from "../crypto-digest-owners";
+import { cryptoExports } from "../crypto-exports";
 import type { SourceEvalPlan, EvalSourceEntry, DirectEvalSourceEntry, IndirectEvalSourceEntry } from "../eval-source";
 import { classPrivateNames, classPrivateNamesInScope, externalPrivateNames, resolveClassPrivateName } from "./private-names";
 import { moduleRequestFromDeclaration, moduleRequestKey, type ModuleRequest } from "../module-request";
@@ -1981,13 +1981,6 @@ class Emitter {
         }
         if (
             ts.isIdentifier(recv) &&
-            this.isCryptoModuleIdentifier(recv) &&
-            this.isSideEffectFreeCryptoCall(method, call.arguments, seenConsts)
-        ) {
-            return true;
-        }
-        if (
-            ts.isIdentifier(recv) &&
             this.isEventsModuleIdentifier(recv) &&
             this.isSideEffectFreeEventsStaticCall(method, call.arguments, seenConsts)
         ) {
@@ -2151,10 +2144,6 @@ class Emitter {
             (
                 this.isNetModuleIdentifier(recv) &&
                 this.isSideEffectFreeNetCall(method, call.arguments, seenConsts)
-            ) ||
-            (
-                this.isCryptoModuleIdentifier(recv) &&
-                this.isSideEffectFreePrimitiveCryptoCall(method, call.arguments, seenConsts)
             ) ||
             (
                 this.isEventsModuleIdentifier(recv) &&
@@ -2421,20 +2410,6 @@ class Emitter {
             Array.from(args).slice(1).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
             );
-    }
-
-    private isSideEffectFreeCryptoCall(
-        method: string,
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean { return false; }
-
-    private isSideEffectFreePrimitiveCryptoCall(
-        method: string,
-        args: ts.NodeArray<ts.Expression>,
-        seenConsts: Set<ts.Symbol>,
-    ): boolean {
-        return false;
     }
 
     private isSideEffectFreeHashMethodCall(
@@ -5940,10 +5915,7 @@ class Emitter {
         if (streamExport !== null) {
             return this.isSideEffectFreeStreamCall(streamExport, call.arguments, seenConsts);
         }
-        const cryptoExport = this.namedImportExportName(callee, ["crypto", "node:crypto"]);
-        if (cryptoExport !== null) {
-            return this.isSideEffectFreeCryptoCall(cryptoExport, call.arguments, seenConsts);
-        }
+        if(this.importedHostModuleOwner(callee,false))return false;
         if (name === "RegExp") {
             return this.isUnshadowedGlobalIdentifier(callee, name) &&
                 false;
@@ -7198,13 +7170,7 @@ class Emitter {
             ) {
                 return true;
             }
-            const cryptoExport = this.namedImportExportName(unwrapped.expression, ["crypto", "node:crypto"]);
-            if (
-                cryptoExport !== null &&
-                this.isSideEffectFreePrimitiveCryptoCall(cryptoExport, unwrapped.arguments, seenConsts)
-            ) {
-                return true;
-            }
+
         }
         if (
             ts.isCallExpression(unwrapped) &&
@@ -19021,12 +18987,6 @@ class Emitter {
             return true;
         }
         return ts.isIdentifier(unwrapped) && this.isNamedImportFrom(unwrapped, ["net", "node:net"], "SocketAddress");
-    }
-
-    private isCryptoModuleIdentifier(id: ts.Identifier): boolean {
-        return id.text === "crypto" ||
-            this.isNamespaceImportFrom(id, ["crypto", "node:crypto"]) ||
-            this.isDefaultImportFrom(id, ["crypto", "node:crypto"]);
     }
 
     private isProcessModuleIdentifier(id: ts.Identifier): boolean {
@@ -32801,24 +32761,10 @@ class Emitter {
             }
         }
 
-        if (ts.isIdentifier(expr)) {
-            let receiver: ts.Node=expr;
-            while(receiver.parent && (ts.isParenthesizedExpression(receiver.parent) || ts.isAsExpression(receiver.parent) ||
-                ts.isTypeAssertionExpression(receiver.parent) || ts.isNonNullExpression(receiver.parent) || ts.isSatisfiesExpression(receiver.parent))) receiver=receiver.parent;
-            const member=receiver.parent;
-            const importCell=expr.parent && (ts.isNamespaceImport(expr.parent) || ts.isImportClause(expr.parent));
-            const cryptoNames=["crypto","node:crypto"],cryptoMembers=cryptoDigestExports;
-            const cryptoReceiver=member&&ts.isPropertyAccessExpression(member)&&member.expression===receiver&&cryptoMembers.has(member.name.text);
-            if((cryptoReceiver||importCell)&&this.isNamespaceImportFrom(expr,cryptoNames))return {c:"tsc_crypto_digest_module_value(true)",ty:T_VALUE};
-            if((cryptoReceiver||importCell)&&this.isDefaultImportFrom(expr,cryptoNames))return {c:"tsc_crypto_digest_module_value(false)",ty:T_VALUE};
-            const cryptoName=this.namedImportExportName(expr,cryptoNames);
-            if(cryptoName&&cryptoMembers.has(cryptoName))return {c:"tsc_crypto_digest_export_value("+this.stringLit(cryptoName)+")",ty:T_VALUE};
-        }
-        if(ts.isPropertyAccessExpression(expr)&&ts.isIdentifier(expr.expression)&&this.isCryptoModuleIdentifier(expr.expression)&&cryptoDigestExports.has(expr.name.text)){
-            const namespaceImport=this.isNamespaceImportFrom(expr.expression,["crypto","node:crypto"]);
-            return {c:"tsc_value_get_prop(tsc_crypto_digest_module_value("+namespaceImport+"), "+this.stringLit(expr.name.text)+")",ty:T_VALUE};
-        }
+        if(ts.isIdentifier(expr)&&this.isUnshadowedGlobalIdentifier(expr,"crypto"))
+            return {c:"tsc_crypto_module_value(false)",ty:T_VALUE};
         const modules = [
+            { names: ["crypto", "node:crypto"], value: "tsc_crypto_module_value", export: "tsc_crypto_export_value", members: cryptoExports },
             { names: ["child_process", "node:child_process"], value: "tsc_child_process_module_value", export: "tsc_child_process_export_value", members: new Set(runtimeChildProcessOperations.keys()) },
             { names: ["buffer", "node:buffer"], value: "tsc_buffer_module_value", export: "tsc_buffer_module_export_value", members: runtimeBufferExports },
             { names: ["util", "node:util"], value: "tsc_util_module_value", export: "tsc_util_export_value", members: runtimeUtilExports },
@@ -33470,11 +33416,7 @@ class Emitter {
         if (streamNamed) {
             return this.emitStreamCall(call, streamNamed);
         }
-        const cryptoNamed = ["createHash", "createHmac", "randomBytes", "randomUUID", "timingSafeEqual", "pbkdf2Sync", "getHashes", "randomFillSync", "scryptSync"]
-            .find((exported) => this.isNamedImportFrom(calleeId, ["crypto", "node:crypto"], exported));
-        if (cryptoNamed) {
-            return this.emitCryptoCall(call, cryptoNamed);
-        }
+
         const pathNamed = ["join", "resolve", "normalize", "isAbsolute", "relative", "toNamespacedPath", "basename", "dirname", "extname", "parse", "format", "matchesGlob"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["path", "node:path", "path/posix", "node:path/posix"], exported));
         if (pathNamed) {
@@ -35259,13 +35201,6 @@ class Emitter {
             return this.emitSequencedExpr(T_BOOLEAN, [{ value: argumentsList }],
                 ([actuals]) => `tsc_process_stdio_write(${processWritableStreamName === "stderr" ? "true" : "false"}, ${actuals})`);
         }
-        if(ts.isIdentifier(recvExpr)&&this.isCryptoModuleIdentifier(recvExpr)){
-            if(cryptoDigestExports.has(memberName)){
-                const namespaceImport=this.isNamespaceImportFrom(recvExpr,["crypto","node:crypto"]);
-                return this.emitDynamicNamedPropertyCall(call,{c:"tsc_crypto_digest_module_value("+namespaceImport+")",ty:T_VALUE},memberName);
-            }
-            return this.emitCryptoCall(call,memberName);
-        }
         if (this.importedHostModuleOwner(recvExpr))
             return this.emitDynamicNamedPropertyCall(call, this.emitExpr(recvExpr), memberName);
         if (this.expressionHasCanonicalSourceValue(recvExpr))
@@ -35390,10 +35325,6 @@ class Emitter {
 
         if (ts.isIdentifier(recvExpr) && this.isQueryStringModuleIdentifier(recvExpr)) {
             return this.emitQueryStringCall(call, memberName);
-        }
-
-        if (ts.isIdentifier(recvExpr) && this.isCryptoModuleIdentifier(recvExpr)) {
-            return this.emitCryptoCall(call, memberName);
         }
 
         const requireMember = this.requireModuleMemberCName(pa);
@@ -35933,9 +35864,6 @@ class Emitter {
             memberName === "hrtime"
         ) {
             return this.emitProcessModuleCall(call, "hrtime");
-        }
-        if (ts.isIdentifier(recvExpr) && this.isCryptoModuleIdentifier(recvExpr)) {
-            return this.emitCryptoCall(call, memberName);
         }
         if (ts.isIdentifier(recvExpr) && this.isOsModuleIdentifier(recvExpr)) {
             return this.emitOsCall(call, memberName);
@@ -38486,255 +38414,6 @@ class Emitter {
             }
         }
         unsupported(call, `path.${name} (Phase 10 subset only)`);
-    }
-
-    private emitCryptoNumberArgument(value: EmitResult, node: ts.Node): EmitResult {
-        if (value.ty.kind === "value") return { c: `tsc_crypto_number_input(${value.c})`, ty: T_NUMBER };
-        requireNumber(node, value.ty);
-        return value;
-    }
-
-    private emitCryptoCall(call: ts.CallExpression, name: string): EmitResult {
-        if (name === "createHash" || name === "createHmac") {
-            const argumentsList = this.emitSpreadCallArgumentList(call.arguments);
-            return this.emitSequencedExpr(T_VALUE, [{ value: argumentsList }],
-                ([actuals]) => `tsc_crypto_digest_create_value(${name === "createHmac" ? "true" : "false"}, ${actuals})`);
-        }
-        if (name === "randomBytes") {
-            if (call.arguments.length < 1)
-                unsupported(call, "crypto.randomBytes expects 1 arg");
-            const size = this.emitCryptoNumberArgument(this.emitExpr(call.arguments[0]!), call.arguments[0]!);
-            requireNumber(call.arguments[0]!, size.ty);
-            return this.emitSequencedExpr(
-                T_BUFFER,
-                [
-                    { value: size, target: T_NUMBER, node: call.arguments[0]! },
-                    ...this.ignoredArgumentSpecs(call.arguments, 1),
-                ],
-                ([sizeArg]) => `tsc_crypto_random_bytes(${sizeArg})`,
-            );
-        }
-        if (name === "randomUUID") {
-            if (call.arguments.length > 0) {
-                this.validateCryptoRandomUUIDOptions(call.arguments[0]!, "crypto.randomUUID");
-            }
-            return this.emitSequencedExpr(
-                T_STRING,
-                this.ignoredArgumentSpecs(call.arguments, 0),
-                () => "tsc_crypto_random_uuid()",
-            );
-        }
-        if (name === "timingSafeEqual") {
-            if (call.arguments.length < 2)
-                unsupported(call, "crypto.timingSafeEqual expects two Buffer arguments");
-            const a = this.emitExpr(call.arguments[0]!);
-            const b = this.emitExpr(call.arguments[1]!);
-            if (a.ty.kind !== "buffer" || b.ty.kind !== "buffer") {
-                unsupported(call, "crypto.timingSafeEqual expects Buffer arguments");
-            }
-            return this.emitSequencedExpr(
-                T_BOOLEAN,
-                [
-                    { value: a },
-                    { value: b },
-                    ...this.ignoredArgumentSpecs(call.arguments, 2),
-                ],
-                ([left, right]) => `tsc_crypto_timing_safe_equal(${left}, ${right})`,
-            );
-        }
-        if (name === "pbkdf2Sync") {
-            if (call.arguments.length < 5)
-                unsupported(call, "crypto.pbkdf2Sync expects 5 args: password, salt, iterations, keylen, digest");
-            const password = this.emitExpr(call.arguments[0]!);
-            const salt = this.emitExpr(call.arguments[1]!);
-            const iterations = this.emitCryptoNumberArgument(this.emitExpr(call.arguments[2]!), call.arguments[2]!);
-            const keylen = this.emitCryptoNumberArgument(this.emitExpr(call.arguments[3]!), call.arguments[3]!);
-            const digest = this.emitExpr(call.arguments[4]!);
-
-            requireNumber(call.arguments[2]!, iterations.ty);
-            requireNumber(call.arguments[3]!, keylen.ty);
-
-            const passIsStr = password.ty.kind === "string";
-            const passIsBuf = password.ty.kind === "buffer";
-            if (!passIsStr && !passIsBuf) {
-                unsupported(call.arguments[0]!, "crypto.pbkdf2Sync password must be a string or Buffer");
-            }
-            const saltIsStr = salt.ty.kind === "string";
-            const saltIsBuf = salt.ty.kind === "buffer";
-            if (!saltIsStr && !saltIsBuf) {
-                unsupported(call.arguments[1]!, "crypto.pbkdf2Sync salt must be a string or Buffer");
-            }
-
-            const suffix = (passIsStr ? "s" : "b") + (saltIsStr ? "s" : "b");
-            const cFn = `tsc_crypto_pbkdf2_sync_${suffix}`;
-
-            return this.emitSequencedExpr(
-                T_BUFFER,
-                [
-                    { value: password, target: passIsStr ? T_STRING : T_BUFFER, node: call.arguments[0]! },
-                    { value: salt, target: saltIsStr ? T_STRING : T_BUFFER, node: call.arguments[1]! },
-                    { value: iterations, target: T_NUMBER, node: call.arguments[2]! },
-                    { value: keylen, target: T_NUMBER, node: call.arguments[3]! },
-                    { value: digest, target: T_STRING, node: call.arguments[4]! },
-                    ...this.ignoredArgumentSpecs(call.arguments, 5),
-                ],
-                ([p, s, i, k, d]) => `${cFn}(${p}, ${s}, ${i}, ${k}, ${d})`
-            );
-        }
-        if (name === "scryptSync") {
-            if (call.arguments.length < 3)
-                unsupported(call, "crypto.scryptSync expects password, salt, keylen");
-            const password = this.emitExpr(call.arguments[0]!);
-            const salt = this.emitExpr(call.arguments[1]!);
-            const keylen = this.emitCryptoNumberArgument(this.emitExpr(call.arguments[2]!), call.arguments[2]!);
-
-            requireNumber(call.arguments[2]!, keylen.ty);
-
-            const passIsStr = password.ty.kind === "string";
-            const passIsBuf = password.ty.kind === "buffer";
-            if (!passIsStr && !passIsBuf) {
-                unsupported(call.arguments[0]!, "crypto.scryptSync password must be a string or Buffer");
-            }
-            const saltIsStr = salt.ty.kind === "string";
-            const saltIsBuf = salt.ty.kind === "buffer";
-            if (!saltIsStr && !saltIsBuf) {
-                unsupported(call.arguments[1]!, "crypto.scryptSync salt must be a string or Buffer");
-            }
-
-            let N_expr: ts.Expression | undefined;
-            let r_expr: ts.Expression | undefined;
-            let p_expr: ts.Expression | undefined;
-            let maxmem_expr: ts.Expression | undefined;
-
-            if (call.arguments.length >= 4) {
-                const options = call.arguments[3]!;
-                if (!this.isUndefinedLikeExpression(options)) {
-                    const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
-                    if (!this.isUndefinedLikeExpression(resolvedOptions)) {
-                        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
-                            unsupported(options, "crypto.scryptSync options must be an object literal in this subset");
-                        }
-                        for (const prop of resolvedOptions.properties) {
-                            if (!ts.isPropertyAssignment(prop)) {
-                                unsupported(prop, "crypto.scryptSync options only support property assignments");
-                            }
-                            const key = this.staticPropertyName(prop.name);
-                            if (key === "N" || key === "cost") {
-                                N_expr = prop.initializer;
-                            } else if (key === "r" || key === "blockSize") {
-                                r_expr = prop.initializer;
-                            } else if (key === "p" || key === "parallelization") {
-                                p_expr = prop.initializer;
-                            } else if (key === "maxmem") {
-                                maxmem_expr = prop.initializer;
-                            } else {
-                                unsupported(prop.name, `crypto.scryptSync unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
-                            }
-                        }
-                    }
-                }
-            }
-
-            const N_val = N_expr ? this.emitCryptoNumberArgument(this.emitExpr(N_expr), N_expr) : undefined;
-            const r_val = r_expr ? this.emitCryptoNumberArgument(this.emitExpr(r_expr), r_expr) : undefined;
-            const p_val = p_expr ? this.emitCryptoNumberArgument(this.emitExpr(p_expr), p_expr) : undefined;
-            const maxmem_val = maxmem_expr ? this.emitCryptoNumberArgument(this.emitExpr(maxmem_expr), maxmem_expr) : undefined;
-
-            if (N_val) requireNumber(N_expr!, N_val.ty);
-            if (r_val) requireNumber(r_expr!, r_val.ty);
-            if (p_val) requireNumber(p_expr!, p_val.ty);
-            if (maxmem_val) requireNumber(maxmem_expr!, maxmem_val.ty);
-
-            const suffix = (passIsStr ? "s" : "b") + (saltIsStr ? "s" : "b");
-            const cFn = `tsc_crypto_scrypt_sync_${suffix}`;
-
-            const specs: SequencedCallArg[] = [
-                { value: password, target: passIsStr ? T_STRING : T_BUFFER, node: call.arguments[0]! },
-                { value: salt, target: saltIsStr ? T_STRING : T_BUFFER, node: call.arguments[1]! },
-                { value: keylen, target: T_NUMBER, node: call.arguments[2]! },
-            ];
-
-            if (N_val) specs.push({ value: N_val, target: T_NUMBER, node: N_expr! });
-            if (r_val) specs.push({ value: r_val, target: T_NUMBER, node: r_expr! });
-            if (p_val) specs.push({ value: p_val, target: T_NUMBER, node: p_expr! });
-            if (maxmem_val) specs.push({ value: maxmem_val, target: T_NUMBER, node: maxmem_expr! });
-
-            specs.push(...this.ignoredArgumentSpecs(call.arguments, 4));
-
-            return this.emitSequencedExpr(
-                T_BUFFER,
-                specs,
-                (emittedArgs) => {
-                    let idx = 3;
-                    const p_arg = N_val ? emittedArgs[idx++] : "16384.0";
-                    const r_arg = r_val ? emittedArgs[idx++] : "8.0";
-                    const p_par_arg = p_val ? emittedArgs[idx++] : "1.0";
-                    const maxmem_arg = maxmem_val ? emittedArgs[idx++] : "33554432.0";
-                    return `${cFn}(${emittedArgs[0]}, ${emittedArgs[1]}, ${emittedArgs[2]}, ${p_arg}, ${r_arg}, ${p_par_arg}, ${maxmem_arg})`;
-                }
-            );
-        }
-        if (name === "randomFillSync") {
-            if (call.arguments.length < 1)
-                unsupported(call, "crypto.randomFillSync expects at least 1 arg");
-            const buf = this.emitExpr(call.arguments[0]!);
-            if (buf.ty.kind !== "buffer") {
-                unsupported(call.arguments[0]!, "crypto.randomFillSync expects Buffer as first argument");
-            }
-            const specs: SequencedCallArg[] = [{ value: buf }];
-            const hasOffset = !!call.arguments[1] && !this.isUndefinedExpression(call.arguments[1]);
-            const hasSize = !!call.arguments[2] && !this.isUndefinedExpression(call.arguments[2]);
-            if (hasOffset) {
-                const offset = this.emitCryptoNumberArgument(this.emitExpr(call.arguments[1]), call.arguments[1]);
-                requireNumber(call.arguments[1], offset.ty);
-                specs.push({ value: offset, target: T_NUMBER, node: call.arguments[1] });
-            }
-            if (hasSize) {
-                const size = this.emitCryptoNumberArgument(this.emitExpr(call.arguments[2]), call.arguments[2]);
-                requireNumber(call.arguments[2], size.ty);
-                specs.push({ value: size, target: T_NUMBER, node: call.arguments[2] });
-            }
-            specs.push(...this.ignoredArgumentSpecs(call.arguments, 3));
-            return this.emitSequencedExpr(T_BUFFER, specs, (vals) => {
-                const b = vals[0]!;
-                let next = 1;
-                const offset = hasOffset ? vals[next++]! : "0.0";
-                const size = hasSize ? vals[next++]! : "0.0";
-                const offsetIsNull = hasOffset ? "false" : "true";
-                const sizeIsNull = hasSize ? "false" : "true";
-                return `tsc_crypto_random_fill_sync(${b}, ${offset}, ${size}, ${offsetIsNull}, ${sizeIsNull})`;
-            });
-        }
-        if (name === "getHashes") {
-            return this.emitSequencedExpr(
-                arrayType(T_STRING),
-                this.ignoredArgumentSpecs(call.arguments, 0),
-                () => "tsc_crypto_get_hashes()",
-            );
-        }
-        unsupported(call, `crypto.${name} (supported: createHash, createHmac, getHashes, randomBytes, randomUUID, timingSafeEqual, pbkdf2Sync, randomFillSync, scryptSync)`);
-    }
-
-    private validateCryptoRandomUUIDOptions(options: ts.Expression, label: string): void {
-        if (this.isUndefinedLikeExpression(options)) return;
-        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedLikeExpression(resolvedOptions)) return;
-        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
-            unsupported(options, `${label} options must be an object literal in this subset`);
-        }
-        for (const prop of resolvedOptions.properties) {
-            if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, `${label} options only support disableEntropyCache property assignments`);
-            }
-            const key = this.staticPropertyName(prop.name);
-            if (key !== "disableEntropyCache") {
-                unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
-            }
-            const value = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
-            if (!this.isUndefinedExpression(value) && this.sideEffectFreeBooleanLiteralValue(value, new Set()) === null) {
-                unsupported(value, `${label}.disableEntropyCache must be a boolean literal in this subset`);
-            }
-        }
     }
 
     private emitOsCall(call: ts.CallExpression, name: string): EmitResult {

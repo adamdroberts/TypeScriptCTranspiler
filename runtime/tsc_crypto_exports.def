@@ -1,0 +1,12 @@
+/* public key, owner kind, operation, function name, length, constructible */
+TSC_CRYPTO_EXPORT(Hash, CONSTRUCTOR, HASH, "deprecated", 2, true)
+TSC_CRYPTO_EXPORT(Hmac, CONSTRUCTOR, HMAC, "deprecated", 3, true)
+TSC_CRYPTO_EXPORT(createHash, FACTORY, HASH, "createHash", 2, true)
+TSC_CRYPTO_EXPORT(createHmac, FACTORY, HMAC, "createHmac", 3, true)
+TSC_CRYPTO_EXPORT(getHashes, FUNCTION, HASHES, "", 0, false)
+TSC_CRYPTO_EXPORT(randomBytes, FUNCTION, RANDOM_BYTES, "randomBytes", 2, true)
+TSC_CRYPTO_EXPORT(randomFillSync, FUNCTION, RANDOM_FILL, "randomFillSync", 1, true)
+TSC_CRYPTO_EXPORT(randomUUID, FUNCTION, RANDOM_UUID, "randomUUID", 1, true)
+TSC_CRYPTO_EXPORT(timingSafeEqual, FUNCTION, TIMING_EQUAL, "", 0, false)
+TSC_CRYPTO_EXPORT(pbkdf2Sync, FUNCTION, PBKDF2, "pbkdf2Sync", 5, true)
+TSC_CRYPTO_EXPORT(scryptSync, FUNCTION, SCRYPT, "scryptSync", 3, true)

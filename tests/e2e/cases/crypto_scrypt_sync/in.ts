@@ -35,7 +35,7 @@ function tryCatch(fn: () => void) {
     try {
         fn();
     } catch (e) {
-        console.log("error:", String(e));
+        console.log("error:", e instanceof Error ? e.name : typeof e);
     }
 }
 
@@ -51,9 +51,7 @@ tryCatch(() => {
     crypto.scryptSync("password", "salt", 32, { r: -1 });
 });
 
-tryCatch(() => {
-    crypto.scryptSync("password", "salt", 32, { p: 0 });
-});
+console.log("zero default:", crypto.scryptSync("password", "salt", 32, { p: 0 }).toString("hex") === res1.toString("hex"));
 
 tryCatch(() => {
     crypto.scryptSync("password", "salt", 32, { maxmem: -5 });

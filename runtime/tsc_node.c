@@ -107,11 +107,22 @@ static const crypto_owner_descriptor_t crypto_owners[]={
 #include "tsc_crypto_digest.def"
 #undef TSC_CRYPTO_DIGEST_OWNER
 };
+typedef enum {CRYPTO_EXPORT_CONSTRUCTOR,CRYPTO_EXPORT_FACTORY,CRYPTO_EXPORT_FUNCTION} crypto_export_kind_t;
+typedef enum {CRYPTO_EXPORT_HASH,CRYPTO_EXPORT_HMAC,CRYPTO_EXPORT_HASHES,CRYPTO_EXPORT_RANDOM_BYTES,
+    CRYPTO_EXPORT_RANDOM_FILL,CRYPTO_EXPORT_RANDOM_UUID,CRYPTO_EXPORT_TIMING_EQUAL,CRYPTO_EXPORT_PBKDF2,CRYPTO_EXPORT_SCRYPT} crypto_export_operation_t;
+typedef struct {const char* key;crypto_export_kind_t kind;crypto_export_operation_t operation;const char* name;double length;bool constructible;} crypto_export_descriptor_t;
+static const crypto_export_descriptor_t crypto_exports[]={
+#define TSC_CRYPTO_EXPORT(key,kind,operation,name,length,constructible) {#key,CRYPTO_EXPORT_##kind,CRYPTO_EXPORT_##operation,name,length,constructible},
+#include "tsc_crypto_exports.def"
+#undef TSC_CRYPTO_EXPORT
+};
+static tsc_value_t crypto_export_apply(void*,tsc_value_t,tsc_array_t*);
 typedef struct {
     tsc_value_t prototype[2],constructor[2],handle_symbol,state_symbol,finalized_symbol;
     void* prototype_root[2];void* constructor_root[2];void* symbol_root[3];
     tsc_value_t* methods;void** method_roots;
-    tsc_value_t exports,factories[2],export_constructors[2],module_members[4];
+    tsc_value_t exports,factories[2],export_constructors[2];
+    tsc_value_t* module_members;void** module_roots;
     void* exports_root;void* factory_roots[2];void* export_constructor_roots[2];tsc_object_t* namespace_object;
 } crypto_realm_t;
 static const char crypto_realm_key;
@@ -301,18 +312,26 @@ static crypto_realm_t* crypto_realm(void){
         exported->construct_allocates_receiver=false;exported->construct_default_prototype=index?TSC_INTRINSIC_DEFAULT_CRYPTO_HMAC_PROTOTYPE:TSC_INTRINSIC_DEFAULT_CRYPTO_HASH_PROTOTYPE;
         tsc_function_identity_set_own_prototype(exported,realm->prototype[index]);exported->func_prototype_writable=true;
         (void)tsc_value_object_set_prototype_of(realm->export_constructors[index],realm->constructor[index]);
-        realm->module_members[index*2]=realm->export_constructors[index];realm->module_members[index*2+1]=realm->factories[index];
-        const char* names[]={owner->constructor,owner->factory};
-        for(size_t member=0;member<sizeof(names)/sizeof(names[0]);++member){
-            crypto_define(realm->exports,crypto_key(names[member]),realm->module_members[index*2+member],true);
-            (void)tsc_object_define_accessor(realm->namespace_object,crypto_key(names[member]),crypto_export_get,&realm->module_members[index*2+member],true,NULL,NULL,false,true,true,false,true);
-        }
+    }
+    size_t export_count=sizeof(crypto_exports)/sizeof(*crypto_exports);
+    realm->module_members=TSC_GC_MALLOC(export_count*sizeof(*realm->module_members));
+    realm->module_roots=TSC_GC_MALLOC(export_count*sizeof(*realm->module_roots));
+    memset(realm->module_roots,0,export_count*sizeof(*realm->module_roots));
+    for(size_t index=0;index<export_count;++index){
+        const crypto_export_descriptor_t* entry=&crypto_exports[index];
+        if(entry->kind==CRYPTO_EXPORT_CONSTRUCTOR)realm->module_members[index]=realm->export_constructors[entry->operation==CRYPTO_EXPORT_HMAC];
+        else if(entry->kind==CRYPTO_EXPORT_FACTORY)realm->module_members[index]=realm->factories[entry->operation==CRYPTO_EXPORT_HMAC];
+        else realm->module_members[index]=tsc_value_function_named_kind(crypto_export_apply,NULL,(void*)entry,entry->length,crypto_key(entry->name),
+            entry->constructible?TSC_FUNCTION_IDENTITY_GENERIC:TSC_FUNCTION_IDENTITY_BUILTIN);
+        realm->module_roots[index]=tsc_value_gc_root(realm->module_members[index]);
+        crypto_define(realm->exports,crypto_key(entry->key),realm->module_members[index],true);
+        (void)tsc_object_define_accessor(realm->namespace_object,crypto_key(entry->key),crypto_export_get,&realm->module_members[index],true,NULL,NULL,false,true,true,false,true);
     }
     (void)tsc_object_define_accessor(realm->namespace_object,crypto_key("default"),crypto_default_get,realm,true,NULL,NULL,false,true,true,false,true);
     tsc_module_namespace_finalize(realm->namespace_object);
     return realm;
 }
-double tsc_crypto_number_input(tsc_value_t value){
+static double crypto_export_number(tsc_value_t value){
     if(value_is_box(value))tsc_throw_error(TSC_ERROR_TYPE,crypto_key("Crypto numeric argument must be a number"));
     return value_as_num(value);
 }
@@ -326,9 +345,7 @@ tsc_buffer_t* tsc_crypto_random_bytes(double size) {
     tsc_buffer_t* out = tsc_buffer_alloc(size, 0);
     if (out->len == 0) return out;
     if (RAND_bytes(out->data, (int)out->len) != 1) {
-        for (size_t i = 0; i < out->len; i++) {
-            out->data[i] = (uint8_t)(rand() & 0xff);
-        }
+        crypto_digest_error("crypto.randomBytes entropy generation failed",NULL);
     }
     return out;
 }
@@ -383,9 +400,7 @@ tsc_buffer_t* tsc_crypto_random_fill_sync(tsc_buffer_t* buffer, double offset, d
     }
     uint8_t* ptr = buffer->data + off;
     if (RAND_bytes(ptr, (int)len) != 1) {
-        for (size_t i = 0; i < len; i++) {
-            ptr[i] = (uint8_t)(rand() & 0xff);
-        }
+        crypto_digest_error("crypto.randomFillSync entropy generation failed",NULL);
     }
     return buffer;
 }
@@ -393,21 +408,17 @@ tsc_buffer_t* tsc_crypto_random_fill_sync(tsc_buffer_t* buffer, double offset, d
 
 bool tsc_crypto_timing_safe_equal(const tsc_buffer_t* a, const tsc_buffer_t* b) {
     if (!a || !b || a->len != b->len) {
-        tsc_throw_str(tsc_str_from_cstr("crypto.timingSafeEqual: inputs must have the same byte length"));
+        tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("crypto.timingSafeEqual: inputs must have the same byte length"));
     }
-    uint8_t diff = 0;
-    for (size_t i = 0; i < a->len; i++) {
-        diff |= (uint8_t)(a->data[i] ^ b->data[i]);
-    }
-    return diff == 0;
+    return a->len == 0 || CRYPTO_memcmp(a->data, b->data, a->len) == 0;
 }
 
-tsc_buffer_t* tsc_crypto_pbkdf2_sync_impl(const void* password_data, size_t password_len, const void* salt_data, size_t salt_len, double iterations, double keylen, const tsc_str_t* digest) {
+static tsc_buffer_t* crypto_pbkdf2_bytes(const void* password_data, size_t password_len, const void* salt_data, size_t salt_len, double iterations, double keylen, const tsc_str_t* digest) {
     if (isnan(iterations) || isinf(iterations) || iterations <= 0) {
-        tsc_throw_str(tsc_str_from_cstr("crypto.pbkdf2Sync: iterations must be a positive finite number"));
+        tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("crypto.pbkdf2Sync: iterations must be a positive finite number"));
     }
     if (isnan(keylen) || isinf(keylen) || keylen < 0) {
-        tsc_throw_str(tsc_str_from_cstr("crypto.pbkdf2Sync: keylen must be a non-negative finite number"));
+        tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("crypto.pbkdf2Sync: keylen must be a non-negative finite number"));
     }
 
     const EVP_MD* md = crypto_digest_lookup(digest);
@@ -424,59 +435,27 @@ tsc_buffer_t* tsc_crypto_pbkdf2_sync_impl(const void* password_data, size_t pass
     );
 
     if (res != 1) {
-        tsc_throw_str(tsc_str_from_cstr("crypto.pbkdf2Sync: PKCS5_PBKDF2_HMAC failed"));
+        tsc_throw_error(TSC_ERROR_ERROR,tsc_str_from_cstr("crypto.pbkdf2Sync: PKCS5_PBKDF2_HMAC failed"));
     }
 
     return out;
 }
 
-tsc_buffer_t* tsc_crypto_pbkdf2_sync_ss(const tsc_str_t* password, const tsc_str_t* salt, double iterations, double keylen, const tsc_str_t* digest) {
-    const void* p_data = password ? (const void*)password->data : "";
-    size_t p_len = password ? password->len : 0;
-    const void* s_data = salt ? (const void*)salt->data : "";
-    size_t s_len = salt ? salt->len : 0;
-    return tsc_crypto_pbkdf2_sync_impl(p_data, p_len, s_data, s_len, iterations, keylen, digest);
-}
-
-tsc_buffer_t* tsc_crypto_pbkdf2_sync_sb(const tsc_str_t* password, const tsc_buffer_t* salt, double iterations, double keylen, const tsc_str_t* digest) {
-    const void* p_data = password ? (const void*)password->data : "";
-    size_t p_len = password ? password->len : 0;
-    const void* s_data = salt ? (const void*)salt->data : NULL;
-    size_t s_len = salt ? salt->len : 0;
-    return tsc_crypto_pbkdf2_sync_impl(p_data, p_len, s_data, s_len, iterations, keylen, digest);
-}
-
-tsc_buffer_t* tsc_crypto_pbkdf2_sync_bs(const tsc_buffer_t* password, const tsc_str_t* salt, double iterations, double keylen, const tsc_str_t* digest) {
-    const void* p_data = password ? (const void*)password->data : NULL;
-    size_t p_len = password ? password->len : 0;
-    const void* s_data = salt ? (const void*)salt->data : "";
-    size_t s_len = salt ? salt->len : 0;
-    return tsc_crypto_pbkdf2_sync_impl(p_data, p_len, s_data, s_len, iterations, keylen, digest);
-}
-
-tsc_buffer_t* tsc_crypto_pbkdf2_sync_bb(const tsc_buffer_t* password, const tsc_buffer_t* salt, double iterations, double keylen, const tsc_str_t* digest) {
-    const void* p_data = password ? (const void*)password->data : NULL;
-    size_t p_len = password ? password->len : 0;
-    const void* s_data = salt ? (const void*)salt->data : NULL;
-    size_t s_len = salt ? salt->len : 0;
-    return tsc_crypto_pbkdf2_sync_impl(p_data, p_len, s_data, s_len, iterations, keylen, digest);
-}
-
-tsc_buffer_t* tsc_crypto_scrypt_sync_impl(const void* password_data, size_t password_len, const void* salt_data, size_t salt_len, double keylen, double N, double r, double p, double maxmem) {
+static tsc_buffer_t* crypto_scrypt_bytes(const void* password_data, size_t password_len, const void* salt_data, size_t salt_len, double keylen, double N, double r, double p, double maxmem) {
     if (isnan(keylen) || isinf(keylen) || keylen < 0) {
-        tsc_throw_str(tsc_str_from_cstr("crypto.scryptSync: keylen must be a non-negative finite number"));
+        tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("crypto.scryptSync: keylen must be a non-negative finite number"));
     }
     if (isnan(N) || isinf(N) || N <= 1 || ((uint64_t)N & ((uint64_t)N - 1)) != 0) {
-        tsc_throw_str(tsc_str_from_cstr("crypto.scryptSync: N must be a power of two greater than 1"));
+        tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("crypto.scryptSync: N must be a power of two greater than 1"));
     }
     if (isnan(r) || isinf(r) || r <= 0) {
-        tsc_throw_str(tsc_str_from_cstr("crypto.scryptSync: r must be a positive finite number"));
+        tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("crypto.scryptSync: r must be a positive finite number"));
     }
     if (isnan(p) || isinf(p) || p <= 0) {
-        tsc_throw_str(tsc_str_from_cstr("crypto.scryptSync: p must be a positive finite number"));
+        tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("crypto.scryptSync: p must be a positive finite number"));
     }
     if (isnan(maxmem) || isinf(maxmem) || maxmem <= 0) {
-        tsc_throw_str(tsc_str_from_cstr("crypto.scryptSync: maxmem must be a positive finite number"));
+        tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("crypto.scryptSync: maxmem must be a positive finite number"));
     }
 
     tsc_buffer_t* out = tsc_buffer_alloc(keylen, 0.0);
@@ -492,42 +471,10 @@ tsc_buffer_t* tsc_crypto_scrypt_sync_impl(const void* password_data, size_t pass
     );
 
     if (res != 1) {
-        tsc_throw_str(tsc_str_from_cstr("crypto.scryptSync: EVP_PBE_scrypt failed"));
+        tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("crypto.scryptSync: EVP_PBE_scrypt failed"));
     }
 
     return out;
-}
-
-tsc_buffer_t* tsc_crypto_scrypt_sync_ss(const tsc_str_t* password, const tsc_str_t* salt, double keylen, double N, double r, double p, double maxmem) {
-    const void* p_data = password ? (const void*)password->data : "";
-    size_t p_len = password ? password->len : 0;
-    const void* s_data = salt ? (const void*)salt->data : "";
-    size_t s_len = salt ? salt->len : 0;
-    return tsc_crypto_scrypt_sync_impl(p_data, p_len, s_data, s_len, keylen, N, r, p, maxmem);
-}
-
-tsc_buffer_t* tsc_crypto_scrypt_sync_sb(const tsc_str_t* password, const tsc_buffer_t* salt, double keylen, double N, double r, double p, double maxmem) {
-    const void* p_data = password ? (const void*)password->data : "";
-    size_t p_len = password ? password->len : 0;
-    const void* s_data = salt ? (const void*)salt->data : NULL;
-    size_t s_len = salt ? salt->len : 0;
-    return tsc_crypto_scrypt_sync_impl(p_data, p_len, s_data, s_len, keylen, N, r, p, maxmem);
-}
-
-tsc_buffer_t* tsc_crypto_scrypt_sync_bs(const tsc_buffer_t* password, const tsc_str_t* salt, double keylen, double N, double r, double p, double maxmem) {
-    const void* p_data = password ? (const void*)password->data : NULL;
-    size_t p_len = password ? password->len : 0;
-    const void* s_data = salt ? (const void*)salt->data : "";
-    size_t s_len = salt ? salt->len : 0;
-    return tsc_crypto_scrypt_sync_impl(p_data, p_len, s_data, s_len, keylen, N, r, p, maxmem);
-}
-
-tsc_buffer_t* tsc_crypto_scrypt_sync_bb(const tsc_buffer_t* password, const tsc_buffer_t* salt, double keylen, double N, double r, double p, double maxmem) {
-    const void* p_data = password ? (const void*)password->data : NULL;
-    size_t p_len = password ? password->len : 0;
-    const void* s_data = salt ? (const void*)salt->data : NULL;
-    size_t s_len = salt ? salt->len : 0;
-    return tsc_crypto_scrypt_sync_impl(p_data, p_len, s_data, s_len, keylen, N, r, p, maxmem);
 }
 
 static void crypto_digest_name(const OBJ_NAME* entry,void* env) {
@@ -2456,6 +2403,140 @@ tsc_value_t tsc_child_process_exec_utf8(const tsc_str_t* command, const tsc_str_
     tsc_array_push_raw(args, &flag);
     tsc_array_push_raw(args, &cmd);
     return tsc_child_process_spawn_sync(shell ? shell : tsc_str_from_lit("/bin/sh", 7), args, cwd, NULL, env, NULL, NULL, true, false, true, true, false, false, false, uid, gid, max_buffer, timeout_ms, timeout_signal, true);
+}
+
+/* Actual crypto inputs retain their owners until all observable option reads
+ * finish. A byte witness is refreshed at the native call boundary. */
+typedef struct {tsc_value_t value;void* volatile root;tsc_buffer_t* volatile text;} crypto_input_t;
+static crypto_input_t crypto_export_input(tsc_value_t value,bool text) {
+    crypto_input_t input={value,tsc_value_gc_root(value),NULL};
+    if(text&&crypto_is_string(value)) {
+        input.text=tsc_buffer_from_str(tsc_str_to_well_formed(tsc_value_as_string(value)),NULL);
+        return input;
+    }
+    tsc_byte_source_t witness=tsc_value_byte_source(value,true);
+    if(!witness.valid)tsc_throw_error(TSC_ERROR_TYPE,crypto_key("Crypto data must be a String or byte owner"));
+    return input;
+}
+static tsc_buffer_t* crypto_export_bytes(crypto_input_t input) {
+    if(input.text)return input.text;
+    tsc_byte_source_t witness=tsc_value_byte_source(input.value,true);
+    if(!witness.valid)tsc_throw_error(TSC_ERROR_TYPE,crypto_key("Crypto byte owner is detached or outside its backing buffer"));
+    tsc_buffer_t* buffer=TSC_GC_MALLOC(sizeof(*buffer));memset(buffer,0,sizeof(*buffer));
+    buffer->data=witness.data;buffer->len=witness.length;buffer->data_owner=witness.backing?witness.backing->data:witness.data;
+    return buffer;
+}
+static double crypto_export_integer(tsc_value_t value,double minimum,double maximum,const char* label) {
+    double number=crypto_export_number(value);
+    if(!isfinite(number)||floor(number)!=number||number<minimum||number>maximum)
+        tsc_throw_error(TSC_ERROR_RANGE,crypto_key(label));
+    return number;
+}
+static size_t crypto_export_extent(tsc_value_t value,size_t width,size_t maximum,const char* label) {
+    double number=crypto_export_number(value)*(double)width;
+    if(!isfinite(number)||number<0||number>(double)maximum)
+        tsc_throw_error(TSC_ERROR_RANGE,crypto_key(label));
+    return (size_t)number;
+}
+static const size_t crypto_element_widths[]={
+#define TSC_TYPED_ARRAY(name,width,format) width,
+#include "tsc_typed_array.def"
+#undef TSC_TYPED_ARRAY
+};
+static size_t crypto_export_element_width(tsc_value_t value) {
+    if(value_is_object_value(value)){
+        tsc_object_t* object=value_ptr(value);
+        if(object->is_typed_array&&!object->is_buffer)
+            return crypto_element_widths[((tsc_typed_array_t*)object->class_ptr)->kind];
+    }
+    return 1;
+}
+static tsc_value_t crypto_export_box_string(const void* value){return tsc_value_string(*(tsc_str_t* const*)value);}
+static bool crypto_export_unbox_string(tsc_value_t value,void* output){
+    if(!crypto_is_string(value))return false;*(tsc_str_t**)output=tsc_value_as_string(value);return true;
+}
+static void crypto_export_scrypt_options(tsc_value_t options,double* values) {
+    static const struct {const char* primary;const char* alias;double initial;} pairs[]={
+        {"N","cost",16384},{"r","blockSize",8},{"p","parallelization",1},
+    };
+    for(size_t index=0;index<sizeof(pairs)/sizeof(*pairs);++index){
+        values[index]=pairs[index].initial;
+        if(!tsc_value_is_truthy(options))continue;
+        bool primary=!tsc_value_is_undefined(tsc_value_get_prop(options,crypto_key(pairs[index].primary)));
+        if(primary)values[index]=crypto_export_integer(tsc_value_get_prop(options,crypto_key(pairs[index].primary)),0,UINT32_MAX,"crypto.scryptSync option must be an unsigned integer");
+        if(!tsc_value_is_undefined(tsc_value_get_prop(options,crypto_key(pairs[index].alias)))){
+            if(primary)crypto_digest_error("Scrypt option aliases cannot both be present","ERR_INCOMPATIBLE_OPTION_PAIR");
+            values[index]=crypto_export_integer(tsc_value_get_prop(options,crypto_key(pairs[index].alias)),0,UINT32_MAX,"crypto.scryptSync option must be an unsigned integer");
+        }
+        if(values[index]==0)values[index]=pairs[index].initial;
+    }
+    values[3]=33554432;
+    if(tsc_value_is_truthy(options)&&!tsc_value_is_undefined(tsc_value_get_prop(options,crypto_key("maxmem")))){
+        values[3]=crypto_export_integer(tsc_value_get_prop(options,crypto_key("maxmem")),0,9007199254740991.0,"crypto.scryptSync maxmem must be a non-negative integer");
+        if(values[3]==0)values[3]=33554432;
+    }
+}
+static tsc_value_t crypto_export_apply(void* environment,tsc_value_t receiver,tsc_array_t* args) {
+    (void)receiver;const crypto_export_descriptor_t* entry=environment;
+    switch(entry->operation){
+        case CRYPTO_EXPORT_HASHES:{
+            tsc_array_t* volatile names=tsc_crypto_get_hashes();
+            return tsc_value_array(tsc_array_set_value_codec(names,crypto_export_box_string,crypto_export_unbox_string));
+        }
+        case CRYPTO_EXPORT_RANDOM_BYTES:{
+            size_t length=crypto_export_extent(crypto_argument(args,0),1,INT_MAX,"crypto.randomBytes size is outside its byte range");
+            /* The existing native profile is synchronous; callback overloads
+             * require the queued host operation rather than ignored execution. */
+            if(!tsc_value_is_undefined(crypto_argument(args,1)))
+                tsc_throw_error(TSC_ERROR_TYPE,crypto_key("crypto.randomBytes callback requires an asynchronous host operation"));
+            return tsc_value_buffer(tsc_crypto_random_bytes((double)length));
+        }
+        case CRYPTO_EXPORT_RANDOM_FILL:{
+            tsc_value_t value=crypto_argument(args,0);crypto_input_t input=crypto_export_input(value,false);
+            tsc_buffer_t* volatile bytes=crypto_export_bytes(input);size_t width=crypto_export_element_width(value);
+            tsc_value_t offset_value=crypto_argument(args,1),size_value=crypto_argument(args,2);
+            size_t offset=tsc_value_is_undefined(offset_value)?0:crypto_export_extent(offset_value,width,bytes->len<INT_MAX?bytes->len:INT_MAX,"crypto.randomFillSync offset is outside its byte range");
+            size_t length=tsc_value_is_undefined(size_value)?bytes->len-offset:crypto_export_extent(size_value,width,INT_MAX,"crypto.randomFillSync size is outside its byte range");
+            if(length>INT_MAX||length>bytes->len-offset)tsc_throw_error(TSC_ERROR_RANGE,crypto_key("crypto.randomFillSync size is outside the buffer bounds"));
+            (void)tsc_crypto_random_fill_sync(bytes,(double)offset,(double)length,false,false);return value;
+        }
+        case CRYPTO_EXPORT_RANDOM_UUID:{
+            tsc_value_t options=crypto_argument(args,0);
+            if(!tsc_value_is_undefined(options)){
+                if(!tsc_value_is_object(options)||tsc_value_is_callable(options))
+                    tsc_throw_error(TSC_ERROR_TYPE,crypto_key("crypto.randomUUID options must be an object"));
+                tsc_value_t cache=tsc_value_get_prop(options,crypto_key("disableEntropyCache"));
+                if(!tsc_value_is_undefined(cache)&&!(value_is_box(cache)&&(value_tag(cache)==TSC_VALUE_TAG_TRUE||value_tag(cache)==TSC_VALUE_TAG_FALSE)))
+                    tsc_throw_error(TSC_ERROR_TYPE,crypto_key("crypto.randomUUID disableEntropyCache must be a Boolean"));
+            }
+            return tsc_value_string(tsc_crypto_random_uuid());
+        }
+        case CRYPTO_EXPORT_TIMING_EQUAL:{
+            crypto_input_t left=crypto_export_input(crypto_argument(args,0),false),right=crypto_export_input(crypto_argument(args,1),false);
+            tsc_buffer_t* volatile a=crypto_export_bytes(left);tsc_buffer_t* volatile b=crypto_export_bytes(right);
+            return tsc_value_bool(tsc_crypto_timing_safe_equal(a,b));
+        }
+        case CRYPTO_EXPORT_PBKDF2:{
+            tsc_value_t digest=crypto_argument(args,4);
+            if(!crypto_is_string(digest))tsc_throw_error(TSC_ERROR_TYPE,crypto_key("crypto.pbkdf2Sync digest must be a String"));
+            tsc_str_t* volatile algorithm=tsc_value_as_string(digest);
+            crypto_input_t password=crypto_export_input(crypto_argument(args,0),true),salt=crypto_export_input(crypto_argument(args,1),true);
+            double iterations=crypto_export_integer(crypto_argument(args,2),1,INT_MAX,"crypto.pbkdf2Sync iterations must be a positive integer");
+            double length=crypto_export_integer(crypto_argument(args,3),0,INT_MAX,"crypto.pbkdf2Sync keylen must be a non-negative integer");
+            tsc_buffer_t* volatile p=crypto_export_bytes(password);tsc_buffer_t* volatile s=crypto_export_bytes(salt);
+            if(p->len>INT_MAX||s->len>INT_MAX)tsc_throw_error(TSC_ERROR_RANGE,crypto_key("crypto.pbkdf2Sync input is too large"));
+            return tsc_value_buffer(crypto_pbkdf2_bytes(p->data,p->len,s->data,s->len,iterations,length,algorithm));
+        }
+        case CRYPTO_EXPORT_SCRYPT:{
+            crypto_input_t password=crypto_export_input(crypto_argument(args,0),true),salt=crypto_export_input(crypto_argument(args,1),true);
+            double length=crypto_export_integer(crypto_argument(args,2),0,INT_MAX,"crypto.scryptSync keylen must be a non-negative integer");
+            double options[4];crypto_export_scrypt_options(crypto_argument(args,3),options);
+            tsc_buffer_t* volatile p=crypto_export_bytes(password);tsc_buffer_t* volatile s=crypto_export_bytes(salt);
+            return tsc_value_buffer(crypto_scrypt_bytes(p->data,p->len,s->data,s->len,length,options[0],options[1],options[2],options[3]));
+        }
+        default:tsc_throw_error(TSC_ERROR_TYPE,crypto_key("Crypto export operation cannot be represented"));
+    }
+    return tsc_value_undefined();
 }
 
 /* Ordinary child-process export owners. The synchronous callback profile is
@@ -18915,7 +18996,7 @@ void tsc_fs_futimes_sync(double fd, double atime, double mtime) {
     }
 }
 
-tsc_value_t tsc_crypto_digest_module_value(bool namespace_import){
+tsc_value_t tsc_crypto_module_value(bool namespace_import){
     crypto_realm_t* realm=crypto_realm();return namespace_import?tsc_value_object(realm->namespace_object):realm->exports;
 }
-tsc_value_t tsc_crypto_digest_export_value(tsc_str_t* name){return tsc_value_get_prop(tsc_crypto_digest_module_value(true),name);}
+tsc_value_t tsc_crypto_export_value(tsc_str_t* name){return tsc_value_get_prop(tsc_crypto_module_value(true),name);}

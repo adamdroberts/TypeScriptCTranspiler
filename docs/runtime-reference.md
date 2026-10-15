@@ -706,12 +706,15 @@ Supported fs path arguments use a bounded `PathLike` subset: strings pass throug
 
 ## crypto
 
-| Symbol | Signature | JS equivalent |
-|--------|-----------|---------------|
-| `tsc_crypto_create_hash(algorithm)` | `tsc_hash_t*` | `crypto.createHash("sha256")` |
-| `tsc_crypto_get_hashes()` | `tsc_array_t*` | `crypto.getHashes()` |
-| `tsc_hash_update(hash, data)` | `tsc_hash_t*` | `.update(data)` |
-| `tsc_hash_digest(hash, encoding)` | `tsc_str_t*` | `.digest("hex")` |
+| Symbol | Result | Purpose |
+|--------|--------|---------|
+| `tsc_crypto_module_value(namespace_import)` | `tsc_value_t` | Retained default or namespace owner |
+| `tsc_crypto_export_value(name)` | `tsc_value_t` | Original named export owner |
+| `tsc_crypto_digest_create_value(hmac, args)` | `tsc_value_t` | Shared Hash/HMAC construction from the actual List |
+| `tsc_crypto_digest_prototype_value(hmac)` | `tsc_value_t` | Realm-owned digest prototype |
+
+The export descriptor collection creates ordinary callable owners. Their runtime decoder consumes actual argument Lists and projects retained byte owners through the shared byte witness. PBKDF2 and scrypt use private span kernels; random helpers use OpenSSL RAND_bytes and throw Error on provider failure; timing comparison uses CRYPTO_memcmp. The synchronous native profile rejects asynchronous randomBytes callbacks. Full Node stream, option, key, codec and provider parity remains open.
+
 
 ## EventEmitter
 

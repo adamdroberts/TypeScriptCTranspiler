@@ -11,7 +11,7 @@ function lengthMismatch(): string {
     try {
         return String(crypto.timingSafeEqual(Buffer.from("a"), Buffer.from("aa")));
     } catch (err) {
-        return String(err);
+        return (err instanceof RangeError) + ":" + (err instanceof Error ? err.name : typeof err);
     }
 }
 

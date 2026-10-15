@@ -5,8 +5,8 @@ scrypt bb custom: 3cf2ff249f6592a84fc509f6799edfbd
 named import: true
 namespace import: true
 ignored args: true 42
-error: crypto.scryptSync: keylen must be a non-negative finite number
-error: crypto.scryptSync: N must be a power of two greater than 1
-error: crypto.scryptSync: r must be a positive finite number
-error: crypto.scryptSync: p must be a positive finite number
-error: crypto.scryptSync: maxmem must be a positive finite number
+error: RangeError
+error: RangeError
+error: RangeError
+zero default: true
+error: RangeError

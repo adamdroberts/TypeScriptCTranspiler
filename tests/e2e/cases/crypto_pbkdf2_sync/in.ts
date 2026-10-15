@@ -35,7 +35,7 @@ function tryCatch(fn: () => void) {
     try {
         fn();
     } catch (e) {
-        console.log("error:", String(e));
+        console.log("error:", e instanceof Error ? e.name : typeof e);
     }
 }
 
