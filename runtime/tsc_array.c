@@ -1493,44 +1493,10 @@ static tsc_value_t tsc_array_default_prototype(void) {
         proto->unbox_element = NULL;
         proto->data = NULL;
         proto->value_roots = NULL;
-        array_prototype_define_method(proto->props, "toString", 8, 0.0, array_prototype_to_string);
-        array_prototype_define_method(proto->props, "toLocaleString", 14, 0.0, array_prototype_to_locale_string);
-        array_prototype_define_method(proto->props, "at", 2, 1.0, array_prototype_at);
-        array_prototype_define_method(proto->props, "includes", 8, 1.0, array_prototype_includes);
-        array_prototype_define_method(proto->props, "indexOf", 7, 1.0, array_prototype_index_of);
-        array_prototype_define_method(proto->props, "lastIndexOf", 11, 1.0, array_prototype_last_index_of);
-        array_prototype_define_method(proto->props, "join", 4, 1.0, array_prototype_join);
-        array_prototype_define_method(proto->props, "keys", 4, 0.0, array_prototype_keys);
-        array_prototype_define_method(proto->props, "values", 6, 0.0, array_prototype_values);
-        array_prototype_define_method(proto->props, "entries", 7, 0.0, array_prototype_entries);
-        array_prototype_define_method(proto->props, "pop", 3, 0.0, array_prototype_pop);
-        array_prototype_define_method(proto->props, "push", 4, 1.0, array_prototype_push);
-        array_prototype_define_method(proto->props, "shift", 5, 0.0, array_prototype_shift);
-        array_prototype_define_method(proto->props, "unshift", 7, 1.0, array_prototype_unshift);
-        array_prototype_define_method(proto->props, "concat", 6, 1.0, array_prototype_concat);
-        array_prototype_define_method(proto->props, "slice", 5, 2.0, array_prototype_slice);
-        array_prototype_define_method(proto->props, "fill", 4, 1.0, array_prototype_fill);
-        array_prototype_define_method(proto->props, "copyWithin", 10, 2.0, array_prototype_copy_within);
-        array_prototype_define_method(proto->props, "splice", 6, 2.0, array_prototype_splice);
-        array_prototype_define_method(proto->props, "sort", 4, 1.0, array_prototype_sort);
-        array_prototype_define_method(proto->props, "toSorted", 8, 1.0, array_prototype_to_sorted);
-        array_prototype_define_method(proto->props, "with", 4, 2.0, array_prototype_with);
-        array_prototype_define_method(proto->props, "toSpliced", 9, 2.0, array_prototype_to_spliced);
-        array_prototype_define_method(proto->props, "flat", 4, 0.0, array_prototype_flat);
-        array_prototype_define_method(proto->props, "reverse", 7, 0.0, array_prototype_reverse);
-        array_prototype_define_method(proto->props, "toReversed", 10, 0.0, array_prototype_to_reversed);
-        array_prototype_define_method(proto->props, "forEach", 7, 1.0, array_prototype_for_each);
-        array_prototype_define_method(proto->props, "map", 3, 1.0, array_prototype_map);
-        array_prototype_define_method(proto->props, "flatMap", 7, 1.0, array_prototype_flat_map);
-        array_prototype_define_method(proto->props, "filter", 6, 1.0, array_prototype_filter);
-        array_prototype_define_method(proto->props, "some", 4, 1.0, array_prototype_some);
-        array_prototype_define_method(proto->props, "every", 5, 1.0, array_prototype_every);
-        array_prototype_define_method(proto->props, "find", 4, 1.0, array_prototype_find);
-        array_prototype_define_method(proto->props, "findIndex", 9, 1.0, array_prototype_find_index);
-        array_prototype_define_method(proto->props, "findLast", 8, 1.0, array_prototype_find_last);
-        array_prototype_define_method(proto->props, "findLastIndex", 13, 1.0, array_prototype_find_last_index);
-        array_prototype_define_method(proto->props, "reduce", 6, 1.0, array_prototype_reduce);
-        array_prototype_define_method(proto->props, "reduceRight", 11, 1.0, array_prototype_reduce_right);
+#define TSC_ARRAY_PROTOTYPE_METHOD(name, implementation, length) \
+        array_prototype_define_method(proto->props, #name, sizeof(#name) - 1, (double)(length), implementation);
+#include "tsc_array_prototype_methods.def"
+#undef TSC_ARRAY_PROTOTYPE_METHOD
         tsc_object_define(
             proto->props,
             tsc_symbol_property_key(tsc_symbol_iterator()),

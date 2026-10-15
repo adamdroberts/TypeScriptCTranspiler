@@ -247,3 +247,29 @@ export const runtimeChildProcessOperations: ReadonlyMap<string, {readonly arity:
         .map(([,name,result,arity])=>[name!,{arity:Number(arity),result:result!}]),
 );
 if (!runtimeChildProcessOperations.size) throw new Error("missing canonical child process operations");
+
+/** Native prototype installers and source profiles share the same rows. */
+function nativePrototypeMethods(file:string,macro:string):ReadonlyMap<string,{implementation:string;length:number}> {
+ const methods=new Map<string,{implementation:string;length:number}>(),rowPattern=new RegExp("^"+macro+"\\((\\w+), (\\w+), (\\d+)\\)$");
+ for(const line of fs.readFileSync(path.join(resolvePackageRoot(),"runtime",file),"utf8").split(/\r?\n/)){
+  if(!line.trim())continue;
+  const row=rowPattern.exec(line);
+  if(!row||methods.has(row[1]!))throw new Error("native prototype collection cannot be represented");
+  methods.set(row[1]!,{implementation:row[2]!,length:Number(row[3])});
+ }
+ if(!methods.size)throw new Error("native prototype collection cannot be represented");
+ return methods;
+}
+export const runtimeArrayPrototypeMethods=nativePrototypeMethods("tsc_array_prototype_methods.def","TSC_ARRAY_PROTOTYPE_METHOD");
+export const runtimeFunctionPrototypeMethods=nativePrototypeMethods("tsc_function_prototype_methods.def","TSC_FUNCTION_PROTOTYPE_METHOD");
+export const runtimeFunctionRestrictedProperties:readonly string[]=(()=>{
+ const names=new Set<string>();
+ for(const line of fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_function_restricted_properties.def"),"utf8").split(/\r?\n/)){
+  if(!line.trim())continue;
+  const row=/^TSC_FUNCTION_RESTRICTED_PROPERTY\((\w+)\)$/.exec(line);
+  if(!row||names.has(row[1]!))throw new Error("native prototype collection cannot be represented");
+  names.add(row[1]!);
+ }
+ if(!names.size)throw new Error("native prototype collection cannot be represented");
+ return [...names];
+})();

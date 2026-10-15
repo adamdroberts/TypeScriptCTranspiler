@@ -1,3 +1,5 @@
+- Share native Array/Function prototype collections with source lookup, preserving actual join dispatch, restricted accessors, readonly write alternatives and prototype-read effects.
+
 - Retain source values across unknown property keys through shared property, global binding and callback-escape locations.
 
 - Normalize comparable source capture chains through their retained input graph.

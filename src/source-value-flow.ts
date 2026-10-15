@@ -1,3 +1,4 @@
+import {runtimeArrayPrototypeMethods,runtimeFunctionPrototypeMethods,runtimeFunctionRestrictedProperties} from "./global-bindings";
 import {sourceNumericOperation, type SourceNumericOperation, type SourcePrimitive} from "./source-numeric-operations";
 import {bufferStaticDescriptors} from "./buffer-statics";
 import ts from "typescript";
@@ -54,8 +55,8 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
-type Operation = `callback-timer:${string}` | "ordinary-has-instance" | "prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}`;
+type Operation = `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
+    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
@@ -72,6 +73,21 @@ const NUMERIC_CONVERSIONS: ReadonlyMap<string, (value: Primitive) => Primitive> 
         return number>0?Math.min(Math.trunc(number),Number.MAX_SAFE_INTEGER):0;
     }],
 ]);
+const SOURCE_NATIVE_METHODS:ReadonlyMap<Operation,{name:string;length:number;owner:"Array"|"Function"|null;opaque:boolean}>=(()=>{
+    const methods=new Map<Operation,{name:string;length:number;owner:"Array"|"Function"|null;opaque:boolean}>();
+    const collections=[
+        {owner:"Array" as const,methods:runtimeArrayPrototypeMethods,prefix:"native-array:",precise:new Map<string,Operation>([["toString","array-text"],["join","array-join"],["keys","array-keys"],["values","array-values"],["entries","array-entries"]])},
+        {owner:"Function" as const,methods:runtimeFunctionPrototypeMethods,prefix:"native-function:",precise:new Map<string,Operation>([["call","call"],["apply","apply"],["bind","bind"],["toString","function-text"]])},
+    ];
+    for(const collection of collections)for(const[name,descriptor]of collection.methods){
+        const known=collection.precise.get(name),operation=known??(collection.prefix+name) as Operation;
+        if(methods.has(operation))throw new Error("native prototype collection cannot be represented");
+        methods.set(operation,{name,length:descriptor.length,owner:collection.owner,opaque:!known});
+    }
+    for(const[operation,name,length]of [["throw-type-error","",0],["ordinary-has-instance","[Symbol.hasInstance]",1],["eval","eval",1]] as const)
+        methods.set(operation,{name,length,owner:null,opaque:false});
+    return methods;
+})();
 interface PrimitiveChoiceProof {
     readonly values: readonly Primitive[];
     readonly primitiveComplete: boolean;
@@ -140,16 +156,18 @@ class SourceFacts extends Set<Atom> {
 }
 interface Cell { readonly id: number; readonly values: SourceFacts; readonly users: Set<Rule>; }
 interface Rule { readonly inputs: Set<Cell>; readonly run: () => void; queued: boolean; }
+interface SourcePropertyWrite {readonly context:ts.Node;readonly base:Cell;readonly receiver:Cell;readonly mode:"set"|"define"|"delete";readonly weak:Cell;}
 interface OwnPresence {
     readonly facts: Cell;
-    readonly writes: Map<ts.Node,{base:Cell;receiver:Cell;mode:"set"|"define"|"delete"}>;
+    readonly writes: Map<string,SourcePropertyWrite>;
+    readonlyWrite?:Cell;
     readonly contexts: Map<ts.Node|undefined,Cell>;
     initial: boolean;
     readonly enumerable: Cell;
 }
 interface SourceCollectionRecord {readonly kind:CollectionKind;readonly entries:Map<string,{key:Cell;value:Cell;pair?:Cell}>;readonly changes:Cell;readonly shape:Cell;}
 interface SourceSetLikeRecord {readonly object:Cell;readonly size:Cell;readonly has:Cell;readonly keys:Cell;readonly normal:Cell;}
-interface ObjectOwner { collectionIterator?:{kind:CollectionKind|"Array";elements:Cell;activity:Cell;source?:Cell;operation?:"keys"|"values"|"entries"}; collections?:Map<CollectionKind,SourceCollectionRecord>; readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, OwnPresence>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; closedIndices?:boolean; rawJSON?:Cell; boxed?:Map<string,Cell>; unboxed?:boolean; ordinary?:boolean; proxy?:{target:Cell;handler:Cell;context:ts.Node}; }
+interface ObjectOwner { collectionIterator?:{kind:CollectionKind|"Array";elements:Cell;activity:Cell;source?:Cell;operation?:"keys"|"values"|"entries"}; collections?:Map<CollectionKind,SourceCollectionRecord>; readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, OwnPresence>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; closedIndices?:boolean; closedOwn?:boolean; immutableOwn?:boolean; rawJSON?:Cell; boxed?:Map<string,Cell>; unboxed?:boolean; ordinary?:boolean; proxy?:{target:Cell;handler:Cell;context:ts.Node}; }
 interface SourceDescriptorRecord {readonly normal:Cell;readonly fields:Map<string,{present:Cell;value:Cell}>;}
 interface SourceJSONRecord {readonly value:Atom;readonly children:Map<string,SourceJSONRecord>;readonly source:string|null;readonly array:boolean;}
 interface FunctionOwner {
@@ -183,15 +201,12 @@ const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operati
     ["Error", new Map([["isError", "error-brand"]])],
     ["JSON", new Map([...jsonMethods.values()].map(descriptor=>[descriptor.name,descriptor.operation]))],
     ["console", new Map([...consoleOperations].map(name=>[name,"host-print" as const]))],
-    ["Object", new Map([["getPrototypeOf", "prototype"], ["create", "create-object"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
+    ["Object", new Map([["getPrototypeOf", "object-get-prototype"], ["create", "create-object"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
         ["getOwnPropertyDescriptor", "own-descriptor"], ["getOwnPropertyDescriptors", "own-descriptors"]])],
-    ["Reflect", new Map([["getPrototypeOf", "prototype"], ["apply", "reflect-apply"], ["construct", "construct"],
+    ["Reflect", new Map([["getPrototypeOf", "reflect-get-prototype"], ["apply", "reflect-apply"], ["construct", "construct"],
         ["defineProperty", "define-property"], ["set", "set-property"], ["deleteProperty", "delete-property"], ["getOwnPropertyDescriptor", "own-descriptor"]])],
 ]);
 const PROPERTY_MUTATIONS = new Set<Operation>(["define-property", "define-properties", "set-property", "delete-property"]);
-const CALLABLE_FORWARDING_OPERATIONS: ReadonlyMap<string, Operation> = new Map([
-    ["call", "call"], ["apply", "apply"], ["bind", "bind"],
-]);
 
 function conversionOperands(node: ts.Node): readonly ts.Expression[] | null {
     if (ts.isComputedPropertyName(node)) return [node.expression];
@@ -242,10 +257,13 @@ class SourceValueFlow {
     private readonly primitiveDefaults = new Map<string,Cell>();
     private readonly defaultedPrimitiveInputs = new Map<Cell,Map<string,Cell>>();
     private readonly primitiveMethodResults = new Map<ts.Node,Map<string,Cell>>();
+    private readonly objectCoercions = new Map<ts.Node,Map<Cell,Cell>>();
+    private readonly prototypeReads = new Map<ts.Node,Map<string,Cell>>();
+    private readonly arrayTexts = new Map<ts.Node,Map<Cell,Cell>>();
     private readonly objectTexts = new Map<ts.Node,Map<Cell,Cell>>();
     private readonly constructorChecks = new Map<ts.Node,Map<Cell,Cell>>();
     private readonly jsonPrimitiveResults = new Map<ts.Node,Map<string,Cell>>();
-    private readonly nativeExceptions = new Map<ts.Node,Atom>();
+    private readonly nativeExceptions = new Map<ts.Node,Map<SourceRealmRecord,Map<string|undefined,Atom>>>();
     private readonly errorStrings = new Map<ts.Node,Map<Cell,Cell>>();
     private readonly jsonSerializations = new Map<ts.Node, Map<string, Cell>>();
     private readonly rawJSONResults = new Map<ts.Node, Map<Cell, Cell>>();
@@ -394,6 +412,7 @@ class SourceValueFlow {
     private readonly empty = this.newCell();
     private readonly globalMutation = this.newCell();
     private readonly globalReceiver = this.newCell();
+    private readonly propertyWriteUncertainty = new Map<ts.Node,Cell>();
     private readonly propertyWrites = new Set<string>();
     private readonly hintPrimitives = new Map<Cell, Map<ts.Node | undefined, Map<PrimitiveHint, Cell>>>();
     private readonly stringConversions = new Map<Cell, Map<ts.Node, Map<boolean, Cell>>>();
@@ -1376,8 +1395,8 @@ class SourceValueFlow {
             const state=this.primitiveState(record.input,rule);
             for(const text of state.proof.values){
                 if(typeof text!=="string")continue;
-                if(key==="length"){this.publish(value,this.primitive(text.length));this.defineField(owner,key,value,false);}
-                else if(Number(key)<text.length){this.publish(value,this.primitive(text[Number(key)]));this.defineField(owner,key,value,true);}
+                if(key==="length"){this.publish(value,this.primitive(text.length));this.defineField(owner,key,value,false);this.markReadonly(owner,key);}
+                else if(Number(key)<text.length){this.publish(value,this.primitive(text[Number(key)]));this.defineField(owner,key,value,true);this.markReadonly(owner,key);}
                 else this.publish(this.presence(owner,key),this.primitive(false));
             }
             if(state.unresolved){this.publish(value,this.unknown);this.copy(value,this.field(owner,key));this.publish(this.presence(owner,key),this.primitive(true));this.publish(this.presence(owner,key),this.primitive(false));}
@@ -1394,14 +1413,14 @@ class SourceValueFlow {
                 keys.add("length");this.stringField(owner,"length");
             }
         }
-        for(const key of owner.fields.keys())keys.add(key);
-        for(const key of owner.accessors.keys())keys.add(key);
+        for(const key of owner.fields.keys())if(!owner.immutableOwn||owner.own?.get(key)?.initial)keys.add(key);
+        for(const key of owner.accessors.keys())if(key===null||!owner.immutableOwn||owner.own?.get(key)?.initial)keys.add(key);
         return [...keys];
     }
     private attachField(owner:ObjectOwner,key:SourcePropertyKey,cell:Cell):void {
         if(owner.fields.has(key))return;
         this.propertyLocations.add(cell);owner.fields.set(key,cell);this.publish(owner.shape,this.primitive(key));
-        if(this.ownerRealms.has(owner)&&typeof key==="string"&&this.immutableGlobalBinding(key))return;
+        if(this.ownerRealms.has(owner)&&typeof key==="string"&&this.immutableGlobalBinding(key)){this.markReadonly(owner,key);return;}
         let effects=this.ownerFieldEffects.get(owner);
         if(!effects){effects=this.newCell();this.ownerFieldEffects.set(owner,effects);this.copy(owner.shape,effects,"origin");}
         this.copy(effects,cell);
@@ -1433,6 +1452,21 @@ class SourceValueFlow {
         return record;
     }
     private presence(owner:ObjectOwner,key:SourcePropertyKey):Cell {return this.ownPresence(owner,key).facts;}
+    private markReadonly(owner:ObjectOwner,key:SourcePropertyKey):void {
+        const record=this.ownPresence(owner,key);
+        if(!record.readonlyWrite){record.readonlyWrite=this.newCell();this.publish(owner.shape,{tag:"descriptor",identity:record.readonlyWrite});}
+        this.publish(record.readonlyWrite,this.primitive(true));
+    }
+    private writeUncertainty(context:ts.Node):Cell {
+        let state=this.propertyWriteUncertainty.get(context);if(!state){state=this.newCell();this.propertyWriteUncertainty.set(context,state);}return state;
+    }
+    private recordPropertyWrite(owner:ObjectOwner,key:SourcePropertyKey,context:ts.Node,base:Cell,receiver:Cell,mode:"set"|"define"|"delete"):void {
+        const record=this.ownPresence(owner,key),signature=this.cell(context).id+":"+base.id+":"+receiver.id+":"+mode;
+        if(record.writes.has(signature))return;
+        const event:SourcePropertyWrite={context,base,receiver,mode,weak:this.writeUncertainty(context)};
+        record.writes.set(signature,event);this.publish(owner.shape,{tag:"descriptor",identity:event});
+    }
+
     /** Relative source-tree order is a dominance proof only within the same
      * activation and outside repeated or optional evaluation paths. */
     private writeDominates(write:ts.Node,read:ts.Node,rule:Rule):boolean {
@@ -1483,18 +1517,18 @@ class SourceValueFlow {
             if(origins)this.watch(rule,origins);
             const activation=context?this.enclosingActivation(context):null;
             if(activation)this.watch(rule,this.activationTiming(activation));
-            const visibleDeletes=[...record.writes].filter(([write,event])=>event.mode==="delete"&&this.effectVisible({tag:"unknown",origin:write},context));
+            const visibleDeletes=[...record.writes].filter(([,event])=>event.mode==="delete"&&this.effectVisible({tag:"unknown",origin:event.context},context));
             if(record.initial&&!visibleDeletes.length&&!(typeof key==="symbol"&&this.freshSymbols.has(key))){this.publish(result,this.primitive(true));return;}
             const points=context&&this.enclosingActivation(context)?[...(origins?.values??[])].map(atom=>atom.tag==="unknown"?atom.origin:undefined):[context];
             if(!points.length)return;
             for(const point of points){
                 let present=record.initial;
-                for(const [write,event]of record.writes){
-                    this.watch(rule,event.base);this.watch(rule,event.receiver);
+                for(const event of record.writes.values()){
+                    const write=event.context;this.watch(rule,event.base);this.watch(rule,event.receiver);this.watch(rule,event.weak);
                     const singleton=(cell:Cell)=>[...cell.values].every(atom=>atom.tag==="abrupt"||this.ordinaryOwner(atom)===owner)&&[...cell.values].some(atom=>this.ordinaryOwner(atom)===owner);
                     const reference=context&&this.enclosingActivation(write)===this.enclosingActivation(context)?context:point;
                     if(event.mode==="delete"){if(this.effectVisible({tag:"unknown",origin:write},reference))present=false;continue;}
-                    if(reference&&singleton(event.base)&&singleton(event.receiver)&&this.writeDominates(write,reference,rule))present=true;
+                    if(reference&&!event.weak.values.has(this.primitive(true))&&singleton(event.base)&&singleton(event.receiver)&&this.writeDominates(write,reference,rule))present=true;
                 }
                 if(visibleDeletes.length)present=false;
                 if(typeof key==="symbol"&&this.freshSymbols.has(key))present=false;
@@ -1515,6 +1549,7 @@ class SourceValueFlow {
         this.publish(this.booleanResult,this.primitive(false));this.publish(this.booleanResult,this.primitive(true));this.defineField(owner,key,this.booleanResult);
     }
     private defineAccessor(owner:ObjectOwner,key:SourcePropertyKey|null,kind:"get"|"set",value:Cell,context?:ts.Node): void {
+        if(owner.immutableOwn){const handler=context&&this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context!,"TypeError"));return;}
         let accessor=owner.accessors.get(key);
         if(!accessor){accessor={get:this.newCell(),set:this.newCell()};this.accessorSlots.add(accessor.get);this.accessorSlots.add(accessor.set);owner.accessors.set(key,accessor);this.publish(owner.shape,{tag:"descriptor",identity:accessor});}
         if(context){this.accessorDefinitions.set(accessor.get,context);this.accessorDefinitions.set(accessor.set,context);}
@@ -1546,6 +1581,7 @@ class SourceValueFlow {
                 this.writeProperty(this.objectValue(primitives,conversion),key,value,unknownGlobal,mode,context,receiver);
             });
         }
+        const weak=context?this.writeUncertainty(context):this.newCell();
         const proxyEffects=new Set<ObjectOwner>();
         const setterEffects=new Set<Cell>();
         let rule!:Rule;
@@ -1558,19 +1594,25 @@ class SourceValueFlow {
                     while(pending.length){
                         const current=pending.pop()!;if(visited.has(current))continue;visited.add(current);
                         if(current.proxy&&context&&!proxyEffects.has(current)){
-                            proxyEffects.add(current);
+                            proxyEffects.add(current);this.publish(weak,this.primitive(true));
                             const trap=this.property(current.proxy.handler,"set",context);
                             this.opaqueCallableCaptures(trap,context);this.activateOpaqueEffect(context);
                         }
                         this.watch(rule,current.shape);
-                        if(handler && this.opaqueShape(current,context))this.publish(handler,this.unknown);
-                        for(const[name,accessor]of current.accessors)if((key===null || name===key || name===null)&&!setterEffects.has(accessor.set)){
-                            setterEffects.add(accessor.set);
-                            this.invoke(context ?? this.accessorDefinitions.get(accessor.set)!,this.accessorCallee(accessor.set),receiver,[{cell:value,spread:false}],this.newCell());
+                        if(this.opaqueShape(current,context)){this.publish(weak,this.primitive(true));if(handler)this.publish(handler,this.unknown);}
+                        for(const[name,accessor]of current.accessors)if(key===null || name===key || name===null){
+                            this.publish(weak,this.primitive(true));
+                            if(!setterEffects.has(accessor.set)){
+                                setterEffects.add(accessor.set);
+                                this.invoke(context ?? this.accessorDefinitions.get(accessor.set)!,this.accessorCallee(accessor.set),receiver,[{cell:value,spread:false}],this.newCell());
+                            }
                         }
                         const presence=key===null?null:this.presence(current,key);
                         if(presence)this.watch(rule,presence);
-                        if(key!==null && current.accessors.has(key) && presence?.values.has(this.primitive(true)) && !presence.values.has(this.primitive(false)))continue;
+                        const data=key===null?undefined:current.fields.get(key);if(data)this.watch(rule,data);
+                        const readonly=key===null?undefined:this.ownPresence(current,key).readonlyWrite;
+                        if(readonly){this.watch(rule,readonly);if(readonly.values.has(this.primitive(true)))this.publish(weak,this.primitive(true));}
+                        if(key!==null && current.accessors.has(key) && presence?.values.has(this.primitive(true)) && !presence.values.has(this.primitive(false)) && !data?.values.nonempty)continue;
                         if(presence?.values.has(this.primitive(true)) && !presence.values.has(this.primitive(false))){store=true;continue;}
                         if(!current.prototype){store=true;continue;}
                         this.watch(rule,current.prototype);
@@ -1585,10 +1627,11 @@ class SourceValueFlow {
                 if(!store)continue;
                 const destinations=mode==="set"?[...receiver.values].map(value=>this.ordinaryOwner(value)).filter((value):value is ObjectOwner=>!!value):[owner];
                 for(const owner of destinations){
+                if(owner.immutableOwn)continue;
                 if(key===null){const origins=this.executionOrigins(context);this.copy(origins,owner.shape);if(mode!=="delete")this.copyWrite(value,this.unknownPropertyLocation(owner),context);for(const record of owner.collections?.values()??[])this.copy(origins,record.shape);}
                 else {
                     const presence=this.presence(owner,key);
-                    if(context)this.ownPresence(owner,key).writes.set(context,{base,receiver,mode});
+                    if(context)this.recordPropertyWrite(owner,key,context,base,receiver,mode);
                     if(mode==="set"){const location=this.ownPresence(owner,key);if(!location.initial&&!location.enumerable.values.nonempty)this.publish(location.enumerable,this.primitive(true));}
                     if(mode==="delete")this.publish(presence,this.primitive(false));
                     if (!presence.values.nonempty) this.publish(presence,this.primitive(false));
@@ -1988,7 +2031,7 @@ class SourceValueFlow {
                         }
                     }else mask|=KIND_STRING;
                 }else if(atom.tag==="unknown"||atom.tag==="pending-source")mask|=KIND_ALL;
-                else if(atom.tag==="function"||atom.tag==="bound"||atom.tag==="promise-resolver"||atom.tag==="operation"||atom.tag==="intrinsic"&&(atom.domain==="constructor"||atom.domain==="prototype")||atom.tag==="builtin"&&atom.normalResult!=="not-callable")mask|=KIND_FUNCTION;
+                else if(atom.tag==="function"||atom.tag==="bound"||atom.tag==="promise-resolver"||atom.tag==="operation"||atom.tag==="intrinsic"&&(atom.domain==="constructor"||atom.domain==="prototype"&&atom.kind==="ordinary")||atom.tag==="builtin"&&atom.normalResult!=="not-callable")mask|=KIND_FUNCTION;
                 else mask|=KIND_OBJECT;
             }
             kinds.set(task.cell,mask);
@@ -2132,16 +2175,17 @@ class SourceValueFlow {
             const names=this.propertyKeys(key,locations,context);
             for(const name of names??[])for(const atom of base.values){
                 const owner=this.ordinaryOwner(atom);if(!owner)continue;
+                if(owner.immutableOwn){const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context,"TypeError"));continue;}
                 const record=this.ownPresence(owner,name);
-                record.writes.set(context,{base,receiver:base,mode:"define"});
+                this.recordPropertyWrite(owner,name,context,base,base,"define");
                 this.publish(record.facts,this.primitive(true));
             }
         });
         const converted=this.propertyDescriptor(descriptor,context),getter=converted.fields.get("get")!.value,setter=converted.fields.get("set")!.value,value=converted.fields.get("value")!.value;
-        const enumerable=converted.fields.get("enumerable")!;
+        const enumerable=converted.fields.get("enumerable")!,writable=converted.fields.get("writable")!,writableValue=this.booleanPrimitive(writable.value);
         const getterPresent=converted.fields.get("get")!.present,setterPresent=converted.fields.get("set")!.present;
         let rule!:Rule;
-        rule=this.rule([base,key,getter,setter,getterPresent,setterPresent,converted.normal],()=>{
+        rule=this.rule([base,key,getter,setter,getterPresent,setterPresent,converted.normal,writable.present,writableValue],()=>{
             if(![...converted.normal.values].some(atom=>atom.tag!=="abrupt"&&atom.tag!=="pending-source"))return;
             const keys = this.propertyKeys(key, rule, context);
             if (keys === undefined) return;
@@ -2149,7 +2193,7 @@ class SourceValueFlow {
             const accessor=getterPresent.values.has(this.primitive(true))||setterPresent.values.has(this.primitive(true));
             const data=getterPresent.values.has(this.primitive(false))&&setterPresent.values.has(this.primitive(false));
             for(const name of names){
-                if(name!==null)for(const atom of base.values){const owner=this.ordinaryOwner(atom);if(owner)this.copy(enumerable.value,this.ownPresence(owner,name).enumerable);}
+                if(name!==null)for(const atom of base.values){const owner=this.ordinaryOwner(atom);if(owner){this.copy(enumerable.value,this.ownPresence(owner,name).enumerable);if(data&&(writable.present.values.has(this.primitive(false))||writableValue.values.has(this.primitive(false))))this.markReadonly(owner,name);}}
                 if(accessor){for(const atom of base.values){const owner=this.ordinaryOwner(atom);
                     if(owner){this.defineAccessor(owner,name,"get",getter,context);this.defineAccessor(owner,name,"set",setter,context);}
                     else if(atom.tag==="unknown"||atom.tag==="opaque-object") {this.publish(this.globalMutation,this.unknown);this.opaqueEffect(context);}
@@ -2895,18 +2939,79 @@ class SourceValueFlow {
         }}});
         return result;
     }
+    /** ToObject differs from the Object constructor at null and undefined. */
+    private toObject(input:Cell,context:ts.Node):Cell {
+        let calls=this.objectCoercions.get(context);if(!calls){calls=new Map();this.objectCoercions.set(context,calls);}
+        const prior=calls.get(input);if(prior)return prior;
+        const result=this.newCell(),coercible=this.newCell();calls.set(input,result);
+        this.returnTransforms.set(result,{inputs:[input],evaluate:inputs=>this.toObject(inputs[0]!,context)});
+        const cells=new Map<Atom,Cell>();
+        this.rule([input],()=>{for(const atom of input.values){
+            if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
+            let value=cells.get(atom);if(!value){value=this.newCell();cells.set(atom,value);this.publish(value,atom);}
+            const kinds=this.primitiveKinds(value);
+            if(kinds&(KIND_NULL|KIND_UNDEFINED)){
+                this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context,"TypeError"));
+            }
+            if(kinds&~(KIND_NULL|KIND_UNDEFINED))this.publish(coercible,atom);
+        }});
+        this.copy(this.objectValue(coercible,context),result);return result;
+    }
+    /** One worklist handles ordinary owners and Proxy default forwarding.
+     * Opaque shape origins also cover unrepresented internal prototype writes. */
+    private getPrototype(input:Cell,context:ts.Node,coerce:boolean):Cell {
+        let calls=this.prototypeReads.get(context);if(!calls){calls=new Map();this.prototypeReads.set(context,calls);}
+        const signature=input.id+":"+coerce,prior=calls.get(signature);if(prior)return prior;
+        const result=this.newCell(),objects=coerce?this.toObject(input,context):input;calls.set(signature,result);
+        this.returnTransforms.set(result,{inputs:[input],evaluate:inputs=>this.getPrototype(inputs[0]!,context,coerce)});
+        const selected=new Set<Atom>(),pending=this.newCell(),cells=new Map<Atom,Cell>();this.copy(objects,pending);
+        const fail=()=>{this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context,"TypeError"));};
+        let rule!:Rule;rule=this.rule([pending],()=>{for(const atom of pending.values){
+            if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
+            const owner=this.ordinaryOwner(atom);
+            if(owner){
+                this.watch(rule,owner.shape);
+                if(!owner.immutableOwn){
+                    let effects=this.ownerFieldEffects.get(owner);
+                    if(!effects){effects=this.newCell();this.ownerFieldEffects.set(owner,effects);this.copy(owner.shape,effects,"origin");}
+                    this.copyRead(effects,result,context);
+                }
+                if(selected.has(atom))continue;selected.add(atom);
+                if(owner.proxy){
+                    const proxy=owner.proxy,method=this.property(proxy.handler,"getPrototypeOf",context),callee=this.newCell(),returned=this.newCell();
+                    this.rule([method],()=>{for(const target of method.values){
+                        if(target===this.primitive(undefined)||target===this.primitive(null))this.copy(proxy.target,pending);
+                        else this.publish(callee,target);
+                    }});
+                    this.invoke(context,callee,proxy.handler,[{cell:proxy.target,spread:false}],returned);
+                    this.rule([returned],()=>{for(const value of returned.values){
+                        if(value.tag==="abrupt"||value.tag==="pending-source"){this.publish(result,value);continue;}
+                        let cell=cells.get(value);if(!cell){cell=this.newCell();cells.set(value,cell);this.publish(cell,value);}
+                        const kinds=this.primitiveKinds(cell);
+                        if(kinds&(KIND_OBJECT|KIND_FUNCTION|KIND_NULL))this.publish(result,value);
+                        // Proxy invariant checks may reject an otherwise valid
+                        // trap result. Integrity state is still conservative.
+                        fail();
+                    }});
+                }else if(owner.prototype)this.copyRead(owner.prototype,result,context);
+                else this.publish(result,this.unknown);
+            }else if(atom.tag==="unknown"||atom.tag==="opaque-object"){
+                this.publish(result,this.unknown);fail();
+                if(!selected.has(atom)){selected.add(atom);this.opaqueEffect(context);}
+            }else fail();
+        }});return result;
+    }
     /** Only language-created exceptions enter this allocation collection.
      * Unknown messages keep their String category without inventing callbacks;
      * mutable prototype properties still use the ordinary owner graph. */
-    private nativeException(context:ts.Node):Atom {
-        let value=this.nativeExceptions.get(context);if(value)return value;
-        const prototype=this.newCell(),message=this.newCell();
-        const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype};
-        value={tag:"object",owner};this.nativeExceptions.set(context,value);
-        this.copy(this.opaqueMutation,owner.shape);
-        for(const name of runtimeErrorKinds.keys())this.copy(this.errorPrototype(name),prototype);
-        this.publish(message,this.unknownString);this.defineField(owner,"message",message);
-        return value;
+    private nativeException(context:ts.Node,kind?:string,realm=this.currentRealm):Atom {
+        let realms=this.nativeExceptions.get(context);if(!realms){realms=new Map();this.nativeExceptions.set(context,realms);}
+        let errors=realms.get(realm);if(!errors){errors=new Map();realms.set(realm,errors);}
+        let value=errors.get(kind);if(value)return value;
+        const prototype=this.newCell(),message=this.newCell(),owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype};
+        value={tag:"object",owner};errors.set(kind,value);this.copy(this.opaqueMutation,owner.shape);
+        for(const name of kind?[kind]:runtimeErrorKinds.keys())this.copy(realm===this.currentRealm?this.errorPrototype(name):this.property(this.realmBinding(realm,name),"prototype"),prototype);
+        this.publish(message,this.unknownString);this.defineField(owner,"message",message);return value;
     }
     private errorText(receiver:Cell,context:ts.Node):Cell {
         let receivers=this.errorStrings.get(context);if(!receivers){receivers=new Map();this.errorStrings.set(context,receivers);}
@@ -2951,14 +3056,37 @@ class SourceValueFlow {
     private arrayPrototype():Cell {
         if(!this.ordinaryArrayPrototype){
             const value=this.newCell();this.ordinaryArrayPrototype=value;
-            const fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype(),closedIndices:true};
-            this.copy(this.opaqueMutation,fields.shape);
-            this.publish(value,{tag:"builtin",name:"Array.prototype",normalResult:"not-callable",fields});
-            const join=this.newCell();this.publish(join,this.operation("array-join"));this.defineField(fields,"join",join);
-            const length=this.newCell();this.publish(length,this.primitive(0));this.defineField(fields,"length",length);
-            for(const name of ["keys","values","entries"] as const){const iterator=this.newCell();this.publish(iterator,this.operation(`array-${name}`));this.defineField(fields,name,iterator);if(name==="values")this.defineField(fields,this.wellKnownSymbols.get("iterator")!,iterator);}
+            const fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype(),closedIndices:true,closedOwn:true,ordinary:true};
+            this.copy(this.opaqueMutation,fields.shape);this.publish(value,{tag:"builtin",name:"Array.prototype",normalResult:"not-callable",fields});
+            const length=this.newCell();this.publish(length,this.primitive(0));this.defineField(fields,"length",length);fields.listLength=this.field(fields,"length");
+            this.defineField(fields,"constructor",this.globalBinding("Array"));
+            for(const[operation,descriptor]of SOURCE_NATIVE_METHODS)if(descriptor.owner==="Array"){
+                const member=this.newCell();this.publish(member,this.operation(operation));this.defineField(fields,descriptor.name,member,false);
+            }
+            this.defineField(fields,this.wellKnownSymbols.get("iterator")!,this.field(fields,"values"),false);
+            const unscopables=this.newCell();this.publish(unscopables,this.opaqueObject);this.defineField(fields,this.wellKnownSymbols.get("unscopables")!,unscopables,false);
         }
         return this.ordinaryArrayPrototype;
+    }
+    /** Array.prototype.toString observes the actual join Reference. IsCallable
+     * selects either its Call result or the intrinsic Object text fallback. */
+    private arrayText(receiver:Cell,context:ts.Node):Cell {
+        let calls=this.arrayTexts.get(context);if(!calls){calls=new Map();this.arrayTexts.set(context,calls);}
+        const prior=calls.get(receiver);if(prior)return prior;
+        const result=this.newCell();calls.set(receiver,result);
+        this.returnTransforms.set(result,{inputs:[receiver],evaluate:inputs=>this.arrayText(inputs[0]!,context)});
+        const objects=this.toObject(receiver,context),join=this.property(objects,"join",context),callee=this.newCell(),fallback=this.newCell(),seen=new Set<Atom>();
+        this.rule([join],()=>{for(const atom of join.values){
+            if(seen.has(atom))continue;seen.add(atom);
+            if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
+            const value=this.newCell();this.publish(value,atom);const valid=this.callableValidity(value,context);
+            this.rule([valid],()=>{
+                if(valid.values.has(this.primitive(true)))this.publish(callee,atom);
+                if(valid.values.has(this.primitive(false)))this.copy(objects,fallback);
+            });
+        }});
+        this.invoke(context,callee,objects,[],result);this.copy(this.objectText(fallback,context),result);
+        return result;
     }
     private joinTextInput(value:Cell,separator:boolean):Cell {
         const normalized=this.newCell();
@@ -3072,7 +3200,7 @@ class SourceValueFlow {
             if(visited.has(owner))continue;visited.add(owner);
             this.watch(rule,owner.shape);
             if(!this.definitionsReady(owner,rule))unresolved=true;
-            if(this.opaqueShape(owner,context)||atom.tag==="builtin"&&(domain==="all"||!owner.closedIndices))opaque=true;
+            if(this.opaqueShape(owner,context)||atom.tag==="builtin"&&!owner.closedOwn&&(domain==="all"||!owner.closedIndices))opaque=true;
             const names=this.ownerKeys(owner,rule);
             if(names===null)opaque=true;
             else if(names===undefined)unresolved=true;
@@ -3429,6 +3557,12 @@ class SourceValueFlow {
     }
 
     private ordinaryOwner(atom: Atom): ObjectOwner | null {
+        const owner=this.representedOwner(atom);
+        if(owner&&(atom.tag==="function"||atom.tag==="bound"||atom.tag==="operation"||atom.tag==="promise-resolver"||atom.tag==="builtin"&&atom.normalResult!=="not-callable"||atom.tag==="intrinsic"&&(atom.domain==="constructor"||atom.domain==="prototype"&&atom.kind==="ordinary")))
+            for(const key of ["name","length"])if(owner.own?.get(key)?.initial)this.markReadonly(owner,key);
+        return owner;
+    }
+    private representedOwner(atom: Atom): ObjectOwner | null {
         if(atom.tag==="promise") {
             let owner=this.promiseOwners.get(atom);
             if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.promisePrototype(),ordinary:true};this.promiseOwners.set(atom,owner);}
@@ -3450,11 +3584,21 @@ class SourceValueFlow {
         if(atom.tag === "object")return atom.owner;
         if(atom.tag === "function")return atom.owner.fields;
         if(atom.tag === "promise-resolver")return atom.fields;
+        const nativeMethod=atom.tag==="operation"?SOURCE_NATIVE_METHODS.get(atom.operation):undefined;
+        if(nativeMethod){
+            let owner=this.intrinsicOwners.get(atom);
+            if(!owner){
+                const prototype=this.newCell();this.publish(prototype,this.intrinsic("prototype","ordinary",atom.tag==="operation"?atom.realm:this.currentRealm));
+                owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype};this.intrinsicOwners.set(atom,owner);
+                const frozen=atom.tag==="operation"&&atom.operation==="throw-type-error";
+                if(!frozen)this.copy(this.opaqueMutation,owner.shape);
+                const text=this.newCell(),length=this.newCell();this.publish(text,this.primitive(nativeMethod.name));this.publish(length,this.primitive(nativeMethod.length));this.defineField(owner,"name",text,false);this.defineField(owner,"length",length,false);
+                if(frozen)owner.immutableOwn=true;
+            }
+            return owner;
+        }
         if(atom.tag==="operation"&&atom.operation.startsWith("callback-timer:")){
             let owner=this.intrinsicOwners.get(atom);if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);this.copy(this.opaqueMutation,owner.shape);const spelling=atom.operation.slice("callback-timer:".length),descriptor=runtimeCallbackTimerDescriptors.get(spelling)!,name=this.newCell(),length=this.newCell();this.publish(name,this.primitive(spelling));this.publish(length,this.primitive(descriptor.length));this.defineField(owner,"name",name,false);this.defineField(owner,"length",length,false);}return owner;
-        }
-        if(atom.tag==="operation"&&atom.operation==="ordinary-has-instance"){
-            let owner=this.intrinsicOwners.get(atom);if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);this.copy(this.opaqueMutation,owner.shape);const name=this.newCell(),length=this.newCell();this.publish(name,this.primitive("[Symbol.hasInstance]"));this.publish(length,this.primitive(1));this.defineField(owner,"name",name,false);this.defineField(owner,"length",length,false);}return owner;
         }
         if(atom.tag === "bound")return atom.fields;
         if(atom.tag === "builtin")return atom.fields;
@@ -3466,11 +3610,6 @@ class SourceValueFlow {
         if(atom.tag==="operation"&&atom.operation.startsWith("math-member:")){
             let owner=this.intrinsicOwners.get(atom);if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);this.copy(this.opaqueMutation,owner.shape);
                 const operation=atom.operation.slice("math-member:".length),descriptor=runtimeMathMethods.get(operation)!,name=this.newCell(),length=this.newCell();this.publish(name,this.primitive(operation));this.publish(length,this.primitive(descriptor.length));this.defineField(owner,"name",name);this.defineField(owner,"length",length);
-            }return owner;
-        }
-        if(atom.tag==="operation"&&(atom.operation==="array-values"||atom.operation==="array-keys"||atom.operation==="array-entries")){
-            let owner=this.intrinsicOwners.get(atom);if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);this.copy(this.opaqueMutation,owner.shape);
-                const name=this.newCell(),length=this.newCell();this.publish(name,this.primitive(atom.operation.slice("array-".length)));this.publish(length,this.primitive(0));this.defineField(owner,"name",name);this.defineField(owner,"length",length);
             }return owner;
         }
         if(atom.tag==="operation"&&atom.operation.startsWith("set-composition:")){
@@ -3505,25 +3644,51 @@ class SourceValueFlow {
             }
             return owner;
         }
+        if(atom.tag==="operation"){
+            let owner=this.intrinsicOwners.get(atom);
+            if(!owner){
+                const prototype=this.newCell();this.publish(prototype,this.intrinsic("prototype","ordinary",atom.realm));
+                owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype};this.intrinsicOwners.set(atom,owner);this.copy(this.opaqueMutation,owner.shape);
+                const name=this.newCell(),length=this.newCell();this.publish(name,this.unknownString);
+                let numeric=this.numericValues.get(KIND_NUMBER);if(!numeric){numeric={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,numeric);}this.publish(length,numeric);
+                this.defineField(owner,"name",name,false);this.defineField(owner,"length",length,false);
+            }
+            return owner;
+        }
         if(atom.tag === "intrinsic"){
             let owner=this.intrinsicOwners.get(atom);
             if(!owner){
                 owner={fields:new Map(),accessors:new Map(),shape:this.newCell()};this.intrinsicOwners.set(atom,owner);
                 if(atom.domain==="prototype"){
-                    const name=this.newCell(),length=this.newCell();this.publish(name,this.primitive(""));this.publish(length,this.primitive(0));this.defineField(owner,"name",name,false);this.defineField(owner,"length",length,false);
+                    if(atom.kind==="ordinary"){const name=this.newCell(),length=this.newCell();this.publish(name,this.primitive(""));this.publish(length,this.primitive(0));this.defineField(owner,"name",name,false);this.defineField(owner,"length",length,false);}
                     if(atom.kind!=="ordinary"){const tag=this.newCell();this.publish(tag,this.primitive(runtimeDynamicFunctionDescriptors.get(atom.kind)!.name));this.defineField(owner,this.wellKnownSymbols.get("toStringTag")!,tag,false);}
                 }
-                if (atom.domain === "constructor"){owner.prototype=this.newCell();this.publish(owner.prototype,this.intrinsic("prototype","ordinary",atom.realm));}
+                if (atom.domain === "constructor"){
+                    owner.prototype=this.newCell();this.publish(owner.prototype,this.intrinsic("prototype","ordinary",atom.realm));
+                    const name=this.newCell(),length=this.newCell(),prototype=this.newCell();this.publish(name,this.primitive(runtimeDynamicFunctionDescriptors.get(atom.kind)!.name));this.publish(length,this.primitive(1));this.publish(prototype,this.intrinsic("prototype",atom.kind,atom.realm));
+                    this.defineField(owner,"name",name,false);this.defineField(owner,"length",length,false);this.defineField(owner,"prototype",prototype,false);this.markReadonly(owner,"prototype");
+                }
                 if (atom.domain === "prototype" && atom.kind !== "ordinary"){owner.prototype=this.newCell();this.publish(owner.prototype!,this.intrinsic("prototype","ordinary",atom.realm));}
                 if (atom.domain === "prototype" && atom.kind === "ordinary") {
                     owner.prototype = this.realmObjectPrototype(atom.realm??this.currentRealm);
-                    this.publish(this.field(owner, "toString"), this.operation("function-text"));this.ownPresence(owner,"toString").initial=true;this.publish(this.presence(owner,"toString"),this.primitive(true));
-                    this.defineField(owner, "constructor", this.realmBinding(atom.realm??this.currentRealm,"Function"));
-                    const method=this.newCell();this.publish(method,this.operation("ordinary-has-instance"));this.defineField(owner,this.wellKnownSymbols.get("hasInstance")!,method,false);
+                    for(const[operation,descriptor]of SOURCE_NATIVE_METHODS)if(descriptor.owner==="Function"){
+                        const value=this.newCell();this.publish(value,this.realmOperation(atom.realm??this.currentRealm,operation));this.defineField(owner,descriptor.name,value,false);
+                    }
+                    const constructor=this.newCell();this.publish(constructor,this.intrinsic("constructor","ordinary",atom.realm));this.defineField(owner,"constructor",constructor,false);
+                    const method=this.newCell();this.publish(method,this.realmOperation(atom.realm??this.currentRealm,"ordinary-has-instance"));this.defineField(owner,this.wellKnownSymbols.get("hasInstance")!,method,false);this.markReadonly(owner,this.wellKnownSymbols.get("hasInstance")!);
+                    const thrower=this.newCell();this.publish(thrower,this.realmOperation(atom.realm??this.currentRealm,"throw-type-error"));
+                    for(const name of runtimeFunctionRestrictedProperties){
+                        this.defineAccessor(owner,name,"get",thrower);this.defineAccessor(owner,name,"set",thrower);
+                        const presence=this.ownPresence(owner,name);presence.initial=true;this.publish(presence.enumerable,this.primitive(false));
+                    }
+                }
+                if(atom.domain==="prototype"&&atom.kind!=="ordinary"){
+                    const constructor=this.newCell();this.publish(constructor,this.intrinsic("constructor",atom.kind,atom.realm));this.defineField(owner,"constructor",constructor,false);this.markReadonly(owner,"constructor");
+                    if(atom.kind.includes("generator")){const prototype=this.newCell();this.publish(prototype,this.intrinsic("instance",atom.kind,atom.realm));this.defineField(owner,"prototype",prototype,false);this.markReadonly(owner,"prototype");}
                 }
                 if(atom.domain==="instance"&&atom.kind.includes("generator")){
                     owner.prototype=atom.kind==="async-generator"?this.asyncIteratorPrototype(atom.realm):this.iteratorPrototype();
-                    const constructor=this.newCell();this.publish(constructor,this.intrinsic("prototype",atom.kind,atom.realm));this.defineField(owner,"constructor",constructor,false);
+                    const constructor=this.newCell();this.publish(constructor,this.intrinsic("prototype",atom.kind,atom.realm));this.defineField(owner,"constructor",constructor,false);this.markReadonly(owner,"constructor");
                     const tag=this.newCell();this.publish(tag,this.primitive(atom.kind==="async-generator"?"AsyncGenerator":"Generator"));this.defineField(owner,this.wellKnownSymbols.get("toStringTag")!,tag,false);
                     for(const [name,entry]of runtimeGeneratorMethods){const method=this.newCell();this.publish(method,this.realmOperation(atom.realm??this.currentRealm,`generator-member:${atom.kind}:${entry.completion}`));this.defineField(owner,name,method,false);}
                 }
@@ -3568,18 +3733,19 @@ class SourceValueFlow {
             if (handler) this.publish(handler, this.unknown);
             return;
         }
-        const firstOwner = this.ordinaryOwner(atom), worklist = firstOwner ? [firstOwner] : [];
+        const firstOwner = this.ordinaryOwner(atom), worklist:Atom[] = firstOwner ? [atom] : [];
         if(atom.tag==="global" && typeof key === "string" && !firstOwner!.accessors.has(key)) {
             const binding=this.realmBinding(atom.realm,key);this.field(firstOwner!,key);
             if(runtimeGlobalBindings.has(key)||binding.values.nonempty)this.ownPresence(firstOwner!,key).initial=true;
         }
-        const visited = new Set<ObjectOwner>();
+        const visited = new Set<Atom>();
         while (worklist.length) {
-            const owner = worklist.pop()!;
-            if (visited.has(owner)) continue;
-            visited.add(owner);
+            const current = worklist.pop()!,owner=this.ordinaryOwner(current)!;
+            if (visited.has(current)) continue;
+            visited.add(current);
             if(owner.proxy)this.copy(this.proxyReadEffects(owner,key,"get",context),result);
             if(rule)this.watch(rule,owner.shape);
+            if(handler&&this.opaqueShape(owner,context))this.publish(handler,this.unknown);
             if(!this.definitionsReady(owner,rule))continue;
             this.stringField(owner,key);
             this.copyRead(this.field(owner, key), result, context);
@@ -3597,10 +3763,10 @@ class SourceValueFlow {
             // The native builtin's unrepresented own members are opaque.
             // A closed prototype chain must not turn them into known absence.
             const closedIndex=owner.closedIndices&&typeof key==="string"&&Number.isSafeInteger(Number(key))&&Number(key)>=0&&String(Number(key))===key;
-            const representedAbsence=atom.tag==="builtin"&&(atom.name==="Object"&&key===this.wellKnownSymbols.get("species")&&!runtimeObjectConstructorOwnKeys.has(key)||runtimeErrorKinds.has(atom.name)&&key===this.wellKnownSymbols.get("hasInstance"));
-            if (owner === firstOwner && atom.tag === "builtin" && !representedAbsence && !closedIndex && !presence?.values.has(this.primitive(true)) &&
+            const representedAbsence=current.tag==="builtin"&&(current.name==="Object"&&key===this.wellKnownSymbols.get("species")&&!runtimeObjectConstructorOwnKeys.has(key)||runtimeErrorKinds.has(current.name)&&key===this.wellKnownSymbols.get("hasInstance"));
+            if (current.tag === "builtin" && !owner.closedOwn && !representedAbsence && !closedIndex && !presence?.values.has(this.primitive(true)) &&
                 !(typeof key === "string" && (runtimeObjectPrototypeMethods.has(key) || key === "constructor" ||
-                    atom.normalResult !== "not-callable" && CALLABLE_FORWARDING_OPERATIONS.has(key)))) {
+                    current.normalResult !== "not-callable" && (runtimeFunctionPrototypeMethods.has(key) || runtimeFunctionRestrictedProperties.includes(key))))) {
                 this.publish(result, this.unknown); if (handler) this.publish(handler, this.unknown);
             }
             if(ownOnly){if(!presence?.values.has(this.primitive(true)) || presence.values.has(this.primitive(false)))this.publish(result,this.primitive(undefined));continue;}
@@ -3609,24 +3775,11 @@ class SourceValueFlow {
                 if (rule) this.watch(rule, owner.prototype);
                 for (const prototype of owner.prototype.values) {
                     const inherited = this.ordinaryOwner(prototype);
-                    if (inherited) worklist.push(inherited);
+                    if (inherited) worklist.push(prototype);
                     else if (prototype.tag === "primitive" && prototype.value === null) this.publish(result,this.primitive(undefined));
                     else this.publish(result, prototype.tag === "pending-source" ? prototype : this.unknown);
                 }
             }
-        }
-        if (atom.tag === "function") {
-            if (key === "constructor") this.publish(result, this.intrinsic("constructor", atom.owner.kind));
-        }
-        if (atom.tag === "intrinsic") {
-            if (key === "constructor") {
-                if (atom.domain === "prototype") this.publish(result, this.intrinsic("constructor", atom.kind,atom.realm));
-                if (atom.domain === "constructor") this.publish(result, this.intrinsic("constructor", "ordinary",atom.realm));
-                if (atom.domain === "instance" && atom.kind !== "ordinary") this.publish(result, this.intrinsic("prototype", atom.kind,atom.realm));
-            }
-            if (key === "prototype" && atom.domain === "constructor") this.publish(result, this.intrinsic("prototype", atom.kind,atom.realm));
-            if (key === "prototype" && atom.domain === "prototype" && atom.kind.includes("generator"))
-                this.publish(result, this.intrinsic("instance", atom.kind,atom.realm));
         }
         if (atom.tag === "host" || atom.tag === "realm-record") {
             if (key === "gc") this.publish(result, this.operation("host-gc"));
@@ -3635,9 +3788,7 @@ class SourceValueFlow {
             if (key === "evalScript") this.publish(result, this.operation("eval-script"));
             if (key === "global") this.publish(result,atom.tag==="realm-record"?atom.realm.global:this.global);
         }
-        if ((["function", "bound", "intrinsic", "operation", "promise-resolver"].includes(atom.tag) ||
-            atom.tag === "builtin" && atom.normalResult !== "not-callable") && typeof key === "string" && CALLABLE_FORWARDING_OPERATIONS.has(key))
-            this.publish(result, this.operation(CALLABLE_FORWARDING_OPERATIONS.get(key)!));
+
     }
     private bindingDefault(input:Cell,fallback:Cell):Cell {
         let defaults=this.bindingDefaults.get(input);if(!defaults){defaults=new Map();this.bindingDefaults.set(input,defaults);}
@@ -4840,7 +4991,7 @@ class SourceValueFlow {
                             }
                         }
                     }
-                    if (atom.tag === "unknown" || atom.tag === "opaque-object" || proxy) {
+                    if (atom.tag === "unknown" || atom.tag === "opaque-object" || proxy || atom.tag==="operation"&&SOURCE_NATIVE_METHODS.get(atom.operation)?.opaque&&!invocation.construct) {
                         // A return value belongs to the invocation that
                         // produced it, just as an opaque write does. Shared
                         // formals must retain that provenance when forwarding.
@@ -4990,6 +5141,9 @@ class SourceValueFlow {
                         if(!retained){const context=ts.setTextRange(ts.factory.createEmptyStatement(),node);(context as ts.Node&{parent:ts.Node}).parent=node;retained={context,result:this.newCell()};calls.set(identity,retained);this.invoke(context,callback,this.empty,(descriptor.actuals<0?[]:argv.slice(descriptor.actuals)).map(cell=>({cell,spread:false})),retained.result);}
 
                         if(descriptor.queue==="MICROTASK")this.publish(result,this.primitive(undefined));else{let value=this.numericValues.get(KIND_NUMBER);if(!value){value={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,value);}this.publish(result,value);}continue;
+                    }
+                    if(atom.tag==="operation"&&atom.operation==="throw-type-error"){
+                        this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node,"TypeError",atom.realm));continue;
                     }
                     if(atom.tag==="operation"&&atom.operation==="ordinary-has-instance"){
                         this.copy(this.ordinaryInstanceSource(argument(0)??omittedArgument,invocation.receiver,node),result);continue;
@@ -5273,6 +5427,7 @@ class SourceValueFlow {
                             this.copy(this.jsonSerialization(argument(0)??omittedArgument,argument(1)??omittedArgument,argument(2)??omittedArgument,node),result);
                             continue;
                         }
+                        if(atom.operation==="array-text"){this.copy(this.arrayText(invocation.receiver,node),result);continue;}
                         if(atom.operation==="array-join"){
                             const length=this.arrayLikeLength(invocation.receiver,node);
                             const state=this.primitiveState(length,rule,true);
@@ -5483,13 +5638,9 @@ class SourceValueFlow {
                             } else if (argv && atom.operation === "eval") this.publish(result!, this.primitive(undefined));
                             }
                         }
-                        if (atom.operation === "prototype" && argv?.[0]) {
-                            const input = argv[0]; this.watch(rule, input);
-                            for (const value of input.values) {
-                                const owner = this.ordinaryOwner(value);
-                                if (owner?.prototype) {this.copy(owner.prototype,result!);this.watch(rule,owner.prototype);}
-                                else this.publish(result!,value.tag === "pending-source" ? value : this.unknown);
-                            }
+                        if (atom.operation === "object-get-prototype" || atom.operation === "reflect-get-prototype") {
+                            const input=argument(0)??omittedArgument;
+                            this.copy(this.getPrototype(input,node,atom.operation==="object-get-prototype"),result);
                         }
                     }
                 }

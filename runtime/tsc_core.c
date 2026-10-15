@@ -660,10 +660,10 @@ static tsc_function_intrinsics_t* ensure_function_intrinsics(void) {
             false,
             true
         );
-        function_prototype_define_method(intrinsics->prototype_identity, "apply", 5, 2.0, function_prototype_apply);
-        function_prototype_define_method(intrinsics->prototype_identity, "bind", 4, 1.0, function_prototype_bind);
-        function_prototype_define_method(intrinsics->prototype_identity, "call", 4, 1.0, function_prototype_call);
-        function_prototype_define_method(intrinsics->prototype_identity, "toString", 8, 0.0, function_prototype_to_string);
+#define TSC_FUNCTION_PROTOTYPE_METHOD(name, implementation, length) \
+        function_prototype_define_method(intrinsics->prototype_identity, #name, sizeof(#name) - 1, (double)(length), implementation);
+#include "tsc_function_prototype_methods.def"
+#undef TSC_FUNCTION_PROTOTYPE_METHOD
         tsc_object_define(intrinsics->prototype_identity->props,tsc_symbol_property_key(tsc_symbol_has_instance()),
             tsc_value_function_builtin_named(function_prototype_has_instance,NULL,1.0,tsc_str_from_lit("[Symbol.hasInstance]",20)),false,false,false);
         intrinsics->throw_type_error_identity = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
@@ -680,10 +680,10 @@ static tsc_function_intrinsics_t* ensure_function_intrinsics(void) {
         tsc_object_prevent_extensions(thrower_identity->props);
         thrower_identity->extensible = false;
         tsc_value_t thrower = value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)thrower_identity);
-        const char* restricted_names[] = { "caller", "arguments" };
-        const size_t restricted_lengths[] = { 6, 9 };
-        for (size_t index = 0; index < sizeof(restricted_names) / sizeof(*restricted_names); index++)
-            define_restricted_accessor(prototype, tsc_str_from_lit(restricted_names[index], restricted_lengths[index]), thrower, true);
+#define TSC_FUNCTION_RESTRICTED_PROPERTY(name) \
+        define_restricted_accessor(prototype, tsc_str_from_lit(#name, sizeof(#name) - 1), thrower, true);
+#include "tsc_function_restricted_properties.def"
+#undef TSC_FUNCTION_RESTRICTED_PROPERTY
 
         tsc_function_identity_set_prototype(intrinsics->constructor_identity, prototype);
         tsc_function_identity_set_own_prototype(intrinsics->constructor_identity, prototype);

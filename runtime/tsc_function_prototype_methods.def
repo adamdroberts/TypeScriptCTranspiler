@@ -1,0 +1,4 @@
+TSC_FUNCTION_PROTOTYPE_METHOD(apply, function_prototype_apply, 2)
+TSC_FUNCTION_PROTOTYPE_METHOD(bind, function_prototype_bind, 1)
+TSC_FUNCTION_PROTOTYPE_METHOD(call, function_prototype_call, 1)
+TSC_FUNCTION_PROTOTYPE_METHOD(toString, function_prototype_to_string, 0)
