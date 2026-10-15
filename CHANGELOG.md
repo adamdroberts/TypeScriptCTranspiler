@@ -1,3 +1,5 @@
+- Reuse canonical descriptor conversion and projection subscriptions as source facts grow.
+
 - Project existing anonymous native text for Promise resolving functions and Function.prototype without observing mutable names.
 
 - Record independently audited pinned callable-text scenarios while retaining Proxy and host conformance gates.

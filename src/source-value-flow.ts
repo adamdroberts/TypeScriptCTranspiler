@@ -249,6 +249,8 @@ class SourceValueFlow {
     private readonly rawJSONResults = new Map<ts.Node, Map<Cell, Cell>>();
     private readonly jsonParses = new Map<ts.Node, Map<string, Cell>>();
     private readonly descriptorRecords = new Map<ts.Node,Map<Cell,SourceDescriptorRecord>>();
+    private readonly descriptorWrites=new Map<ts.Node,Set<string>>();
+    private readonly descriptorReads=new Map<ts.Node,Map<string,Cell>>();
     private readonly objectCreations = new Map<ts.Node,Map<string,Cell>>();
     private readonly proxyReads = new Map<string,Cell>();
     private readonly promiseOwners = new WeakMap<Atom,ObjectOwner>();
@@ -2077,6 +2079,8 @@ class SourceValueFlow {
         return record;
     }
     private defineProperty(base:Cell,key:Cell,descriptor:Cell,context:ts.Node): void {
+        let writes=this.descriptorWrites.get(context);if(!writes){writes=new Set();this.descriptorWrites.set(context,writes);}
+        const identity="define:"+base.id+":"+key.id+":"+descriptor.id;if(writes.has(identity))return;writes.add(identity);
         // Every normal DefineProperty completion creates an own location.
         // Register that edge before descriptor absence reads settle, so the
         // worklist cannot seal a later read as absent during intake.
@@ -2113,6 +2117,8 @@ class SourceValueFlow {
         });
     }
     private defineProperties(base:Cell,descriptors:Cell,context:ts.Node): void {
+        let writes=this.descriptorWrites.get(context);if(!writes){writes=new Set();this.descriptorWrites.set(context,writes);}
+        const identity="define-all:"+base.id+":"+descriptors.id;if(writes.has(identity))return;writes.add(identity);
         const selected=new Set<string>();let rule!:Rule;
         rule=this.rule([descriptors],()=>{for(const atom of descriptors.values){
             const owner=this.ordinaryOwner(atom);
@@ -2144,6 +2150,10 @@ class SourceValueFlow {
         return result;
     }
     private ownDescriptors(base:Cell,key:Cell|null,context:ts.Node,result:Cell): void {
+        let reads=this.descriptorReads.get(context);if(!reads){reads=new Map();this.descriptorReads.set(context,reads);}
+        const identity=base.id+":"+(key?.id??"all"),prior=reads.get(identity);
+        if(prior){this.copy(prior,result);return;}
+        reads.set(identity,result);
         const records=new Map<ObjectOwner,Map<SourcePropertyKey,{value:Cell;owner:ObjectOwner}>>();
         const collection:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};
         if(!key)this.publish(result,{tag:"object",owner:collection});

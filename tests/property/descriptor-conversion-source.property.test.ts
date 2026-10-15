@@ -50,3 +50,17 @@ test('descriptor conversion effects match Node through native source modes',asyn
   }
  }finally{await fs.rm(temporary,{recursive:true,force:true})}
 },900_000);
+
+test('descriptor operation records react to later formal and owner facts',()=>{
+ const sources=[
+  ...['Object.defineProperty(target,"read",descriptor)','Reflect.defineProperty(target,"read",descriptor)','Object.defineProperties(target,{read:descriptor})'].map(call=>'function define(target,descriptor){'+call+'}const left={},right={};define(left,{value:()=>"17;"});define(right,{get(){return ()=>"19;"}});eval(left.read());eval(right.read());'),
+  ...['Object.getOwnPropertyDescriptor(target,"read")','Reflect.getOwnPropertyDescriptor(target,"read")','Object.getOwnPropertyDescriptors(target).read'].map(call=>'function read(target){return '+call+'}const left={read:()=>"17;"},right={read:()=>"19;"};eval(read(left).value());eval(read(right).value());'),
+ ];
+ const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");fs.writeSync(1,JSON.stringify(JSON.parse(process.argv[1]).map(source=>{const values=[];new vm.Script(source).runInNewContext({eval:value=>values.push(value)});return values;})));',JSON.stringify(sources)],{stdout:'pipe',stderr:'pipe',timeout:30_000});
+ expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:''});const expected:string[][]=JSON.parse(reference.stdout.toString());
+ expect(expected).toEqual(sources.map(()=>['17;','19;']));
+ for(const [index,source]of sources.entries()){
+  const result=graph([{path:'subject.js',source}]);expect(result.error).toBeNull();
+  for(const value of expected[index]!)expect(result.directEvalSources.map(entry=>entry.source)).toContain(value);
+ }
+});
