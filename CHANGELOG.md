@@ -1,3 +1,5 @@
+- Observe inherited Stats lazy-date errors, String field order and retained user Symbol ownership against independent Node.
+
 - Preserve actual host result owners through typed source facts and retain explicit null filesystem byte encodings.
 
 - Compose retained CommonJS host property References with canonical Module link resolution and share source-unit format metadata.
