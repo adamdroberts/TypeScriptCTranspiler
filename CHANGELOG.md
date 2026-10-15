@@ -1,3 +1,5 @@
+- Select canonical array, binding and literal-key representations before optional TypeScript inference, repairing the delegation checker crash.
+
 - Carry original dispatch completion Values through one rooted invocation record and leave catch frames before rethrowing.
 
 - Align arrow restricted-accessor descriptor expectations with the pinned specification and independent Node execution.

@@ -31060,11 +31060,10 @@ class Emitter {
                 unsupported(expr, "ambient host value requires an ordinary runtime owner");
             }
             const scopedTy = this.identifierScopedType(expr);
-            const sourceFunction = this.canonicalFunctionLikeForExpression(expr);
-            const sourceTy = sourceFunction
+            const sourceFunction = scopedTy ? null : this.canonicalFunctionLikeForExpression(expr);
+            const ty = scopedTy ?? (sourceFunction
                 ? this.sourceFunctionValueType(sourceFunction)
-                : this.prepareType(mapType(expr, this.checker));
-            const ty = scopedTy ?? sourceTy;
+                : this.prepareType(mapType(expr, this.checker)));
             const declaredTy = scopedTy ?? this.identifierDeclaredType(expr);
             const scalarType = this.canonicalValueScalarReadType(expr, declaredTy);
             if (scalarType) {
@@ -32891,7 +32890,7 @@ class Emitter {
         const keyNode = ts.isElementAccessExpression(node) ? node.argumentExpression : null;
         const key = keyNode ? this.emitExpr(keyNode)
             : this.isPrivatePropertyReference(node) ? this.emitPrivateNameValue((node as ts.PropertyAccessExpression).name as ts.PrivateIdentifier)
-            : { c: this.stringLit((node as ts.PropertyAccessExpression).name.text), ty: T_STRING };
+            : { c: `tsc_value_string(${this.stringLit((node as ts.PropertyAccessExpression).name.text)})`, ty: T_VALUE };
         if (this.isSuperProperty(node)) {
             const home = this.superHomeObject(node), receiver = this.superThisValue(node);
             return this.emitSequencedExpr(T_VALUE, [
@@ -40239,13 +40238,11 @@ class Emitter {
     }
 
     private emitArrayLiteral(al: ts.ArrayLiteralExpression): EmitResult {
-        const litType =
-            this.asyncAwaitReturnContextTypes.get(al) ??
-            this.checker.getContextualType(al) ??
-            this.checker.getTypeAtLocation(al);
         const mapped = this.ordinaryAggregateDepth > 0 || this.isUntypedJsArrayLiteral(al)
             ? T_VALUE
-            : mapTsType(al, litType, this.checker);
+            : mapTsType(al, this.asyncAwaitReturnContextTypes.get(al) ??
+                this.checker.getContextualType(al) ??
+                this.checker.getTypeAtLocation(al), this.checker);
         if (mapped.kind === "value") {
             const pieces: string[] = [];
             const av = this.freshTemp("_dynarr");
