@@ -528,33 +528,69 @@ test("typed scalar reads cross one canonical CaseBlock value boundary", async ()
     }
 }, 90_000);
 
-test("unsupported CaseBlock class definitions fail closed at the shared class-definition boundary", async () => {
-    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-switch-class-diagnostic-"));
-    const entry = path.join(temporary, "subject.js");
-    try {
-        await fs.writeFile(entry, `
+test("CaseBlock class definitions use the canonical member and lexical-owner plan", async () => {
+    const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-switch-class-definition-"));
+    const source = `
+        function check(value, label) { if (!value) throw new Error(label); }
+        var trace = [], escaped;
+        switch (0) {
+            case (function() {
+                var tdz = false;
+                try { Local; } catch (error) { tdz = error instanceof ReferenceError; }
+                check(tdz, "selector-tdz");
+                return 0;
+            })():
+                let captured = 17;
+                class Local {
+                    [(trace.push("key"), "read")]() { return captured; }
+                    static self() { return Local; }
+                }
+                check(trace.join(":") === "key" && new Local().read() === 17 && Local.self() === Local, "ordered-definition");
+                escaped = { Constructor: Local, owner: new Local() };
+                captured = 23;
+                break;
+            default:
+                class Dormant { [(trace.push("dormant"), "method")]() {} }
+        }
+        check(escaped.owner.read() === 23 && escaped.Constructor.self() === escaped.Constructor && trace.join(":") === "key", "escaped-live-cell");
+        var sentinel = {}, caught;
+        try { switch (0) { case 0: class Abrupt { [(function() { throw sentinel; })()]() {} } } }
+        catch (error) { caught = error; }
+        check(caught === sentinel, "abrupt-key-identity");
+        function make(seed) {
             switch (0) {
                 case 0:
-                    class UnsupportedCaseClass {
-                        method() { return 1; }
-                    }
-                    console.log(new UnsupportedCaseClass().method());
-                    break;
+                    class Retained { read() { return seed; } static self() { return Retained; } }
+                    return { Constructor: Retained, owner: new Retained() };
             }
-        `, "utf8");
-        const diagnostics: string[] = [];
-        const result = await compile({
-            entry,
-            output: path.join(temporary, "subject"),
-            buildDir: path.join(temporary, "build"),
-            diagnosticWriter: (message) => diagnostics.push(message),
-        });
-        expect(result.exitCode).not.toBe(0);
-        expect(diagnostics.join("")).toContain(
-            "direct switch class declaration requires the canonical class-definition lowering; " +
-            "only an empty base class is currently supported",
-        );
-    } finally {
-        await fs.rm(temporary, { recursive: true, force: true });
-    }
-});
+        }
+        var tree = null;
+        for (var index = 0; index < 512; index++) tree = { value: make(index), previous: tree };
+        var cursor = tree, expected = 511;
+        while (cursor) {
+            check(cursor.value.owner.read() === expected && cursor.value.Constructor.self() === cursor.value.Constructor, "retained-class-owner");
+            cursor = cursor.previous;
+            expected--;
+        }
+        check(expected === -1, "worklist-complete");
+        console.log("switch-class-definition-ok");
+    `;
+    try {
+        const reference = path.join(temporary, "reference.js"), stdout = path.join(temporary, "reference.stdout");
+        await fs.writeFile(reference, source);
+        const oracle = Bun.spawnSync(["node", reference], { stdout: Bun.file(stdout), stderr: "pipe", timeout: 120_000 });
+        expect({ code: oracle.exitCode, stderr: oracle.stderr.toString() }).toEqual({ code: 0, stderr: "" });
+        const expected = await fs.readFile(stdout, "utf8");
+        expect(expected).toBe("switch-class-definition-ok\n");
+        for (const extension of ["ts", "js"]) for (const noGc of [false, true]) {
+            const entry = path.join(temporary, `subject-${extension}-${noGc}.${extension}`), output = entry + "-native";
+            await fs.writeFile(entry, "// @ts-nocheck\n" + source);
+            const diagnostics: string[] = [];
+            const result = await compile({ entry, output, noGc, buildDir: output + "-build", diagnosticWriter: message => diagnostics.push(message) });
+            expect({ code: result.exitCode, diagnostics }).toEqual({ code: 0, diagnostics: [] });
+            const native = Bun.spawnSync([output], { stdout: "pipe", stderr: "pipe", timeout: 120_000 });
+            expect({ code: native.exitCode, stderr: native.stderr.toString() }).toEqual({ code: 0, stderr: "" });
+            expect(native.stdout.toString()).toBe(expected);
+        }
+    } finally { await fs.rm(temporary, { recursive: true, force: true }); }
+}, 120_000);

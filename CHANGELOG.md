@@ -1,3 +1,5 @@
+- Replace the obsolete switch-class rejection assertion with independent Node/native canonical member and lexical-owner behavior checks.
+
 - Keep function declaration binding identity stable across checker expando/prototype inference so lexical reads and captures share the original cell.
 
 - Share opaque source-effect activation subscriptions by source operation node and require complete file-backed Promise owner reference output.
