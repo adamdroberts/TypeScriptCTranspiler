@@ -1,3 +1,5 @@
+- Compare complete async logical-value observations with independent Node execution before native validation.
+
 - Select canonical array, binding and literal-key representations before optional TypeScript inference, repairing the delegation checker crash.
 
 - Carry original dispatch completion Values through one rooted invocation record and leave catch frames before rethrowing.

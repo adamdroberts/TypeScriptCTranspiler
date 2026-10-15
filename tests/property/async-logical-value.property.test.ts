@@ -3,6 +3,8 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { compile } from "../../src/compile";
+import ts from "typescript";
+import { nodeReferenceSync } from "./node-reference";
 
 interface LogicalValuePartition {
     readonly label: string;
@@ -178,7 +180,12 @@ test("async logical values follow one evaluate-once semantic partition", async (
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-async-logical-value-"));
     const entry = path.join(temporary, "subject.ts");
     try {
-        await fs.writeFile(entry, subjectSource(), "utf8");
+        const source = subjectSource();
+        const erased = ts.transpile(source, { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext });
+        const reference = nodeReferenceSync(["node", "-e", erased], { stdout: "pipe", stderr: "pipe", timeout: 120_000 });
+        expect({ code: reference.exitCode, stderr: reference.stderr.toString(), stdout: reference.stdout.toString() })
+            .toEqual({ code: 0, stderr: "", stdout: expectedOutput().join("\n") + "\n" });
+        await fs.writeFile(entry, source, "utf8");
         for (const noGc of [false, true]) {
             const mode = noGc ? "no-gc" : "gc";
             const executable = path.join(temporary, `subject-${mode}`);
