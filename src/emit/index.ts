@@ -20040,6 +20040,11 @@ class Emitter {
                 const target = specifier && this.resolvedModuleInfoForSpecifier(specifier,node.getSourceFile().fileName,"require");
                 if (target && this.isCommonJsSourceFile(target.sf)) admitPositive(node);
             }
+            // Ordinary host module/export owners use the same tagged Reference
+            // and actual-result ABI as source/global owners. Ambient return
+            // annotations cannot select another physical owner representation.
+            if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node) &&
+                this.importedHostModuleOwner(node, false)) admitPositive(node);
             if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node) &&
                 (runtimeGlobalBindings.has(node.text) && this.isRuntimeGlobalReference(node))) admitPositive(node);
             if (ts.isElementAccessExpression(node) || ts.isPropertyAccessExpression(node)) {
@@ -32779,7 +32784,7 @@ class Emitter {
             this.isDefaultImportFrom(expr, ["events", "node:events"])
         );
     }
-    private importedHostModuleOwner(expression: ts.Expression): EmitResult | null {
+    private importedHostModuleOwner(expression: ts.Expression, trackRuntime = true): EmitResult | null {
         const expr = unwrapTransparentExpression(expression);
         if (ts.isIdentifier(expr) && this.namedImportExportName(expr,["os","node:os"]) === "userInfo" ||
             ts.isPropertyAccessExpression(expr) && expr.name.text === "userInfo" && ts.isIdentifier(expr.expression) && this.isOsModuleIdentifier(expr.expression))
@@ -32788,11 +32793,11 @@ class Emitter {
         if (ts.isIdentifier(expr)) {
             const namespace=this.isNamespaceImportFrom(expr,fsNames),ordinary=this.isDefaultImportFrom(expr,fsNames)||this.isUnshadowedGlobalIdentifier(expr,"fs");
             const promiseNamespace=this.isNamespaceImportFrom(expr,["fs/promises","node:fs/promises"]),promiseDefault=this.isDefaultImportFrom(expr,["fs/promises","node:fs/promises"]);
-            if(namespace||ordinary||promiseNamespace||promiseDefault){this.usesLibuv=true;return {c:`tsc_fs_module_value(${promiseNamespace||promiseDefault},${namespace||promiseNamespace})`,ty:T_VALUE};}
+            if(namespace||ordinary||promiseNamespace||promiseDefault){if(trackRuntime)this.usesLibuv=true;return {c:`tsc_fs_module_value(${promiseNamespace||promiseDefault},${namespace||promiseNamespace})`,ty:T_VALUE};}
             for(const promises of [false,true]) {
                 const names=promises?["fs/promises","node:fs/promises"]:fsNames;
                 const name=this.namedImportExportName(expr,names);
-                if(name&&(runtimeFsExports.get(promises?"promises":"sync")!.has(name)||name==="constants"||!promises&&(name==="promises"||name==="Dirent"))){this.usesLibuv=true;return {c:`tsc_fs_export_value(${promises},${this.stringLit(name)})`,ty:T_VALUE};}
+                if(name&&(runtimeFsExports.get(promises?"promises":"sync")!.has(name)||name==="constants"||!promises&&(name==="promises"||name==="Dirent"))){if(trackRuntime)this.usesLibuv=true;return {c:`tsc_fs_export_value(${promises},${this.stringLit(name)})`,ty:T_VALUE};}
             }
         }
 
@@ -32830,7 +32835,7 @@ class Emitter {
             if (name) unsupported(expr, "ambient host export requires an ordinary runtime owner");
         }
         if (ts.isPropertyAccessExpression(expr)) {
-            const owner = this.importedHostModuleOwner(expr.expression);
+            const owner = this.importedHostModuleOwner(expr.expression,trackRuntime);
             if (owner) return { c: "tsc_value_get_prop(" + owner.c + ", " + this.stringLit(expr.name.text) + ")", ty: T_VALUE };
         }
         return null;

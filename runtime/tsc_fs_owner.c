@@ -36,6 +36,10 @@ static double fs_time(tsc_value_t value) {
     return fs_number(value,NAN);
 }
 static tsc_str_t* fs_encoding(tsc_value_t options,bool buffer_null) {
+    // A present null encoding is a byte request for readFile; null readdir
+    // options retain its default text encoding. Do not erase presence before
+    // the shared option projection has interpreted the operation's profile.
+    if(buffer_null&&tsc_value_is_nullish(options)&&!tsc_value_is_undefined(options))return fs_key("buffer");
     tsc_value_t value=options;
     if(!fs_string(value))value=fs_option(options,"encoding");
     if(tsc_value_is_nullish(value))return buffer_null&&!tsc_value_is_undefined(value)?fs_key("buffer"):fs_key("utf8");

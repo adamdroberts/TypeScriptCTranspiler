@@ -1,3 +1,5 @@
+- Preserve actual host result owners through typed source facts and retain explicit null filesystem byte encodings.
+
 - Compose retained CommonJS host property References with canonical Module link resolution and share source-unit format metadata.
 
 - Check actual TypeError owners and explicit dynamic-value string conversion in independent Node/native regression observations.
