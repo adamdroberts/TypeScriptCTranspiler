@@ -1,4 +1,5 @@
 import {expect,test} from 'bun:test';
+import {nodeReferenceSync} from './node-reference';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -48,3 +49,21 @@ test('Promise source methods preserve native result and owner semantics against 
   expect({typed,noGc,code:built.exitCode,diagnostics:diagnostics.join('')}).toEqual({typed,noGc,code:0,diagnostics:''});const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120_000});expect({code:native.exitCode,stderr:native.stderr.toString()}).toEqual({code:0,stderr:''});expect(parseHostObservation(JSON.parse(native.stdout.toString()))).toMatchObject({kind:'normal',stdout:expected});
  }}finally{await fs.rm(temporary,{recursive:true,force:true})}
 },900_000);
+
+test('opaque callable capture subscriptions retain saved values and later custom-constructor effects',()=>{
+ const operations=[
+  'Promise.resolve.call(Custom,0);',
+  'Promise.reject.call(Custom,0);',
+  'const promise=Promise.resolve(0);promise.constructor={[Symbol.species]:Custom};promise.then();',
+  'const promise=Promise.resolve(0);promise.constructor={[Symbol.species]:Custom.bind(null)};promise.then();',
+ ];
+ const definitions='let body="17;";function Custom(executor){body=opaque();executor(()=>{},()=>{})}';
+ for(const operation of operations)for(const saved of [false,true]){
+  const source=definitions+(saved?'const before=body;':'')+operation+'eval('+(saved?'before':'body')+');';
+  const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");const values=[];new vm.Script(process.argv[1]).runInNewContext({opaque:()=>"19;",eval:value=>values.push(value)});fs.writeSync(1,JSON.stringify(values));',source],{stdout:'pipe',stderr:'pipe',timeout:30_000});
+  expect({code:reference.exitCode,stderr:reference.stderr.toString(),stdout:reference.stdout.toString()}).toEqual({code:0,stderr:'',stdout:JSON.stringify([saved?'17;':'19;'])});
+  const result=graph([{path:'subject.js',source}]);
+  if(saved){expect(result.error).toBeNull();expect(result.directEvalSources.map(entry=>entry.source)).toEqual(['17;']);}
+  else expect(result.error).toContain('direct eval source is not a finite static string expression');
+ }
+});

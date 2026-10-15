@@ -1,3 +1,5 @@
+- Reuse opaque callable capture-effect subscriptions while retaining late target and binding facts.
+
 - Preserve empty eval source results for provably inactive guarded calls through one canonical candidate collection.
 
 - Preserve earlier own-property presence across later deletes while retaining repeated and suspended alternatives.

@@ -260,6 +260,7 @@ class SourceValueFlow {
     private readonly generatorReactions=new Map<ts.Node,Map<string,Cell>>();
     private readonly asyncIteratorPrototypes=new WeakMap<SourceRealmRecord,Cell>();
     private readonly sourceObjectOwners=new WeakSet<ObjectOwner>();
+    private readonly opaqueCaptureCalls=new Map<ts.Node,Set<Cell>>();
     private readonly escapedCallableCalls=new Map<ts.Node,{visit:(input:Cell)=>void}>();
     private readonly promiseReactions = new Map<ts.Node,Map<string,Cell>>();
     private readonly sourceCells = new WeakMap<SourceFacts,Cell>();
@@ -789,6 +790,8 @@ class SourceValueFlow {
         return this.unconstrainedOrigins;
     }
     private opaqueCallableCaptures(callable:Cell,context:ts.Node):void {
+        let calls=this.opaqueCaptureCalls.get(context);if(!calls){calls=new Set();this.opaqueCaptureCalls.set(context,calls);}
+        if(calls.has(callable))return;calls.add(callable);
         let rule!:Rule;
         rule=this.rule([callable],()=>{
             const values:Cell[]=[callable],visited=new Set<Cell>(),nodes:ts.Node[]=[],captured=new Set<ts.Symbol>();
