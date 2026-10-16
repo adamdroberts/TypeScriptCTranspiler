@@ -3,7 +3,8 @@ import ts from "typescript";
 import { createEcmaSourceFile } from "./ecmascript-source";
 import { earlyControlFlowStaticSemanticsFailure } from "./control-static-semantics";
 import { earlyFunctionStaticSemanticsFailure } from "./function-static-semantics";
-import { sourceConstructorInvocations, type SourceValueGraphEntries } from "./source-value-flow";
+import { sourceConstructorFacts, type SourceValueGraphEntries } from "./source-value-flow";
+import {sourceChoiceTuples} from "./source-choice-tuples";
 
 /** CreateDynamicFunction's joined FormalParameters and FunctionBody. Argument
  * boundaries do not survive the specified comma join, so this is also the
@@ -78,19 +79,15 @@ export function finiteFunctionConstructorSources(
     program: ts.Program, manifest: readonly FunctionConstructorSource[], entries: SourceValueGraphEntries = {},
 ): FunctionConstructorSource[] {
     const sources = new Map(manifest.map(source => [functionConstructorSourceKey(source), source]));
-    for (const invocation of sourceConstructorInvocations(program, entries)) {
-        const { kind, choices } = invocation;
+    for (const invocation of sourceConstructorFacts(program, entries)) {
+        const { kind, arguments:choices } = invocation;
         if (!choices) continue;
-        let tuples: string[][] = [[]];
-        for (const choice of choices) tuples = tuples.flatMap(tuple => choice.map(value => [...tuple, value]));
-        for (const tuple of tuples) {
+        for (const tuple of sourceChoiceTuples(choices)) {
             const source = { kind, parameters: tuple.slice(0, -1).join(","), body: tuple.at(-1) ?? "",...(invocation.domain?{domain:invocation.domain}:{}) };
             sources.set(functionConstructorSourceKey(source), source);
         }
         if (choices.length && choices.at(-1)!.length === 0) {
-            let parameters: string[][] = [[]];
-            for (const choice of choices.slice(0, -1)) parameters = parameters.flatMap(prefix => choice.map(value => [...prefix, value]));
-            for (const parameterTuple of parameters) for (const body of manifest) {
+            for (const parameterTuple of sourceChoiceTuples(choices.slice(0,-1))) for (const body of manifest) {
                 if (body.parameters !== "" || body.kind && body.kind !== kind) continue;
                 const source = { kind, parameters: parameterTuple.join(","), body: body.body,...(invocation.domain?{domain:invocation.domain}:{}) };
                 sources.set(functionConstructorSourceKey(source), source);

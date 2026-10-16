@@ -11,6 +11,7 @@ import {jsonMethods, jsonOperations, type JSONSourceOperation} from "./json-meth
 import {test262AgentOperations} from "./test262-agent-operations";
 import {sourceModuleFailure} from "./module-source-record";
 import { sourceUnitBodyIncluded, sourceUnitFileName } from "./program";
+import {sourceChoiceTuples} from "./source-choice-tuples";
 import {moduleVarDeclaredNames} from "./module-static-semantics";
 import { ecmaParseGoal } from "./ecmascript-source";
 import * as path from "node:path";
@@ -40,6 +41,14 @@ export interface ConstructorInvocation {
     /** Null means that the actual List cannot be proved finite. The explicit
      * registry remains available; runtime selection still fails closed. */
     readonly choices: readonly (readonly string[])[] | null;
+}
+/** One constructor source domain retains concrete alternatives independently
+ * of the proof that they exhaust every possible normal input. */
+export interface ConstructorSourceFacts {
+    readonly domain?:string;
+    readonly kind:DynamicFunctionKind;
+    readonly arguments:readonly (readonly string[])[]|null;
+    readonly complete:boolean;
 }
 export interface EvaluationInvocation {
     readonly domain?: string;
@@ -694,16 +703,6 @@ class SourceValueFlow {
         let value = this.numericWrites.get(node);
         if (!value) {value = this.newCell(); this.numericWrites.set(node,value);}
         return value;
-    }
-    private *primitiveTuples(parts:readonly (readonly Primitive[])[]):IterableIterator<Primitive[]> {
-        if(parts.some(values=>!values.length))return;
-        const positions=parts.map(()=>0);
-        for(;;){
-            yield parts.map((values,index)=>values[positions[index]!]!);
-            let index=parts.length-1;
-            while(index>=0){positions[index]=positions[index]!+1;if(positions[index]!<parts[index]!.length)break;positions[index]=0;index--;}
-            if(index<0)return;
-        }
     }
     private exceptionCell(): Cell {const cell = this.newCell(); this.exceptionCells.add(cell); return cell;}
     private catchCondition(clause: ts.CatchClause): Cell {
@@ -2419,7 +2418,7 @@ class SourceValueFlow {
         validate=this.rule([complete,...flags],()=>{
             const states=flags.map(input=>this.primitiveState(input,validate,true));
             if(states.some(state=>state.pending&&!state.unresolved))return;
-            for(const tuple of this.primitiveTuples(states.map(state=>state.proof.values))) {
+            for(const tuple of sourceChoiceTuples(states.map(state=>state.proof.values))) {
                 if((tuple[0]||tuple[1])&&(tuple[2]||tuple[3])){this.publish(normal,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}
                 else this.copy(complete,normal);
             }
@@ -3374,7 +3373,7 @@ class SourceValueFlow {
         else {
             const numeric=kind==="number"||kind==="bigint",parts=numeric?[payload,this.primitiveConversion(radix,context,"number")]:[payload];
             this.publish(result,{tag:"text-operation",operation:"primitive-string",parts});
-            const handler=this.exceptionHandlers.get(context);if(handler){let exceptions!:Rule;exceptions=this.rule(parts,()=>{const states=parts.map(part=>this.primitiveState(part,exceptions,true));if(states.some(state=>state.pending&&!state.unresolved))return;for(const tuple of this.primitiveTuples(states.map(state=>state.proof.values)))try{numeric?(tuple[0] as number|bigint).toString(tuple[1] as number|undefined):String(tuple[0]);}catch{this.publish(handler,this.nativeException(context));}});}
+            const handler=this.exceptionHandlers.get(context);if(handler){let exceptions!:Rule;exceptions=this.rule(parts,()=>{const states=parts.map(part=>this.primitiveState(part,exceptions,true));if(states.some(state=>state.pending&&!state.unresolved))return;for(const tuple of sourceChoiceTuples(states.map(state=>state.proof.values)))try{numeric?(tuple[0] as number|bigint).toString(tuple[1] as number|undefined):String(tuple[0]);}catch{this.publish(handler,this.nativeException(context));}});}
         }
         return result;
     }
@@ -4708,7 +4707,7 @@ class SourceValueFlow {
                         names.push(key);choices.push([...new Set([...enumerable.proof.values.map(Boolean),...(presence.values.has(this.primitive(false))?[false]:[])])]);
                     }
                     if(!ready)continue;
-                    for(const tuple of this.primitiveTuples(choices))selections.push(names.filter((_,index)=>!!tuple[index]));
+                    for(const tuple of sourceChoiceTuples(choices))selections.push(names.filter((_,index)=>!!tuple[index]));
                 }
                 opened.add(atom);
                 const path=new Set(ancestors);path.add(owner);
@@ -4904,7 +4903,7 @@ class SourceValueFlow {
                 for(const extent of length.proof.values){
                     const names=positions.filter(index=>index<Number(extent)),values=names.map(name=>this.jsonPrimitive(item(cell(atom),String(name)),"key",context)),states=values.map(value=>this.primitiveState(value,options,true));
                     if(states.some(state=>state.pending&&!state.unresolved))continue;if(states.some(state=>!state.proof.primitiveComplete)){fail(result);continue;}
-                    for(const tuple of this.primitiveTuples(states.map(state=>state.proof.values)))plan(this.empty,[...new Set(tuple.filter(value=>typeof value==="string"||typeof value==="number").map(String))]);
+                    for(const tuple of sourceChoiceTuples(states.map(state=>state.proof.values)))plan(this.empty,[...new Set(tuple.filter(value=>typeof value==="string"||typeof value==="number").map(String))]);
                 }
             }else if(kinds&KIND_OBJECT&&!owner)fail(result);else plan(this.empty,null);
         }});
@@ -5225,7 +5224,7 @@ class SourceValueFlow {
                         this.publish(handler,this.nativeException(node));
                     if (states.some(state => state.unresolved)) this.publish(handler,this.unknown);
                     if (states.some(state => !state.proof.primitiveComplete) && !this.numericOperationCannotThrow(operation,converted)) this.publish(handler,this.nativeException(node));
-                    for (const tuple of this.primitiveTuples(states.map(state => state.proof.values))) {
+                    for (const tuple of sourceChoiceTuples(states.map(state => state.proof.values))) {
                         try {operation.evaluate(tuple);} catch {this.publish(handler,this.nativeException(node));}
                     }
                 });
@@ -5859,7 +5858,7 @@ class SourceValueFlow {
                             if(!admitted)this.publish(result!,this.pendingSource);
                             continue;
                         }
-                        for(const tuple of this.primitiveTuples(proofs.map(proof=>proof.values))){
+                        for(const tuple of sourceChoiceTuples(proofs.map(proof=>proof.values))){
                             const source={kind:atom.kind,parameters:tuple.slice(0,-1).map(String).join(","),body:String(tuple.at(-1)??""),...(this.domain?{domain:this.domain}:{})};
                             const generated=this.generated.get(functionConstructorSourceKey(source));
                             if(!generated){this.publish(result!,this.pendingSource);continue;}
@@ -6438,7 +6437,7 @@ class SourceValueFlow {
                         // collection. Enumerating partial cyclic choices can
                         // manufacture an unbounded String language here.
                         if (!complete) continue;
-                        for(const tuple of this.primitiveTuples(atom.parts.map(part=>proofs.get(part)?.values??[]))){
+                        for(const tuple of sourceChoiceTuples(atom.parts.map(part=>proofs.get(part)?.values??[]))){
                             const outcome=this.evaluatePrimitiveTuple(atom,tuple);
                             if(outcome.kind==="normal")add(outcome.value);
                             else if(outcome.kind==="unknown"){primitiveComplete=false;textComplete=false;}
@@ -6486,7 +6485,7 @@ class SourceValueFlow {
         })){this.publish(cell,this.abrupt);return true;}
         this.publish(cell,this.normalResults.get(cell)??(ts.isNewExpression(node)?this.opaqueObject:this.unknown));return true;
     }
-    solve(): { constructors: ConstructorInvocation[]; evaluations: EvaluationInvocation[] } {
+    solve(): { constructors: ConstructorSourceFacts[]; evaluations: EvaluationInvocation[] } {
         for (;;) {
             while (this.moduleNamespacePending.length || this.initializers.length || this.queueCursor < this.queue.length || this.primitiveChanges.size) {
                 if (this.moduleNamespacePending.length) { const namespace = this.moduleNamespacePending.pop()!; this.initializeModuleNamespace(namespace.source,namespace.symbol,namespace.owner); }
@@ -6540,10 +6539,18 @@ class SourceValueFlow {
         for(const [node,possibilities]of this.inactiveEvaluationCandidates)if(this.guards(node).some(guard=>{
             const proof=this.primitiveChoiceProof(guard.condition);return proof.primitiveComplete&&!proof.values.some(value=>!!value===guard.truthy);
         }))for(const direct of possibilities)inactiveEvaluations.push({node,operation:"eval",direct,choices:[],...(this.domain?{domain:this.domain}:{})});
+        const arguments_=new Map<Cell,{values:readonly string[];complete:boolean}>();
+        const argumentDomain=(input:Cell)=>{
+            const prior=arguments_.get(input);if(prior)return prior;
+            const proof=this.primitiveChoiceProof(input),values=new Set<string>();
+            if(proof.primitiveComplete)for(const value of proof.values)values.add(String(value));
+            else for(const outcome of this.primitiveCompletions(input))if(outcome.kind==="normal")values.add(String(outcome.value));
+            const domain={values:[...values],complete:proof.primitiveComplete};arguments_.set(input,domain);return domain;
+        };
         return {
             constructors: [...this.invocations.values()].flatMap(records => [...records.values()]).map(invocation => {
-                const choices = this.unresolvedPrivate?null:invocation.args?.map(cell => this.choices(cell));
-                return {kind: invocation.kind, choices: choices && choices.every(value => value !== null) ? choices : null,...(this.domain?{domain:this.domain}:{})};
+                const domains=invocation.args?.map(argumentDomain);
+                return {kind:invocation.kind,arguments:domains?.map(domain=>domain.values)??null,complete:!this.unresolvedPrivate&&!!domains&&domains.every(domain=>domain.complete),...(this.domain?{domain:this.domain}:{})};
             }),
             evaluations: [...inactiveEvaluations,...[...this.evaluationInvocations.values()].flatMap(records => [...records.values()]).map(invocation => {
                 const { source, operation, unknown } = invocation;
@@ -6632,7 +6639,12 @@ function sourceValueSolution(program: ts.Program, entries: SourceValueGraphEntri
     return solution;
 }
 export function sourceConstructorInvocations(program: ts.Program, entries: SourceValueGraphEntries = {}): ConstructorInvocation[] {
-    return sourceValueSolution(program, entries).constructors.slice();
+    return sourceConstructorFacts(program,entries).map(facts=>({kind:facts.kind,choices:facts.complete?facts.arguments:null,...(facts.domain?{domain:facts.domain}:{})}));
+}
+/** Registry discovery consumes known alternatives; this projection does not
+ * authorize an unknown source or claim that the domain is complete. */
+export function sourceConstructorFacts(program:ts.Program,entries:SourceValueGraphEntries={}):ConstructorSourceFacts[]{
+    return sourceValueSolution(program,entries).constructors.slice();
 }
 
 export function sourceEvaluationInvocations(program: ts.Program, entries: SourceValueGraphEntries = {}): EvaluationInvocation[] {

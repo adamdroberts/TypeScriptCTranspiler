@@ -7,6 +7,7 @@ import {compile} from '../../src/compile';
 import {sourceConstructorInvocations} from '../../src/source-value-flow';
 import {escapedCallbackGraphInput} from '../e2e/generated-cases';
 import {parseHostObservation} from '../test262/protocol';
+import {nodeReferenceSync} from './node-reference';
 
 function facts(source:string){
  const options:ts.CompilerOptions={noLib:true,allowJs:true,noEmit:true,target:ts.ScriptTarget.ESNext},host=ts.createCompilerHost(options);
@@ -41,13 +42,20 @@ test('escaped cyclic callback data uses explicit source closure and matches Node
  }}finally{await rm(root,{recursive:true,force:true})}
 },900000);
 
-test('unadmitted callback source fails closed at the existing AOT Function boundary',async()=>{
+test('known callback sources execute without a manifest while unregistered runtime text fails closed',async()=>{
  const root=await mkdtemp(join(tmpdir(),'tsc2c-escaped-callback-closed-'));
- try{
-  const entry=join(root,'main.ts'),output=entry+'-native',diagnostics:string[]=[];await writeFile(entry,escapedCallbackGraphInput(3));
+ try{for(const dynamic of [false,true]){
+  const original=escapedCallbackGraphInput(3),input=dynamic?original.replace("'return 311;'","'return '+String(Math.random())+';'"):original;
+  if(dynamic)expect(input).not.toBe(original);
+  const erased=ts.transpileModule(input,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText;
+  const node=nodeReferenceSync(['node','-e',erased],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});const expected=node.stdout.toString();
+  if(dynamic){const lines=expected.trimEnd().split('\n');expect(lines).toHaveLength(2);expect(lines[0]).toBe('container callback: 307');expect(lines[1]).toStartWith('container callback: ');const value=Number(lines[1]!.slice('container callback: '.length));expect(value).toBeGreaterThanOrEqual(0);expect(value).toBeLessThan(1);}
+  else expect(expected).toBe('container callback: 307\ncontainer callback: 311\n');
+  const entry=join(root,'main-'+dynamic+'.ts'),output=entry+'-native',diagnostics:string[]=[];await writeFile(entry,input);
   const result=await compile({entry,output,noGc:true,initializationEntries:[entry],buildDir:output+'-build',test262Observation:{kind:'test262-native-observation',scenarioId:'property/escaped-callback-closed.js#sloppy',setupEntries:[],testEntry:entry,async:false},diagnosticWriter:message=>diagnostics.push(message)});
   expect({code:result.exitCode,diagnostics}).toEqual({code:0,diagnostics:[]});
-  const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120000});expect(native.exitCode).toBe(0);
-  expect(parseHostObservation(JSON.parse(native.stdout.toString()))).toMatchObject({kind:'throw',phase:'runtime',errorConstructor:'EvalError'});
- }finally{await rm(root,{recursive:true,force:true})}
-},300000);
+  const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:native.exitCode,stderr:native.stderr.toString()}).toEqual({code:0,stderr:''});const observed=parseHostObservation(JSON.parse(native.stdout.toString()));
+  if(dynamic)expect(observed).toMatchObject({kind:'throw',phase:'runtime',errorConstructor:'EvalError',stdout:'container callback: 307\n'});
+  else expect(observed).toMatchObject({kind:'normal',stdout:expected});
+ }}finally{await rm(root,{recursive:true,force:true})}
+},600000);

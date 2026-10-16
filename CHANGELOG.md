@@ -1,3 +1,5 @@
+- Retain known Function constructor sources independently of exhaustive proof completeness, with shared lazy source tuple traversal and unchanged runtime rejection of unregistered text.
+
 - Share opaque callback owner inspection across aliases while retaining later shape, collection, accessor and prototype discoveries.
 
 - Compare Object.is source values without coercion or callback escape, preserving SameValue primitives and conservative abstract identities.
