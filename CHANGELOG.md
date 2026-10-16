@@ -1,3 +1,4 @@
+- Preserve right-hand-side source snapshots until their assignment store completes, including repeated Script startup roots.
 - Align the addon-rest emission regression with canonical CopyDataProperties while retaining its native bridge assertion.
 - Carry deferred job timing into native protocol source reads while preserving immediate and saved-method snapshots.
 - Order switch selection effects before selected body source captures through the shared evaluation-region plan.

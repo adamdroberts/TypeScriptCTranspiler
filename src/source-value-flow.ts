@@ -455,7 +455,7 @@ class SourceValueFlow {
     private readonly opaqueEffectActivations=new WeakSet<ts.Node>();
     private readonly originCells = new WeakMap<ts.Node, Cell>();
     private readonly unconstrainedOrigins = this.newCell();
-    private readonly scriptOrder = new Map<ts.SourceFile, number>();
+    private readonly scriptOrder = new Map<ts.SourceFile,{first:number;last:number}>();
     private readonly dynamicContexts = new WeakMap<ts.Node, boolean>();
     private readonly sourceFiles = new WeakMap<ts.Node, ts.SourceFile>();
     private readonly evaluationOrder = new SourceEvaluationOrder();
@@ -510,7 +510,7 @@ class SourceValueFlow {
         this.publish(this.currentRealmCell,this.currentRealm.record);
         for (const [index,filename] of (entries.roots??[]).entries()) {
             const file=program.getSourceFile(sourceUnitFileName(program,path.resolve(filename),"script"));
-            if(file&&ecmaParseGoal(file)==="script"&&(!sources||sources.has(file)))this.scriptOrder.set(file,index);
+            if(file&&ecmaParseGoal(file)==="script"&&(!sources||sources.has(file))){const prior=this.scriptOrder.get(file);this.scriptOrder.set(file,{first:prior?.first??index,last:index});}
         }
         for (const source of this.scriptOrder.keys()) for (const statement of source.statements) {
             if (isAmbientSourceDeclaration(statement)) continue;
@@ -994,7 +994,8 @@ class SourceValueFlow {
     private hasInvocationTiming(context:ts.Node,kind?:"repeated"|"deferred"):boolean {
         for(let node:ts.Node|undefined=context;node&&!functionNode(node);node=node.parent){
             const timing=this.invocationTimings.get(node);
-            if(timing&&(!kind||timing[kind])||kind==="repeated"&&ts.isIterationStatement(node,false))return true;
+            const roots=ts.isSourceFile(node)?this.scriptOrder.get(node):undefined;
+            if(timing&&(!kind||timing[kind])||kind!=="deferred"&&roots&&roots.first!==roots.last||kind==="repeated"&&ts.isIterationStatement(node,false))return true;
         }
         return false;
     }
@@ -1026,7 +1027,8 @@ class SourceValueFlow {
             const known = this.dynamicContexts.get(current);
             if (known !== undefined) {dynamic = known; break;}
             pending.push(current);
-            if (this.invocationTimings.has(current) || ts.isFunctionLike(current) || ts.isIterationStatement(current, false)) {dynamic = true; break;}
+            const roots=ts.isSourceFile(current)?this.scriptOrder.get(current):undefined;
+            if (this.invocationTimings.has(current) || roots&&roots.first!==roots.last || ts.isFunctionLike(current) || ts.isIterationStatement(current, false)) {dynamic = true; break;}
             current = current.parent;
         }
         for (const visited of pending) this.dynamicContexts.set(visited, dynamic);
@@ -1046,6 +1048,8 @@ class SourceValueFlow {
         // Its source offset is not an upper bound on the visible effects.
         if(this.hasInvocationTiming(context,"deferred"))return true;
         const effect = atom.origin;
+        const roots=this.scriptOrder.get(this.sourceFile(context));
+        if(this.sourceFile(effect)===this.sourceFile(context)&&roots&&roots.first!==roots.last)return true;
         const activation=this.enclosingActivation(context);
         if(activation&&activation.kind==="ordinary"&&!this.activationTiming(activation).values.nonempty&&!this.repeatedActivationContext(context)&&!this.dynamicContext(effect)){
             const origins=[...activation.active.values];
@@ -1062,7 +1066,7 @@ class SourceValueFlow {
             if(!this.enclosingActivation(effect)&&!activation){
                 if(this.sourceFile(effect)!==this.sourceFile(context)){
                     const before=this.scriptOrder.get(this.sourceFile(context)),after=this.scriptOrder.get(this.sourceFile(effect));
-                    if(before!==undefined&&after!==undefined&&before<after)return false;
+                    if(before!==undefined&&after!==undefined&&before.last<after.first)return false;
                 }else{
                     let phase=context;
                     for(let node=context.parent;node&&!ts.isSourceFile(node);node=node.parent)if(ts.isIterationStatement(node,false))phase=node;
@@ -1073,7 +1077,7 @@ class SourceValueFlow {
         }
         if (this.sourceFile(effect) !== this.sourceFile(context)) {
             const before=this.scriptOrder.get(this.sourceFile(context)),after=this.scriptOrder.get(this.sourceFile(effect));
-            return before===undefined||after===undefined||after<=before;
+            return before===undefined||after===undefined||after.first<=before.last;
         }
         if (this.evaluationOrder.before(context,effect)) return false;
         if (argumentsRead && effect === context) return false;
@@ -1084,6 +1088,15 @@ class SourceValueFlow {
                 if (parent === effect) break;
             }
         }
+        return true;
+    }
+    /** Store edges commit after their RHS. Other effects of the same
+     * operation can happen earlier while resolving a reference or key. */
+    private writeVisible(write:SourceWriteOrigin,context:ts.Node,argumentsRead:boolean):boolean {
+        if(!this.effectVisible(write,context,argumentsRead))return false;
+        const file=this.sourceFile(context),roots=this.scriptOrder.get(file);
+        if(!this.dynamicContext(context)&&!this.dynamicContext(write.origin)&&!this.sourceOrigins.has(file)&&
+            (!roots||roots.first===roots.last)&&this.readBeforeWrite(context,write.origin,write.reference))return false;
         return true;
     }
     private opaqueShape(owner: ObjectOwner, context?: ts.Node, argumentsRead = false): boolean {
@@ -1286,7 +1299,7 @@ class SourceValueFlow {
                                         if(!written.event||!phase.scalar.universe.has(written.event)){this.publish(target,this.unknown);visible=false;break;}
                                         if(phase.scalar.excluded.has(written.event)){visible=false;break;}
                                     }
-                                }else if(!this.effectVisible(written,context,argumentsRead)||phase.location===written.location&&written.lexical&&
+                                }else if(!this.writeVisible(written,context,argumentsRead)||phase.location===written.location&&written.lexical&&
                                     this.enclosingActivation(written.origin)===activation&&!this.repeatedActivationContext(written.origin)&&!this.repeatedActivationContext(context)&&
                                     this.readBeforeWrite(context,written.origin,written.reference)){visible=false;break;}
                             }
@@ -1688,7 +1701,7 @@ class SourceValueFlow {
                         if(!point||this.dynamicContext(point))return false;
                         if(this.sourceFile(atom.origin!)!==this.sourceFile(point)){
                             const before=this.scriptOrder.get(this.sourceFile(atom.origin!)),after=this.scriptOrder.get(this.sourceFile(point));
-                            return before!==undefined&&after!==undefined&&before<after;
+                            return before!==undefined&&after!==undefined&&before.last<after.first;
                         }
                         return this.evaluationOrder.before(atom.origin!,point);
                     }))continue;
@@ -1843,7 +1856,7 @@ class SourceValueFlow {
         if(before!==after)return false;
         if(this.sourceFile(write)!==this.sourceFile(read)){
             const left=this.scriptOrder.get(this.sourceFile(write)),right=this.scriptOrder.get(this.sourceFile(read));
-            if(left===undefined||right===undefined||left>=right)return false;
+            if(left===undefined||right===undefined||left.last>=right.first)return false;
         }else if(!this.evaluationOrder.before(write,read))return false;
         const readAncestors=new Set<ts.Node>();
         for(let node:ts.Node|undefined=read;node;node=node.parent)readAncestors.add(node);
