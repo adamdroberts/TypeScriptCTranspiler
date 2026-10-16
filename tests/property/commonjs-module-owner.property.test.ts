@@ -77,12 +77,14 @@ test('CommonJS projects actual source values from one retained cached module rec
  try{
   for(const strict of [false,true]){
    const referenceDirectory=path.join(temporary,`reference-${strict}`);await fs.mkdir(referenceDirectory);
+   await fs.writeFile(path.join(referenceDirectory,'package.json'),'{"type":"commonjs"}\n');
    for(const [name,source] of sources(strict))await fs.writeFile(path.join(referenceDirectory,name),source);
    const referenceFile=path.join(referenceDirectory,'main.cjs');await fs.writeFile(referenceFile,erase(subject(false,true),ts.ModuleKind.CommonJS));
    const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");require(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:120_000});
    expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});const expected=reference.stdout.toString().trimEnd().split('\n');expect(expected.at(-1)).toBe('retained-module-callee-through-suspension:true');
    for(const typed of [true,false])for(const profile of [false,true])for(const noGc of [false,true]){
     const directory=path.join(temporary,`${strict}-${typed}-${profile}-${noGc}`);await fs.mkdir(directory);
+    await fs.writeFile(path.join(directory,'package.json'),'{"type":"commonjs"}\n');
     for(const [name,source] of sources(strict))await fs.writeFile(path.join(directory,name),source);
     const entry=path.join(directory,typed?'main.ts':'main.mjs'),output=path.join(directory,'program'),diagnostics:string[]=[];
     await fs.writeFile(entry,typed?subject(profile,noGc):erase(subject(profile,noGc),ts.ModuleKind.ESNext));
