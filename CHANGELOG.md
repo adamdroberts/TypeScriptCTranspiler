@@ -1,3 +1,5 @@
+- Preserve queued protocol invocation timing in finite source analysis while retaining immediate Promise executor and thenable getter reads.
+
 - Release invalidated source proof and readiness values through one reusable typed cache record per cell.
 
 - Retain native method source text from canonical initial-name descriptors during finite eval source analysis.

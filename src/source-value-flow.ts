@@ -308,7 +308,7 @@ class SourceValueFlow {
     private readonly prototypeWrites = new Map<ts.Node,Map<string,Cell>>();
     private readonly writablePrototypes = new Map<ObjectOwner,Cell>();
     private readonly arrayPredicates=new Map<ts.Node,Map<string,Cell>>();
-    private readonly repeatedInvocations=new WeakSet<ts.Node>();
+    private readonly invocationTimings=new WeakMap<ts.Node,{readonly repeated:boolean;readonly deferred:boolean}>();
     private readonly arrayPushes=new Map<ts.Node,Map<string,Cell>>();
     private readonly arrayJoinSummaries=new Map<ts.Node,Map<string,Cell>>();
     private readonly arrayTexts = new Map<ts.Node,Map<Cell,Cell>>();
@@ -953,8 +953,7 @@ class SourceValueFlow {
                 }
             };
             graph={visit};modes.set(sourceCallbacksOnly,graph);
-            const invocation=ts.setTextRange(ts.factory.createEmptyStatement(),context);
-            (invocation as ts.Node&{parent:ts.Node}).parent=context;
+            const invocation=this.invocationContext(context);
             this.escapedInvocationOrigins.set(invocation,context);
             const thrown=this.exceptionCell(),constructed=this.newCell();
             this.exceptionHandlers.set(invocation,thrown);
@@ -966,6 +965,17 @@ class SourceValueFlow {
             this.invoke(invocation,target,constructed,parts,returned,true);
         }
         graph.visit(argument);
+    }
+    /** Synthetic protocol calls retain their scheduling boundary independently
+     * of the source position at which the protocol was requested. */
+    private invocationContext(origin:ts.Node,timing:{repeated?:boolean;deferred?:boolean}={}):ts.Node {
+        const context=ts.setTextRange(ts.factory.createEmptyStatement(),origin);(context as ts.Node&{parent:ts.Node}).parent=origin;
+        if(timing.repeated||timing.deferred){this.invocationTimings.set(context,{repeated:!!timing.repeated,deferred:!!timing.deferred});this.factRevision++;}
+        return context;
+    }
+    private overlappingInvocation(context:ts.Node):boolean {
+        for(let node:ts.Node|undefined=context;node&&!functionNode(node);node=node.parent)if(this.invocationTimings.has(node))return true;
+        return false;
     }
     /** Close represented call cycles through one adjacency graph. An origin
      * alone cannot distinguish successive recursive activations. */
@@ -995,7 +1005,7 @@ class SourceValueFlow {
             const known = this.dynamicContexts.get(current);
             if (known !== undefined) {dynamic = known; break;}
             pending.push(current);
-            if (this.repeatedInvocations.has(current) || ts.isFunctionLike(current) || ts.isIterationStatement(current, false)) {dynamic = true; break;}
+            if (this.invocationTimings.has(current) || ts.isFunctionLike(current) || ts.isIterationStatement(current, false)) {dynamic = true; break;}
             current = current.parent;
         }
         for (const visited of pending) this.dynamicContexts.set(visited, dynamic);
@@ -1007,7 +1017,7 @@ class SourceValueFlow {
         return source;
     }
     private repeatedActivationContext(context:ts.Node):boolean {
-        for(let node:ts.Node|undefined=context;node&&!functionNode(node);node=node.parent)if(this.repeatedInvocations.has(node)||ts.isIterationStatement(node,false))return true;
+        for(let node:ts.Node|undefined=context;node&&!functionNode(node);node=node.parent)if(this.invocationTimings.get(node)?.repeated||ts.isIterationStatement(node,false))return true;
         return false;
     }
     private effectVisible(atom: Atom, context?: ts.Node, argumentsRead = false): boolean {
@@ -3777,7 +3787,7 @@ class SourceValueFlow {
         let calls=this.arrayPredicates.get(context);if(!calls){calls=new Map();this.arrayPredicates.set(context,calls);}
         const key=mode+":"+receiver.id+":"+callback.id+":"+thisArg.id,previous=calls.get(key);if(previous)return previous;
         const result=this.newCell(),objects=this.toObject(receiver,context),checked=this.newCell(),selected=this.newCell(),indices=this.newCell(),callee=this.newCell(),returned=this.newCell();calls.set(key,result);
-        const step=ts.setTextRange(ts.factory.createEmptyStatement(),context);(step as ts.Node&{parent:ts.Node}).parent=context;this.repeatedInvocations.add(step);this.factRevision++;
+        const step=this.invocationContext(context,{repeated:true});
         const caught=this.exceptionHandlers.get(context);if(caught)this.exceptionHandlers.set(step,caught);
         let number=this.numericValues.get(KIND_NUMBER);if(!number){number={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,number);}this.publish(indices,number);
         const length=this.coerceCell(this.property(objects,"length",context),context,"length"),target=this.callableTarget(checked,step);this.copy(target.completion,result);
@@ -4146,6 +4156,8 @@ class SourceValueFlow {
         if(prior){const atom=[...prior.values].find((atom):atom is Extract<Atom,{tag:"promise"}>=>atom.tag==="promise")!;return {value:atom.value,rejection:atom.rejection};}
         const holder=this.newCell(),value=this.newCell(),rejection=this.exceptionCell();calls.set(key,holder);this.publish(holder,{tag:"promise",value,rejection});
         const callback=ts.setTextRange(ts.factory.createEmptyStatement(),context);(callback as ts.Node&{parent:ts.Node}).parent=context;this.exceptionHandlers.set(callback,rejection);
+        // Get(then) is immediate; Call(then) runs in the resolve-thenable job.
+        const job=this.invocationContext(context,{deferred:true});this.exceptionHandlers.set(job,rejection);
         const seen=new Set<Atom>(),cells=new Map<Atom,Cell>(),cell=(atom:Atom)=>{let value=cells.get(atom);if(!value){value=this.newCell();cells.set(atom,value);this.publish(value,atom)}return value;};
         this.rule([returned],()=>{for(const atom of returned.values){
             if(atom.tag==="pending-source"){this.publish(value,atom);continue;}
@@ -4171,7 +4183,7 @@ class SourceValueFlow {
                 if(kinds&~KIND_FUNCTION)this.publish(value,atom);
                 if(kinds&KIND_FUNCTION)this.publish(target,method);
             }});
-            this.invoke(callback,target,input,this.promiseResolverCells(value,rejection).map(cell=>({cell,spread:false})),this.newCell());
+            this.invoke(job,target,input,this.promiseResolverCells(value,rejection).map(cell=>({cell,spread:false})),this.newCell());
         }});return {value,rejection};
     }
 
@@ -4238,7 +4250,7 @@ class SourceValueFlow {
         let calls=this.promiseReactions.get(context);if(!calls){calls=new Map();this.promiseReactions.set(context,calls);}
         const key=receiver.id+":"+fulfilled.id+":"+rejected.id;const prior=calls.get(key);if(prior)return prior;
         const result=this.newCell(),value=this.newCell(),rejection=this.exceptionCell();calls.set(key,result);
-        const callbackContext=ts.setTextRange(ts.factory.createEmptyStatement(),context);(callbackContext as ts.Node&{parent:ts.Node}).parent=context;
+        const callbackContext=this.invocationContext(context,{deferred:true});
         this.exceptionHandlers.set(callbackContext,rejection);
         const seen=new Set<Atom>(),atomCells=new Map<Atom,Cell>(),cell=(atom:Atom)=>{let value=atomCells.get(atom);if(!value){value=this.newCell();atomCells.set(atom,value);this.publish(value,atom)}return value};
         this.rule([receiver],()=>{for(const promise of receiver.values){
@@ -5947,7 +5959,7 @@ class SourceValueFlow {
                         const converted=descriptor.delay>=0&&argv[descriptor.delay]?this.coerceCell(argv[descriptor.delay]!,node,"number"):undefined;
                         if(converted){this.watchText(rule,converted);const state=this.primitiveState(converted,rule,true);if(state.pending)continue;if(state.proof.primitiveComplete&&!state.proof.values.length){this.publish(result,this.abrupt);continue;}}
                         let calls=this.timerCallbacks.get(node);if(!calls){calls=new Map();this.timerCallbacks.set(node,calls);}const identity=atom.operation+":"+signature;let retained=calls.get(identity);
-                        if(!retained){const context=ts.setTextRange(ts.factory.createEmptyStatement(),node);(context as ts.Node&{parent:ts.Node}).parent=node;retained={context,result:this.newCell()};calls.set(identity,retained);this.invoke(context,callback,this.empty,(descriptor.actuals<0?[]:argv.slice(descriptor.actuals)).map(cell=>({cell,spread:false})),retained.result);}
+                        if(!retained){const context=this.invocationContext(node,{deferred:true,repeated:descriptor.action==="REPEAT"});retained={context,result:this.newCell()};calls.set(identity,retained);this.invoke(context,callback,this.empty,(descriptor.actuals<0?[]:argv.slice(descriptor.actuals)).map(cell=>({cell,spread:false})),retained.result);}
 
                         if(descriptor.queue==="MICROTASK")this.publish(result,this.primitive(undefined));else{let value=this.numericValues.get(KIND_NUMBER);if(!value){value={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,value);}this.publish(result,value);}continue;
                     }
@@ -6151,7 +6163,7 @@ class SourceValueFlow {
                             this.publish(result!,this.abrupt);
                             continue;
                         }
-                        this.onActive(node,()=>{this.connectActivation(this.enclosingActivation(node),atom.owner);if(this.repeatedInvocations.has(node))this.publish(this.activationTiming(atom.owner),this.primitive(true));this.copy(this.executionOrigins(node),atom.owner.active);this.recordCallArguments(atom.owner,signature,argv,invocation.sequence,node);});
+                        this.onActive(node,()=>{this.connectActivation(this.enclosingActivation(node),atom.owner);if(this.overlappingInvocation(node))this.publish(this.activationTiming(atom.owner),this.primitive(true));this.copy(this.executionOrigins(node),atom.owner.active);this.recordCallArguments(atom.owner,signature,argv,invocation.sequence,node);});
                         if (invocation.construct) {
                             const instance = this.owner(node);
                             this.markPropertyAlgorithm(instance,ts.isClassLike(atom.owner.definition)&&atom.owner.base?"opaque":"ordinary");

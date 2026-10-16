@@ -8658,8 +8658,8 @@
         "promises and jobs",
         "async functions and generators",
         "disposable resources",
-        "sync generator completion allocates results after restoring the method Realm", "Promise job enqueue Realm records"
-      ],
+        "sync generator completion allocates results after restoring the method Realm", "Promise job enqueue Realm records", "source captures distinguish immediate calls from queued protocol jobs"
+        ],
       "localEvidence": {
         "property": ["tests/property/promise-job-realm.property.test.ts", "tests/property/promise-try.property.test.ts", "tests/property/await-promise-resolve.property.test.ts",
           "tests/property/for-in-owner.property.test.ts",
@@ -8683,7 +8683,7 @@
           "tests/property/promise-source-owner.property.test.ts",
           "tests/property/return-projection-cycle.property.test.ts",
           "tests/property/ambient-bindings.property.test.ts",
-          "tests/property/generator-result-realm.property.test.ts"
+          "tests/property/generator-result-realm.property.test.ts", "tests/property/deferred-source-timing.property.test.ts"
         ],
         "generatedRegression": [
           "async-leading-await-chain",
@@ -8717,9 +8717,10 @@
           "iterator_argument_source",
           "collection_iterator_completion",
           "eval_dynamic_import_source",
-          "generator_result_realm_owner"
+          "generator_result_realm_owner", "source_deferred_timing"
         ],
-        "negativeDiagnostics": [],
+        "negativeDiagnostics": ["source_deferred_unknown"
+        ],
         "declarationSurface": [
           "stdlib/lib.core.d.ts#IteratorObject",
           "stdlib/lib.core.d.ts#IteratorConstructor"
@@ -8773,10 +8774,11 @@
           "src/global-bindings.ts#runtimePromiseMethods",
           "src/global-bindings.ts#runtimeObjectConstructorOwnKeys",
           "src/source-value-flow.ts#projectReturn",
-          "runtime/tsc_iterator.c#generator_resume"
+          "runtime/tsc_iterator.c#generator_resume", "src/source-value-flow.ts#invocationContext", "src/source-value-flow.ts#overlappingInvocation"
         ]
       },
       "knownGaps": [
+        "Source invocation timing now projects synthetic protocol calls into one scheduling-context collection and the existing activation graph. Promise reactions, resolve-thenable calls and callback timer descriptors retain deferred timing; repeated array callbacks and intervals retain repeated timing. Get(then) and Promise executors stay immediate. The former repeated-only context set is removed. deferred-source-timing.property compares independent Node immediate/queued, finite/unknown and fresh-scalar partitions, the unchanged native timer counterexample and one deep retained owner graph in GC/noGC. source_deferred_timing and source_deferred_unknown check typed CLI behavior. The committed predecessor admits only 17; and raises native TypeError on the unchanged timer while Node completes with 19. Frozen source1276 passes the complete feature and source-effect/root-phase/local-snapshot/primitive-hint/activation-property properties, CLI GC/noGC, static gates and pinned eval-spread strict/sloppy GC/noGC with unchanged inputs. The original timer-callable-owners admission nonpass reproduces unchanged on parent 717ae533a; its assertion is retained. The original Promise-resolution property remains running on candidate and parent; bounded private queries reach their diagnostic deadlines and are not semantic outcomes. Existing runtime, CType and declarations suffice. Exact temporal correlations, source-graph growth, broader source admission, final-revision full gates and eligible exhaustive ECMAScript 2026 coverage remain open.",
         "Promise callback scheduling now projects each reaction into one retained job record at actual enqueue, carrying selected handler, argument, completion kind, capability and Realm. Pending and already settled reactions use the same callback collection enqueue hook. GetFunctionRealm abrupt completion captures the current enqueue Realm; the shared helper also replaces thenable fallback deferral to drain time. Reaction execution enters its recorded Realm and restores the previous Realm across normal and abrupt capability completion. The predecessor raw reaction callback and uncaptured thenable fallback are deleted. promise-job-realm.property compares independent Node settled fulfillment/rejection, pending registration versus settlement, revocation before/after enqueue, thenable fallback, body abrupt ownership, empty handler identity and caller restoration across typed and erased native inputs in both memory modes. One shared generated deep retained reaction graph also checks typed CLI. Existing resolution, Promise.try and await properties retain neighboring completion/species evidence. Existing CType, declarations and public callback interfaces suffice; the private callback record adds an enqueue projection. Complete host job policy, callback context/agent contracts, source precision, host eligibility and eligible exhaustive ECMAScript 2026 coverage remain open.",
         "General generators, async generators, remaining async CFGs, and full iterator close semantics are incomplete.",
         "Ordinary Iterator constructor/from, eager consumers, lazy helpers and concat have local differential evidence for captured records, close/error partitions, metadata setters, raw wrapper forwarding, activation worklists, captured method Realm restoration and retained graphs. Complete cross-realm intrinsic behavior, activation through arbitrary user Call graphs and exhaustive eligible Test262 evidence remain open.",
