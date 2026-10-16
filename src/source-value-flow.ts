@@ -56,7 +56,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
-type Operation = `object-has-own:${"static"|"prototype"}` | `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
+type Operation = "object-is" | `object-has-own:${"static"|"prototype"}` | `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
     "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
@@ -89,7 +89,7 @@ const SOURCE_NATIVE_METHODS:ReadonlyMap<Operation,{name:string;length:number;own
         methods.set(operation,{name,length:descriptor.length,owner:collection.owner,opaque:!known});
     }
     for(const collection of [
-        {methods:runtimeObjectStaticMethods,operations:new Map<string,Operation>([["hasOwn","object-has-own:static"],["getOwnPropertyNames","object-own-keys:string"],["getOwnPropertySymbols","object-own-keys:symbol"]])},
+        {methods:runtimeObjectStaticMethods,operations:new Map<string,Operation>([["is","object-is"],["hasOwn","object-has-own:static"],["getOwnPropertyNames","object-own-keys:string"],["getOwnPropertySymbols","object-own-keys:symbol"]])},
         {methods:runtimeReflectMethods,operations:new Map<string,Operation>([["ownKeys","reflect-own-keys"],["get","reflect-get"]])},
     ])for(const[name,operation]of collection.operations){
         const descriptor=collection.methods.get(name);if(!descriptor)throw new Error("native reflection operation cannot be represented");
@@ -220,7 +220,7 @@ const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operati
     ["Error", new Map([["isError", "error-brand"]])],
     ["JSON", new Map([...jsonMethods.values()].map(descriptor=>[descriptor.name,descriptor.operation]))],
     ["console", new Map([...consoleOperations].map(name=>[name,"host-print" as const]))],
-    ["Object", new Map([["hasOwn","object-has-own:static"],["getPrototypeOf", "object-get-prototype"], ["create", "create-object"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
+    ["Object", new Map([["is","object-is"],["hasOwn","object-has-own:static"],["getPrototypeOf", "object-get-prototype"], ["create", "create-object"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
         ["getOwnPropertyDescriptor", "own-descriptor"], ["getOwnPropertyDescriptors", "own-descriptors"], ["getOwnPropertyNames", "object-own-keys:string"], ["getOwnPropertySymbols", "object-own-keys:symbol"]])],
     ["Reflect", new Map([["ownKeys", "reflect-own-keys"], ["get", "reflect-get"], ["getPrototypeOf", "reflect-get-prototype"], ["apply", "reflect-apply"], ["construct", "construct"],
         ["defineProperty", "define-property"], ["set", "set-property"], ["deleteProperty", "delete-property"], ["getOwnPropertyDescriptor", "own-descriptor"]])],
@@ -276,6 +276,7 @@ class SourceValueFlow {
     private readonly primitiveDefaults = new Map<string,Cell>();
     private readonly defaultedPrimitiveInputs = new Map<Cell,Map<string,Cell>>();
     private readonly primitiveMethodResults = new Map<ts.Node,Map<string,Cell>>();
+    private readonly sameValueQueries=new Map<ts.Node,Map<string,Cell>>();
     private readonly ownPropertyQueries=new Map<ts.Node,Map<string,Cell>>();
     private readonly hasProperties=new Map<ts.Node,Map<Cell,Map<SourcePropertyKey,Cell>>>();
     private readonly proxyCreations=new Map<ts.Node,Map<string,Cell>>();
@@ -2632,6 +2633,25 @@ class SourceValueFlow {
         // Target validation precedes ToPropertyKey, including key hook effects.
         if(!opened&&objects.values.nonempty){opened=true;this.copy(this.computedProperty(objects,key,context,receiver),result);}});
         return result;
+    }
+    /** SameValue compares values without coercion, property reads or callable
+     * escape. Abstract identities retain both Boolean results. */
+    private sameValueQuery(left:Cell,right:Cell,context:ts.Node):Cell {
+        let calls=this.sameValueQueries.get(context);if(!calls){calls=new Map();this.sameValueQueries.set(context,calls);}
+        const key=left.id+":"+right.id,prior=calls.get(key);if(prior)return prior;
+        const result=this.newCell();calls.set(key,result);
+        this.returnTransforms.set(result,{kind:"projection",inputs:[left,right],evaluate:inputs=>this.sameValueQuery(inputs[0]!,inputs[1]!,context)});
+        this.rule([left,right],()=>{
+            for(const input of [left,right])for(const atom of input.values)if(atom.tag==="abrupt"||atom.tag==="pending-source")this.publish(result,atom);
+            for(const a of left.values)for(const b of right.values){
+                if(a.tag==="abrupt"||a.tag==="pending-source"||b.tag==="abrupt"||b.tag==="pending-source")continue;
+                if(a.tag==="primitive"&&b.tag==="primitive"&&!(typeof a.value==="symbol"&&a.value===b.value&&this.freshSymbols.has(a.value)))this.publish(result,this.primitive(Object.is(a.value,b.value)));
+                else{this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));}
+                // These are the complete result domain, rather than a bound
+                // on the size of either operand's retained value graph.
+                if(result.values.has(this.primitive(false))&&result.values.has(this.primitive(true)))return;
+            }
+        });return result;
     }
     /** HasOwnProperty reads the retained own-location graph. Prototype and
      * static entry points keep their distinct conversion order in this plan. */
@@ -6088,6 +6108,9 @@ class SourceValueFlow {
                                 else {this.publish(result, this.abrupt); const handler = this.exceptionHandlers.get(node); if (handler) this.publish(handler, this.nativeException(node));}
                             }
                             continue;
+                        }
+                        if(atom.operation==="object-is"){
+                            this.copy(this.sameValueQuery(argument(0)??omittedArgument,argument(1)??omittedArgument,node),result);continue;
                         }
                         if(atom.operation.startsWith("object-has-own:")){
                             const mode=atom.operation.slice("object-has-own:".length) as "static"|"prototype",base=mode==="static"?argument(0)??omittedArgument:invocation.receiver===this.empty?omittedArgument:invocation.receiver,key=argument(mode==="static"?1:0)??omittedArgument;
