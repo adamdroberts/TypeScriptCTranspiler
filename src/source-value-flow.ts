@@ -6404,8 +6404,10 @@ class SourceValueFlow {
                                     this.publish(result!, this.text("function () { [native code] }"));
                                 else if (receiver.tag === "builtin" && receiver.normalResult !== "not-callable")
                                     this.publish(result!, this.text(`function ${receiver.name}() { [native code] }`));
-                                else if(receiver.tag==="operation"&&jsonOperations.has(receiver.operation as JSONSourceOperation))
-                                    this.publish(result!,this.text(`function ${jsonOperations.get(receiver.operation as JSONSourceOperation)!.name}() { [native code] }`));
+                                else if(receiver.tag==="operation"){
+                                    const descriptor=SOURCE_NATIVE_METHODS.get(receiver.operation)??jsonOperations.get(receiver.operation as JSONSourceOperation);
+                                    this.publish(result!,descriptor?this.text(`function ${descriptor.name}() { [native code] }`):this.unknown);
+                                }
                                 else this.publish(result!, this.unknown);
                             }
                         }

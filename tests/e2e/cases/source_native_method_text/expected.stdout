@@ -1,0 +1,5 @@
+function hasOwn() { [native code] }
+function apply() { [native code] }
+function values() { [native code] }
+true
+native-method-text-complete
