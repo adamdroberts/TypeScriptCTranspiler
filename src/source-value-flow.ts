@@ -270,6 +270,8 @@ class SourceValueFlow {
     private readonly primitiveDefaults = new Map<string,Cell>();
     private readonly defaultedPrimitiveInputs = new Map<Cell,Map<string,Cell>>();
     private readonly primitiveMethodResults = new Map<ts.Node,Map<string,Cell>>();
+    private readonly hasProperties=new Map<ts.Node,Map<Cell,Map<SourcePropertyKey,Cell>>>();
+    private readonly proxyCreations=new Map<ts.Node,Map<string,Cell>>();
     private readonly objectCoercions = new Map<ts.Node,Map<Cell,Cell>>();
     private readonly prototypeReads = new Map<ts.Node,Map<string,Cell>>();
     private readonly arrayPredicates=new Map<ts.Node,Map<string,Cell>>();
@@ -2310,16 +2312,34 @@ class SourceValueFlow {
         this.rule([method],()=>{for(const atom of method.values){
             if(atom!==this.primitive(undefined)&&atom!==this.primitive(null))this.publish(callee,atom);
             else if(trap==="ownKeys"||trap==="getOwnPropertyDescriptor")this.publish(result,this.unknown);
+            else if(trap==="has") {
+                if(key!==null)this.copy(this.hasProperty(proxy.target,key,context!),result);
+                else{this.publish(result,this.unknown);this.activateOpaqueEffect(context!);}
+            }
             else if(trap==="get") {
                 if(key!==null)this.copy(this.property(proxy.target,key,context,false,receiver),result);
                 else this.copy(this.computedProperty(proxy.target,property,context,receiver),result);
             }
         }});
-        this.invoke(context,callee,proxy.handler,[{cell:proxy.target,spread:false},...(trap!=="ownKeys"?[{cell:property,spread:false}]:[]),...(trap==="get"?[{cell:receiver,spread:false}]:[])],result);
+        const returned=trap==="has"?this.newCell():result;
+        this.invoke(context,callee,proxy.handler,[{cell:proxy.target,spread:false},...(trap!=="ownKeys"?[{cell:property,spread:false}]:[]),...(trap==="get"?[{cell:receiver,spread:false}]:[])],returned);
+        if(trap==="has"){
+            this.copy(returned,result);const truth=this.booleanPrimitive(returned);let opened=false;
+            this.rule([truth],()=>{if(!opened&&truth.values.has(this.primitive(false))){
+                opened=true;
+                // False trap results additionally inspect target descriptor
+                // and extensibility invariants. Their exotic effects are
+                // unrepresented, so retain the opaque target worklist.
+                const caught=this.exceptionHandlers.get(context!);if(caught)this.publish(caught,this.unknown);
+                this.onActive(context!,()=>{this.opaqueEffect(context!);this.escapeCallableArgument(proxy.target,context!);});
+            }});
+        }
         return result;
     }
     private hasProperty(base:Cell,key:SourcePropertyKey,context:ts.Node):Cell {
-        const result=this.newCell();let rule!:Rule;
+        let bases=this.hasProperties.get(context);if(!bases){bases=new Map();this.hasProperties.set(context,bases);}
+        let keys=bases.get(base);if(!keys){keys=new Map();bases.set(base,keys);}const previous=keys.get(key);if(previous)return previous;
+        const result=this.newCell();keys.set(key,result);let rule!:Rule;
         rule=this.rule([base],()=>{
             const pending=[...base.values],visited=new Set<ObjectOwner>();
             while(pending.length){
@@ -2327,7 +2347,7 @@ class SourceValueFlow {
                 if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
                 if(atom===this.primitive(null)){this.publish(result,this.primitive(false));continue;}
                 const owner=this.ordinaryOwner(atom);
-                if(owner?.proxy)this.proxyReadEffects(owner,key,"has",context);
+                if(owner?.proxy){this.copy(this.booleanPrimitive(this.proxyReadEffects(owner,key,"has",context)),result);continue;}
                 if(!owner){this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));this.activateOpaqueEffect(context);continue;}
                 if(visited.has(owner))continue;visited.add(owner);this.watch(rule,owner.shape);
                 if(this.opaqueShape(owner,context)){this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));this.activateOpaqueEffect(context);continue;}
@@ -2444,6 +2464,31 @@ class SourceValueFlow {
                 this.defineProperty(base,propertyKey,this.property(descriptors,name,context),context);
             }
         }});
+    }
+    /** ProxyCreate validates object domains without reading properties or
+     * invoking either operand. Later Proxy operations own their trap effects. */
+    private proxyCreate(target:Cell,handler:Cell,context:ts.Node):Cell {
+        let calls=this.proxyCreations.get(context);if(!calls){calls=new Map();this.proxyCreations.set(context,calls);}
+        const key=target.id+":"+handler.id,previous=calls.get(key);if(previous)return previous;
+        const result=this.newCell(),owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),proxy:{target,handler,context}};
+        calls.set(key,result);this.ownerCreations.set(owner,context);this.sourceObjectOwners.add(owner);this.ownerMutation(owner);this.markPropertyAlgorithm(owner,"opaque");
+        this.returnTransforms.set(result,{kind:"allocation",inputs:[target,handler],evaluate:inputs=>this.proxyCreate(inputs[0]!,inputs[1]!,context)});
+        const fail=()=>{this.publish(result,this.abrupt);const caught=this.exceptionHandlers.get(context);if(caught)this.publish(caught,this.nativeException(context,"TypeError"));};
+        const operands=[target,handler].map(input=>{
+            const normal=this.newCell();this.rule([input],()=>{for(const value of input.values){
+                if(value.tag==="abrupt"||value.tag==="pending-source")this.publish(result,value);
+                else this.publish(normal,value);
+            }});return normal;
+        });
+        this.rule(operands,()=>{
+            const targets=this.primitiveKinds(operands[0]!),handlers=this.primitiveKinds(operands[1]!),objects=KIND_OBJECT|KIND_FUNCTION;
+            if(!targets||!handlers)return;
+            if(targets&KIND_PRIMITIVE)fail();
+            if(!(targets&objects))return;
+            if(handlers&KIND_PRIMITIVE)fail();
+            if(handlers&objects)this.publish(result,{tag:"object",owner});
+        });
+        return result;
     }
     private createObject(prototype:Cell,properties:Cell,context:ts.Node):Cell {
         let creations=this.objectCreations.get(context);if(!creations){creations=new Map();this.objectCreations.set(context,creations);}
@@ -4002,6 +4047,14 @@ class SourceValueFlow {
 
     private ordinaryOwner(atom: Atom): ObjectOwner | null {
         const owner=this.representedOwner(atom);
+        // Native callable metadata remains primitive data even when its
+        // exact spelling or expected argument count is not represented.
+        if(owner&&atom.tag==="builtin"&&atom.normalResult!=="not-callable"){
+            let number=this.numericValues.get(KIND_NUMBER);if(!number){number={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,number);}
+            for(const [key,value]of [["name",this.unknownString],["length",number]] as const)if(!owner.fields.has(key)){
+                const cell=this.newCell();this.publish(cell,value);this.defineField(owner,key,cell,false);
+            }
+        }
         if(owner&&(atom.tag==="function"||atom.tag==="bound"||atom.tag==="operation"||atom.tag==="promise-resolver"||atom.tag==="builtin"&&atom.normalResult!=="not-callable"||atom.tag==="intrinsic"&&(atom.domain==="constructor"||atom.domain==="prototype"&&atom.kind==="ordinary")))
             for(const key of ["name","length"])if(owner.own?.get(key)?.initial)this.markReadonly(owner,key);
         return owner;
@@ -5690,12 +5743,12 @@ class SourceValueFlow {
                         const path = new Set(invocation.boundPath); path.add(atom);
                         worklist.push({...invocation, target:atom.owner.base, direct:false, boundPath:path});
                     }
-                    if(invocation.construct&&atom.tag==="builtin"&&atom.name==="Proxy") {
-                        const owner=this.owner(node);this.markPropertyAlgorithm(owner,"opaque");
-                        owner.proxy??={target:this.newCell(),handler:this.newCell(),context:node};
-                        this.copy(argument(0)??omittedArgument,owner.proxy.target);this.copy(argument(1)??omittedArgument,owner.proxy.handler);
-                        this.publish(owner.shape,this.unknown);this.publish(result,{tag:"object",owner});
-                    }else if(invocation.construct&&!(atom.tag==="builtin"&&atom.name==="Promise")){if(atom.tag==="builtin")this.markPropertyAlgorithm(this.owner(node),"opaque");this.publish(result!,{tag:"object",owner:this.owner(node)});}
+                    if(atom.tag==="builtin"&&atom.name==="Proxy") {
+                        if(invocation.construct)this.copy(this.proxyCreate(argument(0)??omittedArgument,argument(1)??omittedArgument,node),result);
+                        else{this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node,"TypeError"));}
+                        continue;
+                    }
+                    if(invocation.construct&&!(atom.tag==="builtin"&&atom.name==="Promise")){if(atom.tag==="builtin")this.markPropertyAlgorithm(this.owner(node),"opaque");this.publish(result!,{tag:"object",owner:this.owner(node)});}
                     const evolvingPrimitiveResult = constructorArguments !== undefined || atom.tag === "builtin" && (atom.normalResult === "primitive-string" || atom.name === "Symbol" || NUMERIC_CONVERSIONS.has(atom.name));
                     if (!evolvingPrimitiveResult && (atom.tag !== "operation" || PROPERTY_MUTATIONS.has(atom.operation)) && handled(atom, signature)) continue;
                     if (atom.tag === "intrinsic" && atom.domain === "constructor") {
@@ -6014,7 +6067,7 @@ class SourceValueFlow {
                                 const derivedName: Atom = {tag:"text-operation",operation:"bound-name",parts:[primitiveName]};
                                 this.rule([name], () => {
                                     for (const spelling of name.values) {
-                                        if (spelling.tag === "primitive" || spelling.tag === "text-operation") {
+                                        if (spelling.tag === "primitive" || spelling.tag === "text-operation" || spelling.tag === "unknown-string") {
                                             this.publish(primitiveName, spelling);
                                             this.publish(boundName, derivedName);
                                         } else if (spelling.tag === "unknown" || spelling.tag === "non-string") this.publish(boundName, this.unknown);

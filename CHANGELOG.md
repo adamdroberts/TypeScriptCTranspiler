@@ -1,3 +1,5 @@
+- Validate Proxy creation without operand hooks and retain inherited Proxy HasProperty effects in source analysis.
+
 - Retain indexed Array values, spread separator effects and repeated predicate callbacks through shared source property domains.
 
 - Preserve materialized source-allocation identity across captured reads while retaining actual-input return substitution.
