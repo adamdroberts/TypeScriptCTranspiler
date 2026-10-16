@@ -279,7 +279,7 @@ export function statementBodyCompletions(body: ts.Statement | ts.SourceFile): St
     const flow = summaries.get(body)!.flow;
     return { normal: [...flow].some(value => value.kind === "normal"), normalValues: [...new Set([...flow].filter(value => value.kind === "normal").map(value => value.value ?? "undefined"))], returns: [...flow].filter(value => value.kind === "return").map(value => typeof value.value === "object" ? value.value : null), reachable, analyzed: new Set(summaries.keys()), complete };
 }
-export function functionBodyCompletions(body: ts.Block): FunctionBodyCompletions { return statementBodyCompletions(body); }
+export function functionBodyCompletions(body: ts.Block): StatementBodyCompletions { return statementBodyCompletions(body); }
 
 /** Assignment productions that perform NamedEvaluation for an identifier reference. */
 export const NAME_EVALUATING_ASSIGNMENTS: ReadonlySet<ts.SyntaxKind> = new Set([

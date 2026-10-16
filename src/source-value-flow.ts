@@ -1,3 +1,4 @@
+import {SourceEvaluationOrder} from "./source-evaluation-order";
 import {runtimeObjectStaticMethods,runtimeReflectMethods,runtimeArrayPrototypeMethods,runtimeFunctionPrototypeMethods,runtimeFunctionRestrictedProperties,runtimeStringStaticMethods} from "./global-bindings";
 import {sourceNumericOperation, type SourceNumericOperation, type SourcePrimitive} from "./source-numeric-operations";
 import {bufferStaticDescriptors} from "./buffer-statics";
@@ -5,7 +6,7 @@ import ts from "typescript";
 import { callableSourceText } from "./callable-source-text";
 import {classPrivateNames,classPrivateNamesInScope,resolveClassPrivateName,type ClassPrivateName} from "./emit/private-names";
 import { normalizeAssignmentTarget, unwrapTransparentExpression as unwrap } from "./emit/binding-tree";
-import { isStrictCodeContext, callableNameInput, expectedArgumentCount, functionBodyCompletions, statementBodyCompletions, type FunctionBodyCompletions, type StatementBodyCompletions, NAME_EVALUATING_ASSIGNMENTS } from "./function-static-semantics";
+import { isStrictCodeContext, callableNameInput, expectedArgumentCount, functionBodyCompletions, statementBodyCompletions, type StatementBodyCompletions, NAME_EVALUATING_ASSIGNMENTS } from "./function-static-semantics";
 import {consoleOperations} from "./console-operations";
 import {jsonMethods, jsonOperations, type JSONSourceOperation} from "./json-methods";
 import {test262AgentOperations} from "./test262-agent-operations";
@@ -221,7 +222,7 @@ interface FunctionOwner {
     readonly definition: CallableDefinition; readonly node: FunctionNode | null; readonly kind: DynamicFunctionKind; readonly fields: ObjectOwner;
     readonly yields:Cell;readonly yieldReceives:Cell;readonly yieldThrows:Cell; readonly returns: Cell; readonly throws: Cell; readonly receiver: Cell; readonly active: Cell; readonly sourceText: string;
     base?: Cell;
-    completion?: FunctionBodyCompletions;
+    completion?: StatementBodyCompletions;
 }
 interface EvaluationRecord {
     readonly node: ts.Node; readonly operation: "eval" | "eval-script" | "agent-start";
@@ -452,7 +453,7 @@ class SourceValueFlow {
     private readonly scriptOrder = new Map<ts.SourceFile, number>();
     private readonly dynamicContexts = new WeakMap<ts.Node, boolean>();
     private readonly sourceFiles = new WeakMap<ts.Node, ts.SourceFile>();
-    private readonly sourceStarts = new WeakMap<ts.Node, number>();
+    private readonly evaluationOrder = new SourceEvaluationOrder();
     private readonly executionGuards = new WeakMap<ts.Node, readonly {condition: Cell; truthy: boolean}[]>();
     private readonly captureInputs=new WeakMap<Cell,{source:Cell;phase:SourceCapturePhase}>();
     private nextCapturePhase=0;
@@ -574,14 +575,15 @@ class SourceValueFlow {
             if (!sourceUnitBodyIncluded(program, file) && !(entries.evaluations ?? []).some(entry => entry.entry && path.resolve(entry.entry) === path.resolve(file.fileName)) &&
                 !(entries.functions ?? []).some(entry => entry.entry && path.resolve(entry.entry) === path.resolve(file.fileName))) continue;
             const script=this.scriptCompletions.get(file);
-            const worklist: Array<{node: ts.Node; handler: Cell | null}> = [{node: file, handler: script?.throws??null}];
+            const worklist: Array<{node: ts.Node; handler: Cell | null; completion:StatementBodyCompletions|undefined}> = [{node: file, handler: script?.throws??null,completion:script?.summary}];
             while (worklist.length) {
-                const {node, handler} = worklist.pop()!;
+                const {node, handler,completion} = worklist.pop()!;
                 if ((ts.isStatement(node) || ts.isCatchClause(node)) && !ts.isFunctionDeclaration(node)) {
-                    const activation = this.enclosingActivation(node);
-                    if (activation?.completion && !activation.completion.reachable.has(node)) continue;
                     const analyzed=ts.isCatchClause(node)?node.block:node;
-                    if(!activation&&script?.summary.analyzed.has(analyzed)&&!script.summary.reachable.has(node))continue;
+                    if(completion?.analyzed.has(analyzed)&&!completion.reachable.has(node))continue;
+                }
+                if(ts.isClassStaticBlockDeclaration(node)){
+                    worklist.push({node:node.body,handler,completion:statementBodyCompletions(node.body)});continue;
                 }
                 if (handler) this.exceptionHandlers.set(node, handler);
                 if (ts.isTryStatement(node)) {
@@ -590,11 +592,10 @@ class SourceValueFlow {
                         const condition=this.catchCondition(node.catchClause);
                         this.rule([caught],()=>{for(const atom of caught.values)this.publish(condition,this.primitive(atom.tag!=="abrupt"));});
                     }
-                    if (node.catchClause?.variableDeclaration && (!this.enclosingActivation(node)?.completion ||
-                        this.enclosingActivation(node)!.completion!.reachable.has(node.catchClause))) this.bind(node.catchClause.variableDeclaration.name, caught!);
-                    worklist.push({node: node.tryBlock, handler: caught});
-                    if (node.catchClause) worklist.push({node: node.catchClause, handler});
-                    if (node.finallyBlock) worklist.push({node: node.finallyBlock, handler});
+                    if (node.catchClause?.variableDeclaration && (!completion || completion.reachable.has(node.catchClause))) this.bind(node.catchClause.variableDeclaration.name, caught!);
+                    worklist.push({node: node.tryBlock, handler: caught,completion});
+                    if (node.catchClause) worklist.push({node: node.catchClause, handler,completion});
+                    if (node.finallyBlock) worklist.push({node: node.finallyBlock, handler,completion});
                     continue;
                 }
                 if (ts.isThrowStatement(node) && handler) this.copy(this.cell(node.expression), handler);
@@ -666,13 +667,14 @@ class SourceValueFlow {
                     // Computed method names execute in the defining context;
                     // formals and bodies execute in the function activation.
                     node.forEachChild(child => { worklist.push({node: child,
-                        handler: child === node.body || ts.isParameter(child) ? owner.throws : handler}); });
+                        handler: child === node.body || ts.isParameter(child) ? owner.throws : handler,
+                        completion:child === node.body || ts.isParameter(child)?owner.completion:completion}); });
                     continue;
                 }
                 if (ts.isCallExpression(node) || ts.isNewExpression(node) ||
                     ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node) || ts.isAwaitExpression(node) ||
                     ts.isTemplateExpression(node) || ts.isBinaryExpression(node)&&node.operatorToken.kind===ts.SyntaxKind.InstanceOfKeyword || ts.isExpression(node) && conversionOperands(node)) this.cell(node);
-                node.forEachChild(child => { worklist.push({node: child, handler}); });
+                node.forEachChild(child => { worklist.push({node: child, handler,completion}); });
             }
         }
     }
@@ -1028,7 +1030,7 @@ class SourceValueFlow {
                 }else{
                     let phase=context;
                     for(let node=context.parent;node&&!ts.isSourceFile(node);node=node.parent)if(ts.isIterationStatement(node,false))phase=node;
-                    if(phase.getEnd()<=effect.getStart())return false;
+                    if(this.evaluationOrder.before(phase,effect))return false;
                 }
             }
             return true;
@@ -1037,9 +1039,7 @@ class SourceValueFlow {
             const before=this.scriptOrder.get(this.sourceFile(context)),after=this.scriptOrder.get(this.sourceFile(effect));
             return before===undefined||after===undefined||after<=before;
         }
-        let start = this.sourceStarts.get(effect);
-        if (start === undefined) {start = effect.getStart(this.sourceFile(effect)); this.sourceStarts.set(effect,start);}
-        if (context.getEnd() <= start) return false;
+        if (this.evaluationOrder.before(context,effect)) return false;
         if (argumentsRead && effect === context) return false;
         if (ts.isCallExpression(effect) || ts.isNewExpression(effect)) {
             for (let parent: ts.Node | undefined = context; parent; parent = parent.parent) {
@@ -1072,13 +1072,13 @@ class SourceValueFlow {
         this.copy(this.captureRead(from,context,argumentsRead),into);
     }
     private capturePrecedes(before:SourceCapturePhase,after:SourceCapturePhase):boolean {
-        if(before.location!==after.location||before.argumentsRead!==after.argumentsRead||this.sourceFile(before.context)!==this.sourceFile(after.context)||before.context.getEnd()>after.context.getStart())return false;
+        if(before.location!==after.location||before.argumentsRead!==after.argumentsRead||this.sourceFile(before.context)!==this.sourceFile(after.context)||!this.evaluationOrder.before(before.context,after.context))return false;
         const left=this.enclosingActivation(before.context),right=this.enclosingActivation(after.context);
         return left===right&&!this.repeatedActivationContext(before.context)&&!this.repeatedActivationContext(after.context)&&(!left||!this.activationTiming(left).values.nonempty);
     }
     private readBeforeWrite(read:ts.Node,write:ts.Node,reference?:ts.Identifier):boolean {
         if(this.sourceFile(read)!==this.sourceFile(write))return false;
-        if(read.getEnd()<=write.getStart())return true;
+        if(this.evaluationOrder.before(read,write))return true;
         const within=(root:ts.Node|undefined)=>{for(let node:ts.Node|undefined=read;node;node=node.parent)if(node===root)return true;return false;};
         if(ts.isVariableDeclaration(write)&&within(write.initializer)||ts.isBinaryExpression(write)&&within(write.right)||
             (ts.isPrefixUnaryExpression(write)||ts.isPostfixUnaryExpression(write))&&within(write.operand))return true;
@@ -1089,7 +1089,7 @@ class SourceValueFlow {
             else if(ts.isShorthandPropertyAssignment(node)&&node.name===reference){if(within(node.objectAssignmentInitializer))return true;leaf=node;}
             else if(ts.isBinaryExpression(node)&&node.operatorToken.kind===ts.SyntaxKind.EqualsToken&&within(node.right)&&node.left.getStart()<=reference.getStart()&&reference.getEnd()<=node.left.getEnd())return true;
         }
-        return read.getEnd()<=leaf.getStart()||within(leaf);
+        return this.evaluationOrder.before(read,leaf)||within(leaf);
     }
     private captureRead(from: Cell, context?: ts.Node, argumentsRead = false,location?:Cell): Cell {
         if(!context)return from;
@@ -1392,7 +1392,7 @@ class SourceValueFlow {
         const origins=this.evaluationDeclarationBindings.get(binding)?.origins;if(!origins?.size)return false;
         const activation=this.enclosingActivation(read);
         return [...origins].every(caller=>this.sourceFile(caller)===this.sourceFile(read)&&
-            this.enclosingActivation(caller)===activation&&read.getEnd()<=caller.getStart());
+            this.enclosingActivation(caller)===activation&&this.evaluationOrder.before(read,caller));
     }
     private scriptDeclarationBinding(declaration: ts.Node, name: string): Cell | null {
         let selected = declaration;
@@ -1578,7 +1578,7 @@ class SourceValueFlow {
                             const before=this.scriptOrder.get(this.sourceFile(atom.origin!)),after=this.scriptOrder.get(this.sourceFile(point));
                             return before!==undefined&&after!==undefined&&before<after;
                         }
-                        return atom.origin!.getEnd()<=point.getStart();
+                        return this.evaluationOrder.before(atom.origin!,point);
                     }))continue;
                 }
                 this.publish(owner.shape,atom);
@@ -1732,7 +1732,7 @@ class SourceValueFlow {
         if(this.sourceFile(write)!==this.sourceFile(read)){
             const left=this.scriptOrder.get(this.sourceFile(write)),right=this.scriptOrder.get(this.sourceFile(read));
             if(left===undefined||right===undefined||left>=right)return false;
-        }else if(write.getEnd()>read.getStart())return false;
+        }else if(!this.evaluationOrder.before(write,read))return false;
         const readAncestors=new Set<ts.Node>();
         for(let node:ts.Node|undefined=read;node;node=node.parent)readAncestors.add(node);
         for(let child=write,parent=write.parent;parent;child=parent,parent=parent.parent){

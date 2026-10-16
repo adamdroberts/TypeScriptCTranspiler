@@ -1,3 +1,5 @@
+- Preserve class definition evaluation order in source captures and analyze static blocks with their own statement-completion region.
+
 - Invalidate source proof, kind and readiness caches with per-cell revisions on the existing dependency frontier.
 
 - Observe replacement callbacks through the canonical mapped-arguments property value during opaque owner traversal.
