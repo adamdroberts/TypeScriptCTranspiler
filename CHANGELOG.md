@@ -1,3 +1,5 @@
+- Retain Object.hasOwn and borrowed hasOwnProperty source presence and conversion order without invoking getters or escaping ordinary stored callbacks.
+
 - Query primitive normal completions lazily without enumerating discarded formatter products, preserving finite source proofs and conversion effects.
 
 - Validate Proxy creation without operand hooks and retain inherited Proxy HasProperty effects in source analysis.

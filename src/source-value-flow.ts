@@ -20,7 +20,7 @@ import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, functionConstructorSourceKey, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
 import {declarativeSourceBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding, sourceBindingTarget} from "./source-bindings";
-import {runtimeDynamicFunctionDescriptors,runtimeGeneratorMethods,runtimeCallbackTimerDescriptors,runtimeAtomicsMethods,runtimeTypedArrayDescriptors,runtimeMathMethods,runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeBufferExports, runtimeChildProcessOperations, runtimeUtilExports, runtimeFsExports, runtimeFsConstants, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeObjectPrototypeMethods, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
+import {runtimeDynamicFunctionDescriptors,runtimeGeneratorMethods,runtimeCallbackTimerDescriptors,runtimeAtomicsMethods,runtimeTypedArrayDescriptors,runtimeMathMethods,runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeBufferExports, runtimeChildProcessOperations, runtimeUtilExports, runtimeFsExports, runtimeFsConstants, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeObjectPrototypeMethods, runtimeObjectPrototypeDescriptors, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
     readonly roots?: readonly string[];
@@ -56,7 +56,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
-type Operation = `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
+type Operation = `object-has-own:${"static"|"prototype"}` | `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
     "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
@@ -75,6 +75,7 @@ const NUMERIC_CONVERSIONS: ReadonlyMap<string, (value: Primitive) => Primitive> 
         return number>0?Math.min(Math.trunc(number),Number.MAX_SAFE_INTEGER):0;
     }],
 ]);
+const SOURCE_OBJECT_PROTOTYPE_OPERATIONS:ReadonlyMap<string,Operation>=new Map([["toString","object-text"],["hasOwnProperty","object-has-own:prototype"]]);
 const SOURCE_NATIVE_METHODS:ReadonlyMap<Operation,{name:string;length:number;owner:"Array"|"Function"|"String"|null;opaque:boolean}>=(()=>{
     const methods=new Map<Operation,{name:string;length:number;owner:"Array"|"Function"|"String"|null;opaque:boolean}>();
     const collections=[
@@ -88,10 +89,14 @@ const SOURCE_NATIVE_METHODS:ReadonlyMap<Operation,{name:string;length:number;own
         methods.set(operation,{name,length:descriptor.length,owner:collection.owner,opaque:!known});
     }
     for(const collection of [
-        {methods:runtimeObjectStaticMethods,operations:new Map<string,Operation>([["getOwnPropertyNames","object-own-keys:string"],["getOwnPropertySymbols","object-own-keys:symbol"]])},
+        {methods:runtimeObjectStaticMethods,operations:new Map<string,Operation>([["hasOwn","object-has-own:static"],["getOwnPropertyNames","object-own-keys:string"],["getOwnPropertySymbols","object-own-keys:symbol"]])},
         {methods:runtimeReflectMethods,operations:new Map<string,Operation>([["ownKeys","reflect-own-keys"],["get","reflect-get"]])},
     ])for(const[name,operation]of collection.operations){
         const descriptor=collection.methods.get(name);if(!descriptor)throw new Error("native reflection operation cannot be represented");
+        methods.set(operation,{name,length:descriptor.length,owner:null,opaque:false});
+    }
+    for(const[name,operation]of SOURCE_OBJECT_PROTOTYPE_OPERATIONS){
+        const descriptor=runtimeObjectPrototypeDescriptors.get(name);if(!descriptor||methods.has(operation))throw new Error("native Object.prototype operation cannot be represented");
         methods.set(operation,{name,length:descriptor.length,owner:null,opaque:false});
     }
     for(const[operation,name,length]of [["throw-type-error","",0],["ordinary-has-instance","[Symbol.hasInstance]",1],["eval","eval",1]] as const)
@@ -215,7 +220,7 @@ const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operati
     ["Error", new Map([["isError", "error-brand"]])],
     ["JSON", new Map([...jsonMethods.values()].map(descriptor=>[descriptor.name,descriptor.operation]))],
     ["console", new Map([...consoleOperations].map(name=>[name,"host-print" as const]))],
-    ["Object", new Map([["getPrototypeOf", "object-get-prototype"], ["create", "create-object"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
+    ["Object", new Map([["hasOwn","object-has-own:static"],["getPrototypeOf", "object-get-prototype"], ["create", "create-object"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
         ["getOwnPropertyDescriptor", "own-descriptor"], ["getOwnPropertyDescriptors", "own-descriptors"], ["getOwnPropertyNames", "object-own-keys:string"], ["getOwnPropertySymbols", "object-own-keys:symbol"]])],
     ["Reflect", new Map([["ownKeys", "reflect-own-keys"], ["get", "reflect-get"], ["getPrototypeOf", "reflect-get-prototype"], ["apply", "reflect-apply"], ["construct", "construct"],
         ["defineProperty", "define-property"], ["set", "set-property"], ["deleteProperty", "delete-property"], ["getOwnPropertyDescriptor", "own-descriptor"]])],
@@ -271,6 +276,7 @@ class SourceValueFlow {
     private readonly primitiveDefaults = new Map<string,Cell>();
     private readonly defaultedPrimitiveInputs = new Map<Cell,Map<string,Cell>>();
     private readonly primitiveMethodResults = new Map<ts.Node,Map<string,Cell>>();
+    private readonly ownPropertyQueries=new Map<ts.Node,Map<string,Cell>>();
     private readonly hasProperties=new Map<ts.Node,Map<Cell,Map<SourcePropertyKey,Cell>>>();
     private readonly proxyCreations=new Map<ts.Node,Map<string,Cell>>();
     private readonly objectCoercions = new Map<ts.Node,Map<Cell,Cell>>();
@@ -2627,6 +2633,65 @@ class SourceValueFlow {
         if(!opened&&objects.values.nonempty){opened=true;this.copy(this.computedProperty(objects,key,context,receiver),result);}});
         return result;
     }
+    /** HasOwnProperty reads the retained own-location graph. Prototype and
+     * static entry points keep their distinct conversion order in this plan. */
+    private ownPropertyQuery(input:Cell,key:Cell,context:ts.Node,mode:"static"|"prototype"):Cell {
+        let calls=this.ownPropertyQueries.get(context);if(!calls){calls=new Map();this.ownPropertyQueries.set(context,calls);}
+        const signature=input.id+":"+key.id+":"+mode,prior=calls.get(signature);if(prior)return prior;
+        const result=this.newCell(),keyInput=this.newCell(),objectInput=this.newCell();calls.set(signature,result);
+        this.returnTransforms.set(result,{kind:"projection",inputs:[input,key],evaluate:inputs=>this.ownPropertyQuery(inputs[0]!,inputs[1]!,context,mode)});
+        const converted=this.primitiveConversion(keyInput,context),objects=this.toObject(objectInput,context);
+        if(mode==="static")this.copy(input,objectInput);else this.copy(key,keyInput);
+        const normal=(cell:Cell):boolean=>[...cell.values].some(atom=>atom.tag!=="abrupt"&&atom.tag!=="pending-source");
+        this.rule([objects],()=>{for(const atom of objects.values)if(atom.tag==="abrupt"||atom.tag==="pending-source")this.publish(result,atom);if(mode==="static"&&normal(objects))this.copy(key,keyInput);});
+        let rule!:Rule;rule=this.rule([objects,converted],()=>{
+            this.watchText(rule,converted);
+            if(converted.values.nonempty&&!this.primitiveHasNormal(converted)){this.publish(result,this.abrupt);return;}
+            for(const atom of converted.values)if(atom.tag==="abrupt"||atom.tag==="pending-source")this.publish(result,atom);
+            if(!normal(converted))return;
+            if(mode==="prototype")this.copy(input,objectInput);
+            const names=new Set<SourcePropertyKey>();let unknownKey=false;
+            for(const atom of converted.values){
+                if(atom.tag==="primitive")names.add(typeof atom.value==="symbol"?atom.value:String(atom.value));
+                else if(atom.tag!=="abrupt"&&atom.tag!=="pending-source")unknownKey=true;
+            }
+            const uncertain=()=>{this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));};
+            for(const atom of objects.values){
+                if(atom.tag==="abrupt"||atom.tag==="pending-source")continue;
+                const owner=this.ordinaryOwner(atom);
+                if(owner)this.watch(rule,owner.shape);
+                const algorithm=owner?.propertyAlgorithm;if(algorithm)this.watch(rule,algorithm);
+                const known=owner&&(atom.tag==="global"||owner.ordinary||owner.boxed||algorithm?.values.has(this.primitive("ordinary"))&&!algorithm.values.has(this.primitive("opaque"))||["function","bound","intrinsic","operation","promise","promise-resolver"].includes(atom.tag));
+                if(!known||owner.proxy){
+                    uncertain();const caught=this.exceptionHandlers.get(context);if(caught)this.publish(caught,this.unknown);
+                    if(owner?.proxy)this.proxyReadEffects(owner,null,"getOwnPropertyDescriptor",context);
+                    this.onActive(context,()=>{this.opaqueEffect(context);this.escapeCallableArgument(objects,context);});continue;
+                }
+                if(unknownKey){uncertain();continue;}
+                for(const name of names){
+                    this.stringField(owner,name);
+                    if(owner.listLength&&name==="length"){this.publish(result,this.primitive(true));continue;}
+                    if(this.opaqueShape(owner,context)||this.hasUnknownPropertyDefinitions(owner)){uncertain();continue;}
+                    const presence=this.propertyPresence(owner,name,context);this.watch(rule,presence);
+                    let inRange=true,outOfRange=false;
+                    const index=typeof name==="string"?Number(name):NaN;
+                    if(owner.listLength&&Number.isInteger(index)&&index>=0&&index<0xffffffff&&String(index)===name){
+                        const length=this.captureRead(owner.listLength,context);this.watch(rule,length);inRange=false;
+                        for(const value of length.values){
+                            if(value.tag==="abrupt"||value.tag==="pending-source")continue;
+                            if(value.tag==="primitive"){
+                                let extent=NaN;try{extent=Number(value.value);}catch{}
+                                if(Number.isInteger(extent)&&extent>=0&&extent<=0xffffffff){inRange||=index<extent;outOfRange||=index>=extent;continue;}
+                            }
+                            inRange=outOfRange=true;
+                        }
+                    }
+                    if(presence.values.has(this.primitive(false))||outOfRange)this.publish(result,this.primitive(false));
+                    if(presence.values.has(this.primitive(true))&&inRange)this.publish(result,this.primitive(true));
+                }
+            }
+        });return result;
+    }
     private ownDescriptors(base:Cell,key:Cell|null,context:ts.Node,result:Cell): void {
         let reads=this.descriptorReads.get(context);if(!reads){reads=new Map();this.descriptorReads.set(context,reads);}
         const identity=base.id+":"+(key?.id??"all"),prior=reads.get(identity);
@@ -3454,7 +3519,7 @@ class SourceValueFlow {
             this.defineField(owner,"constructor",this.globalBinding("Object"));
             for(const[name,normalResult]of runtimeObjectPrototypeMethods){
                 const value=this.newCell(),fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};
-                this.publish(value,name==="toString"?this.operation("object-text"):{tag:"builtin",name,normalResult,fields});this.defineField(owner,name,value);
+                const operation=SOURCE_OBJECT_PROTOTYPE_OPERATIONS.get(name);this.publish(value,operation?this.operation(operation):{tag:"builtin",name,normalResult,fields});this.defineField(owner,name,value);
             }
         }
         return this.ordinaryObjectPrototype;
@@ -6023,6 +6088,10 @@ class SourceValueFlow {
                                 else {this.publish(result, this.abrupt); const handler = this.exceptionHandlers.get(node); if (handler) this.publish(handler, this.nativeException(node));}
                             }
                             continue;
+                        }
+                        if(atom.operation.startsWith("object-has-own:")){
+                            const mode=atom.operation.slice("object-has-own:".length) as "static"|"prototype",base=mode==="static"?argument(0)??omittedArgument:invocation.receiver===this.empty?omittedArgument:invocation.receiver,key=argument(mode==="static"?1:0)??omittedArgument;
+                            this.copy(this.ownPropertyQuery(base,key,node,mode),result);continue;
                         }
                         if(atom.operation==="own-descriptor"||atom.operation==="own-descriptors"){
                             if(argv?.[0]){

@@ -114,14 +114,16 @@ export const runtimeCallbackTimerDescriptors:ReadonlyMap<string,{operation:strin
 );
 if(!runtimeCallbackTimerDescriptors.size)throw new Error("missing native callback timer descriptors");
 
-export const runtimeObjectPrototypeMethods: ReadonlyMap<string, NonNullable<RuntimeGlobalBinding["normalResult"]>> = new Map(
-    fs.readFileSync(path.join(resolvePackageRoot(), "runtime/tsc_object_prototype_methods.def"), "utf8")
-        .split(/\r?\n/).filter(line => line.startsWith("TSC_OBJECT_PROTOTYPE_METHOD"))
-        .map(line => {
-            const row = /^TSC_OBJECT_PROTOTYPE_METHOD\((\w+), [^,]+, [^,]+, .*?, (BOOLEAN|OBJECT|UNKNOWN|NON_STRING)\)$/.exec(line);
-            if (!row) throw new Error("invalid canonical Object.prototype method descriptor");
-            return [row[1]!,row[2]!.toLowerCase().replaceAll("_","-") as NonNullable<RuntimeGlobalBinding["normalResult"]>] as const;
+export const runtimeObjectPrototypeDescriptors:ReadonlyMap<string,{length:number;normalResult:NonNullable<RuntimeGlobalBinding["normalResult"]>}>=new Map(
+    fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_object_prototype_methods.def"),"utf8")
+        .split(/\r?\n/).filter(line=>line.startsWith("TSC_OBJECT_PROTOTYPE_METHOD")).map(line=>{
+            const row=/^TSC_OBJECT_PROTOTYPE_METHOD\((\w+), ([\d.]+), [^,]+, .*?, (BOOLEAN|OBJECT|UNKNOWN|NON_STRING)\)$/.exec(line);
+            if(!row)throw new Error("invalid canonical Object.prototype method descriptor");
+            return [row[1]!,{length:Number(row[2]),normalResult:row[3]!.toLowerCase().replaceAll("_","-") as NonNullable<RuntimeGlobalBinding["normalResult"]>}] as const;
         }),
+);
+export const runtimeObjectPrototypeMethods:ReadonlyMap<string,NonNullable<RuntimeGlobalBinding["normalResult"]>>=new Map(
+    [...runtimeObjectPrototypeDescriptors].map(([name,descriptor])=>[name,descriptor.normalResult]),
 );
 
 /** Native Error constructor identities come from the Realm binding table. */
