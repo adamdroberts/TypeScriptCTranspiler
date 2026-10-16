@@ -925,7 +925,7 @@ class SourceValueFlow {
                         for(const accessor of owner.accessors.values())if(this.accessorDefinitions.has(accessor.get)){visit(accessor.get);visit(accessor.set);}
                         const stored=this.unknownPropertyLocations.get(owner);if(stored)visit(stored.value);
                         if(!sourceCallbacksOnly&&atom.tag!=="function"&&!this.sourceObjectOwners.has(owner)&&!this.ownerCreations.has(owner)&&!this.ownerRealms.has(owner)&&!owner.collections&&!owner.collectionIterator)return;
-                        for(const field of owner.fields.values())visit(field);
+                        for(const key of owner.fields.keys())visit(this.dataProperty(owner,key));
                         for(const accessor of owner.accessors.values()){visit(accessor.get);visit(accessor.set);}
                         if(owner.prototype)visit(owner.prototype);
                         if(owner.proxy){visit(owner.proxy.target);visit(owner.proxy.handler);}
