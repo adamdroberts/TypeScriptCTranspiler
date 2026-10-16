@@ -1,3 +1,4 @@
+- Propagate reaching-definition deltas without repeatedly copying complete sets.
 - Retain reaching lexical definitions through canonical binding/control and generated-evaluation activation graphs.
 - Retain conditional loose-equality object coercions, operand completion and actual return inputs in source analysis; skip ordinary nullish hooks in the native equality kernel.
 - Retain source Reference evaluation and GetValue/PutValue boundaries, including raw computed keys and structured assignment defaults.

@@ -179,11 +179,28 @@ export class SourceReachingWrites {
         const at=this.entries.get(reference),symbol=this.symbolFor(reference);if(at===undefined||!symbol)return null;
         let solution=this.solutions.get(symbol);
         if(!solution){
-            const facts=new Map<number,ReadonlySet<SourceLexicalWrite|null>>([[this.entry,new Set([null])]]),pending=[this.entry],queued=new Set(pending);
-            while(pending.length){const index=pending.pop()!;queued.delete(index);const point=this.points[index]!,input=facts.get(index)!;
-                const output=point.write&&point.symbol===symbol?new Set([point.write]):input;
-                for(const next of point.successors){const before=facts.get(next);if(before&&[...output].every(value=>before.has(value)))continue;
-                    facts.set(next,before?new Set([...before,...output]):output);if(!queued.has(next)){queued.add(next);pending.push(next);}
+            const facts=new Map<number,Set<SourceLexicalWrite|null>>(),deltas=new Map<number,Set<SourceLexicalWrite|null>>();
+            const pending:number[]=[],queued=new Set<number>(),stored=new Set<number>();
+            const add=(index:number,values:Iterable<SourceLexicalWrite|null>)=>{
+                let known=facts.get(index),delta=deltas.get(index);
+                for(const value of values){
+                    if(known?.has(value))continue;
+                    if(!known){known=new Set();facts.set(index,known);}known.add(value);
+                    if(!delta){delta=new Set();deltas.set(index,delta);}delta.add(value);
+                }
+                if(delta&&!queued.has(index)){queued.add(index);pending.push(index);}
+            };
+            add(this.entry,[null]);
+            while(pending.length){const index=pending.pop()!;queued.delete(index);const point=this.points[index]!;
+                const delta=deltas.get(index)!;deltas.delete(index);
+                // Joins forward each newly arrived definition once per edge.
+                // A reachable store kills its incoming alternatives and emits
+                // its one definition once, regardless of later arrivals.
+                if(point.write&&point.symbol===symbol){
+                    if(stored.has(index))continue;stored.add(index);
+                    for(const next of point.successors)add(next,[point.write]);
+                }else{
+                    for(const next of point.successors)add(next,delta);
                 }
             }
             solution=facts;this.solutions.set(symbol,solution);
