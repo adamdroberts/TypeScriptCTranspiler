@@ -22,3 +22,5 @@ console.log("dynamic:", dynamic.name, dynamic.count, dynamic.enabled);
 
 const primitive: Settings = { ...base, ...(123 as any), name: "primitive" };
 console.log("primitive:", primitive.name, primitive.count, primitive.enabled);
+
+console.log("extra:", (typed as any).extra, (dynamic as any).extra);

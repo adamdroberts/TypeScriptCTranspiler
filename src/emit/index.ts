@@ -40057,7 +40057,8 @@ class Emitter {
             ts.isGetAccessorDeclaration(property) || ts.isSetAccessorDeclaration(property),
         );
         const computedNames = ol.properties.some(property => "name" in property && property.name && ts.isComputedPropertyName(property.name));
-        const targetType = ordinary || this.isUntypedJsObjectLiteral(ol) || hasAccessor || computedNames ||
+        const hasSpread=ol.properties.some(ts.isSpreadAssignment);
+        const targetType = ordinary || this.isUntypedJsObjectLiteral(ol) || hasAccessor || computedNames || hasSpread ||
             ol.properties.some(property => ts.isMethodDeclaration(property) && this.requestedFunctionActivationBindings(property).has("home-object")) ? undefined :
             this.asyncAwaitReturnContextTypes.get(ol) ??
             this.checker.getContextualType(ol) ??
@@ -40072,7 +40073,7 @@ class Emitter {
                 if (ts.isSpreadAssignment(prop)) {
                     const value = this.emitExpr(prop.expression);
                     pieces.push(
-                        `tsc_value_object_assign(tsc_value_object(${obj}), ${this.coerce(value, T_VALUE, prop.expression)})`,
+                        `tsc_value_copy_data_properties_into(tsc_value_object(${obj}), ${this.coerce(value, T_VALUE, prop.expression)}, NULL)`,
                     );
                     continue;
                 } else if (ts.isPropertyAssignment(prop)) {
@@ -40176,20 +40177,6 @@ class Emitter {
             `${tmp}->__tsc_object_owner.object = NULL`,
             `${tmp}->__tsc_object_owner.initialize = ${this.ensureNativeObjectValueInitializer(mapped, ol)}`,
         ];
-        const targetFields = this.objectProperties(targetType).map((prop) => {
-            const name = prop.getName();
-            const decl = prop.valueDeclaration ?? prop.getDeclarations()?.[0] ?? ol;
-            return {
-                name,
-                field: mangleIdent(name),
-                type: this.prepareType(mapTsType(
-                    decl,
-                    this.checker.getTypeOfSymbolAtLocation(prop, decl),
-                    this.checker,
-                )),
-            };
-        });
-        const targetByName = new Map(targetFields.map((field) => [field.name, field]));
         for (const prop of ol.properties) {
             if (ts.isPropertyAssignment(prop)) {
                 const fieldName = this.staticPropertyName(prop.name);
@@ -40223,53 +40210,6 @@ class Emitter {
                 pieces.push(
                     `${this.nativeFieldStore(tmp, cls, fieldName, fieldType, this.coerce(val, fieldType, prop))}`,
                 );
-            } else if (ts.isSpreadAssignment(prop)) {
-                const sourceTsType = this.expressionDeclaredOrCurrentType(prop.expression);
-                const source = this.emitExpr(prop.expression);
-                const sourceTmp = this.freshTemp("_obj_spread");
-                pieces.push(`${source.ty.c} const ${sourceTmp} = ${source.c}`);
-                const primitiveSource =
-                    source.ty.kind === "number" ||
-                    source.ty.kind === "boolean" ||
-                    source.ty.kind === "bigint" ||
-                    source.ty.kind === "symbol";
-                if (source.ty.kind === "class" && !this.findClassDecl(source.ty.className!)) {
-                    for (const sourceProp of this.objectProperties(sourceTsType)) {
-                        const targetField = targetByName.get(sourceProp.getName());
-                        if (!targetField) continue;
-                        const decl = sourceProp.valueDeclaration ?? sourceProp.getDeclarations()?.[0] ?? prop.expression;
-                        const sourceType = this.prepareType(mapTsType(
-                            decl,
-                            this.checker.getTypeOfSymbolAtLocation(sourceProp, decl),
-                            this.checker,
-                        ));
-                        const raw = {
-                            c: `${sourceTmp}->${mangleIdent(sourceProp.getName())}`,
-                            ty: sourceType,
-                        };
-                        pieces.push(
-                            `${this.nativeFieldStore(tmp, cls, targetField.name, targetField.type, this.coerce(raw, targetField.type, prop.expression))}`,
-                        );
-                    }
-                    continue;
-                }
-                if (source.ty.kind === "value" || source.ty.kind === "array" || source.ty.kind === "string" || source.ty.kind === "class") {
-                    const boxed = this.coerce({ c: sourceTmp, ty: source.ty }, T_VALUE, prop.expression);
-                    for (const targetField of targetFields) {
-                        const key = `tsc_str_from_lit("${escapeCString(targetField.name)}", ${utf8ByteLen(targetField.name)})`;
-                        const raw = {
-                            c: `tsc_value_get_prop(${boxed}, ${key})`,
-                            ty: T_VALUE,
-                        };
-                        pieces.push(
-                            `if (tsc_value_has_own_prop(${boxed}, ${key})) ${this.nativeFieldStore(tmp, cls, targetField.name, targetField.type, this.coerce(raw, targetField.type, prop.expression))}`,
-                        );
-                    }
-                    continue;
-                }
-                if (!primitiveSource) {
-                    unsupported(prop.expression, "typed object literal spread currently supports typed object, array, string, dynamic, or primitive sources");
-                }
             } else {
                 unsupported(
                     prop,
