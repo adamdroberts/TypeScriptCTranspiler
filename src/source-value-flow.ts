@@ -307,7 +307,7 @@ class SourceValueFlow {
     private readonly projectedCellPhases = new WeakMap<Cell,ReadonlySet<SourceProjectionPhase>>();
     private readonly projectedAtomPhases = new WeakMap<Atom,ReadonlySet<SourceProjectionPhase>>();
     private readonly bindingDefaults = new Map<Cell,Map<Cell,Cell>>();
-    private readonly returnTransforms = new Map<Cell,{inputs:readonly Cell[];evaluate:(inputs:readonly Cell[])=>Cell}>();
+    private readonly returnTransforms = new Map<Cell,{kind:"projection"|"allocation";inputs:readonly Cell[];evaluate:(inputs:readonly Cell[])=>Cell}>();
     private readonly normalResults = new Map<Cell, Atom>();
     private readonly exceptionHandlers = new Map<ts.Node, Cell>();
     private readonly exceptionCells = new Set<Cell>();
@@ -1056,7 +1056,10 @@ class SourceValueFlow {
                         const written=this.knownWriteOrigins.get(source);
                         if(written&&!this.effectVisible(written,context,argumentsRead))continue;
                         const transform=this.returnTransforms.get(source);
-                        if(transform){const replay=transform.evaluate(transform.inputs.map(project));
+                        // A captured allocation keeps the materialized heap
+                        // identity and its later property writes. Formal
+                        // substitution still replays allocations in projectReturn.
+                        if(transform?.kind==="projection"){const replay=transform.evaluate(transform.inputs.map(project));
                             if(replay!==source){worklist.push({source:replay,origins:false});continue;}}
                     }
                     for(const atom of Set.prototype.values.call(source.values) as Iterable<Atom>){
@@ -2054,7 +2057,7 @@ class SourceValueFlow {
         let receivers=contexts.get(context);if(!receivers){receivers=new Map();contexts.set(context,receivers);}
         const prior=receivers.get(receiver);if(prior)return prior;
         const result = this.newCell(), selected = new Set<SourcePropertyKey>();receivers.set(receiver,result);
-        this.returnTransforms.set(result,{inputs:[base,key,receiver],evaluate:inputs=>this.computedProperty(inputs[0]!,inputs[1]!,context,inputs[2]!)});
+        this.returnTransforms.set(result,{kind:"projection",inputs:[base,key,receiver],evaluate:inputs=>this.computedProperty(inputs[0]!,inputs[1]!,context,inputs[2]!)});
         let rule!: Rule;
         rule = this.rule([base, key], () => {
             const names = this.propertyKeys(key, rule, context);
@@ -2206,7 +2209,7 @@ class SourceValueFlow {
         let accesses=this.privateAccesses.get(context);if(!accesses){accesses=new Map();this.privateAccesses.set(context,accesses);}
         const signature=base.id+":"+mode+":"+value?.id,previous=accesses.get(signature);if(previous)return previous;
         const result=this.newCell();accesses.set(signature,result);
-        if(mode!=="set")this.returnTransforms.set(result,{inputs:[base],evaluate:inputs=>this.privateAccess(inputs[0]!,identifier,context,mode)});
+        if(mode!=="set")this.returnTransforms.set(result,{kind:"projection",inputs:[base],evaluate:inputs=>this.privateAccess(inputs[0]!,identifier,context,mode)});
         const fail=()=>{this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context,"TypeError"));};
         let rule!:Rule;
         const read=(slot:SourcePrivateSlot):void=>{
@@ -2509,7 +2512,7 @@ class SourceValueFlow {
         let calls=this.ownKeyArrays.get(context);if(!calls){calls=new Map();this.ownKeyArrays.set(context,calls);}
         const signature=input.id+":"+kind+":"+coerce,previous=calls.get(signature);if(previous)return previous;
         const result=this.newCell(),objects=coerce?this.toObject(input,context):input;calls.set(signature,result);
-        this.returnTransforms.set(result,{inputs:[input],evaluate:inputs=>this.ownKeyArray(inputs[0]!,context,kind,coerce)});
+        this.returnTransforms.set(result,{kind:"allocation",inputs:[input],evaluate:inputs=>this.ownKeyArray(inputs[0]!,context,kind,coerce)});
         const owner=this.descriptorOwner(context),values=this.newCell(),indices=this.newCell(),length=this.newCell();
         owner.prototype=this.arrayPrototype();owner.listLength=length;owner.closedIndices=true;
         this.defineField(owner,"length",length,false);this.publish(indices,{tag:"non-string",kinds:KIND_NUMBER});
@@ -2552,7 +2555,7 @@ class SourceValueFlow {
         let calls=this.reflectiveGets.get(context);if(!calls){calls=new Map();this.reflectiveGets.set(context,calls);}
         const signature=target.id+":"+key.id+":"+receiver.id,previous=calls.get(signature);if(previous)return previous;
         const result=this.newCell(),objects=this.newCell();calls.set(signature,result);
-        this.returnTransforms.set(result,{inputs:[target,key,receiver],evaluate:inputs=>this.reflectiveGet(inputs[0]!,inputs[1]!,inputs[2]!,context)});
+        this.returnTransforms.set(result,{kind:"projection",inputs:[target,key,receiver],evaluate:inputs=>this.reflectiveGet(inputs[0]!,inputs[1]!,inputs[2]!,context)});
         let opened=false;this.rule([target],()=>{for(const atom of target.values){
             if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
             if(this.ordinaryOwner(atom)||atom.tag==="unknown"||atom.tag==="opaque-object")this.publish(objects,atom);
@@ -3144,10 +3147,10 @@ class SourceValueFlow {
         return value;
     }
     private primitiveDefault(kind:string):Cell {let value=this.primitiveDefaults.get(kind);if(!value){value=this.newCell();this.primitiveDefaults.set(kind,value);this.publish(value,this.primitive(kind==="number"?0:kind==="string"?"":false));}return value;}
-    private defaultedPrimitiveInput(input:Cell,kind:string):Cell {let kinds=this.defaultedPrimitiveInputs.get(input);if(!kinds){kinds=new Map();this.defaultedPrimitiveInputs.set(input,kinds);}let result=kinds.get(kind);if(!result){result=this.newCell();kinds.set(kind,result);this.copy(input,result);this.copy(this.primitiveDefault(kind),result);this.returnTransforms.set(result,{inputs:[input],evaluate:inputs=>this.defaultedPrimitiveInput(inputs[0]!,kind)});}return result;}
+    private defaultedPrimitiveInput(input:Cell,kind:string):Cell {let kinds=this.defaultedPrimitiveInputs.get(input);if(!kinds){kinds=new Map();this.defaultedPrimitiveInputs.set(input,kinds);}let result=kinds.get(kind);if(!result){result=this.newCell();kinds.set(kind,result);this.copy(input,result);this.copy(this.primitiveDefault(kind),result);this.returnTransforms.set(result,{kind:"projection",inputs:[input],evaluate:inputs=>this.defaultedPrimitiveInput(inputs[0]!,kind)});}return result;}
     private booleanPrimitive(input:Cell):Cell {
         let result=this.booleanPrimitives.get(input);if(result)return result;result=this.newCell();this.booleanPrimitives.set(input,result);const output=result;let rule!:Rule;
-        this.returnTransforms.set(result,{inputs:[input],evaluate:inputs=>this.booleanPrimitive(inputs[0]!)});
+        this.returnTransforms.set(result,{kind:"projection",inputs:[input],evaluate:inputs=>this.booleanPrimitive(inputs[0]!)});
         rule=this.rule([input],()=>{const state=this.primitiveState(input,rule,true);for(const value of state.proof.values)this.publish(output,this.primitive(Boolean(value)));for(const atom of input.values){if(atom.tag==="abrupt"||atom.tag==="pending-source")this.publish(output,atom);else if(this.ordinaryOwner(atom))this.publish(output,this.primitive(true));}if(!state.proof.primitiveComplete&&!(state.pending&&!state.unresolved)){this.publish(output,this.primitive(false));this.publish(output,this.primitive(true));}});
         return result;
     }
@@ -3155,7 +3158,7 @@ class SourceValueFlow {
         let boxes=this.primitiveBoxes.get(context);if(!boxes){boxes=new Map();this.primitiveBoxes.set(context,boxes);}
         const signature=kind+":"+input.id+":"+newTarget?.id,prior=boxes.get(signature);if(prior)return prior;
         const result=this.newCell(),owner=this.owner(context);boxes.set(signature,result);owner.boxed??=new Map();
-        this.returnTransforms.set(result,{inputs:[input,...(newTarget?[newTarget]:[])],evaluate:inputs=>this.boxedPrimitive(inputs[0]!,kind,context,inputs[1])});
+        this.returnTransforms.set(result,{kind:"allocation",inputs:[input,...(newTarget?[newTarget]:[])],evaluate:inputs=>this.boxedPrimitive(inputs[0]!,kind,context,inputs[1])});
         let payload=owner.boxed.get(kind);if(!payload){payload=this.newCell();owner.boxed.set(kind,payload);this.publish(owner.shape,{tag:"descriptor",identity:payload});}this.copy(input,payload);
         owner.prototype??=this.newCell();
         const name=[...runtimePrimitiveDescriptors].find(([,descriptor])=>descriptor.kind===kind)![0],fallback=this.primitivePrototype(name);
@@ -3172,7 +3175,7 @@ class SourceValueFlow {
         let calls=this.primitiveBoxes.get(context);if(!calls){calls=new Map();this.primitiveBoxes.set(context,calls);}
         const signature="Object:"+input.id+":"+newTarget?.id,prior=calls.get(signature);if(prior)return prior;
         const result=this.newCell(),plain=this.newCell(),owner=this.owner(context);calls.set(signature,result);owner.prototype??=this.newCell();
-        this.returnTransforms.set(result,{inputs:[input,...(newTarget?[newTarget]:[])],evaluate:inputs=>this.objectValue(inputs[0]!,context,inputs[1])});
+        this.returnTransforms.set(result,{kind:"allocation",inputs:[input,...(newTarget?[newTarget]:[])],evaluate:inputs=>this.objectValue(inputs[0]!,context,inputs[1])});
         const prototype=newTarget?this.property(newTarget,"prototype",context):this.objectPrototype();
         this.rule([prototype,plain],()=>{if(!plain.values.nonempty)return;for(const atom of prototype.values)if(this.ordinaryOwner(atom)||atom.tag==="unknown"||atom.tag==="opaque-object")this.publish(owner.prototype!,atom);else if(atom.tag!=="abrupt"&&atom.tag!=="pending-source")this.copy(this.objectPrototype(),owner.prototype!);});
         const inputs=new Map<Atom,Cell>();const cell=(atom:Atom)=>{let value=inputs.get(atom);if(!value){value=this.newCell();inputs.set(atom,value);this.publish(value,atom);}return value;};
@@ -3206,7 +3209,7 @@ class SourceValueFlow {
         let methods=this.primitiveMethodResults.get(context);if(!methods){methods=new Map();this.primitiveMethodResults.set(context,methods);}
         const signature=operation+":"+receiver.id+":"+radix.id,prior=methods.get(signature);if(prior)return prior;
         const result=this.newCell(),payload=this.newCell();methods.set(signature,result);const [role,kind]=operation.split(":");
-        this.returnTransforms.set(result,{inputs:[receiver,radix],evaluate:inputs=>this.primitiveMethod(operation,inputs[0]!,inputs[1]!,context)});
+        this.returnTransforms.set(result,{kind:"projection",inputs:[receiver,radix],evaluate:inputs=>this.primitiveMethod(operation,inputs[0]!,inputs[1]!,context)});
         const mask=({number:KIND_NUMBER,string:KIND_STRING,boolean:KIND_BOOLEAN,bigint:KIND_BIGINT,symbol:KIND_SYMBOL} as Record<string,number>)[kind!]!;
         const inputs=new Map<Atom,Cell>();const cell=(atom:Atom)=>{let value=inputs.get(atom);if(!value){value=this.newCell();inputs.set(atom,value);this.publish(value,atom);}return value;};
         this.rule([receiver],()=>{for(const atom of receiver.values){
@@ -3228,7 +3231,7 @@ class SourceValueFlow {
         let calls=this.jsonPrimitiveResults.get(context);if(!calls){calls=new Map();this.jsonPrimitiveResults.set(context,calls);}
         const signature=role+":"+input.id,prior=calls.get(signature);if(prior)return prior;
         const result=this.newCell();calls.set(signature,result);const inputs=new Map<Atom,Cell>(),selected=new Set<Atom>();
-        this.returnTransforms.set(result,{inputs:[input],evaluate:inputs=>this.jsonPrimitive(inputs[0]!,role,context)});
+        this.returnTransforms.set(result,{kind:"projection",inputs:[input],evaluate:inputs=>this.jsonPrimitive(inputs[0]!,role,context)});
         const cell=(atom:Atom)=>{let value=inputs.get(atom);if(!value){value=this.newCell();inputs.set(atom,value);this.publish(value,atom);}return value;};
         let rule!:Rule;rule=this.rule([input],()=>{for(const atom of input.values){
             const owner=this.ordinaryOwner(atom);if(owner)this.watch(rule,owner.shape);
@@ -3251,7 +3254,7 @@ class SourceValueFlow {
     private objectText(input:Cell,context:ts.Node):Cell {
         let calls=this.objectTexts.get(context);if(!calls){calls=new Map();this.objectTexts.set(context,calls);}const prior=calls.get(input);if(prior)return prior;
         const result=this.newCell();calls.set(input,result);const selected=new Set<Atom>();
-        this.returnTransforms.set(result,{inputs:[input],evaluate:inputs=>this.objectText(inputs[0]!,context)});
+        this.returnTransforms.set(result,{kind:"projection",inputs:[input],evaluate:inputs=>this.objectText(inputs[0]!,context)});
         this.rule([input],()=>{for(const atom of input.values){if(selected.has(atom))continue;selected.add(atom);
             if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
             const owner=this.ordinaryOwner(atom),defaults:string[]=[];
@@ -3285,7 +3288,7 @@ class SourceValueFlow {
         let calls=this.objectCoercions.get(context);if(!calls){calls=new Map();this.objectCoercions.set(context,calls);}
         const prior=calls.get(input);if(prior)return prior;
         const result=this.newCell(),coercible=this.newCell();calls.set(input,result);
-        this.returnTransforms.set(result,{inputs:[input],evaluate:inputs=>this.toObject(inputs[0]!,context)});
+        this.returnTransforms.set(result,{kind:"allocation",inputs:[input],evaluate:inputs=>this.toObject(inputs[0]!,context)});
         const cells=new Map<Atom,Cell>();
         this.rule([input],()=>{for(const atom of input.values){
             if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
@@ -3304,7 +3307,7 @@ class SourceValueFlow {
         let calls=this.prototypeReads.get(context);if(!calls){calls=new Map();this.prototypeReads.set(context,calls);}
         const signature=input.id+":"+coerce,prior=calls.get(signature);if(prior)return prior;
         const result=this.newCell(),objects=coerce?this.toObject(input,context):input;calls.set(signature,result);
-        this.returnTransforms.set(result,{inputs:[input],evaluate:inputs=>this.getPrototype(inputs[0]!,context,coerce)});
+        this.returnTransforms.set(result,{kind:"projection",inputs:[input],evaluate:inputs=>this.getPrototype(inputs[0]!,context,coerce)});
         const selected=new Set<Atom>(),pending=this.newCell(),cells=new Map<Atom,Cell>();this.copy(objects,pending);
         const fail=()=>{this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context,"TypeError"));};
         let rule!:Rule;rule=this.rule([pending],()=>{for(const atom of pending.values){
@@ -3415,7 +3418,7 @@ class SourceValueFlow {
         let calls=this.arrayTexts.get(context);if(!calls){calls=new Map();this.arrayTexts.set(context,calls);}
         const prior=calls.get(receiver);if(prior)return prior;
         const result=this.newCell();calls.set(receiver,result);
-        this.returnTransforms.set(result,{inputs:[receiver],evaluate:inputs=>this.arrayText(inputs[0]!,context)});
+        this.returnTransforms.set(result,{kind:"projection",inputs:[receiver],evaluate:inputs=>this.arrayText(inputs[0]!,context)});
         const objects=this.toObject(receiver,context),join=this.property(objects,"join",context),callee=this.newCell(),fallback=this.newCell(),seen=new Set<Atom>();
         this.rule([join],()=>{for(const atom of join.values){
             if(seen.has(atom))continue;seen.add(atom);
@@ -3568,7 +3571,7 @@ class SourceValueFlow {
         let roles=contexts.get(context);if(!roles){roles=new Map();contexts.set(context,roles);}
         const role=ownOnly+":"+receiver.id,prior=roles.get(role);if(prior)return prior;
         const result = this.newCell();roles.set(role,result);
-        this.returnTransforms.set(result,{inputs:[base,receiver],evaluate:inputs=>this.property(inputs[0]!,key,context,ownOnly,inputs[1]!)});
+        this.returnTransforms.set(result,{kind:"projection",inputs:[base,receiver],evaluate:inputs=>this.property(inputs[0]!,key,context,ownOnly,inputs[1]!)});
         const rule = this.rule([base], () => { for (const atom of base.values) this.read(atom, receiver, key, result, context && this.exceptionHandlers.get(context), rule, context,ownOnly); });
         return result;
     }
@@ -3759,7 +3762,7 @@ class SourceValueFlow {
         let calls=this.promiseReactions.get(context);if(!calls){calls=new Map();this.promiseReactions.set(context,calls);}
         const key="await:"+input.id,prior=calls.get(key);if(prior)return prior;
         const result=this.newCell();calls.set(key,result);
-        this.returnTransforms.set(result,{inputs:[input],evaluate:inputs=>this.promiseAwait(inputs[0]!,context)});
+        this.returnTransforms.set(result,{kind:"projection",inputs:[input],evaluate:inputs=>this.promiseAwait(inputs[0]!,context)});
         const operand=this.promiseResolve(input,context);
         this.rule([operand],()=>{for(const atom of operand.values)if(atom.tag==="promise"){
             this.copy(atom.value,result);const handler=this.exceptionHandlers.get(context);if(handler)this.copy(atom.rejection,handler);
@@ -3773,7 +3776,7 @@ class SourceValueFlow {
         let calls=this.promiseConstructions.get(context);if(!calls){calls=new Map();this.promiseConstructions.set(context,calls);}
         const key="resolve:"+input.id,prior=calls.get(key);if(prior)return prior;
         const result=this.newCell(),adopted=this.newCell(),seen=new Set<Atom>();calls.set(key,result);
-        this.returnTransforms.set(result,{inputs:[input],evaluate:inputs=>this.promiseResolve(inputs[0]!,context)});
+        this.returnTransforms.set(result,{kind:"allocation",inputs:[input],evaluate:inputs=>this.promiseResolve(inputs[0]!,context)});
         const resolved=this.promiseAssimilation(adopted,context),promise:Atom={tag:"promise",value:resolved.value,rejection:resolved.rejection};
         this.publish(result,promise);const identity=this.promiseAtoms.get(resolved.value)!.get(resolved.rejection)!;
         // Actual-input views keep the allocation's mutable property owner.
@@ -4135,7 +4138,7 @@ class SourceValueFlow {
         let defaults=this.bindingDefaults.get(input);if(!defaults){defaults=new Map();this.bindingDefaults.set(input,defaults);}
         const prior=defaults.get(fallback);if(prior)return prior;
         const result=this.newCell();defaults.set(fallback,result);
-        this.returnTransforms.set(result,{inputs:[input,fallback],evaluate:inputs=>this.bindingDefault(inputs[0]!,inputs[1]!)});
+        this.returnTransforms.set(result,{kind:"projection",inputs:[input,fallback],evaluate:inputs=>this.bindingDefault(inputs[0]!,inputs[1]!)});
         let rule!:Rule;
         rule=this.rule([input],()=>{
             for(const atom of input.values){

@@ -1,3 +1,5 @@
+- Preserve materialized source-allocation identity across captured reads while retaining actual-input return substitution.
+
 - Project captured source aliases through one retained worklist, preserving derived operands and origin-only effects without cloning every copy edge.
 
 - Canonicalize incomparable source capture filters through their retained phase graph, preserving timing predicates while removing permutation duplication.
