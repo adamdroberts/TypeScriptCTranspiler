@@ -239,7 +239,10 @@ interface EvaluationEnvironment {
     readonly declarations:Map<string,{node:ts.Identifier;function?:ts.FunctionDeclaration}>;
 }
 interface SourceRealmRecord {objectPrototype?:Cell;readonly bindings:Map<string,Cell>;owner?:ObjectOwner;host?:ObjectOwner;readonly global:Atom;readonly record:Atom;readonly operations:Map<Operation,Atom>;readonly intrinsics:Map<string,Atom>;}
-interface SourceCapturePhase {readonly id:number;readonly kind:"capture";readonly context:ts.Node;readonly argumentsRead:boolean;readonly location?:Cell;}
+interface SourceLexicalWrite {readonly id:number;readonly origin:ts.Node;readonly reference:ts.Identifier;}
+interface SourceWriteOrigin {readonly tag:"unknown";readonly origin:ts.Node;readonly location:Cell;readonly lexical:boolean;readonly reference?:ts.Identifier;readonly event?:SourceLexicalWrite;}
+interface SourceCapturePhase {readonly id:number;readonly kind:"capture";readonly context:ts.Node;readonly argumentsRead:boolean;readonly location?:Cell;readonly activationOnly?:FunctionOwner;readonly scalar?:{readonly activation:FunctionOwner;readonly excluded:ReadonlySet<SourceLexicalWrite>;readonly universe:ReadonlySet<SourceLexicalWrite>;readonly universeKey:string};}
+interface SourceCaptureConstraints {readonly kind:"capture-constraints";readonly phases:readonly SourceCapturePhase[];}
 type SourceProjectionPhase = SourceCapturePhase | {readonly kind:"return"};
 
 const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
@@ -457,8 +460,15 @@ class SourceValueFlow {
     private readonly sourceFiles = new WeakMap<ts.Node, ts.SourceFile>();
     private readonly evaluationOrder = new SourceEvaluationOrder();
     private readonly executionGuards = new WeakMap<ts.Node, readonly {condition: Cell; truthy: boolean}[]>();
-    private readonly captureInputs=new WeakMap<Cell,{source:Cell;phase:SourceCapturePhase}>();
+    private readonly captureInputs=new WeakMap<Cell,{source:Cell;constraints:SourceCaptureConstraints}>();
+    private readonly captureConstraints=new Map<string,SourceCaptureConstraints>();
+    private readonly capturedAtoms=new WeakMap<Atom,Map<SourceCaptureConstraints,Atom>>();
+    private readonly capturedAtomInputs=new WeakMap<Atom,{source:Atom;constraints:SourceCaptureConstraints}>();
+    private failedCapture?:Cell;
     private nextCapturePhase=0;
+    private readonly activationCapturePhases=new Map<FunctionOwner,SourceCapturePhase>();
+    private readonly scalarCapturePhases=new Map<FunctionOwner,Map<Cell,Map<string,SourceCapturePhase>>>();
+    private readonly normalizedCapturePhases=new WeakMap<SourceCapturePhase,SourceCapturePhase>();
     private readonly capturePhases=new Map<ts.Node,Map<boolean,Map<Cell|undefined,SourceCapturePhase>>>();
     private readonly propertyLocations=new Set<Cell>();
     private readonly privateAccesses=new Map<ts.Node,Map<string,Cell>>();
@@ -469,11 +479,13 @@ class SourceValueFlow {
     private readonly unresolvedPrivateContexts=new Set<ts.Node>();
     private unresolvedPrivate=false;
     private readonly knownWrites=new Map<Cell,Map<ts.Node,Map<Cell,Map<boolean,Map<ts.Identifier|undefined,Cell>>>>>();
-    private readonly bindingWriteSites=new Map<ts.Symbol,Map<ts.Node,Set<ts.Identifier>>>();
+    private readonly lexicalWriteEvents=new Map<ts.Node,Map<ts.Identifier,SourceLexicalWrite>>();
+    private readonly bindingWriteSites=new Map<ts.Symbol,Map<ts.Node,Map<ts.Identifier,SourceLexicalWrite>>>();
+    private nextLexicalWrite=0;
     private readonly assignmentTargets=new WeakMap<ts.Expression,{binding:ts.BindingName|null;references:Map<ts.Identifier,ts.Expression>}>();
-    private readonly knownWriteOrigins=new WeakMap<Cell,{tag:"unknown";origin:ts.Node;location:Cell;lexical:boolean;reference?:ts.Identifier}>();
+    private readonly knownWriteOrigins=new WeakMap<Cell,SourceWriteOrigin>();
     private readonly ownerCreations=new WeakMap<ObjectOwner,ts.Node>();
-    private readonly readCaptures = new Map<Cell,Map<SourceCapturePhase,Cell>>();
+    private readonly readCaptures = new Map<Cell,Map<SourceCaptureConstraints,Cell>>();
     private readonly empty = this.newCell();
     private readonly globalMutation = this.newCell();
     private readonly globalReceiver = this.newCell();
@@ -655,6 +667,8 @@ class SourceValueFlow {
                     }
                 }
                 if (ts.isForInStatement(node) || ts.isForOfStatement(node)) {
+                    if(ts.isVariableDeclarationList(node.initializer))for(const declaration of node.initializer.declarations)this.recordBindingWrites(declaration.name,node);
+                    else this.recordAssignmentWrites(node.initializer,node);
                     this.onActive(node, () => {
                         const iterable=ts.isForOfStatement(node)&&!node.awaitModifier;
                         const value=iterable?this.iteratorElements(this.cell(node.expression),node):this.newCell();
@@ -704,7 +718,7 @@ class SourceValueFlow {
         const extend=()=>{while(pending.length){const source=pending.pop()!,target=projected.get(source)!;let read!:Rule;
             read=this.rule([source],()=>{
                 const capture=this.captureInputs.get(source);
-                if(capture){this.copy(this.captureProjection(project(capture.source),capture.phase),target);extend();return;}
+                if(capture){this.copy(this.captureProjection(project(capture.source),capture.constraints),target);extend();return;}
                 const transform=this.returnTransforms.get(source);
                 if(transform){this.copy(transform.evaluate(transform.inputs.map(project)),target);extend();return;}
                 for(const atom of Set.prototype.values.call(source.values) as Iterable<Atom>){
@@ -844,11 +858,15 @@ class SourceValueFlow {
      * to an interned value identity shared by unrelated writes. */
     private copyWrite(from:Cell,into:Cell,context?:ts.Node,lexical=false,reference?:ts.Identifier):void {
         if(!context){this.copy(from,into);return;}
+        const event=lexical&&reference?this.lexicalWriteEvents.get(context)?.get(reference):undefined;
+        // Every located lexical write comes from the scanner's binding tree.
+        // An unrepresented write must not invent a finite source alternative.
+        if(lexical&&!event){this.publish(into,this.unknown);return;}
         let contexts=this.knownWrites.get(from);if(!contexts){contexts=new Map();this.knownWrites.set(from,contexts);}
         let locations=contexts.get(context);if(!locations){locations=new Map();contexts.set(context,locations);}
         let modes=locations.get(into);if(!modes){modes=new Map();locations.set(into,modes);}
         let references=modes.get(lexical);if(!references){references=new Map();modes.set(lexical,references);}
-        let written=references.get(reference);if(!written){written=this.newCell();references.set(reference,written);this.knownWriteOrigins.set(written,{tag:"unknown",origin:context,location:into,lexical,...(reference?{reference}:{})});this.copy(from,written);}
+        let written=references.get(reference);if(!written){written=this.newCell();references.set(reference,written);this.knownWriteOrigins.set(written,{tag:"unknown",origin:context,location:into,lexical,...(reference?{reference}:{}),...(event?{event}:{})});this.copy(from,written);}
         this.copy(written,into);
     }
     /** Activation origins use the same monotone Cell graph as values. A
@@ -1085,6 +1103,15 @@ class SourceValueFlow {
         this.copy(this.captureRead(from,context,argumentsRead),into);
     }
     private capturePrecedes(before:SourceCapturePhase,after:SourceCapturePhase):boolean {
+        before=this.normalizeCapturePhase(before);after=this.normalizeCapturePhase(after);
+        if(before===after)return true;
+        if(before.scalar||after.scalar){
+            if(after.activationOnly)return (before.scalar?.activation??before.activationOnly??this.enclosingActivation(before.context))===after.activationOnly;
+            return !!before.scalar&&!!after.scalar&&before.location===after.location&&before.scalar.activation===after.scalar.activation&&before.scalar.universeKey===after.scalar.universeKey&&
+                [...after.scalar.excluded].every(event=>before.scalar!.excluded.has(event));
+        }
+        if(before.activationOnly||after.activationOnly)return !!after.activationOnly&&
+            (before.activationOnly??this.enclosingActivation(before.context))===after.activationOnly;
         if(before.location!==after.location||before.argumentsRead!==after.argumentsRead||this.sourceFile(before.context)!==this.sourceFile(after.context)||!this.evaluationOrder.before(before.context,after.context))return false;
         const left=this.enclosingActivation(before.context),right=this.enclosingActivation(after.context);
         return left===right&&!this.repeatedActivationContext(before.context)&&!this.repeatedActivationContext(after.context)&&(!left||!this.activationTiming(left).values.nonempty);
@@ -1104,6 +1131,40 @@ class SourceValueFlow {
         }
         return this.evaluationOrder.before(read,leaf)||within(leaf);
     }
+    private unfilteredCaptureActivation(context:ts.Node):FunctionOwner|null {
+        const activation=this.enclosingActivation(context);
+        return activation&&this.dynamicContext(context)&&(activation.kind!=="ordinary"||this.repeatedActivationContext(context)||this.activationTiming(activation).values.nonempty)?activation:null;
+    }
+    private scalarCapturePhase(context:ts.Node,activation:FunctionOwner,location:Cell,excluded:ReadonlySet<SourceLexicalWrite>,universe:ReadonlySet<SourceLexicalWrite>):SourceCapturePhase {
+        let locations=this.scalarCapturePhases.get(activation);if(!locations){locations=new Map();this.scalarCapturePhases.set(activation,locations);}
+        let phases=locations.get(location);if(!phases){phases=new Map();locations.set(location,phases);}
+        const universeKey=[...universe].map(event=>event.id).sort((a,b)=>a-b).join(","),key=universeKey+"|"+[...excluded].map(event=>event.id).sort((a,b)=>a-b).join(",");let phase=phases.get(key);
+        if(!phase){phase={id:this.nextCapturePhase++,kind:"capture",context,argumentsRead:false,location,scalar:{activation,excluded,universe,universeKey}};phases.set(key,phase);}return phase;
+    }
+    private normalizeCapturePhase(phase:SourceCapturePhase):SourceCapturePhase {
+        if(phase.activationOnly||phase.scalar)return phase;
+        const prior=this.normalizedCapturePhases.get(phase);if(prior)return prior;
+        const activation=this.unfilteredCaptureActivation(phase.context);if(!activation)return phase;
+        let normalized:SourceCapturePhase;
+        if(phase.location){
+            if(!ts.isIdentifier(phase.context))return phase;
+            const symbol=this.bindingSymbol(phase.context);if(!symbol)return phase;
+            const excluded=new Set<SourceLexicalWrite>(),universe=new Set<SourceLexicalWrite>();
+            for(const[origin,events]of this.bindingWriteSites.get(symbol)??[]){
+                if(this.enclosingActivation(origin)!==activation||this.repeatedActivationContext(origin))continue;
+                for(const event of events.values()){
+                    universe.add(event);
+                    if(!this.repeatedActivationContext(phase.context)&&this.readBeforeWrite(phase.context,origin,event.reference))excluded.add(event);
+                }
+            }
+            normalized=this.scalarCapturePhase(phase.context,activation,phase.location,excluded,universe);
+        }else{
+            let gate=this.activationCapturePhases.get(activation);
+            if(!gate){gate={id:this.nextCapturePhase++,kind:"capture",context:activation.definition,argumentsRead:false,activationOnly:activation};this.activationCapturePhases.set(activation,gate);}
+            normalized=gate;
+        }
+        this.normalizedCapturePhases.set(phase,normalized);return normalized;
+    }
     private captureRead(from: Cell, context?: ts.Node, argumentsRead = false,location?:Cell): Cell {
         if(!context)return from;
         let kinds=this.capturePhases.get(context);if(!kinds){kinds=new Map();this.capturePhases.set(context,kinds);}
@@ -1111,70 +1172,123 @@ class SourceValueFlow {
         let phase=locations.get(location);if(!phase){phase={id:this.nextCapturePhase++,kind:"capture",context,argumentsRead,...(location?{location}:{})};locations.set(location,phase);}
         return this.captureProjection(from,phase);
     }
-    private captureProjection(from:Cell,phase:SourceCapturePhase):Cell {
-        const {context,argumentsRead}=phase;
-        const previous=this.readCaptures.get(from)?.get(phase);if(previous)return previous;
-        const pending:Cell[]=[];
-        const project=(source:Cell):Cell=>{
-            // Comparable acyclic filters intersect at the earlier phase.
-            // Follow the retained source graph instead of retaining every
-            // ordering of equivalent nested capture projections.
+    /** Conjunctions have one normal form independent of the order in which
+     * aliases encounter them. Scalar masks merge across intervening filters. */
+    private captureConstraintSet(phases:readonly SourceCapturePhase[]):SourceCaptureConstraints {
+        const scalar=new Map<FunctionOwner,Map<string,{phase:SourceCapturePhase;excluded:Set<SourceLexicalWrite>}>>(),normalized=new Set<SourceCapturePhase>();
+        for(const input of phases){
+            const phase=this.normalizeCapturePhase(input);
+            if(!phase.scalar){normalized.add(phase);continue;}
+            let locations=scalar.get(phase.scalar.activation);if(!locations){locations=new Map();scalar.set(phase.scalar.activation,locations);}
+            const key=phase.location!.id+";"+phase.scalar.universeKey,prior=locations.get(key);
+            if(prior)for(const event of phase.scalar.excluded)prior.excluded.add(event);
+            else locations.set(key,{phase,excluded:new Set(phase.scalar.excluded)});
+        }
+        for(const locations of scalar.values())for(const {phase,excluded}of locations.values())
+            normalized.add(this.scalarCapturePhase(phase.context,phase.scalar!.activation,phase.location!,excluded,phase.scalar!.universe));
+        let effective:SourceCapturePhase[]=[];
+        for(const phase of [...normalized].sort((left,right)=>left.id-right.id)){
+            if(effective.some(prior=>this.capturePrecedes(prior,phase)))continue;
+            effective=effective.filter(prior=>!this.capturePrecedes(phase,prior));effective.push(phase);
+        }
+        const key=effective.sort((left,right)=>left.id-right.id).map(phase=>phase.id).join(",");
+        let constraints=this.captureConstraints.get(key);
+        if(!constraints){constraints={kind:"capture-constraints",phases:effective};this.captureConstraints.set(key,constraints);}
+        return constraints;
+    }
+    private captureSatisfied(inherited:ReadonlySet<SourceProjectionPhase>|undefined,constraints:SourceCaptureConstraints):boolean {
+        return constraints.phases.every(phase=>[...inherited??[]].some(prior=>prior.kind==="capture"&&this.capturePrecedes(prior,phase)));
+    }
+    private captureAtom(atom:Extract<Atom,{tag:"text-operation"}>,constraints:SourceCaptureConstraints):Atom {
+        if(this.captureSatisfied(this.projectedAtomPhases.get(atom),constraints))return atom;
+        let source:Atom=atom;
+        for(let prior=this.capturedAtomInputs.get(source);prior;prior=this.capturedAtomInputs.get(source)){
+            constraints=this.captureConstraintSet([...constraints.phases,...prior.constraints.phases]);source=prior.source;
+        }
+        let views=this.capturedAtoms.get(source);if(!views){views=new Map();this.capturedAtoms.set(source,views);}
+        let projected=views.get(constraints);
+        if(!projected){
+            const original=source as Extract<Atom,{tag:"text-operation"}>;
+            projected={...original,parts:original.parts.map(part=>this.captureProjection(part,constraints))};views.set(constraints,projected);
+            this.projectedAtomPhases.set(projected,new Set([...(this.projectedAtomPhases.get(source)??[]),...constraints.phases]));
+            this.capturedAtomInputs.set(projected,{source,constraints});
+        }
+        return projected;
+    }
+    private captureProjection(from:Cell,input:SourceCapturePhase|SourceCaptureConstraints):Cell {
+        const initial=this.captureConstraintSet(input.kind==="capture"?[input]:input.phases);
+        const pending:Array<{source:Cell;target:Cell;constraints:SourceCaptureConstraints}>=[];
+        const project=(source:Cell,constraints=initial):Cell=>{
+            constraints=this.captureConstraintSet(constraints.phases);
             const seen=new Set<Cell>();
-            while(!seen.has(source)){
-                seen.add(source);const prior=this.captureInputs.get(source);
-                if(!prior||!this.capturePrecedes(phase!,prior.phase))break;
-                source=prior.source;
+            for(let prior=this.captureInputs.get(source);prior;prior=this.captureInputs.get(source)){
+                if(seen.has(source)){
+                    if(!this.failedCapture){this.failedCapture=this.newCell();this.publish(this.failedCapture,this.unknown);}
+                    return this.failedCapture;
+                }
+                seen.add(source);constraints=this.captureConstraintSet([...constraints.phases,...prior.constraints.phases]);source=prior.source;
             }
-            const outer=this.captureInputs.get(source);
-            // Capture filters intersect. Intern incomparable filters in one
-            // order so cyclic aliases cannot retain every permutation.
-            if(outer&&outer.phase!==phase&&!this.capturePrecedes(outer.phase,phase)&&phase.id<outer.phase.id)
-                return this.captureProjection(this.captureProjection(outer.source,phase),outer.phase);
             const inherited=this.projectedCellPhases.get(source);
-            // A later acyclic capture cannot undo the earlier filtering.
-            // Reuse that canonical projection instead of composing an alias
-            // path of equivalent phase filters through every saved binding.
-            if(inherited?.has(phase!)||[...(inherited??[])].some(prior=>prior.kind==="capture"&&this.capturePrecedes(prior,phase!)))return source;
-            let phases=this.readCaptures.get(source);if(!phases){phases=new Map();this.readCaptures.set(source,phases);}
-            let target=phases.get(phase);
-            if(!target){target=this.newCell();phases.set(phase,target);
-                this.projectedCellPhases.set(target,new Set([...(inherited??[]),phase!]));this.captureInputs.set(target,{source,phase:phase!});
-                this.readCaptures.set(target,new Map([[phase,target]]));pending.push(source);}
+            if(this.captureSatisfied(inherited,constraints))return source;
+            let views=this.readCaptures.get(source);if(!views){views=new Map();this.readCaptures.set(source,views);}
+            let target=views.get(constraints);
+            if(!target){
+                target=this.newCell();views.set(constraints,target);
+                this.captureInputs.set(target,{source,constraints});
+                this.projectedCellPhases.set(target,new Set([...(inherited??[]),...constraints.phases]));
+                pending.push({source,target,constraints});
+            }
             return target;
         };
         const captured=project(from);
-        const extend=()=>{while(pending.length){const source=pending.pop()!,target=project(source),atoms=new Map<Atom,Atom>();
+        const extend=()=>{while(pending.length){
+            const {source,target,constraints}=pending.pop()!,activations=[...new Set(constraints.phases.map(phase=>phase.activationOnly??this.enclosingActivation(phase.context)).filter((owner):owner is FunctionOwner=>!!owner))];
             let read!:Rule;
-            read=this.rule([source,...(this.enclosingActivation(context)?[this.enclosingActivation(context)!.active,this.activationTiming(this.enclosingActivation(context)!)]:[])],()=>{
-                const activation=this.enclosingActivation(context);
-                if(activation&&!activation.active.values.nonempty)return;
-                // A read projects its retained copy graph with one worklist.
-                // Only derived operands need their own value view; alias
-                // edges do not allocate a clone for every source cell.
+            read=this.rule([source,...activations.flatMap(owner=>[owner.active,this.activationTiming(owner)])],()=>{
+                if(activations.some(owner=>!owner.active.values.nonempty))return;
+                const normalized=this.captureConstraintSet(constraints.phases);
+                if(normalized!==constraints){this.copy(this.captureProjection(source,normalized),target);return;}
+                if(constraints.phases.every(phase=>!!phase.activationOnly)){this.copy(source,target);return;}
                 const worklist=[{source,origins:false}],visited=new Map<Cell,number>();
-                while(worklist.length){const {source,origins}=worklist.pop()!,bit=origins?1:2;
+                while(worklist.length){
+                    const {source,origins}=worklist.pop()!,bit=origins?1:2;
                     if((visited.get(source)??0)&bit)continue;visited.set(source,(visited.get(source)??0)|bit);this.watch(read,source);
+                    const prior=this.captureInputs.get(source);
+                    if(prior){
+                        const combined=this.captureConstraintSet([...constraints.phases,...prior.constraints.phases]);
+                        if(combined===constraints){worklist.push({source:prior.source,origins});continue;}
+                        const projected=this.captureProjection(prior.source,combined);this.watch(read,projected);
+                        if(projected!==target)for(const atom of projected.values)if(!origins||atom.tag==="unknown")this.publish(target,atom);
+                        continue;
+                    }
                     if(!origins){
                         const written=this.knownWriteOrigins.get(source);
-                        if(written&&(!this.effectVisible(written,context,argumentsRead)||phase.location===written.location&&written.lexical&&
-                            this.enclosingActivation(written.origin)===activation&&!this.repeatedActivationContext(written.origin)&&!this.repeatedActivationContext(context)&&
-                            this.readBeforeWrite(context,written.origin,written.reference)))continue;
+                        if(written){
+                            let visible=true;
+                            for(const phase of constraints.phases){
+                                if(phase.activationOnly)continue;
+                                const {context,argumentsRead}=phase,activation=this.enclosingActivation(context);
+                                if(phase.scalar){
+                                    if(written.lexical&&written.location===phase.location&&this.enclosingActivation(written.origin)===phase.scalar.activation&&
+                                        !this.repeatedActivationContext(written.origin)&&!this.repeatedActivationContext(context)){
+                                        if(!written.event||!phase.scalar.universe.has(written.event)){this.publish(target,this.unknown);visible=false;break;}
+                                        if(phase.scalar.excluded.has(written.event)){visible=false;break;}
+                                    }
+                                }else if(!this.effectVisible(written,context,argumentsRead)||phase.location===written.location&&written.lexical&&
+                                    this.enclosingActivation(written.origin)===activation&&!this.repeatedActivationContext(written.origin)&&!this.repeatedActivationContext(context)&&
+                                    this.readBeforeWrite(context,written.origin,written.reference)){visible=false;break;}
+                            }
+                            if(!visible)continue;
+                        }
                         const transform=this.returnTransforms.get(source);
-                        // A captured allocation keeps the materialized heap
-                        // identity and its later property writes. Formal
-                        // substitution still replays allocations in projectReturn.
-                        if(transform?.kind==="projection"){const replay=transform.evaluate(transform.inputs.map(project));
-                            if(replay!==source){worklist.push({source:replay,origins:false});continue;}}
+                        if(transform?.kind==="projection"){
+                            const replay=transform.evaluate(transform.inputs.map(part=>project(part,constraints)));
+                            if(replay!==source){worklist.push({source:replay,origins:false});continue;}
+                        }
                     }
                     for(const atom of Set.prototype.values.call(source.values) as Iterable<Atom>){
-                        if(origins&&atom.tag!=="unknown"||!this.effectVisible(atom,context,argumentsRead))continue;
-                        let value=atom;
-                        if(atom.tag==="text-operation"){
-                            const inherited=this.projectedAtomPhases.get(atom);
-                            if(!inherited?.has(phase)){let prior=atoms.get(atom);if(!prior){prior={...atom,parts:atom.parts.map(project)};atoms.set(atom,prior);
-                                this.projectedAtomPhases.set(prior,new Set([...(inherited??[]),phase]));}value=prior;}
-                        }
-                        this.publish(target,value);
+                        if(origins&&atom.tag!=="unknown"||constraints.phases.some(phase=>!phase.activationOnly&&!this.effectVisible(atom,phase.context,phase.argumentsRead)))continue;
+                        this.publish(target,atom.tag==="text-operation"?this.captureAtom(atom,constraints):atom);
                     }
                     for(const [facts,kind]of source.values.sources)worklist.push({source:this.sourceCells.get(facts)!,origins:origins||kind==="origin"});
                 }
@@ -2414,9 +2528,12 @@ class SourceValueFlow {
     }
     private recordBindingWrites(name:ts.BindingName,context:ts.Node,references?:ReadonlyMap<ts.Identifier,ts.Expression>):void {
         const pending=[name];while(pending.length){const current=pending.pop()!;
-            if(ts.isIdentifier(current)){const raw=references?.get(current)??current,target=unwrap(raw);if(!ts.isIdentifier(target))continue;const symbol=this.bindingSymbol(target);if(!symbol)continue;
+            if(ts.isIdentifier(current)){const raw=references?.get(current)??current,target=unwrap(raw);if(!ts.isIdentifier(target))continue;
+                let events=this.lexicalWriteEvents.get(context);if(!events){events=new Map();this.lexicalWriteEvents.set(context,events);}
+                let event=events.get(target);if(!event){event={id:this.nextLexicalWrite++,origin:context,reference:target};events.set(target,event);}
+                const symbol=this.bindingSymbol(target);if(!symbol)continue;
                 let sites=this.bindingWriteSites.get(symbol);if(!sites){sites=new Map();this.bindingWriteSites.set(symbol,sites);}
-                let leaves=sites.get(context);if(!leaves){leaves=new Set();sites.set(context,leaves);}leaves.add(target);
+                let leaves=sites.get(context);if(!leaves){leaves=new Map();sites.set(context,leaves);}leaves.set(target,event);
             }else for(const element of current.elements)if(ts.isBindingElement(element))pending.push(element.name);
         }
     }
@@ -5464,7 +5581,7 @@ class SourceValueFlow {
             // origin capture. Dynamic/repeated contexts remain conservative.
             const symbol=this.bindingSymbol(node),declaration=symbol?.valueDeclaration,activation=this.enclosingActivation(node);
             const location=activation&&declaration&&this.enclosingActivation(declaration)===activation&&!this.repeatedActivationContext(node)&&
-                [...this.bindingWriteSites.get(symbol!)??[]].some(([site,leaves])=>this.enclosingActivation(site)===activation&&!this.repeatedActivationContext(site)&&[...leaves].some(leaf=>this.readBeforeWrite(node,site,leaf)))?binding:undefined;
+                [...this.bindingWriteSites.get(symbol!)??[]].some(([site,leaves])=>this.enclosingActivation(site)===activation&&!this.repeatedActivationContext(site)&&[...leaves.values()].some(event=>this.readBeforeWrite(node,site,event.reference)))?binding:undefined;
             this.copy(this.captureRead(binding,node,false,location),result);
             if (this.bindingMayBeUninitialized(node)) this.publish(result,this.primitive(undefined));
             for (const base of this.withBindingObjects(node)) this.copy(this.property(base, node.text, node), result);

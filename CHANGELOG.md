@@ -1,3 +1,5 @@
+- Normalize source capture intersections through one canonical constraint collection, retaining complete RHS and return projections.
+
 - Project imported and required callback timer owners through the shared native-module source descriptor collection.
 
 - Preserve queued protocol invocation timing in finite source analysis while retaining immediate Promise executor and thenable getter reads.
