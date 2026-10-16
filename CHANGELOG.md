@@ -856,6 +856,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Project ordinary own-key inspection and Reflect.get through shared source owner, key and receiver graphs, retaining getter/Proxy effects and native installer metadata.
+
 - Give each source invocation a canonical result cell, separating callback output from projected property readers and preserving native normal-result sealing without fabricating absent hooks.
 
 - Lower every object literal spread through native CopyDataProperties, preserving own data, getters, symbols and properties beyond typed target fields.

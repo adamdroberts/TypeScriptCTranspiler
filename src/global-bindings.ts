@@ -183,8 +183,16 @@ export const runtimeDescriptorFields: readonly {name:string;kind:"boolean"|"valu
 const primitiveSource=fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_value.c"),"utf8");
 const objectStaticMethods=/static const tsc_object_static_method_t object_static_methods\[\] = \{([\s\S]*?)\n\};/.exec(primitiveSource)?.[1];
 if(!objectStaticMethods)throw new Error("missing canonical Object constructor method collection");
+export const runtimeObjectStaticMethods:ReadonlyMap<string,{length:number}>=new Map(
+    [...objectStaticMethods.matchAll(/\{ "(\w+)", \d+, ([\d.]+),/g)].map(([,name,length])=>[name!,{length:Number(length)}]),
+);
+const reflectMethods=/static const tsc_reflect_method_descriptor_t reflect_method_descriptors\[\] = \{([\s\S]*?)\n\};/.exec(primitiveSource)?.[1];
+if(!reflectMethods)throw new Error("missing canonical Reflect method collection");
+export const runtimeReflectMethods:ReadonlyMap<string,{length:number}>=new Map(
+    [...reflectMethods.matchAll(/TSC_REFLECT_METHOD\("(\w+)", ([\d.]+),/g)].map(([,name,length])=>[name!,{length:Number(length)}]),
+);
 export const runtimeObjectConstructorOwnKeys:ReadonlySet<string|symbol>=new Set([
-    "name","length","prototype",...[...objectStaticMethods.matchAll(/\{ "(\w+)"/g)].map(match=>match[1]!),
+    "name","length","prototype",...runtimeObjectStaticMethods.keys(),
     ...[...(/static const tsc_object_integrity_operation_t object_integrity_operations\[\] = \{([\s\S]*?)\n\};/.exec(primitiveSource)?.[1]??"").matchAll(/\{ "(\w+)"/g)].map(match=>match[1]!),
 ]);
 const primitiveConstructors=new Set([...primitiveSource.matchAll(/tsc_value_t tsc_(\w+)_constructor_value\(void\) \{ return primitive_constructor_value\(&primitive_\w+\); \}/g)].map(match=>match[1]!));

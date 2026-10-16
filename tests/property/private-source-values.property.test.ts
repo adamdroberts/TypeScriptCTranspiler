@@ -39,8 +39,7 @@ test('opaque calls retain constructors read from private state',async()=>{
 const brandAndPrivacy='let body="23;";class Guard{#value="secret";read(receiver){return receiver.#value;}has(receiver){return #value in receiver;}}const owner=new Guard();try{owner.read({});}catch(error){if(error instanceof TypeError)body="29;";}print(executeSource(body));print(owner.has(owner));print(owner.has({}));print(Reflect.ownKeys(owner).length===0);print(Object.getOwnPropertySymbols(owner).length===0);print(Reflect.get(owner,"#value")===undefined);print(Reflect.ownKeys({...owner}).length===0);';
 test('private values, brands and reflection agree with Node in native execution',async()=>{
  const scenarios=[
-  {name:'values',source:prelude+cases.map(item=>'{'+item.source+'}').join('\n')+'print("complete");',expected:'17\n'+cases.map(()=>'19\n').join('')+'complete\n'},
-  {name:'brands-and-privacy',source:'const executeSource=eval;'+brandAndPrivacy+'print("complete");',expected:'29\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\ncomplete\n'},
+  {name:'values-brands-and-privacy',source:prelude+cases.map(item=>'{'+item.source+'}').join('\n')+'{'+brandAndPrivacy+'}print("complete");',expected:'17\n'+cases.map(()=>'19\n').join('')+'29\ntrue\nfalse\ntrue\ntrue\ntrue\ntrue\ncomplete\n'},
  ];
  for(const scenario of scenarios){const {source,expected}=scenario;expect(reference(source)).toBe(expected);
  const directory=await mkdtemp(join(tmpdir(),'tsc2c-private-source-native-'+scenario.name+'-'));
