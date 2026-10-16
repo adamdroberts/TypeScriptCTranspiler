@@ -56,7 +56,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
-type Operation = "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
+type Operation = `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
     "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
@@ -78,7 +78,7 @@ const NUMERIC_CONVERSIONS: ReadonlyMap<string, (value: Primitive) => Primitive> 
 const SOURCE_NATIVE_METHODS:ReadonlyMap<Operation,{name:string;length:number;owner:"Array"|"Function"|"String"|null;opaque:boolean}>=(()=>{
     const methods=new Map<Operation,{name:string;length:number;owner:"Array"|"Function"|"String"|null;opaque:boolean}>();
     const collections=[
-        {owner:"Array" as const,methods:runtimeArrayPrototypeMethods,prefix:"native-array:",precise:new Map<string,Operation>([["toString","array-text"],["join","array-join"],["keys","array-keys"],["values","array-values"],["entries","array-entries"]])},
+        {owner:"Array" as const,methods:runtimeArrayPrototypeMethods,prefix:"native-array:",precise:new Map<string,Operation>([["some","array-predicate:some"],["every","array-predicate:every"],["push","array-push"],["toString","array-text"],["join","array-join"],["keys","array-keys"],["values","array-values"],["entries","array-entries"]])},
         {owner:"String" as const,methods:runtimeStringStaticMethods,prefix:"native-string-static:",precise:new Map<string,Operation>([["fromCharCode","string-codes:unit"],["fromCodePoint","string-codes:point"]])},
         {owner:"Function" as const,methods:runtimeFunctionPrototypeMethods,prefix:"native-function:",precise:new Map<string,Operation>([["call","call"],["apply","apply"],["bind","bind"],["toString","function-text"]])},
     ];
@@ -272,6 +272,10 @@ class SourceValueFlow {
     private readonly primitiveMethodResults = new Map<ts.Node,Map<string,Cell>>();
     private readonly objectCoercions = new Map<ts.Node,Map<Cell,Cell>>();
     private readonly prototypeReads = new Map<ts.Node,Map<string,Cell>>();
+    private readonly arrayPredicates=new Map<ts.Node,Map<string,Cell>>();
+    private readonly repeatedInvocations=new WeakSet<ts.Node>();
+    private readonly arrayPushes=new Map<ts.Node,Map<string,Cell>>();
+    private readonly arrayJoinSummaries=new Map<ts.Node,Map<string,Cell>>();
     private readonly arrayTexts = new Map<ts.Node,Map<Cell,Cell>>();
     private readonly objectTexts = new Map<ts.Node,Map<Cell,Cell>>();
     private readonly constructorChecks = new Map<ts.Node,Map<Cell,Cell>>();
@@ -939,7 +943,7 @@ class SourceValueFlow {
             const known = this.dynamicContexts.get(current);
             if (known !== undefined) {dynamic = known; break;}
             pending.push(current);
-            if (ts.isFunctionLike(current) || ts.isIterationStatement(current, false)) {dynamic = true; break;}
+            if (this.repeatedInvocations.has(current) || ts.isFunctionLike(current) || ts.isIterationStatement(current, false)) {dynamic = true; break;}
             current = current.parent;
         }
         for (const visited of pending) this.dynamicContexts.set(visited, dynamic);
@@ -951,7 +955,7 @@ class SourceValueFlow {
         return source;
     }
     private repeatedActivationContext(context:ts.Node):boolean {
-        for(let node:ts.Node|undefined=context;node&&!functionNode(node);node=node.parent)if(ts.isIterationStatement(node,false))return true;
+        for(let node:ts.Node|undefined=context;node&&!functionNode(node);node=node.parent)if(this.repeatedInvocations.has(node)||ts.isIterationStatement(node,false))return true;
         return false;
     }
     private effectVisible(atom: Atom, context?: ts.Node, argumentsRead = false): boolean {
@@ -1416,7 +1420,7 @@ class SourceValueFlow {
         let owner = this.objects.get(node);
         if (!owner) {
             owner = { fields: new Map(), accessors: new Map(), shape: this.newCell() }; this.objects.set(node, owner);this.sourceObjectOwners.add(owner);
-            if(ts.isObjectLiteralExpression(node)||callableDefinition(node))this.markPropertyAlgorithm(owner,"ordinary");
+            if(ts.isObjectLiteralExpression(node)||ts.isArrayLiteralExpression(node)||callableDefinition(node))this.markPropertyAlgorithm(owner,"ordinary");
             if(ts.isObjectLiteralExpression(node)||ts.isArrayLiteralExpression(node)||ts.isNewExpression(node))this.ownerCreations.set(owner,node);
             this.ownerMutation(owner);
         }
@@ -1529,14 +1533,16 @@ class SourceValueFlow {
         });
         return record;
     }
+    private keyMayContain(input:Cell|undefined,key:SourcePropertyKey|null,rule:Rule):boolean {
+        if(!input||key===null)return true;
+        const keys=this.propertyKeys(input,rule);if(keys===undefined)return false;
+        if(keys!==null)return keys.includes(key);
+        const domain=this.computedKeyDomain(input);
+        const numeric=typeof key==="string"&&(String(Number(key))===key||(()=>{try{return String(BigInt(key))===key;}catch{return false;}})());
+        return !domain||numeric||domain.keys.includes(key);
+    }
     private borrowUnknownProperty(record:UnknownOwnPropertyRecord,key:SourcePropertyKey,result:Cell):void {
-        let rule!:Rule;rule=this.rule([record.keys],()=>{
-            const keys=this.propertyKeys(record.keys,rule);
-            if(keys===undefined)return;
-            const domain=keys===null?this.computedKeyDomain(record.keys):null;
-            const numeric=typeof key==="string"&&(String(Number(key))===key||(()=>{try{return String(BigInt(key))===key;}catch{return false;}})());
-            if(keys?.includes(key)||keys===null&&(!domain||numeric||domain.keys.includes(key)))this.copy(record.value,result);
-        });
+        let rule!:Rule;rule=this.rule([record.keys],()=>{if(this.keyMayContain(record.keys,key,rule))this.copy(record.value,result);});
     }
     private hasUnknownPropertyDefinitions(owner:ObjectOwner):boolean {
         return [...this.unknownPropertyLocations.get(owner)?.events.values()??[]].some(event=>event.mode!=="delete");
@@ -1677,10 +1683,10 @@ class SourceValueFlow {
             this.rule([source],()=>{for(const value of source.values)if(value!==this.primitive(undefined))this.publish(target,value);});}
         return callee;
     }
-    private writeProperty(base: Cell, key: SourcePropertyKey | null, value: Cell, unknownGlobal = true, mode: "set"|"define"|"delete" = "set", context?: ts.Node, receiver = base): void {
+    private writeProperty(base: Cell, key: SourcePropertyKey | null, value: Cell, unknownGlobal = true, mode: "set"|"define"|"delete" = "set", context?: ts.Node, receiver = base,keys?:Cell): void {
         const handler=context?this.exceptionHandlers.get(context):undefined;
         if(handler)this.publish(handler,this.nativeException(context!));
-        const signature=base.id+":"+this.keyIdentity(key)+":"+value.id+":"+unknownGlobal+":"+mode+":"+(context?this.cell(context).id:"none")+":"+receiver.id;
+        const signature=base.id+":"+this.keyIdentity(key)+":"+value.id+":"+unknownGlobal+":"+mode+":"+(context?this.cell(context).id:"none")+":"+receiver.id+":"+keys?.id;
         if(this.propertyWrites.has(signature))return;
         this.propertyWrites.add(signature);
         if(mode==="set"&&context){
@@ -1690,14 +1696,14 @@ class SourceValueFlow {
                     (atom.tag==="primitive"||atom.tag==="text-operation"||atom.tag==="non-string"||atom.tag==="unknown-string"))this.publish(primitives,atom);
                 if(opened||!primitives.values.nonempty)return;opened=true;
                 const conversion=ts.setTextRange(ts.factory.createEmptyStatement(),context);(conversion as ts.Node&{parent:ts.Node}).parent=context;
-                this.writeProperty(this.objectValue(primitives,conversion),key,value,unknownGlobal,mode,context,receiver);
+                this.writeProperty(this.objectValue(primitives,conversion),key,value,unknownGlobal,mode,context,receiver,keys);
             });
         }
         const weak=context?this.writeUncertainty(context):this.newCell();
         const proxyEffects=new Set<ObjectOwner>();
         const setterEffects=new Set<Cell>();
         let rule!:Rule;
-        rule=this.rule([base,receiver],()=>{for(const atom of base.values){
+        rule=this.rule([base,receiver,...(keys?[keys]:[])],()=>{for(const atom of base.values){
             const owner=this.ordinaryOwner(atom);
             if(owner){
                 let store = mode !== "set";
@@ -1712,7 +1718,7 @@ class SourceValueFlow {
                         }
                         this.watch(rule,current.shape);
                         if(this.opaqueShape(current,context)){this.publish(weak,this.primitive(true));if(handler)this.publish(handler,this.unknown);}
-                        for(const[name,accessor]of current.accessors)if(key===null || name===key || name===null){
+                        for(const[name,accessor]of current.accessors)if((key===null || name===key || name===null)&&this.keyMayContain(keys,name,rule)){
                             this.publish(weak,this.primitive(true));
                             if(!setterEffects.has(accessor.set)){
                                 setterEffects.add(accessor.set);
@@ -1742,9 +1748,9 @@ class SourceValueFlow {
                 if(owner.immutableOwn)continue;
                 if(key===null){
                     const origins=this.executionOrigins(context);
-                    if(value===this.empty)this.copy(origins,owner.shape);else this.recordUnknownProperty(owner,mode,context);
+                    if(value===this.empty)this.copy(origins,owner.shape);else this.recordUnknownProperty(owner,mode,context,keys);
                     if(mode!=="delete")this.copyWrite(value,this.unknownPropertyLocation(owner),context);
-                    if(mode==="set"&&value!==this.empty)this.unknownSetPrototype(owner,value);
+                    if(mode==="set"&&value!==this.empty&&this.keyMayContain(keys,"__proto__",rule))this.unknownSetPrototype(owner,value);
                     for(const record of owner.collections?.values()??[])this.copy(origins,record.shape);
                 }
                 else {
@@ -1767,7 +1773,11 @@ class SourceValueFlow {
                 }
             }
             if(atom.tag==="global"){
-                if(key===null)this.copy(this.executionOrigins(context),this.globalMutation);
+                if(key===null){
+                    const domain=keys?this.computedKeyDomain(keys):null;
+                    if(domain){for(const name of domain.keys)if(typeof name==="string"&&!this.immutableGlobalBinding(name))this.copyWrite(value,this.realmBinding(atom.realm,name),context);}
+                    else this.copy(this.executionOrigins(context),this.globalMutation);
+                }
                 else if (typeof key === "string" && !this.immutableGlobalBinding(key)) this.copyWrite(value,this.realmBinding(atom.realm,key),context);
             }
             if(unknownGlobal&&(atom.tag==="unknown"||atom.tag==="opaque-object")){this.copy(this.executionOrigins(context),this.globalMutation);if(handler)this.publish(handler,this.unknown);}
@@ -2514,7 +2524,7 @@ class SourceValueFlow {
         const result=this.newCell(),objects=coerce?this.toObject(input,context):input;calls.set(signature,result);
         this.returnTransforms.set(result,{kind:"allocation",inputs:[input],evaluate:inputs=>this.ownKeyArray(inputs[0]!,context,kind,coerce)});
         const owner=this.descriptorOwner(context),values=this.newCell(),indices=this.newCell(),length=this.newCell();
-        owner.prototype=this.arrayPrototype();owner.listLength=length;owner.closedIndices=true;
+        this.arrayOwner(context,owner);
         this.defineField(owner,"length",length,false);this.publish(indices,{tag:"non-string",kinds:KIND_NUMBER});
         this.defineField(owner,null,values,true,indices);
         const unknownNumber:Atom={tag:"non-string",kinds:KIND_NUMBER},unknownSymbol:Atom={tag:"non-string",kinds:KIND_SYMBOL};
@@ -2889,10 +2899,10 @@ class SourceValueFlow {
         const entry={key,value};record.entries.set(signature,entry);this.publish(record.changes,{tag:"descriptor",identity:entry});
     }
     private collectionPair(key:Cell,value:Cell,context:ts.Node):Cell {
-        const result=this.newCell(),owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.arrayPrototype(),ordinary:true,closedIndices:true,listLength:this.newCell()};
+        const result=this.newCell(),owner=this.arrayOwner(context);
         const node=ts.setTextRange(ts.factory.createArrayLiteralExpression(),context);(node as ts.Node&{parent:ts.Node}).parent=context;
         this.literalLists.set(owner,{node,parts:[{cell:key,spread:false},{cell:value,spread:false}],holes:new Set()});
-        this.defineField(owner,"0",key);this.defineField(owner,"1",value);this.defineField(owner,"length",owner.listLength!,false);this.publish(owner.listLength!,this.primitive(2));this.publish(result,{tag:"object",owner});return result;
+        this.defineField(owner,"0",key);this.defineField(owner,"1",value);this.publish(owner.listLength!,this.primitive(2));this.publish(result,{tag:"object",owner});return result;
     }
     private constructCollection(kind:CollectionKind,input:Cell,context:ts.Node,newTarget:Cell):Cell {
         let calls=this.collectionConstruction.get(context);if(!calls){calls=new Map();this.collectionConstruction.set(context,calls);}
@@ -3397,10 +3407,21 @@ class SourceValueFlow {
         }
         return this.ordinaryObjectPrototype;
     }
+    private arrayOwner(context:ts.Node,existing?:ObjectOwner):ObjectOwner {
+        const owner:ObjectOwner=existing??{fields:new Map(),accessors:new Map(),shape:this.newCell()};
+        owner.ordinary=true;owner.closedIndices=true;owner.prototype=this.arrayPrototype();
+        if(owner.listLength&&owner.fields.get("length")!==owner.listLength)this.copy(owner.listLength,this.field(owner,"length"));
+        owner.listLength=this.field(owner,"length");const presence=this.ownPresence(owner,"length");
+        presence.initial=true;this.publish(presence.facts,this.primitive(true));this.publish(presence.enumerable,this.primitive(false));
+        this.markPropertyAlgorithm(owner,"ordinary");this.sourceObjectOwners.add(owner);
+        if(!this.ownerCreations.has(owner)){this.ownerCreations.set(owner,context);this.ownerMutation(owner);}
+        return owner;
+    }
     private arrayPrototype():Cell {
         if(!this.ordinaryArrayPrototype){
             const value=this.newCell();this.ordinaryArrayPrototype=value;
             const fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype(),closedIndices:true,closedOwn:true,ordinary:true};
+            this.markPropertyAlgorithm(fields,"ordinary");
             this.copy(this.opaqueMutation,fields.shape);this.publish(value,{tag:"builtin",name:"Array.prototype",normalResult:"not-callable",fields});
             const length=this.newCell();this.publish(length,this.primitive(0));this.defineField(fields,"length",length);fields.listLength=this.field(fields,"length");
             this.defineField(fields,"constructor",this.globalBinding("Array"));
@@ -3430,6 +3451,85 @@ class SourceValueFlow {
             });
         }});
         this.invoke(context,callee,objects,[],result);this.copy(this.objectText(fallback,context),result);
+        return result;
+    }
+    /** Predicate callbacks share one numeric read and actual-call worklist.
+     * The semantic loop retains repeated activation timing without choosing
+     * an extent or enumerating possible callback counts. */
+    private arrayPredicate(mode:"some"|"every",receiver:Cell,callback:Cell,thisArg:Cell,context:ts.Node):Cell {
+        let calls=this.arrayPredicates.get(context);if(!calls){calls=new Map();this.arrayPredicates.set(context,calls);}
+        const key=mode+":"+receiver.id+":"+callback.id+":"+thisArg.id,previous=calls.get(key);if(previous)return previous;
+        const result=this.newCell(),objects=this.toObject(receiver,context),checked=this.newCell(),selected=this.newCell(),indices=this.newCell(),callee=this.newCell(),returned=this.newCell();calls.set(key,result);
+        const step=ts.setTextRange(ts.factory.createEmptyStatement(),context);(step as ts.Node&{parent:ts.Node}).parent=context;this.repeatedInvocations.add(step);
+        const caught=this.exceptionHandlers.get(context);if(caught)this.exceptionHandlers.set(step,caught);
+        let number=this.numericValues.get(KIND_NUMBER);if(!number){number={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,number);}this.publish(indices,number);
+        const length=this.coerceCell(this.property(objects,"length",context),context,"length"),target=this.callableTarget(checked,step);this.copy(target.completion,result);
+        const values=this.computedProperty(selected,indices,step);this.invoke(step,callee,thisArg,[{cell:values,spread:false},{cell:indices,spread:false},{cell:selected,spread:false}],returned);
+        let rule!:Rule;rule=this.rule([length,target.callable,returned],()=>{
+            const state=this.primitiveState(length,rule,true);if(state.pending&&!state.unresolved)return;
+            if(state.proof.primitiveComplete&&!state.proof.values.length){this.publish(result,this.abrupt);return;}
+            this.copy(callback,checked);if(!target.callable.values.nonempty)return;
+            if(!state.proof.primitiveComplete||state.proof.values.some(value=>Number(value)===0))this.publish(result,this.primitive(mode==="every"));
+            if(state.proof.primitiveComplete&&state.proof.values.every(value=>Number(value)===0))return;
+            const domain=this.propertyKeyDomain(objects,step,rule,"index");if(domain.pending)return;
+            if(domain.opaque){this.activateOpaqueEffect(context);if(caught)this.publish(caught,this.unknown);this.onActive(context,()=>this.escapeCallableArgument(objects,context));}
+            const present=domain.opaque||domain.keys.length||domain.getters.length||domain.locations.some(value=>{this.watch(rule,value);return value.values.nonempty;});
+            if(!present){this.publish(result,this.primitive(mode==="every"));return;}
+            this.copy(objects,selected);this.copy(target.callable,callee);
+            for(const value of returned.values)if(value.tag==="abrupt"||value.tag==="pending-source")this.publish(result,value);
+            if([...returned.values].some(value=>value.tag!=="abrupt"&&value.tag!=="pending-source")){this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));}
+        });
+        return result;
+    }
+    /** One actual-List summary stores possible indexed values through Set.
+     * Abstract numeric extents do not enumerate successive call outcomes. */
+    private arrayPush(receiver:Cell,args:readonly Cell[]|null,sequence:ArgumentSequence|null,context:ts.Node):Cell {
+        let calls=this.arrayPushes.get(context);if(!calls){calls=new Map();this.arrayPushes.set(context,calls);}
+        const key=receiver.id+":"+(args?.map(cell=>cell.id).join(",")??"sequence:"+sequence?.id),previous=calls.get(key);if(previous)return previous;
+        const result=this.newCell(),objects=this.toObject(receiver,context),selected=this.newCell(),values=this.newCell(),indices=this.newCell(),extent=this.newCell();calls.set(key,result);
+        if(args)for(const value of args)this.copy(value,values);else if(sequence)this.copy(this.allArgumentValues(sequence),values);else this.publish(values,this.unknown);
+        let number=this.numericValues.get(KIND_NUMBER);if(!number){number={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,number);}
+        this.publish(indices,number);this.publish(extent,number);
+        const length=this.coerceCell(this.property(objects,"length",context),context,"length");let rule!:Rule;
+        rule=this.rule([length],()=>{
+            const state=this.primitiveState(length,rule,true);if(state.pending&&!state.unresolved)return;
+            if(state.proof.primitiveComplete&&!state.proof.values.length){this.publish(result,this.abrupt);return;}
+            const valid=state.proof.values.some(value=>Number(value)<=Number.MAX_SAFE_INTEGER-(args?.length??0));
+            const invalid=args===null||!state.proof.primitiveComplete||state.proof.values.some(value=>Number(value)>Number.MAX_SAFE_INTEGER-(args?.length??0));
+            if(invalid){const caught=this.exceptionHandlers.get(context);if(caught)this.publish(caught,this.nativeException(context,"TypeError"));}
+            if([...objects.values].some(atom=>!!this.ordinaryOwner(atom)?.listLength)&&
+                (args===null||!state.proof.primitiveComplete||state.proof.values.some(value=>Number(value)+(args?.length??0)>0xffffffff))){
+                const caught=this.exceptionHandlers.get(context);if(caught)this.publish(caught,this.nativeException(context,"RangeError"));
+            }
+            if(!valid&&state.proof.primitiveComplete)return;
+            this.copy(objects,selected);this.copy(extent,result);
+        });
+        let stored=false;this.rule([selected,values],()=>{if(!stored&&selected.values.nonempty&&values.values.nonempty){stored=true;this.writeProperty(selected,null,values,true,"set",context,selected,indices);}});
+        this.writeProperty(selected,"length",extent,true,"set",context);
+        return result;
+    }
+    /** Unknown join text is not itself an opaque effect. Primitive indexed
+     * domains have no user conversion hooks; exotic/getter/object domains
+     * retain the conservative owner effect path. */
+    private arrayJoinSummary(receiver:Cell,separator:Cell,context:ts.Node):Cell {
+        let calls=this.arrayJoinSummaries.get(context);if(!calls){calls=new Map();this.arrayJoinSummaries.set(context,calls);}
+        const key=receiver.id+":"+separator.id,previous=calls.get(key);if(previous)return previous;
+        const result=this.newCell(),text=this.stringHintCell(this.joinTextInput(separator,true),context),values=this.newCell();calls.set(key,result);
+        this.publish(values,this.primitive(undefined));let opaque=false;
+        let rule!:Rule;rule=this.rule([receiver,text,values],()=>{
+            const state=this.primitiveState(text,rule,true);if(state.pending&&!state.unresolved)return;
+            if(state.proof.primitiveComplete&&!state.proof.values.length){this.publish(result,this.abrupt);return;}
+            const domain=this.propertyKeyDomain(receiver,context,rule,"index");if(domain.pending)return;
+            for(const name of domain.keys)this.copy(this.property(receiver,name,context),values);
+            for(const value of domain.locations)this.copyRead(value,values,context);
+            for(const value of domain.getters)this.watch(rule,value);
+            const kinds=this.primitiveKinds(values);this.publish(result,this.unknownString);
+            if(kinds&KIND_SYMBOL){const caught=this.exceptionHandlers.get(context);if(caught)this.publish(caught,this.nativeException(context,"TypeError"));}
+            if(!opaque&&(domain.opaque||domain.getters.length||kinds&~KIND_PRIMITIVE)){
+                opaque=true;const caught=this.exceptionHandlers.get(context);if(caught)this.publish(caught,this.unknown);
+                this.onActive(context,()=>{this.opaqueEffect(context);this.escapeCallableArgument(receiver,context);});
+            }
+        });
         return result;
     }
     private joinTextInput(value:Cell,separator:boolean):Cell {
@@ -4372,7 +4472,7 @@ class SourceValueFlow {
     }
     /** Original JSON token records and ordinary owners share one iterative
      * frame tree. Only the last decoded definition is attached to an owner. */
-    private jsonRecord(text:string):SourceJSONRecord {
+    private jsonRecord(text:string,context:ts.Node):SourceJSONRecord {
         JSON.parse(text); // The host grammar validator cannot run user code.
         let offset=0;
         const whitespace=()=>{while(/[\t\n\r ]/.test(text[offset]??"x"))offset++;};
@@ -4406,7 +4506,7 @@ class SourceValueFlow {
             const record=records.pop()!;if(visited.has(record))continue;visited.add(record);
             const owner=this.ordinaryOwner(record.value);if(!owner)continue;
             for(const [key,child]of record.children){const value=this.newCell();this.publish(value,child.value);this.defineField(owner,key,value,true);records.push(child);}
-            if(record.array){owner.listLength=this.field(owner,"length");const length=this.newCell();this.publish(length,this.primitive(record.children.size));this.defineField(owner,"length",length,false);}
+            if(record.array){this.arrayOwner(context,owner);const length=this.newCell();this.publish(length,this.primitive(record.children.size));this.defineField(owner,"length",length,false);}
         }
         return root;
     }
@@ -4493,7 +4593,7 @@ class SourceValueFlow {
             const state=this.primitiveState(text,parse,true);
             for(const value of state.proof.values){
                 const input=String(value);if(selected.has(input))continue;
-                try{selected.set(input,this.jsonRecord(input));}catch{this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}
+                try{selected.set(input,this.jsonRecord(input,context));}catch{this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}
             }
             for(const [input,record]of selected)for(const atom of reviver.values){
                 const key=input+":"+cell(atom).id;if(routed.has(key))continue;routed.add(key);
@@ -4788,6 +4888,11 @@ class SourceValueFlow {
         const keys=new Map<number,Cell>(),pairs=new Map<number,Cell>();
         const missingKey=this.newCell(),missingValue=this.newCell();this.publish(missingKey,{tag:"non-string",kinds:KIND_NUMBER});this.publish(missingValue,this.primitive(undefined));
         const missing=operation==="keys"?missingKey:operation==="values"?missingValue:this.collectionPair(missingKey,missingValue,context);
+        let abstract:Cell|undefined;
+        const appendAbstract=()=>{
+            if(!abstract){const value=operation==="keys"?missingKey:this.computedProperty(receiver,missingKey,context);abstract=operation==="entries"?this.collectionPair(missingKey,value,context):value;}
+            this.copy(abstract,elements);
+        };
         const append=(index:number)=>{
             let key=keys.get(index);if(!key){key=this.newCell();keys.set(index,key);this.publish(key,this.primitive(index));}
             if(operation==="keys"){this.copy(key,elements);return;}
@@ -4803,8 +4908,11 @@ class SourceValueFlow {
             // widens their Number domain; it cannot invent getter effects.
             const positions=this.indexedPropertyPositions(receiver,context,rule);
             if(positions===undefined)return;
-            if(operation==="keys"&&positions===null){this.publish(elements,{tag:"non-string",kinds:KIND_NUMBER});for(const extent of state.proof.values)this.publish(activity,this.primitive(typeof extent==="number"&&extent>0));if(!state.proof.primitiveComplete){this.publish(activity,this.primitive(true));this.publish(activity,this.primitive(false));}return;}
-            if(positions===null){this.publish(elements,this.unknown);this.publish(activity,this.primitive(true));this.publish(activity,this.primitive(false));return;}
+            if(positions===null){
+                for(const extent of state.proof.values){const present=typeof extent==="number"&&extent>0;this.publish(activity,this.primitive(present));if(present)appendAbstract();}
+                if(!state.proof.primitiveComplete){appendAbstract();this.publish(activity,this.primitive(true));this.publish(activity,this.primitive(false));}
+                return;
+            }
             for(const extent of state.proof.values){
                 const size=typeof extent==="number"?extent:NaN;
                 if(!Number.isSafeInteger(size)||size<0){this.publish(elements,this.unknown);continue;}
@@ -4820,8 +4928,7 @@ class SourceValueFlow {
             }
             if(!state.proof.primitiveComplete){
                 this.publish(activity,this.primitive(true));this.publish(activity,this.primitive(false));
-                if(operation==="keys")this.publish(elements,{tag:"non-string",kinds:KIND_NUMBER});
-                else {for(const index of positions)append(index);this.publish(elements,this.unknown);}
+                appendAbstract();
             }
         });return {elements,activity};
     }
@@ -5065,12 +5172,10 @@ class SourceValueFlow {
                 }});}else this.copy(this.objectPrototype(),owner.prototype);
             }
             if (ts.isArrayLiteralExpression(node)) {
-                owner.prototype=this.arrayPrototype();
+                this.arrayOwner(node,owner);
                 const parts = node.elements.map(element => ({ cell: this.cell(ts.isSpreadElement(element) ? element.expression : element), spread: ts.isSpreadElement(element) }));
                 const holes=new Set(parts.filter((_,index)=>ts.isOmittedExpression(node.elements[index]!)).map(part=>part.cell));
                 this.literalLists.set(owner,{node,parts,holes});
-                owner.listLength = this.field(owner, "length");
-                this.ownPresence(owner,"length").initial=true;this.publish(this.presence(owner,"length"),this.primitive(true));
                 owner.listSources = parts.filter(part => part.spread).map(part => part.cell);
                 const seen = new Set<string>();
                 let rule: Rule;
@@ -5709,7 +5814,7 @@ class SourceValueFlow {
                             this.publish(result!,this.abrupt);
                             continue;
                         }
-                        this.onActive(node,()=>{this.connectActivation(this.enclosingActivation(node),atom.owner);this.copy(this.executionOrigins(node),atom.owner.active);});
+                        this.onActive(node,()=>{this.connectActivation(this.enclosingActivation(node),atom.owner);if(this.repeatedInvocations.has(node))this.publish(this.activationTiming(atom.owner),this.primitive(true));this.copy(this.executionOrigins(node),atom.owner.active);});
                         if (invocation.construct) {
                             const instance = this.owner(node);
                             this.markPropertyAlgorithm(instance,ts.isClassLike(atom.owner.definition)&&atom.owner.base?"opaque":"ordinary");
@@ -5725,9 +5830,7 @@ class SourceValueFlow {
                             if (parameter.dotDotDotToken) {
                                 let location = this.restLocations.get(parameter);
                                 if (!location) {
-                                    const restOwner: ObjectOwner = {fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.arrayPrototype()};
-                                    restOwner.listLength = this.field(restOwner, "length");
-                                    this.ownPresence(restOwner,"length").initial=true;this.publish(this.presence(restOwner,"length"),this.primitive(true));
+                                    const restOwner=this.arrayOwner(parameter);
                                     location = {value:this.newCell(),owner:restOwner};
                                     this.restLocations.set(parameter,location);
                                     this.publish(location.value, {tag:"object",owner:restOwner});
@@ -5796,6 +5899,8 @@ class SourceValueFlow {
                             continue;
                         }
                         if(atom.operation==="array-text"){this.copy(this.arrayText(invocation.receiver,node),result);continue;}
+                        if(atom.operation.startsWith("array-predicate:")){this.copy(this.arrayPredicate(atom.operation.slice("array-predicate:".length) as "some"|"every",invocation.receiver,argument(0)??omittedArgument,argument(1)??omittedArgument,node),result);continue;}
+                        if(atom.operation==="array-push"){this.copy(this.arrayPush(invocation.receiver,argv,invocation.sequence,node),result);continue;}
                         if(atom.operation==="array-join"){
                             const length=this.arrayLikeLength(invocation.receiver,node);
                             const state=this.primitiveState(length,rule,true);
@@ -5804,10 +5909,7 @@ class SourceValueFlow {
                             const positions=argv?this.indexedPropertyPositions(invocation.receiver,node,rule):null;
                             if(positions===undefined)continue;
                             if(positions===null||!state.proof.primitiveComplete){
-                                if(handled(atom,signature+":opaque"))continue;
-                                this.publish(result,this.unknownString);
-                                const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.unknown);
-                                this.activateOpaqueEffect(node);
+                                this.copy(this.arrayJoinSummary(invocation.receiver,argument(0)??omittedArgument,node),result);
                                 continue;
                             }
                             for(const extent of state.proof.values){

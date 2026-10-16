@@ -1,3 +1,5 @@
+- Retain indexed Array values, spread separator effects and repeated predicate callbacks through shared source property domains.
+
 - Preserve materialized source-allocation identity across captured reads while retaining actual-input return substitution.
 
 - Project captured source aliases through one retained worklist, preserving derived operands and origin-only effects without cloning every copy edge.
