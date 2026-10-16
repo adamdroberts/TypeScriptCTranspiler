@@ -98,6 +98,7 @@ const SOURCE_NATIVE_METHODS:ReadonlyMap<Operation,{name:string;length:number;own
         methods.set(operation,{name,length,owner:null,opaque:false});
     return methods;
 })();
+type PrimitiveOutcome={kind:"normal";value:Primitive}|{kind:"unknown"}|{kind:"abrupt"};
 interface PrimitiveChoiceProof {
     readonly values: readonly Primitive[];
     readonly primitiveComplete: boolean;
@@ -687,10 +688,15 @@ class SourceValueFlow {
         if (!value) {value = this.newCell(); this.numericWrites.set(node,value);}
         return value;
     }
-    private primitiveTuples(parts: readonly (readonly Primitive[])[]): Primitive[][] {
-        let tuples: Primitive[][] = [[]];
-        for (const values of parts) tuples = tuples.flatMap(prefix => values.map(value => [...prefix,value]));
-        return tuples;
+    private *primitiveTuples(parts:readonly (readonly Primitive[])[]):IterableIterator<Primitive[]> {
+        if(parts.some(values=>!values.length))return;
+        const positions=parts.map(()=>0);
+        for(;;){
+            yield parts.map((values,index)=>values[positions[index]!]!);
+            let index=parts.length-1;
+            while(index>=0){positions[index]=positions[index]!+1;if(positions[index]!<parts[index]!.length)break;positions[index]=0;index--;}
+            if(index<0)return;
+        }
     }
     private exceptionCell(): Cell {const cell = this.newCell(); this.exceptionCells.add(cell); return cell;}
     private catchCondition(clause: ts.CatchClause): Cell {
@@ -1886,8 +1892,9 @@ class SourceValueFlow {
         if (context) {
             let effects!: Rule;
             effects = this.rule([result], () => {
-                const state = this.primitiveState(result, effects, true);
-                if (state.pending || !state.unresolved) return;
+                this.watchText(effects,result);
+                const state = this.primitiveReadiness(result);
+                if (state.pending || !state.scalarUnresolved) return;
                 const handler = this.exceptionHandlers.get(context);
                 if (handler) this.publish(handler, this.unknown);
                 this.activateOpaqueEffect(context);
@@ -5730,8 +5737,8 @@ class SourceValueFlow {
                         constructors.set(atom.kind + ":" + signature, { kind: atom.kind, args: constructorArguments ?? null });
                     }
                     const noArguments = (constructorArguments === undefined ? argv : constructorArguments)?.some(argument => {
-                        const proof = this.primitiveChoiceProof(argument);
-                        return proof.primitiveComplete && !proof.values.length;
+                        this.watchText(rule,argument);
+                        return !this.primitiveHasNormal(argument);
                     });
                     if (noArguments && !(atom.tag === "operation" && ["eval", "eval-script", "agent-start"].includes(atom.operation))) {
                         this.publish(result!, this.abrupt); continue;
@@ -6032,8 +6039,8 @@ class SourceValueFlow {
                             if (argv === null) {if (handler) this.publish(handler, this.unknown);}
                             else for (const argument of argv) {
                                 const converted = this.primitiveConversion(argument, node);
-                                if (handler && this.primitiveState(converted, rule, true).unresolved) this.publish(handler, this.unknown);
-                                else this.watchText(rule, converted);
+                                this.watchText(rule,converted);
+                                if (handler && this.primitiveReadiness(converted).scalarUnresolved) this.publish(handler, this.unknown);
                             }
                         }
                         if(PROPERTY_MUTATIONS.has(atom.operation)){
@@ -6210,6 +6217,93 @@ class SourceValueFlow {
         const proof = this.primitiveChoiceProof(root);
         return proof.primitiveComplete ? [...new Set(proof.values.map(String))] : null;
     }
+    private evaluatePrimitiveTuple(atom:Extract<Atom,{tag:"text-operation"}>,tuple:readonly Primitive[]):PrimitiveOutcome {
+        const normal=(value:Primitive):PrimitiveOutcome=>({kind:"normal",value});
+        if(atom.operation==="prefix")return normal(!tuple[0]);
+        if(atom.operation==="numeric"){try{return normal(atom.numeric!.evaluate(tuple));}catch{return {kind:"abrupt"};}}
+        if(atom.operation==="coerce"){try{return normal(NUMERIC_CONVERSIONS.get(atom.conversion!)!(tuple[0]!));}catch{return {kind:"abrupt"};}}
+        if(atom.operation==="util-format"){
+            const text=tuple.some(value=>typeof value==="symbol")?null:nativePrimitiveFormat(tuple as Exclude<Primitive,symbol>[]);
+            return text===null?{kind:"unknown"}:normal(text);
+        }
+        if(atom.operation==="error-text")return normal(tuple[0]===""?tuple[1]!:tuple[1]===""?tuple[0]!:String(tuple[0])+": "+String(tuple[1]));
+        if(atom.operation==="primitive-string"){try{return normal(atom.parts.length>1?(tuple[0] as number|bigint).toString(tuple[1] as number|undefined):String(tuple[0]));}catch{return {kind:"abrupt"};}}
+        if(atom.operation==="string-codes"){
+            if(atom.coding==="point"&&tuple.some(value=>typeof value!=="number"||!Number.isInteger(value)||value<0||value>0x10ffff))return {kind:"abrupt"};
+            try{return normal(tuple.map(value=>atom.coding==="unit"?String.fromCharCode(value as number):String.fromCodePoint(value as number)).join(""));}
+            catch{return {kind:"unknown"};}
+        }
+        if(atom.operation==="bound-name")return normal("bound "+(typeof tuple[0]==="string"?tuple[0]:""));
+        if(atom.operation==="array-join"){
+            const range=atom.indexedRange,separator=String(tuple[0]),pieces:string[]=[];let previous=0;
+            try{
+                for(const [index,position]of range.positions.entries()){
+                    pieces.push(separator.repeat(position-previous),String(tuple[index+1]));previous=position;
+                }
+                pieces.push(separator.repeat(Math.max(0,range.length-1-previous)));return normal(pieces.join(""));
+            }catch{return {kind:"unknown"};}
+        }
+        if(atom.operation==="json-container"){
+            const gap=String(tuple[0]),indent=gap.repeat(atom.level+1),stepback=gap.repeat(atom.level),pieces:string[]=[];
+            if(atom.arrayLength!==null){
+                let previous=0;
+                for(const [index,key]of atom.keys.entries()){
+                    const position=Number(key);while(previous<position){pieces.push("null");previous++;}
+                    pieces.push(tuple[index+1]===undefined?"null":String(tuple[index+1]));previous=position+1;
+                }
+                while(previous<atom.arrayLength){pieces.push("null");previous++;}
+            }else for(const [index,key]of atom.keys.entries())if(tuple[index+1]!==undefined)pieces.push(JSON.stringify(key)+":"+(gap?" ":"")+String(tuple[index+1]));
+            const open=atom.arrayLength===null?"{":"[",close=atom.arrayLength===null?"}":"]";
+            return normal(!pieces.length?open+close:gap?open+"\n"+indent+pieces.join(",\n"+indent)+"\n"+stepback+close:open+pieces.join(",")+close);
+        }
+        if(atom.operation==="to-string")return normal(String(tuple[0]));
+        if(atom.operation==="template"&&!tuple.some(value=>typeof value==="symbol"))return normal(tuple.map(String).join(""));
+        return {kind:"abrupt"};
+    }
+    /** A completion query consumes the retained value graph lazily. Choice
+     * points keep persistent continuations; no operand Cartesian product or
+     * JavaScript recursion is needed to find one possible normal result. */
+    private *primitiveCompletions(root:Cell):IterableIterator<Exclude<PrimitiveOutcome,{kind:"abrupt"}>> {
+        type Value=Exclude<PrimitiveOutcome,{kind:"abrupt"}>;
+        type Ancestors={cell:Cell;next:Ancestors|null};
+        type Task={kind:"cell";cell:Cell;ancestors:Ancestors|null}|{kind:"atom";atom:Atom;ancestors:Ancestors}|{kind:"apply";atom:Extract<Atom,{tag:"text-operation"}>};
+        type Tasks={task:Task;next:Tasks|null};type Values={value:Value;next:Values|null};
+        let tasks:Tasks|null={task:{kind:"cell",cell:root,ancestors:null},next:null},values:Values|null=null;
+        const choices:{atoms:IterableIterator<Atom>;tasks:Tasks|null;values:Values|null;ancestors:Ancestors}[]=[];
+        const resume=():boolean=>{
+            while(choices.length){const choice=choices[choices.length-1]!,next=choice.atoms.next();
+                if(next.done){choices.pop();continue;}
+                tasks={task:{kind:"atom",atom:next.value,ancestors:choice.ancestors},next:choice.tasks};values=choice.values;return true;
+            }return false;
+        };
+        for(;;){
+            if(!tasks){if(values)yield values.value;if(!resume())return;continue;}
+            const task:Task=tasks.task;tasks=tasks.next;
+            if(task.kind==="cell"){
+                let cyclic=false;for(let parent=task.ancestors;parent;parent=parent.next)if(parent.cell===task.cell){cyclic=true;break;}
+                if(cyclic){values={value:{kind:"unknown"},next:values};continue;}
+                const atoms:IterableIterator<Atom>=task.cell.values[Symbol.iterator]();const first:IteratorResult<Atom>=atoms.next();
+                if(first.done){values={value:{kind:"unknown"},next:values};continue;}
+                const ancestors:Ancestors={cell:task.cell,next:task.ancestors};choices.push({atoms,tasks,values,ancestors});
+                tasks={task:{kind:"atom",atom:first.value,ancestors},next:tasks};continue;
+            }
+            if(task.kind==="atom"){
+                const atom:Atom=task.atom;
+                if(atom.tag==="abrupt"){if(!resume())return;continue;}
+                if(atom.tag==="primitive"){values={value:{kind:"normal",value:atom.value},next:values};continue;}
+                if(atom.tag!=="text-operation"){values={value:{kind:"unknown"},next:values};continue;}
+                tasks={task:{kind:"apply",atom},next:tasks};
+                for(let index:number=atom.parts.length-1;index>=0;index--)tasks={task:{kind:"cell",cell:atom.parts[index]!,ancestors:task.ancestors},next:tasks};
+                continue;
+            }
+            const tuple:Primitive[]=new Array(task.atom.parts.length);let unknown=false;
+            for(let index=tuple.length-1;index>=0;index--){const value=values!.value;values=values!.next;if(value.kind==="unknown")unknown=true;else tuple[index]=value.value;}
+            const outcome=unknown?{kind:"unknown"} as const:this.evaluatePrimitiveTuple(task.atom,tuple);
+            if(outcome.kind==="abrupt"){if(!resume())return;continue;}
+            values={value:outcome,next:values};
+        }
+    }
+    private primitiveHasNormal(root:Cell):boolean {return !this.primitiveCompletions(root).next().done;}
     private primitiveChoiceProof(root: Cell): PrimitiveChoiceProof {
         this.flushPrimitiveChanges();
         const incomplete: PrimitiveChoiceProof = { values: [], primitiveComplete: false, textComplete: false };
@@ -6248,58 +6342,10 @@ class SourceValueFlow {
                         // collection. Enumerating partial cyclic choices can
                         // manufacture an unbounded String language here.
                         if (!complete) continue;
-                        const combinations = this.primitiveTuples(atom.parts.map(part => proofs.get(part)?.values ?? []));
-                        for (const tuple of combinations) {
-                            if (atom.operation === "prefix") {
-                                // Primitive operators have no user callbacks. Abrupt
-                                // numeric conversions contribute no normal choice.
-                                add(!tuple[0]);
-                            } else if (atom.operation === "numeric") {
-                                try {add(atom.numeric!.evaluate(tuple));} catch {}
-                            } else if (atom.operation === "coerce") {
-                                try {add(NUMERIC_CONVERSIONS.get(atom.conversion!)!(tuple[0]!));} catch {}
-                            } else if(atom.operation==="util-format"){
-                                const text=tuple.some(value=>typeof value==="symbol")?null:nativePrimitiveFormat(tuple as Exclude<Primitive,symbol>[]);
-                                if(text===null){primitiveComplete=false;textComplete=false;}else add(text);
-                            } else if(atom.operation==="error-text")add(tuple[0]===""?tuple[1]!:tuple[1]===""?tuple[0]!:String(tuple[0])+": "+String(tuple[1]));
-                            else if(atom.operation==="primitive-string"){try{add(atom.parts.length>1?(tuple[0] as number|bigint).toString(tuple[1] as number|undefined):String(tuple[0]));}catch{}}
-                            else if(atom.operation==="string-codes"){
-                                if(atom.coding==="point"&&tuple.some(value=>typeof value!=="number"||!Number.isInteger(value)||value<0||value>0x10ffff))continue;
-                                try{add(tuple.map(value=>atom.coding==="unit"?String.fromCharCode(value as number):String.fromCodePoint(value as number)).join(""));}
-                                catch{primitiveComplete=false;textComplete=false;}
-                            }
-                            else if (atom.operation === "bound-name") add("bound " + (typeof tuple[0] === "string" ? tuple[0] : ""));
-                            else if(atom.operation==="array-join"){
-                                const range=atom.indexedRange,separator=String(tuple[0]),pieces:string[]=[];
-                                let previous=0;
-                                try{
-                                    for(const [index,position] of range.positions.entries()){
-                                        pieces.push(separator.repeat(position-previous),String(tuple[index+1]));previous=position;
-                                    }
-                                    pieces.push(separator.repeat(Math.max(0,range.length-1-previous)));
-                                    add(pieces.join(""));
-                                }catch{
-                                    // A host String allocation limit cannot
-                                    // establish a language-level abrupt result.
-                                    primitiveComplete=false;textComplete=false;
-                                }
-                            }
-                            else if(atom.operation==="json-container") {
-                                const gap=String(tuple[0]),indent=gap.repeat(atom.level+1),stepback=gap.repeat(atom.level),pieces:string[]=[];
-                                if(atom.arrayLength!==null){
-                                    let previous=0;
-                                    for(const [index,key]of atom.keys.entries()){
-                                        const position=Number(key);
-                                        while(previous<position){pieces.push("null");previous++;}
-                                        pieces.push(tuple[index+1]===undefined?"null":String(tuple[index+1]));previous=position+1;
-                                    }
-                                    while(previous<atom.arrayLength){pieces.push("null");previous++;}
-                                }else for(const [index,key]of atom.keys.entries())if(tuple[index+1]!==undefined)pieces.push(JSON.stringify(key)+":"+(gap?" ":"")+String(tuple[index+1]));
-                                const open=atom.arrayLength===null?"{":"[",close=atom.arrayLength===null?"}":"]";
-                                add(!pieces.length?open+close:gap?open+"\n"+indent+pieces.join(",\n"+indent)+"\n"+stepback+close:open+pieces.join(",")+close);
-                            }
-                            else if(atom.operation==="to-string"){add(String(tuple[0]));}
-                            else if (atom.operation === "template") {if (!tuple.some(value => typeof value === "symbol")) add(tuple.map(String).join(""));}
+                        for(const tuple of this.primitiveTuples(atom.parts.map(part=>proofs.get(part)?.values??[]))){
+                            const outcome=this.evaluatePrimitiveTuple(atom,tuple);
+                            if(outcome.kind==="normal")add(outcome.value);
+                            else if(outcome.kind==="unknown"){primitiveComplete=false;textComplete=false;}
                         }
                     } else {primitiveComplete = false; if (atom.tag === "unknown-string") textComplete = false;}
                 }

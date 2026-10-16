@@ -1,3 +1,5 @@
+- Query primitive normal completions lazily without enumerating discarded formatter products, preserving finite source proofs and conversion effects.
+
 - Validate Proxy creation without operand hooks and retain inherited Proxy HasProperty effects in source analysis.
 
 - Retain indexed Array values, spread separator effects and repeated predicate callbacks through shared source property domains.
