@@ -96,7 +96,7 @@ interface PrimitiveChoiceProof {
     readonly textComplete: boolean;
 }
 interface PrimitiveReadiness {pending:boolean; pendingSource:boolean; unresolved:boolean; scalarUnresolved:boolean;}
-interface ListPart { readonly cell: Cell; readonly spread: boolean; }
+interface ListPart { readonly cell: Cell; readonly spread: boolean; readonly abstractList?:true; }
 const KIND_UNDEFINED=1,KIND_NULL=2,KIND_BOOLEAN=4,KIND_NUMBER=8,KIND_BIGINT=16,KIND_STRING=32,KIND_SYMBOL=64,KIND_OBJECT=128,KIND_FUNCTION=256;
 const KIND_PRIMITIVE=KIND_UNDEFINED|KIND_NULL|KIND_BOOLEAN|KIND_NUMBER|KIND_BIGINT|KIND_STRING|KIND_SYMBOL;
 const KIND_NUMERIC=KIND_NUMBER|KIND_BIGINT,KIND_ALL=KIND_PRIMITIVE|KIND_OBJECT|KIND_FUNCTION;
@@ -159,7 +159,7 @@ class SourceFacts extends Set<Atom> {
 }
 interface Cell { readonly id: number; readonly values: SourceFacts; readonly users: Set<Rule>; }
 interface Rule { readonly inputs: Set<Cell>; readonly run: () => void; queued: boolean; }
-interface SourcePropertyWrite {readonly context:ts.Node;readonly base:Cell;readonly receiver:Cell;readonly mode:"set"|"define"|"delete";readonly weak:Cell;}
+interface SourcePropertyWrite {readonly context:ts.Node;readonly base:Cell;readonly receiver:Cell;readonly mode:"set"|"define"|"delete";readonly weak:Cell;readonly values:Cell;}
 interface OwnPresence {
     readonly facts: Cell;
     readonly writes: Map<string,SourcePropertyWrite>;
@@ -850,10 +850,12 @@ class SourceValueFlow {
                         if(atom.tag==="promise"){visit(atom.value);visit(atom.rejection);}
                         if(atom.tag==="generator"){visit(atom.yielded);visit(atom.returned);}
                         if(atom.tag==="function"||atom.tag==="bound"||atom.tag==="intrinsic"||atom.tag==="operation"||atom.tag==="promise-resolver"||atom.tag==="builtin"&&atom.normalResult!=="not-callable"||owner?.proxy)this.publish(target,atom);
-                        if(!owner||atom.tag!=="function"&&!this.sourceObjectOwners.has(owner)&&!this.ownerCreations.has(owner)&&!owner.collections&&!owner.collectionIterator)continue;
+                        if(!owner)continue;
                         this.watch(rule,owner.shape);
+                        for(const property of owner.own?.values()??[])for(const write of property.writes.values())visit(write.values);
+                        const stored=this.unknownPropertyLocations.get(owner);if(stored)visit(stored);
+                        if(atom.tag!=="function"&&!this.sourceObjectOwners.has(owner)&&!this.ownerCreations.has(owner)&&!owner.collections&&!owner.collectionIterator)continue;
                         for(const field of owner.fields.values())visit(field);
-                        const unknown=this.unknownPropertyLocations.get(owner);if(unknown)visit(unknown);
                         for(const accessor of owner.accessors.values()){visit(accessor.get);visit(accessor.set);}
                         if(owner.prototype)visit(owner.prototype);
                         if(owner.proxy){visit(owner.proxy.target);visit(owner.proxy.handler);}
@@ -869,7 +871,7 @@ class SourceValueFlow {
                 }
             };
             graph={visit};this.escapedCallableCalls.set(context,graph);
-            visit(returned);this.invoke(context,target,actuals,[{cell:actuals,spread:true}],returned);
+            visit(returned);this.invoke(context,target,actuals,[{cell:actuals,spread:true,abstractList:true}],returned);
         }
         graph.visit(argument);
     }
@@ -1463,11 +1465,11 @@ class SourceValueFlow {
     private writeUncertainty(context:ts.Node):Cell {
         let state=this.propertyWriteUncertainty.get(context);if(!state){state=this.newCell();this.propertyWriteUncertainty.set(context,state);}return state;
     }
-    private recordPropertyWrite(owner:ObjectOwner,key:SourcePropertyKey,context:ts.Node,base:Cell,receiver:Cell,mode:"set"|"define"|"delete"):void {
+    private recordPropertyWrite(owner:ObjectOwner,key:SourcePropertyKey,context:ts.Node,base:Cell,receiver:Cell,mode:"set"|"define"|"delete",value?:Cell):void {
         const record=this.ownPresence(owner,key),signature=this.cell(context).id+":"+base.id+":"+receiver.id+":"+mode;
-        if(record.writes.has(signature))return;
-        const event:SourcePropertyWrite={context,base,receiver,mode,weak:this.writeUncertainty(context)};
-        record.writes.set(signature,event);this.publish(owner.shape,{tag:"descriptor",identity:event});
+        let event=record.writes.get(signature);
+        if(!event){event={context,base,receiver,mode,weak:this.writeUncertainty(context),values:this.newCell()};record.writes.set(signature,event);this.publish(owner.shape,{tag:"descriptor",identity:event});}
+        if(value)this.copyWrite(value,event.values,context);
     }
 
     /** Relative source-tree order is a dominance proof only within the same
@@ -1634,7 +1636,7 @@ class SourceValueFlow {
                 if(key===null){const origins=this.executionOrigins(context);this.copy(origins,owner.shape);if(mode!=="delete")this.copyWrite(value,this.unknownPropertyLocation(owner),context);for(const record of owner.collections?.values()??[])this.copy(origins,record.shape);}
                 else {
                     const presence=this.presence(owner,key);
-                    if(context)this.recordPropertyWrite(owner,key,context,base,receiver,mode);
+                    if(context)this.recordPropertyWrite(owner,key,context,base,receiver,mode,value);
                     if(mode==="set"){const location=this.ownPresence(owner,key);if(!location.initial&&!location.enumerable.values.nonempty)this.publish(location.enumerable,this.primitive(true));}
                     if(mode==="delete")this.publish(presence,this.primitive(false));
                     if (!presence.values.nonempty) this.publish(presence,this.primitive(false));
@@ -2200,7 +2202,7 @@ class SourceValueFlow {
             for(const name of names){
                 if(name!==null)for(const atom of base.values){const owner=this.ordinaryOwner(atom);if(owner){this.copy(enumerable.value,this.ownPresence(owner,name).enumerable);if(data&&(writable.present.values.has(this.primitive(false))||writableValue.values.has(this.primitive(false))))this.markReadonly(owner,name);}}
                 if(accessor){for(const atom of base.values){const owner=this.ordinaryOwner(atom);
-                    if(owner){this.defineAccessor(owner,name,"get",getter,context);this.defineAccessor(owner,name,"set",setter,context);}
+                    if(owner){this.defineAccessor(owner,name,"get",getter,context);this.defineAccessor(owner,name,"set",setter,context);if(name!==null){this.recordPropertyWrite(owner,name,context,base,base,"define",getter);this.recordPropertyWrite(owner,name,context,base,base,"define",setter);}}
                     else if(atom.tag==="unknown"||atom.tag==="opaque-object") {this.publish(this.globalMutation,this.unknown);this.opaqueEffect(context);}
                     else if(atom.tag!=="abrupt"&&atom.tag!=="pending-source"){const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context!));}
                 }}
@@ -2241,13 +2243,19 @@ class SourceValueFlow {
         this.defineProperties(result,descriptors,context);
         return result;
     }
+    /** Descriptor results are allocated ordinary objects whose stored values
+     * remain reachable when the result itself escapes to opaque code. */
+    private descriptorOwner(context:ts.Node):ObjectOwner {
+        const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype(),ordinary:true};
+        this.ownerCreations.set(owner,context);this.ownerMutation(owner);return owner;
+    }
     private ownDescriptors(base:Cell,key:Cell|null,context:ts.Node,result:Cell): void {
         let reads=this.descriptorReads.get(context);if(!reads){reads=new Map();this.descriptorReads.set(context,reads);}
         const identity=base.id+":"+(key?.id??"all"),prior=reads.get(identity);
         if(prior){this.copy(prior,result);return;}
         reads.set(identity,result);
         const records=new Map<ObjectOwner,Map<SourcePropertyKey,{value:Cell;owner:ObjectOwner}>>();
-        const collection:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};
+        const collection=this.descriptorOwner(context);
         if(!key)this.publish(result,{tag:"object",owner:collection});
         const handler=this.exceptionHandlers.get(context);
         const incomplete=()=>{this.publish(result,this.unknown);if(handler)this.publish(handler,this.unknown);};
@@ -2283,7 +2291,7 @@ class SourceValueFlow {
                     let entries=records.get(owner);if(!entries){entries=new Map();records.set(owner,entries);}
                     let record=entries.get(name);
                     if(!record){
-                        const descriptor:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};
+                        const descriptor=this.descriptorOwner(context);
                         const value=this.newCell();this.publish(value,{tag:"object",owner:descriptor});record={value,owner:descriptor};entries.set(name,record);
                         for(const attribute of ["enumerable","configurable"])this.defineBooleanField(descriptor,attribute);
                     }
@@ -4015,7 +4023,7 @@ class SourceValueFlow {
     private arguments(parts: readonly ListPart[],context?:ts.Node): Array<readonly Cell[] | null> {
         let choices: Array<readonly Cell[] | null> = [[]];
         for (const part of parts) {
-            const alternatives = part.spread ? this.lists(part.cell,context) : [[part.cell]];
+            const alternatives = part.abstractList?[null]:part.spread ? this.lists(part.cell,context) : [[part.cell]];
             choices = choices.flatMap(prefix => alternatives.map(tail => prefix && tail ? [...prefix, ...tail] : null));
         }
         return choices;
@@ -4314,7 +4322,7 @@ class SourceValueFlow {
     private argumentSequence(context: ts.Node, parts: readonly ListPart[]): ArgumentSequence {
         let sequences = this.argumentSequences.get(context);
         if (!sequences) {sequences = new Map(); this.argumentSequences.set(context, sequences);}
-        const key = "parts:" + parts.map(part => part.cell.id + ":" + part.spread).join(",");
+        const key = "parts:" + parts.map(part => part.cell.id + ":" + part.spread+":"+!!part.abstractList).join(",");
         let sequence = sequences.get(key);
         if (!sequence) {
             sequence = {id: this.nextArgumentSequence++, context, positions: new Map(), kind: "parts", parts};
@@ -4351,7 +4359,7 @@ class SourceValueFlow {
             let rule!: Rule;
             rule = this.rule(current.parts.map(part => part.cell), () => {
                 for (const part of current.parts) {
-                    if (!part.spread) {this.copy(part.cell, result); continue;}
+                    if (!part.spread||part.abstractList) {this.copy(part.cell, result); continue;}
                     this.watchList(rule, part.cell, current.context);
                     for (const values of this.lists(part.cell, current.context)) {
                         if (values) for (const value of values) this.copy(value, result);
@@ -4382,7 +4390,7 @@ class SourceValueFlow {
             // ArgumentListEvaluation consumes every spread, including those
             // after the requested position. Their calls and effects belong
             // to the same invocation even when an earlier value was captured.
-            for (const part of parts) if (part.spread) {
+            for (const part of parts) if (part.spread&&!part.abstractList) {
                 this.watchList(rule, part.cell, sequence.context);
                 this.watch(rule, this.iteratorElements(part.cell, sequence.context));
             }
@@ -4393,11 +4401,11 @@ class SourceValueFlow {
                 if (visited.has(key)) continue; visited.add(key);
                 const part = parts[state.part];
                 if (!part) {this.publish(result, this.primitive(undefined)); continue;}
-                const alternatives = part.spread ? this.lists(part.cell, sequence.context) : [[part.cell]];
-                if (part.spread) this.watchList(rule, part.cell, sequence.context);
+                const alternatives = part.abstractList?[null]:part.spread ? this.lists(part.cell, sequence.context) : [[part.cell]];
+                if (part.spread&&!part.abstractList) this.watchList(rule, part.cell, sequence.context);
                 for (const list of alternatives) {
                     if (list === null) {
-                        const elements = this.iteratorElements(part.cell, sequence.context);
+                        const elements = part.abstractList?part.cell:this.iteratorElements(part.cell, sequence.context);
                         this.watch(rule, elements); this.copy(elements, result);
                         // Unknown extent can contain this position or end
                         // before it. Continue through the remaining sequence
@@ -4929,8 +4937,8 @@ class SourceValueFlow {
             });
         });
     }
-    private invoke(node: ts.Node, callee: Cell, receiver: Cell, parts: readonly {cell:Cell;spread:boolean}[], result: Cell, construct = false, direct = false): void {
-        const signature=callee.id+":"+receiver.id+":"+parts.map(part=>part.cell.id+":"+part.spread).join(",")+":"+construct+":"+direct;
+    private invoke(node: ts.Node, callee: Cell, receiver: Cell, parts: readonly ListPart[], result: Cell, construct = false, direct = false): void {
+        const signature=callee.id+":"+receiver.id+":"+parts.map(part=>part.cell.id+":"+part.spread+":"+!!part.abstractList).join(",")+":"+construct+":"+direct;
         let calls=this.callResults.get(node);
         if(!calls){calls=new Map();this.callResults.set(node,calls);}
         const existing=calls.get(signature);
@@ -4964,7 +4972,7 @@ class SourceValueFlow {
                 return;
             }
             this.allArgumentValues(sequence);
-            for (const part of parts) if (part.spread) this.watchList(rule, part.cell,node);
+            for (const part of parts) if (part.spread&&!part.abstractList) this.watchList(rule, part.cell,node);
             const worklist: Array<{ target: Cell; receiver: Cell; args: readonly Cell[] | null; sequence: ArgumentSequence | null; boundPath: Set<Atom>; direct: boolean; construct: boolean;newTarget?:Cell }> = [
                 ...this.arguments(parts,node).map(args => ({ target: callee, receiver: receiver, args, boundPath: new Set<Atom>(),
                     sequence, construct, direct }))];
