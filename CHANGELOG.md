@@ -1,3 +1,5 @@
+- Preserve primitive property-key domains without inventing opaque conversion effects in source analysis.
+
 - Apply declaration reachability to scope storage and function initialization, preserving dynamic bindings, source text and initializer effects.
 
 - Replace obsolete dynamic class-factory rejection expectations with independent semantic checks of supported initialization.

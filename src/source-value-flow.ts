@@ -1851,7 +1851,9 @@ class SourceValueFlow {
         const {proof, pending, unresolved} = this.primitiveState(key, rule);
         if (proof.primitiveComplete) return [...new Set(proof.values.map(value => typeof value === "symbol" ? value : String(value)))];
         if (pending && !unresolved) return undefined;
-        if (context && !this.computedKeyDomain(key)) {
+        // Primitive key extent cannot introduce a user-code conversion.
+        // Actual object hooks remain on the shared ToPrimitive graph.
+        if (context && (this.primitiveKinds(key) & (KIND_OBJECT | KIND_FUNCTION))) {
             const handler = this.exceptionHandlers.get(context);
             if (handler) this.publish(handler, this.unknown);
             this.activateOpaqueEffect(context);
