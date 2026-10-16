@@ -155,7 +155,7 @@ type Atom =
     | { readonly tag: "text-operation"; readonly operation: "array-join"; readonly parts: readonly Cell[]; readonly indexedRange: {readonly length:number;readonly positions:readonly number[]} }
     | { readonly tag: "text-operation"; readonly operation: "json-container"; readonly parts: readonly Cell[]; readonly keys:readonly string[]; readonly arrayLength:number|null; readonly level:number }
     | { readonly tag: "promise"; readonly value: Cell; readonly rejection: Cell }
-    | { readonly tag: "promise-resolver"; readonly value: Cell; readonly rejection: Cell; readonly reject: boolean; readonly fields:ObjectOwner }
+    | { readonly tag: "promise-resolver"; readonly destination: SourcePromiseDestination; readonly reject: boolean; readonly fields:ObjectOwner }
     | { readonly tag: "generator"; readonly owner: FunctionOwner; readonly fields:ObjectOwner;readonly yielded:Cell;readonly returned:Cell }
     | { readonly tag: "global";readonly realm:SourceRealmRecord } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record";readonly realm:SourceRealmRecord };
 class SourceFacts extends Set<Atom> {
@@ -240,6 +240,7 @@ interface EvaluationEnvironment {
 }
 interface SourceRealmRecord {objectPrototype?:Cell;readonly bindings:Map<string,Cell>;owner?:ObjectOwner;host?:ObjectOwner;readonly global:Atom;readonly record:Atom;readonly operations:Map<Operation,Atom>;readonly intrinsics:Map<string,Atom>;}
 interface SourceLexicalWrite {readonly id:number;readonly origin:ts.Node;readonly reference:ts.Identifier;}
+interface SourcePromiseDestination {readonly value:Cell;readonly rejection:Cell;readonly origin:ts.Node;resolvers?:Map<ts.Node,readonly Cell[]>;}
 interface SourceWriteOrigin {readonly tag:"unknown";readonly origin:ts.Node;readonly location:Cell;readonly lexical:boolean;readonly reference?:ts.Identifier;readonly event?:SourceLexicalWrite;}
 interface SourceCapturePhase {readonly id:number;readonly kind:"capture";readonly context:ts.Node;readonly argumentsRead:boolean;readonly location?:Cell;readonly activationOnly?:FunctionOwner;readonly scalar?:{readonly activation:FunctionOwner;readonly excluded:ReadonlySet<SourceLexicalWrite>;readonly universe:ReadonlySet<SourceLexicalWrite>;readonly universeKey:string};}
 interface SourceCaptureConstraints {readonly kind:"capture-constraints";readonly phases:readonly SourceCapturePhase[];}
@@ -290,7 +291,7 @@ class SourceValueFlow {
     private readonly typedArrayPrototypes = new Map<string,Cell>();
     private readonly atomicsWaitResults = new Map<ts.Node,Cell>();
     private readonly promiseConstructions = new Map<ts.Node,Map<string,Cell>>();
-    private readonly promiseResolvers = new Map<Cell,Map<Cell,readonly Cell[]>>();
+    private readonly promiseDestinations = new Map<Cell,Map<Cell,SourcePromiseDestination>>();
     private readonly instanceSources = new Map<ts.Node,Map<string,Cell>>();
     private readonly timerCallbacks = new Map<ts.Node,Map<string,{context:ts.Node;result:Cell}>>();
     private readonly primitiveBoxes = new Map<ts.Node,Map<string,Cell>>();
@@ -4186,16 +4187,20 @@ class SourceValueFlow {
             }
         });return result;
     }
-    private promiseResolverCells(value:Cell,rejection:Cell):readonly Cell[] {
-        let rejections=this.promiseResolvers.get(value);if(!rejections){rejections=new Map();this.promiseResolvers.set(value,rejections);}
-        const prior=rejections.get(rejection);if(prior)return prior;
+    private promiseDestination(value:Cell,rejection:Cell,origin:ts.Node):SourcePromiseDestination {
+        let rejections=this.promiseDestinations.get(value);if(!rejections){rejections=new Map();this.promiseDestinations.set(value,rejections);}
+        let destination=rejections.get(rejection);if(!destination){destination={value,rejection,origin};rejections.set(rejection,destination);}
+        return destination;
+    }
+    private promiseResolverCells(destination:SourcePromiseDestination,allocation:ts.Node):readonly Cell[] {
+        const cached=destination.resolvers?.get(allocation);if(cached)return cached;
         const resolvers=[false,true].map(reject=>{
             const cell=this.newCell(),fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};
             const length=this.newCell(),name=this.newCell();this.publish(length,this.primitive(1));this.publish(name,this.primitive(""));
             this.defineField(fields,"length",length,false);this.defineField(fields,"name",name,false);
-            this.copy(this.opaqueMutation,fields.shape);this.publish(cell,{tag:"promise-resolver",value,rejection,reject,fields});return cell;
+            this.copy(this.opaqueMutation,fields.shape);this.publish(cell,{tag:"promise-resolver",destination,reject,fields});return cell;
         });
-        rejections.set(rejection,resolvers);return resolvers;
+        (destination.resolvers??=new Map()).set(allocation,resolvers);return resolvers;
     }
     private promiseStaticCapability(member:string,context:ts.Node,args:readonly Cell[]|null):Cell {
         let calls=this.promiseConstructions.get(context);if(!calls){calls=new Map();this.promiseConstructions.set(context,calls);}
@@ -4203,7 +4208,7 @@ class SourceValueFlow {
         const result=this.newCell(),value=this.newCell(),rejection=this.exceptionCell(),promise=this.newCell();calls.set(key,result);this.publish(promise,{tag:"promise",value,rejection});
         if(member==="withResolvers"){
             const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype(),ordinary:true};this.ownerCreations.set(owner,context);this.ownerMutation(owner);this.publish(result,{tag:"object",owner});
-            const [resolve,reject]=this.promiseResolverCells(value,rejection);this.defineField(owner,"promise",promise);this.defineField(owner,"resolve",resolve!);this.defineField(owner,"reject",reject!);
+            const [resolve,reject]=this.promiseResolverCells(this.promiseDestination(value,rejection,context),context);this.defineField(owner,"promise",promise);this.defineField(owner,"resolve",resolve!);this.defineField(owner,"reject",reject!);
         }else{
             this.copy(promise,result);const returned=this.newCell(),callback=ts.setTextRange(ts.factory.createEmptyStatement(),context);(callback as ts.Node&{parent:ts.Node}).parent=context;this.exceptionHandlers.set(callback,rejection);
             if(args){
@@ -4212,7 +4217,7 @@ class SourceValueFlow {
                 this.invoke(callback,callable,this.empty,args.slice(1).map(cell=>({cell,spread:false})),returned);
             }
             else{this.publish(returned,this.unknown);this.publish(rejection,this.unknown);this.activateOpaqueEffect(context);}
-            const resolved=this.promiseAssimilation(returned,callback);this.copy(resolved.value,value);this.copy(resolved.rejection,rejection);
+            this.promiseAssimilation(returned,callback,this.promiseDestination(value,rejection,context));
         }
         return result;
     }
@@ -4221,7 +4226,7 @@ class SourceValueFlow {
         const key="executor:"+executor.id,prior=calls.get(key);if(prior)return prior;
         const result=this.newCell(),value=this.newCell(),rejection=this.exceptionCell();calls.set(key,result);
         this.publish(result,{tag:"promise",value,rejection});
-        const resolvers=this.promiseResolverCells(value,rejection).map(cell=>({cell,spread:false}));
+        const resolvers=this.promiseResolverCells(this.promiseDestination(value,rejection,context),context).map(cell=>({cell,spread:false}));
         const callback=ts.setTextRange(ts.factory.createEmptyStatement(),context);(callback as ts.Node&{parent:ts.Node}).parent=context;this.exceptionHandlers.set(callback,rejection);
         const callable=this.newCell(),atoms=new Map<Atom,Cell>();
         this.rule([executor],()=>{for(const atom of executor.values){let input=atoms.get(atom);if(!input){input=this.newCell();atoms.set(atom,input);this.publish(input,atom);}const kinds=this.primitiveKinds(input);if(kinds&KIND_FUNCTION)this.publish(callable,atom);if(kinds&~KIND_FUNCTION){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}}});
@@ -4297,11 +4302,11 @@ class SourceValueFlow {
         this.invoke(context,this.property(selected,"then",context),receiver,[{cell:fulfilled,spread:false},{cell:rejected,spread:false}],result);return result;
     }
 
-    private promiseAssimilation(returned:Cell,context:ts.Node):{value:Cell;rejection:Cell} {
+    private promiseAssimilation(returned:Cell,context:ts.Node,destination?:SourcePromiseDestination):SourcePromiseDestination {
         let calls=this.promiseReactions.get(context);if(!calls){calls=new Map();this.promiseReactions.set(context,calls);}
-        const key="assimilation:"+returned.id,prior=calls.get(key);
-        if(prior){const atom=[...prior.values].find((atom):atom is Extract<Atom,{tag:"promise"}>=>atom.tag==="promise")!;return {value:atom.value,rejection:atom.rejection};}
-        const holder=this.newCell(),value=this.newCell(),rejection=this.exceptionCell();calls.set(key,holder);this.publish(holder,{tag:"promise",value,rejection});
+        const key="assimilation:"+returned.id+(destination?":"+destination.value.id+":"+destination.rejection.id:""),prior=calls.get(key);
+        if(prior){const atom=[...prior.values].find((atom):atom is Extract<Atom,{tag:"promise"}>=>atom.tag==="promise")!;return this.promiseDestination(atom.value,atom.rejection,context);}
+        const holder=this.newCell(),completion=destination??this.promiseDestination(this.newCell(),this.exceptionCell(),context),{value,rejection}=completion;calls.set(key,holder);this.publish(holder,{tag:"promise",value,rejection});
         const callback=ts.setTextRange(ts.factory.createEmptyStatement(),context);(callback as ts.Node&{parent:ts.Node}).parent=context;this.exceptionHandlers.set(callback,rejection);
         // Get(then) is immediate; Call(then) runs in the resolve-thenable job.
         const job=this.invocationContext(context,{deferred:true});this.exceptionHandlers.set(job,rejection);
@@ -4309,6 +4314,13 @@ class SourceValueFlow {
         this.rule([returned],()=>{for(const atom of returned.values){
             if(atom.tag==="pending-source"){this.publish(value,atom);continue;}
             if(atom.tag==="abrupt")continue;
+            // Resolving a Promise with itself rejects before Get(then). A
+            // repeated allocation may also denote a different instance, so
+            // retain the ordinary assimilation route in that case.
+            if(atom.tag==="promise"&&atom.value===value&&atom.rejection===rejection){
+                this.publish(rejection,this.nativeException(context,"TypeError"));
+                if(!this.dynamicContext(completion.origin)&&!this.sourceOrigins.has(this.sourceFile(completion.origin)))continue;
+            }
             const owner=this.ordinaryOwner(atom);
             if(!owner){
                 this.publish(value,atom);
@@ -4330,8 +4342,8 @@ class SourceValueFlow {
                 if(kinds&~KIND_FUNCTION)this.publish(value,atom);
                 if(kinds&KIND_FUNCTION)this.publish(target,method);
             }});
-            this.invoke(job,target,input,this.promiseResolverCells(value,rejection).map(cell=>({cell,spread:false})),this.newCell());
-        }});return {value,rejection};
+            this.invoke(job,target,input,this.promiseResolverCells(completion,context).map(cell=>({cell,spread:false})),this.newCell());
+        }});return completion;
     }
 
     private promiseAwait(input:Cell,context:ts.Node):Cell {
@@ -4422,7 +4434,7 @@ class SourceValueFlow {
                     }
                 });
                 this.invoke(callbackContext,callee,this.empty,[{cell:route.input,spread:false}],returned);
-                const assimilated=this.promiseAssimilation(returned,callbackContext);this.copy(assimilated.value,value);this.copy(assimilated.rejection,rejection);
+                this.promiseAssimilation(returned,callbackContext,this.promiseDestination(value,rejection,context));
             }
         }});
         return result;
@@ -6119,7 +6131,7 @@ class SourceValueFlow {
                     if(atom.tag==="promise-resolver"){
                         if(invocation.construct){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));continue;}
                         const input=argument(0)??omittedArgument;
-                        if(atom.reject)this.copy(input,atom.rejection);else{const resolved=this.promiseAssimilation(input,node);this.copy(resolved.value,atom.value);this.copy(resolved.rejection,atom.rejection);}
+                        if(atom.reject)this.copy(input,atom.destination.rejection);else this.promiseAssimilation(input,node,atom.destination);
                         this.publish(result,this.primitive(undefined));continue;
                     }
                     if(atom.tag==="operation"&&atom.operation.startsWith("generator-member:")){
