@@ -1,3 +1,5 @@
+- Invalidate source proof, kind and readiness caches with per-cell revisions on the existing dependency frontier.
+
 - Observe replacement callbacks through the canonical mapped-arguments property value during opaque owner traversal.
 
 - Retain scalar binding write events and capture fresh local source reads before later assignment or initialization commits.

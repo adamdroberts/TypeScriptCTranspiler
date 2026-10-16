@@ -48,7 +48,17 @@ test('finite numeric source facts preserve operand Types, signed zero and abrupt
   const source=`class C {}var first={valueOf(){throw "1061;";}},second={valueOf(){C.toString=external;return 3;}};try{first${operator}second;}catch(source){eval(source);}eval(C.toString());`;
   expect(Object.fromEntries(sourceEvaluationInvocations(program(source)).map(call=>[call.node.getText(),call.choices]))).toEqual({'eval(source)':['1061;'],'eval(C.toString())':['class C {}']});
  }
- for(const source of ['eval(String(external*3));','eval(String(external<3));','var x=1;while(flag){x++;}eval(String(x));'])
+ // Relational operations have a finite Boolean normal-result domain even
+ // when operand conversion is unknown or abrupt. Check the independent VM
+ // completion domain before checking the source proof.
+ for(const operator of ['<','<=','>','>=']){
+  const source=`eval(String(external${operator}3));`;
+  const script='const fs=require("node:fs"),vm=require("node:vm"),observed=[];for(const external of [undefined,null,false,true,-1,3,4,1n,"2","x",Symbol(),{valueOf(){return 5;}},{valueOf(){throw 1;}}]){try{vm.runInNewContext(process.argv[1],{external,eval:value=>{observed.push(value);}});}catch(error){}}fs.writeSync(1,JSON.stringify([...new Set(observed)].sort()));';
+  const node=nodeReferenceSync(['node','-e',script,source],{stdout:'pipe',stderr:'pipe'});
+  expect({code:node.exitCode,stderr:node.stderr.toString(),values:JSON.parse(node.stdout.toString())}).toEqual({code:0,stderr:'',values:['false','true']});
+  expect(sourceEvaluationInvocations(program(source)).at(-1)?.choices?.slice().sort()).toEqual(['false','true']);
+ }
+ for(const source of ['eval(String(external*3));','var x=1;while(flag){x++;}eval(String(x));'])
   expect({source,choices:sourceEvaluationInvocations(program(source)).at(-1)?.choices}).toEqual({source,choices:null});
 });
 test('numeric source expressions and a deep operation tree match Node in both memory modes',async()=>{
