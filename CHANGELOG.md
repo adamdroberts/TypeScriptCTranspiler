@@ -1,3 +1,4 @@
+- Retain conditional loose-equality object coercions, operand completion and actual return inputs in source analysis; skip ordinary nullish hooks in the native equality kernel.
 - Retain source Reference evaluation and GetValue/PutValue boundaries, including raw computed keys and structured assignment defaults.
 - Retain the actual Promise resolution destination and reject self-resolution before reading then in finite source analysis.
 - Preserve right-hand-side source snapshots until their assignment store completes, including repeated Script startup roots.

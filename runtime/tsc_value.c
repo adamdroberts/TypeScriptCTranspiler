@@ -7836,6 +7836,10 @@ bool tsc_value_abstract_eq(tsc_value_t a, tsc_value_t b) {
     ) {
         return true;
     }
+    // Nullish pairs and [[IsHTMLDDA]] are complete above. No other
+    // nullish comparison performs an Object-to-primitive conversion.
+    if (at == TSC_ABSTRACT_NULL || at == TSC_ABSTRACT_UNDEFINED ||
+        bt == TSC_ABSTRACT_NULL || bt == TSC_ABSTRACT_UNDEFINED) return false;
     if (at == TSC_ABSTRACT_NUMBER && bt == TSC_ABSTRACT_STRING) {
         return tsc_value_eq(a, tsc_value_num(tsc_value_as_num(b)));
     }

@@ -461,6 +461,7 @@ class SourceValueFlow {
     private readonly dynamicContexts = new WeakMap<ts.Node, boolean>();
     private readonly sourceFiles = new WeakMap<ts.Node, ts.SourceFile>();
     private readonly evaluationOrder = new SourceEvaluationOrder();
+    private readonly equalityResults=new WeakMap<ts.Node,Map<string,Cell>>();
     private readonly normalCompletions=new WeakMap<Cell,Cell>();
     private readonly executionGuards = new WeakMap<ts.Node, readonly {condition: Cell; truthy: boolean}[]>();
     private readonly captureInputs=new WeakMap<Cell,{source:Cell;constraints:SourceCaptureConstraints}>();
@@ -791,7 +792,7 @@ class SourceValueFlow {
         for (let child = node, parent = node.parent; parent; child = parent, parent = parent.parent) {
             if (functionNode(parent) && (child === parent.body || ts.isParameter(child))) break;
             if (ts.isPropertyDeclaration(parent) && child === parent.initializer && !(ts.getModifiers(parent) ?? []).some(modifier => modifier.kind === ts.SyntaxKind.StaticKeyword)) break;
-            if(ts.isBinaryExpression(parent)&&child===parent.right&&parent.operatorToken.kind!==ts.SyntaxKind.EqualsToken&&parent.operatorToken.kind>=ts.SyntaxKind.FirstAssignment&&parent.operatorToken.kind<=ts.SyntaxKind.LastAssignment)
+            if(ts.isBinaryExpression(parent)&&child===parent.right&&parent.operatorToken.kind!==ts.SyntaxKind.EqualsToken)
                 guards.push({condition:this.normalCompletion(this.cell(parent.left)),truthy:true});
             if (ts.isIfStatement(parent) && child !== parent.expression)
                 guards.push({condition:this.cell(parent.expression),truthy:child === parent.thenStatement});
@@ -2205,6 +2206,53 @@ class SourceValueFlow {
             }
         });
         return result;
+    }
+    /** IsLooselyEqual converts an Object only opposite a non-nullish
+     * primitive (Boolean reaches the same case through ToNumber). A pair
+     * worklist preserves abrupt completion and reuses the ToPrimitive graph. */
+    private looseEquality(left:Cell,right:Cell,node:ts.Node,operation:SourceNumericOperation):Cell {
+        let calls=this.equalityResults.get(node);if(!calls){calls=new Map();this.equalityResults.set(node,calls);}
+        const key=left.id+":"+right.id,prior=calls.get(key);if(prior)return prior;
+        const result=this.newCell(),context=this.evaluationOrder.referenceCompletion(node,node);calls.set(key,result);
+        this.returnTransforms.set(result,{kind:"projection",inputs:[left,right],evaluate:inputs=>this.looseEquality(inputs[0]!,inputs[1]!,node,operation)});
+        const handler=this.exceptionHandlers.get(node);if(handler)this.exceptionHandlers.set(context,handler);
+        const atoms=new Map<Atom,Cell>(),pairs=new Map<Atom,Map<Atom,number>>();
+        const cell=(atom:Atom)=>{let input=atoms.get(atom);if(!input){input=this.newCell();atoms.set(atom,input);this.publish(input,atom);}return input;};
+        const scalar=(a:Cell,b:Cell)=>{
+            let compare!:Rule;compare=this.rule([a,b],()=>{
+                if(a.values.has(this.abrupt)||b.values.has(this.abrupt))this.publish(result,this.abrupt);
+                const states=[a,b].map(input=>this.primitiveState(input,compare,true));
+                if(states.some(state=>state.pending||state.proof.primitiveComplete&&!state.proof.values.length))return;
+                if(states.every(state=>state.proof.primitiveComplete)){
+                    for(const values of sourceChoiceTuples(states.map(state=>state.proof.values)))this.publish(result,this.primitive(operation.evaluate(values)));
+                }else{this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));}
+            });
+        };
+        const objects=KIND_OBJECT|KIND_FUNCTION,nonNull=KIND_PRIMITIVE&~(KIND_NULL|KIND_UNDEFINED);
+        let inspect!:Rule;inspect=this.rule([left,right],()=>{
+            if(left.values.has(this.abrupt)||right.values.has(this.abrupt))this.publish(result,this.abrupt);
+            for(const a of left.values)for(const b of right.values){
+                if(a.tag==="abrupt"||b.tag==="abrupt")continue;
+                if(a.tag==="pending-source"||b.tag==="pending-source"){this.publish(result,this.pendingSource);continue;}
+                const x=cell(a),y=cell(b);this.watch(inspect,x);this.watch(inspect,y);
+                const kinds=[this.primitiveKinds(x),this.primitiveKinds(y)];
+                // Kind dependencies can settle after an atom arrives. Each
+                // newly represented semantic route is processed once.
+                if(!kinds[0]||!kinds[1])continue;
+                const modes=(kinds[0]&KIND_PRIMITIVE&&kinds[1]&KIND_PRIMITIVE?1:0)|
+                    (kinds[0]&objects&&kinds[1]&objects||kinds[0]&objects&&kinds[1]&(KIND_NULL|KIND_UNDEFINED)||kinds[1]&objects&&kinds[0]&(KIND_NULL|KIND_UNDEFINED)?2:0)|
+                    (kinds[0]&objects&&kinds[1]&nonNull?4:0)|(kinds[1]&objects&&kinds[0]&nonNull?8:0);
+                let seen=pairs.get(a);if(!seen){seen=new Map();pairs.set(a,seen);}const previous=seen.get(b)??0,added=modes&~previous;if(!added)continue;seen.set(b,previous|modes);
+                if(added&1)scalar(x,y);
+                if(added&2){
+                    // Object identity and the host HTMLDDA slot may be
+                    // abstract. Both Boolean results retain that uncertainty.
+                    this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));
+                }
+                if(added&4)scalar(this.primitiveConversion(x,context,"default"),y);
+                if(added&8)scalar(x,this.primitiveConversion(y,context,"default"));
+            }
+        });return result;
     }
     /** The same ordered List advances only through possible normal results.
      * An abrupt conversion suppresses every later conversion edge. */
@@ -5606,6 +5654,7 @@ class SourceValueFlow {
         const operation = sourceNumericOperation(node);
         if (operation) {
             const operands = ts.isBinaryExpression(node) ? [this.cell(node.left), this.cell(node.right)] : [this.cell((node as ts.PrefixUnaryExpression | ts.PostfixUnaryExpression).operand)];
+            if(operation.conversion==="equality"){this.copy(this.looseEquality(operands[0]!,operands[1]!,node,operation),result);return;}
             const converted = operation.form === "equality" ? operands : this.convertList(operands, node, operation.conversion as PrimitiveHint | "numeric" | "primitive-number");
             const computed = operation.form === "update" ? this.newCell() : result;
             this.publish(computed, {tag: "text-operation", operation: "numeric", numeric: operation, parts: converted});
@@ -5628,12 +5677,11 @@ class SourceValueFlow {
                 });
             }
             const handler = this.exceptionHandlers.get(node);
-            if (handler || operation.conversion === "equality") {
+            if (handler) {
                 let rule!: Rule;
                 rule = this.rule(converted, () => {
                     const states = converted.map(input => this.primitiveState(input,rule,true));
                     if (states.some(state => state.pending || state.proof.primitiveComplete && !state.proof.values.length)) return;
-                    if (operation.conversion === "equality" && states.some(state => state.unresolved)) this.activateOpaqueEffect(node);
                     if (!handler || operation.conversion === "none") return;
                     if(operation.form==="update"||ts.isBinaryExpression(node)&&operation.assignment===node.operatorToken.kind)
                         this.publish(handler,this.nativeException(node));
