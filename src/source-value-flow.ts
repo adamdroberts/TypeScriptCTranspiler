@@ -991,8 +991,11 @@ class SourceValueFlow {
         if(timing.repeated||timing.deferred){this.invocationTimings.set(context,{repeated:!!timing.repeated,deferred:!!timing.deferred});this.factRevision++;}
         return context;
     }
-    private overlappingInvocation(context:ts.Node):boolean {
-        for(let node:ts.Node|undefined=context;node&&!functionNode(node);node=node.parent)if(this.invocationTimings.has(node))return true;
+    private hasInvocationTiming(context:ts.Node,kind?:"repeated"|"deferred"):boolean {
+        for(let node:ts.Node|undefined=context;node&&!functionNode(node);node=node.parent){
+            const timing=this.invocationTimings.get(node);
+            if(timing&&(!kind||timing[kind])||kind==="repeated"&&ts.isIterationStatement(node,false))return true;
+        }
         return false;
     }
     /** Close represented call cycles through one adjacency graph. An origin
@@ -1035,11 +1038,13 @@ class SourceValueFlow {
         return source;
     }
     private repeatedActivationContext(context:ts.Node):boolean {
-        for(let node:ts.Node|undefined=context;node&&!functionNode(node);node=node.parent)if(this.invocationTimings.get(node)?.repeated||ts.isIterationStatement(node,false))return true;
-        return false;
+        return this.hasInvocationTiming(context,"repeated");
     }
     private effectVisible(atom: Atom, context?: ts.Node, argumentsRead = false): boolean {
         if (atom.tag !== "unknown" || !atom.origin || !context) return true;
+        // A protocol running in a job can observe writes after registration.
+        // Its source offset is not an upper bound on the visible effects.
+        if(this.hasInvocationTiming(context,"deferred"))return true;
         const effect = atom.origin;
         const activation=this.enclosingActivation(context);
         if(activation&&activation.kind==="ordinary"&&!this.activationTiming(activation).values.nonempty&&!this.repeatedActivationContext(context)&&!this.dynamicContext(effect)){
@@ -1141,6 +1146,11 @@ class SourceValueFlow {
         const universeKey=[...universe].map(event=>event.id).sort((a,b)=>a-b).join(","),key=universeKey+"|"+[...excluded].map(event=>event.id).sort((a,b)=>a-b).join(",");let phase=phases.get(key);
         if(!phase){phase={id:this.nextCapturePhase++,kind:"capture",context,argumentsRead:false,location,scalar:{activation,excluded,universe,universeKey}};phases.set(key,phase);}return phase;
     }
+    private activationCapturePhase(activation:FunctionOwner):SourceCapturePhase {
+        let gate=this.activationCapturePhases.get(activation);
+        if(!gate){gate={id:this.nextCapturePhase++,kind:"capture",context:activation.definition,argumentsRead:false,activationOnly:activation};this.activationCapturePhases.set(activation,gate);}
+        return gate;
+    }
     private normalizeCapturePhase(phase:SourceCapturePhase):SourceCapturePhase {
         if(phase.activationOnly||phase.scalar)return phase;
         const prior=this.normalizedCapturePhases.get(phase);if(prior)return prior;
@@ -1159,14 +1169,16 @@ class SourceValueFlow {
             }
             normalized=this.scalarCapturePhase(phase.context,activation,phase.location,excluded,universe);
         }else{
-            let gate=this.activationCapturePhases.get(activation);
-            if(!gate){gate={id:this.nextCapturePhase++,kind:"capture",context:activation.definition,argumentsRead:false,activationOnly:activation};this.activationCapturePhases.set(activation,gate);}
-            normalized=gate;
+            normalized=this.activationCapturePhase(activation);
         }
         this.normalizedCapturePhases.set(phase,normalized);return normalized;
     }
     private captureRead(from: Cell, context?: ts.Node, argumentsRead = false,location?:Cell): Cell {
         if(!context)return from;
+        if(this.hasInvocationTiming(context,"deferred")){
+            const activation=this.enclosingActivation(context);
+            return activation?this.captureProjection(from,this.activationCapturePhase(activation)):from;
+        }
         let kinds=this.capturePhases.get(context);if(!kinds){kinds=new Map();this.capturePhases.set(context,kinds);}
         let locations=kinds.get(argumentsRead);if(!locations){locations=new Map();kinds.set(argumentsRead,locations);}
         let phase=locations.get(location);if(!phase){phase={id:this.nextCapturePhase++,kind:"capture",context,argumentsRead,...(location?{location}:{})};locations.set(location,phase);}
@@ -6285,7 +6297,7 @@ class SourceValueFlow {
                             this.publish(result!,this.abrupt);
                             continue;
                         }
-                        this.onActive(node,()=>{this.connectActivation(this.enclosingActivation(node),atom.owner);if(this.overlappingInvocation(node))this.publish(this.activationTiming(atom.owner),this.primitive(true));this.copy(this.executionOrigins(node),atom.owner.active);this.recordCallArguments(atom.owner,signature,argv,invocation.sequence,node);});
+                        this.onActive(node,()=>{this.connectActivation(this.enclosingActivation(node),atom.owner);if(this.hasInvocationTiming(node))this.publish(this.activationTiming(atom.owner),this.primitive(true));this.copy(this.executionOrigins(node),atom.owner.active);this.recordCallArguments(atom.owner,signature,argv,invocation.sequence,node);});
                         if (invocation.construct) {
                             const instance = this.owner(node);
                             this.markPropertyAlgorithm(instance,ts.isClassLike(atom.owner.definition)&&atom.owner.base?"opaque":"ordinary");
@@ -6320,7 +6332,10 @@ class SourceValueFlow {
                         }
                         if (atom.owner.kind.includes("generator")) this.copy(this.generatorInstance(atom.owner,actualFormals,node),result);
                         else if (atom.owner.kind === "async") {
-                            const returned=this.projectReturn(atom.owner.returns,actualFormals),resolved=this.promiseAssimilation(returned,node);
+                            // Async return resolution runs in the callee activation, which
+                            // can resume after the caller's initial source phase.
+                            const returned=this.projectReturn(atom.owner.returns,actualFormals),context=this.invocationContext(atom.owner.node?.body??atom.owner.definition);
+                            const resolved=this.promiseAssimilation(returned,context);
                             this.copy(atom.owner.throws,resolved.rejection);this.publish(result!,{tag:"promise",value:resolved.value,rejection:resolved.rejection});
                         }
                         else {

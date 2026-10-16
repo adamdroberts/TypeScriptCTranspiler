@@ -1,3 +1,4 @@
+- Carry deferred job timing into native protocol source reads while preserving immediate and saved-method snapshots.
 - Order switch selection effects before selected body source captures through the shared evaluation-region plan.
 
 - Normalize source capture intersections through one canonical constraint collection, retaining complete RHS and return projections.
