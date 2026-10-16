@@ -1,3 +1,5 @@
+- Apply declaration reachability to scope storage and function initialization, preserving dynamic bindings, source text and initializer effects.
+
 - Replace obsolete dynamic class-factory rejection expectations with independent semantic checks of supported initialization.
 
 - Model native String code-unit and code-point construction in finite source analysis using shared installer metadata and actual argument Lists.

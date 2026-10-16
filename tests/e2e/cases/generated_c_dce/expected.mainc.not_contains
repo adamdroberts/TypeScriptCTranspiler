@@ -2,8 +2,8 @@ dead_helper(
 dead_leaf(
 dead_parent(
 dead_local_helper(
-dead local effect
-unused_top_effect
-unused_top_let_effect
-unused_local_effect
-unused_local_let_effect
+tsc_str_from_lit("dead local effect",
+_unused_top_effect
+_unused_top_let_effect
+_unused_local_effect
+_unused_local_let_effect

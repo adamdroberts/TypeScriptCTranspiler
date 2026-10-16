@@ -15,6 +15,7 @@ import { runtimeGlobalBindings, runtimeUtilExports, runtimeFsExports, runtimePat
 import { canonicalParameterBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding } from "../source-bindings";
 import { timersPromiseOperations, callbackTimerOperations } from "../timers-promises-operations";
 import { directLexicalDeclarations, lexicalDeclarationsFromList, type ScopeLexicalDeclaration, type NamedScopeLexicalDeclaration } from "./lexical-declarations";
+type NamedScopeFunctionDeclaration = Extract<ScopeLexicalDeclaration, ts.FunctionDeclaration>;
 import { escapeRegExpString } from "../regexp-escape";
 import * as path from "node:path";
 import { CBuf, escapeCString, utf8ByteLen } from "./cbuf";
@@ -729,6 +730,7 @@ class Emitter {
     private catchValueSymbols = new Set<ts.Symbol>();
     private referencedTopLevelFunctions = new WeakSet<ts.FunctionDeclaration>();
     private referencedTopLevelClasses = new WeakSet<ts.ClassDeclaration>();
+    private scopeFunctionSelections = new WeakMap<ts.Node, ReadonlyMap<ts.Symbol, NamedScopeFunctionDeclaration>>();
     private referencedTopLevelVariables = new WeakSet<ts.VariableDeclaration>();
     private referencedLocalFunctions = new WeakSet<ts.FunctionDeclaration>();
     private referencedLocalClasses = new WeakSet<ts.ClassDeclaration>();
@@ -909,8 +911,7 @@ class Emitter {
             if (
                 ts.isFunctionDeclaration(node) &&
                 this.isPrunableLocalFunction(node) &&
-                !this.isDirectScopeLexicalDeclaration(node) &&
-                !this.referencedLocalFunctions.has(node)
+                !this.scopeLexicalDeclarationNeeded(node)
             ) {
                 return;
             }
@@ -1064,12 +1065,8 @@ class Emitter {
                 ) {
                     markTopLevelFunction(decl);
                 }
-                if (
-                    decl &&
-                    ts.isFunctionDeclaration(decl) &&
-                    this.isPrunableLocalFunction(decl)
-                ) {
-                    markLocalFunction(decl);
+                if (sym) {
+                    for (const declaration of this.localFunctionsForSymbol(sym)) markLocalFunction(declaration);
                 }
                 if (decl && ts.isVariableDeclaration(decl)) {
                     markVariable(decl);
@@ -27780,6 +27777,7 @@ class Emitter {
         if (ts.isExpressionStatement(stmt)) return this.emitExprStmt(buf, stmt);
         if (ts.isVariableStatement(stmt)) return this.emitVarStmt(buf, stmt);
         if (ts.isFunctionDeclaration(stmt)) {
+            if (!this.scopeLexicalDeclarationNeeded(stmt)) return;
             if (this.emitTest262AnnexBGlobalFunctionUpdate(buf, stmt)) return;
             if (this.isSupportedLexicalFunctionDeclaration(stmt)) {
                 const symbol = this.symbolForIdentifier(stmt.name);
@@ -27800,6 +27798,7 @@ class Emitter {
             return;
         }
         if (ts.isClassDeclaration(stmt)) {
+            if (this.isDirectScopeLexicalDeclaration(stmt) && !this.scopeLexicalDeclarationNeeded(stmt)) return;
             if (this.emitScopeClassDeclaration(buf, stmt)) return;
             if (!this.shouldEmitLocalClassDeclaration(stmt)) return;
             unsupported(stmt, "referenced local class declarations are not supported yet");
@@ -30112,12 +30111,68 @@ class Emitter {
         return this.directSwitchLexicalDeclarations(sw).length > 0;
     }
 
+    private scopeFunctionOwner(declaration: ts.FunctionDeclaration): ts.Block | ts.CaseBlock | null {
+        const parent = declaration.parent;
+        return ts.isBlock(parent) ? parent :
+            ts.isCaseClause(parent) || ts.isDefaultClause(parent) ? parent.parent : null;
+    }
+
+    /** Function instantiation and dependency discovery share last-declaration
+     * selection on one canonical scope collection, including parameter aliases. */
+    private scopeFunctions(owner: ts.Block | ts.CaseBlock): ReadonlyMap<ts.Symbol, NamedScopeFunctionDeclaration> {
+        const previous = this.scopeFunctionSelections.get(owner);
+        if (previous) return previous;
+        const declarations = ts.isBlock(owner) ? directLexicalDeclarations(owner.statements) :
+            this.directSwitchLexicalDeclarations(owner.parent);
+        const functions = new Map<ts.Symbol, NamedScopeFunctionDeclaration>();
+        for (const declaration of declarations) {
+            if (!ts.isFunctionDeclaration(declaration)) continue;
+            const symbol = this.symbolForIdentifier(declaration.name);
+            if (!symbol) unsupported(declaration.name, "unresolved function binding");
+            functions.set(symbol, declaration);
+        }
+        this.scopeFunctionSelections.set(owner, functions);
+        return functions;
+    }
+
+    private localFunctionsForSymbol(symbol: ts.Symbol): ReadonlySet<ts.FunctionDeclaration> {
+        const functions = new Set<ts.FunctionDeclaration>();
+        for (const declaration of symbol.declarations ?? []) {
+            if (!ts.isFunctionDeclaration(declaration) || !this.isPrunableLocalFunction(declaration)) continue;
+            const owner = this.scopeFunctionOwner(declaration);
+            const selected = owner ? this.scopeFunctions(owner).get(symbol) : declaration;
+            if (!selected) unsupported(declaration, "function binding is missing from its scope collection");
+            functions.add(selected);
+        }
+        return functions;
+    }
+
+    /** Scope storage and object creation follow the same declaration graph.
+     * Dynamic environments and block functions with possible legacy aliases
+     * retain their binding collection even without a direct value reference. */
+    private scopeLexicalDeclarationNeeded(
+        declaration: ts.VariableDeclaration | ts.FunctionDeclaration | ts.ClassDeclaration,
+    ): boolean {
+        if (this.sourceEnvironmentEnabled(declaration.getSourceFile())) return true;
+        if (ts.isVariableDeclaration(declaration)) return this.shouldEmitLocalVariable(declaration);
+        if (ts.isClassDeclaration(declaration)) return this.shouldEmitLocalClassDeclaration(declaration);
+        if (ts.isFunctionDeclaration(declaration)) {
+            const owner = this.scopeFunctionOwner(declaration), parent = owner?.parent;
+            const functionBody = owner && ts.isBlock(owner) && parent && ts.isFunctionLike(parent) &&
+                "body" in parent && parent.body === owner;
+            if (!functionBody) return true;
+            return this.shouldEmitLocalFunctionDeclaration(declaration);
+        }
+        return true;
+    }
+
     private createScopeLexicalBindings(
         buf: CBuf,
         declarations: readonly ScopeLexicalDeclaration[],
     ): Map<ts.Symbol, LocalLexicalBindingPlan> {
         const lexicalScope = new Map<ts.Symbol, LocalLexicalBindingPlan>();
         for (const declaration of declarations) {
+            if (!this.scopeLexicalDeclarationNeeded(declaration)) continue;
             for (const identifier of this.scopeLexicalDeclarationNames(declaration)) {
                 const symbol = this.symbolForIdentifier(identifier);
                 if (!symbol) unsupported(identifier, "unresolved lexical binding");
@@ -30212,14 +30267,12 @@ class Emitter {
     }
 
     private initializeScopeFunctions(buf: CBuf, declarations: readonly ScopeLexicalDeclaration[]): void {
-        const functions = new Map<ts.Symbol, ts.FunctionDeclaration & { name: ts.Identifier }>();
-        for (const declaration of declarations) {
-            if (!ts.isFunctionDeclaration(declaration)) continue;
-            const symbol = this.symbolForIdentifier(declaration.name);
-            if (!symbol) unsupported(declaration.name, "unresolved function binding");
-            functions.set(symbol, declaration);
-        }
-        for (const [symbol, declaration] of functions) {
+        const first = declarations.find((declaration): declaration is NamedScopeFunctionDeclaration => ts.isFunctionDeclaration(declaration));
+        if (!first) return;
+        const owner = this.scopeFunctionOwner(first);
+        if (!owner) unsupported(first, "lexical function collection has no scope owner");
+        for (const [symbol, declaration] of this.scopeFunctions(owner)) {
+            if (!this.scopeLexicalDeclarationNeeded(declaration)) continue;
             if (!this.isSupportedLexicalFunctionDeclaration(declaration)) {
                 unsupported(
                     declaration,
