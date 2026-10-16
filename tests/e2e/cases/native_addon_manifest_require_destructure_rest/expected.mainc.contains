@@ -1,4 +1,4 @@
-tsc_value_object_keys(
+tsc_value_copy_data_properties(
 tsc_object_set(
 tsc_value_get_prop(
 tsc_value_is_undefined(
