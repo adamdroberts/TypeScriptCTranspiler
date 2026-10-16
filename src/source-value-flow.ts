@@ -241,6 +241,8 @@ interface EvaluationEnvironment {
 interface SourceRealmRecord {objectPrototype?:Cell;readonly bindings:Map<string,Cell>;owner?:ObjectOwner;host?:ObjectOwner;readonly global:Atom;readonly record:Atom;readonly operations:Map<Operation,Atom>;readonly intrinsics:Map<string,Atom>;}
 interface SourceLexicalWrite {readonly id:number;readonly origin:ts.Node;readonly reference:ts.Identifier;}
 interface SourcePromiseDestination {readonly value:Cell;readonly rejection:Cell;readonly origin:ts.Node;resolvers?:Map<ts.Node,readonly Cell[]>;}
+type SourceReferenceExpression=ts.PropertyAccessExpression|ts.ElementAccessExpression;
+interface SourceReference {readonly target:SourceReferenceExpression;readonly operation:ts.Node;readonly completion:ts.Node;readonly read:boolean;base?:Cell;key?:Cell;readContext?:ts.Node;writeContext?:ts.Node;}
 interface SourceWriteOrigin {readonly tag:"unknown";readonly origin:ts.Node;readonly location:Cell;readonly lexical:boolean;readonly reference?:ts.Identifier;readonly event?:SourceLexicalWrite;}
 interface SourceCapturePhase {readonly id:number;readonly kind:"capture";readonly context:ts.Node;readonly argumentsRead:boolean;readonly location?:Cell;readonly activationOnly?:FunctionOwner;readonly scalar?:{readonly activation:FunctionOwner;readonly excluded:ReadonlySet<SourceLexicalWrite>;readonly universe:ReadonlySet<SourceLexicalWrite>;readonly universeKey:string};}
 interface SourceCaptureConstraints {readonly kind:"capture-constraints";readonly phases:readonly SourceCapturePhase[];}
@@ -253,7 +255,6 @@ const PROPERTY_MUTATIONS = new Set<Operation>(["define-property", "define-proper
 
 function conversionOperands(node: ts.Node): readonly ts.Expression[] | null {
     if (ts.isComputedPropertyName(node)) return [node.expression];
-    if (ts.isElementAccessExpression(node)) return [node.argumentExpression];
     const operation = sourceNumericOperation(node);
     if (operation) return ts.isBinaryExpression(node) ? [node.left, node.right] : [(node as ts.PrefixUnaryExpression | ts.PostfixUnaryExpression).operand];
     if (ts.isBinaryExpression(node) && node.operatorToken.kind===ts.SyntaxKind.InKeyword)return [node.left,node.right];
@@ -460,6 +461,7 @@ class SourceValueFlow {
     private readonly dynamicContexts = new WeakMap<ts.Node, boolean>();
     private readonly sourceFiles = new WeakMap<ts.Node, ts.SourceFile>();
     private readonly evaluationOrder = new SourceEvaluationOrder();
+    private readonly normalCompletions=new WeakMap<Cell,Cell>();
     private readonly executionGuards = new WeakMap<ts.Node, readonly {condition: Cell; truthy: boolean}[]>();
     private readonly captureInputs=new WeakMap<Cell,{source:Cell;constraints:SourceCaptureConstraints}>();
     private readonly captureConstraints=new Map<string,SourceCaptureConstraints>();
@@ -484,6 +486,8 @@ class SourceValueFlow {
     private readonly bindingWriteSites=new Map<ts.Symbol,Map<ts.Node,Map<ts.Identifier,SourceLexicalWrite>>>();
     private nextLexicalWrite=0;
     private readonly assignmentTargets=new WeakMap<ts.Expression,{binding:ts.BindingName|null;references:Map<ts.Identifier,ts.Expression>}>();
+    private readonly sourceReferences=new WeakMap<SourceReferenceExpression,SourceReference>();
+    private readonly assignmentDefaults=new WeakSet<ts.BinaryExpression>();
     private readonly knownWriteOrigins=new WeakMap<Cell,SourceWriteOrigin>();
     private readonly ownerCreations=new WeakMap<ObjectOwner,ts.Node>();
     private readonly readCaptures = new Map<Cell,Map<SourceCaptureConstraints,Cell>>();
@@ -513,6 +517,10 @@ class SourceValueFlow {
             const file=program.getSourceFile(sourceUnitFileName(program,path.resolve(filename),"script"));
             if(file&&ecmaParseGoal(file)==="script"&&(!sources||sources.has(file))){const prior=this.scriptOrder.get(file);this.scriptOrder.set(file,{first:prior?.first??index,last:index});}
         }
+        const files=program.getSourceFiles().filter(file=>(!sources||sources.has(file))&&!file.isDeclarationFile&&
+            (sourceUnitBodyIncluded(program,file)||(entries.evaluations??[]).some(entry=>entry.entry&&path.resolve(entry.entry)===path.resolve(file.fileName))||
+             (entries.functions??[]).some(entry=>entry.entry&&path.resolve(entry.entry)===path.resolve(file.fileName))));
+        for(const file of files)this.indexSourceReferences(file);
         for (const source of this.scriptOrder.keys()) for (const statement of source.statements) {
             if (isAmbientSourceDeclaration(statement)) continue;
             if (ts.isVariableStatement(statement) && statement.declarationList.flags & ts.NodeFlags.BlockScoped) {
@@ -584,11 +592,7 @@ class SourceValueFlow {
             if(functionNode(definition))this.dynamicSourceTexts.set(definition,functionConstructorDisplaySource(entry));
             this.copy(this.cell(statement.expression),value);this.generated.set(key,{entry,value,environment});
         }
-        for (const file of program.getSourceFiles()) {
-            if (sources && !sources.has(file)) continue;
-            if (file.isDeclarationFile) continue;
-            if (!sourceUnitBodyIncluded(program, file) && !(entries.evaluations ?? []).some(entry => entry.entry && path.resolve(entry.entry) === path.resolve(file.fileName)) &&
-                !(entries.functions ?? []).some(entry => entry.entry && path.resolve(entry.entry) === path.resolve(file.fileName))) continue;
+        for (const file of files) {
             const script=this.scriptCompletions.get(file);
             const worklist: Array<{node: ts.Node; handler: Cell | null; completion:StatementBodyCompletions|undefined}> = [{node: file, handler: script?.throws??null,completion:script?.summary}];
             while (worklist.length) {
@@ -652,7 +656,7 @@ class SourceValueFlow {
                     }
                 }
                 if (ts.isVariableDeclaration(node) && node.initializer){this.recordBindingWrites(node.name,node);this.onActive(node, () => this.bind(node.name,this.cell(node.initializer!),undefined,node));}
-                if (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment) {
+                if (ts.isBinaryExpression(node) && !this.assignmentDefaults.has(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment) {
                     this.recordAssignmentWrites(node.left,node);
                     const value = NAME_EVALUATING_ASSIGNMENTS.has(node.operatorToken.kind) ? this.cell(node.right) : this.cell(node);
                     this.onActive(node, () => this.writeTarget(node.left, value, node));
@@ -689,7 +693,7 @@ class SourceValueFlow {
                     continue;
                 }
                 if (ts.isCallExpression(node) || ts.isNewExpression(node) ||
-                    ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node) || ts.isAwaitExpression(node) ||
+                    (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))&&this.sourceReferences.get(node)?.read!==false || ts.isAwaitExpression(node) ||
                     ts.isTemplateExpression(node) || ts.isBinaryExpression(node)&&node.operatorToken.kind===ts.SyntaxKind.InstanceOfKeyword || ts.isExpression(node) && conversionOperands(node)) this.cell(node);
                 node.forEachChild(child => { worklist.push({node: child, handler,completion}); });
             }
@@ -772,12 +776,23 @@ class SourceValueFlow {
             });
         }
     }
+    /** Normal/abrupt alternatives are monotone. Unrepresented and pending
+     * values retain a possible normal path; only a known abrupt-only input
+     * can suppress dependent evaluation. */
+    private normalCompletion(input:Cell):Cell {
+        const cached=this.normalCompletions.get(input);if(cached)return cached;
+        const result=this.newCell();this.normalCompletions.set(input,result);
+        this.rule([input],()=>{for(const atom of input.values)this.publish(result,this.primitive(atom.tag!=="abrupt"));});
+        return result;
+    }
     private guards(node: ts.Node): readonly {condition: Cell; truthy: boolean}[] {
         const previous = this.executionGuards.get(node); if (previous) return previous;
         const guards: {condition: Cell; truthy: boolean}[] = [];
         for (let child = node, parent = node.parent; parent; child = parent, parent = parent.parent) {
             if (functionNode(parent) && (child === parent.body || ts.isParameter(child))) break;
             if (ts.isPropertyDeclaration(parent) && child === parent.initializer && !(ts.getModifiers(parent) ?? []).some(modifier => modifier.kind === ts.SyntaxKind.StaticKeyword)) break;
+            if(ts.isBinaryExpression(parent)&&child===parent.right&&parent.operatorToken.kind!==ts.SyntaxKind.EqualsToken&&parent.operatorToken.kind>=ts.SyntaxKind.FirstAssignment&&parent.operatorToken.kind<=ts.SyntaxKind.LastAssignment)
+                guards.push({condition:this.normalCompletion(this.cell(parent.left)),truthy:true});
             if (ts.isIfStatement(parent) && child !== parent.expression)
                 guards.push({condition:this.cell(parent.expression),truthy:child === parent.thenStatement});
             if (ts.isConditionalExpression(parent) && child !== parent.condition)
@@ -1094,6 +1109,8 @@ class SourceValueFlow {
     /** Store edges commit after their RHS. Other effects of the same
      * operation can happen earlier while resolving a reference or key. */
     private writeVisible(write:SourceWriteOrigin,context:ts.Node,argumentsRead:boolean):boolean {
+        const actor=this.enclosingActivation(write.origin),origins=actor?[...actor.active.values]:[];
+        if(origins.length&&origins.every(origin=>!this.effectVisible(origin,context,argumentsRead)))return false;
         if(!this.effectVisible(write,context,argumentsRead))return false;
         const file=this.sourceFile(context),roots=this.scriptOrder.get(file);
         if(!this.dynamicContext(context)&&!this.dynamicContext(write.origin)&&!this.sourceOrigins.has(file)&&
@@ -1290,6 +1307,8 @@ class SourceValueFlow {
                     if(!origins){
                         const written=this.knownWriteOrigins.get(source);
                         if(written){
+                            const actor=this.enclosingActivation(written.origin);
+                            if(actor){this.watch(read,actor.active);this.watch(read,this.activationTiming(actor));}
                             let visible=true;
                             for(const phase of constraints.phases){
                                 if(phase.activationOnly)continue;
@@ -2340,8 +2359,10 @@ class SourceValueFlow {
         const prior=receivers.get(receiver);if(prior)return prior;
         const result = this.newCell(), selected = new Set<SourcePropertyKey>();receivers.set(receiver,result);
         this.returnTransforms.set(result,{kind:"projection",inputs:[base,key,receiver],evaluate:inputs=>this.computedProperty(inputs[0]!,inputs[1]!,context,inputs[2]!)});
+        const converted=this.primitiveConversion(key,context);
         let rule!: Rule;
-        rule = this.rule([base, key], () => {
+        rule = this.rule([base,key,converted], () => {
+            for(const input of [base,converted])if(input.values.has(this.abrupt))this.publish(result,this.abrupt);
             const names = this.propertyKeys(key, rule, context);
             const domain = names === null ? this.computedKeyDomain(key) : null;
             if (names === null) {
@@ -2563,6 +2584,52 @@ class SourceValueFlow {
             }else for(const element of current.elements)if(ts.isBindingElement(element))pending.push(element.name);
         }
     }
+    /** Index actual Reference uses before solving expressions. The existing
+     * normalized binding tree owns arbitrary pattern leaves and defaults. */
+    private indexSourceReferences(source:ts.SourceFile):void {
+        const retain=(target:ts.Expression,operation:ts.Node,read:boolean,completion=operation)=>{
+            target=unwrap(target);
+            if((ts.isPropertyAccessExpression(target)||ts.isElementAccessExpression(target))&&!this.sourceReferences.has(target))
+                this.sourceReferences.set(target,{target,operation,completion,read});
+        };
+        const target=(raw:ts.Expression,operation:ts.Node,read:boolean)=>{
+            const {binding,references}=this.assignmentTarget(raw);
+            if(ts.isBinaryExpression(operation))this.evaluationOrder.registerAssignment(operation,!!binding&&!ts.isIdentifier(binding));
+            if(!binding)return;
+            const pending:Array<{name:ts.BindingName;completion?:ts.Node}>=[{name:binding}];
+            while(pending.length){const {name,completion}=pending.pop()!;
+                if(ts.isIdentifier(name)){const reference=references.get(name);if(reference)retain(reference,operation,read,completion??operation);continue;}
+                for(const element of name.elements)if(ts.isBindingElement(element)){
+                    const parent=element.initializer?.parent;
+                    const default_=parent&&ts.isBinaryExpression(parent)&&parent.operatorToken.kind===ts.SyntaxKind.EqualsToken&&parent.right===element.initializer?parent:undefined;
+                    if(default_){this.assignmentDefaults.add(default_);this.evaluationOrder.registerAssignment(default_,!ts.isIdentifier(element.name));}
+                    pending.push({name:element.name,completion:ts.isIdentifier(element.name)?default_:undefined});
+                }
+            }
+        };
+        const pending:ts.Node[]=[source];
+        while(pending.length){const node=pending.pop()!;
+            if(ts.isBinaryExpression(node)&&node.operatorToken.kind>=ts.SyntaxKind.FirstAssignment&&node.operatorToken.kind<=ts.SyntaxKind.LastAssignment&&!this.assignmentDefaults.has(node))
+                target(node.left,node,node.operatorToken.kind!==ts.SyntaxKind.EqualsToken);
+            else if(ts.isPrefixUnaryExpression(node)&&(node.operator===ts.SyntaxKind.PlusPlusToken||node.operator===ts.SyntaxKind.MinusMinusToken)||ts.isPostfixUnaryExpression(node))target(node.operand,node,true);
+            else if(ts.isDeleteExpression(node))retain(node.expression,node,false);
+            else if((ts.isForInStatement(node)||ts.isForOfStatement(node))&&!ts.isVariableDeclarationList(node.initializer))target(node.initializer,node,false);
+            ts.forEachChild(node,child=>{pending.push(child);});
+        }
+    }
+    private sourceReference(target:SourceReferenceExpression):SourceReference {
+        let reference=this.sourceReferences.get(target);
+        if(!reference){reference={target,operation:target,completion:target,read:true};this.sourceReferences.set(target,reference);}
+        if(!reference.base){
+            reference.base=this.cell(target.expression);
+            reference.readContext=this.evaluationOrder.referenceCompletion(target,target);
+            reference.writeContext=this.evaluationOrder.referenceCompletion(target,reference.completion);
+            const handler=this.exceptionHandlers.get(reference.operation)??this.exceptionHandlers.get(target);
+            if(handler){this.exceptionHandlers.set(reference.writeContext,handler);this.exceptionHandlers.set(reference.readContext,handler);}
+            if(ts.isElementAccessExpression(target))reference.key=this.primitiveConversion(this.cell(target.argumentExpression),reference.read?reference.readContext:reference.writeContext);
+        }
+        return reference;
+    }
     private recordAssignmentWrites(raw:ts.Expression,context:ts.Node):void {
         const target=unwrap(raw);if(ts.isIdentifier(target)){this.recordBindingWrites(target,context);return;}
         if(ts.isPropertyAccessExpression(target)||ts.isElementAccessExpression(target))return;
@@ -2572,10 +2639,10 @@ class SourceValueFlow {
         const target = unwrap(raw);
         if (ts.isIdentifier(target)) { this.writeBinding(target,value,context); return; }
         if (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target)) {
-            if (ts.isPropertyAccessExpression(target) && ts.isPrivateIdentifier(target.name)) {this.privateAccess(this.cell(target.expression),target.name,context,"set",value);return;}
-            const base = this.cell(target.expression);
-            if (ts.isElementAccessExpression(target)) this.writeComputedProperty(base, this.cell(target.argumentExpression), value, mode, context);
-            else this.writeProperty(base, target.name.text, value, true, mode, context);
+            const reference=this.sourceReference(target),base=reference.base!,point=reference.writeContext!;
+            if (ts.isPropertyAccessExpression(target) && ts.isPrivateIdentifier(target.name)) {this.privateAccess(base,target.name,point,"set",value);return;}
+            if (ts.isElementAccessExpression(target)) this.writeComputedProperty(base,reference.key!,value,mode,point);
+            else this.writeProperty(base,target.name.text,value,true,mode,point);
             return;
         }
         const {binding,references}=this.assignmentTarget(target);
@@ -5706,12 +5773,14 @@ class SourceValueFlow {
                 },owner);
             }
         } else if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
-            if(ts.isPropertyAccessExpression(node)&&ts.isPrivateIdentifier(node.name)) {this.copy(this.privateAccess(this.cell(node.expression),node.name,node,"get"),result);return;}
+            const reference=this.sourceReference(node);
+            if(!reference.read){this.publish(result,this.unknown);return;}
+            if(ts.isPropertyAccessExpression(node)&&ts.isPrivateIdentifier(node.name)) {this.copy(this.privateAccess(reference.base!,node.name,reference.readContext!,"get"),result);return;}
             if (ts.isElementAccessExpression(node) && node.argumentExpression)
-                this.copy(this.computedProperty(this.cell(node.expression), this.cell(node.argumentExpression), node), result);
+                this.copy(this.computedProperty(reference.base!,reference.key!,reference.readContext!),result);
             else {
-                const key = propertyName(node);
-                if (key !== null) this.copy(this.property(this.cell(node.expression), key, node), result);
+                const key=propertyName(node);
+                if(key!==null)this.copy(this.property(reference.base!,key,reference.readContext!),result);
             }
         } else if (ts.isConditionalExpression(node)) {
             const condition = this.cell(node.condition), whenTrue = this.cell(node.whenTrue), whenFalse = this.cell(node.whenFalse);

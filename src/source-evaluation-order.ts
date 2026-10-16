@@ -1,12 +1,28 @@
 import ts from 'typescript';
 import {classDefinitionPlan} from './emit/class-definition';
 
-type Definition=ts.ClassLikeDeclaration|ts.SwitchStatement;
+type Definition=ts.ClassLikeDeclaration|ts.SwitchStatement|ts.BinaryExpression;
 interface Region {readonly definition:Definition;readonly domain:object;readonly index:number;}
 /** Source offsets order ordinary siblings within an evaluation region.
  * Class keys precede static initialization; switch selection precedes every
- * body it selects. Deferred class bodies retain their separate activations. */
+ * body it selects. Assignment regions separate Reference, value and store
+ * stages. Deferred class bodies retain their separate activations. */
 export class SourceEvaluationOrder {
+    private readonly assignments=new WeakMap<ts.BinaryExpression,{structured:boolean}>();
+    private readonly completions=new WeakMap<ts.Node,Map<ts.Node,ts.Node>>();
+    registerAssignment(operation:ts.BinaryExpression,structured:boolean):void {this.assignments.set(operation,{structured});}
+    /** A Reference keeps its raw key until the first GetValue/PutValue.
+     * Structured targets retain their local position within the binding tree. */
+    referenceCompletion(target:ts.Node,operation:ts.Node):ts.Node {
+        let operations=this.completions.get(target);if(!operations){operations=new Map();this.completions.set(target,operations);}
+        const cached=operations.get(operation);if(cached)return cached;
+        const assignment=ts.isBinaryExpression(operation)?this.assignments.get(operation):undefined;
+        const local=!!assignment?.structured,anchor=local?target:operation;
+        const point=ts.setTextRange(ts.factory.createEmptyStatement(),{pos:anchor.end,end:anchor.end});
+        (point as ts.Node&{parent:ts.Node}).parent=anchor;operations.set(operation,point);
+        if(assignment&&!local)this.regions.set(point,{definition:operation as ts.BinaryExpression,domain:operation,index:2});
+        return point;
+    }
     private readonly indexed=new WeakSet<ts.SourceFile>();
     private readonly regions=new WeakMap<ts.Node,Region>();
     private readonly paths=new WeakMap<ts.Node,readonly (Region|{definition:Definition})[]>();
@@ -43,6 +59,13 @@ export class SourceEvaluationOrder {
                     for(const statement of clause.statements)retain(statement,2);
                 }
             }
+            if(ts.isBinaryExpression(node)){
+                const assignment=this.assignments.get(node);
+                if(assignment){
+                    this.regions.set(node.left,{definition:node,domain:node,index:assignment.structured?1:0});
+                    this.regions.set(node.right,{definition:node,domain:node,index:assignment.structured?0:1});
+                }
+            }
             ts.forEachChild(node,child=>{pending.push(child);});
         }
     }
@@ -52,12 +75,12 @@ export class SourceEvaluationOrder {
         const regions=new Map<Definition,Region>(),path:(Region|{definition:Definition})[]=[];
         for(let current:ts.Node|undefined=node;current;current=current.parent){
             const region=this.regions.get(current);if(region&&!regions.has(region.definition))regions.set(region.definition,region);
-            if((ts.isClassLike(current)||ts.isSwitchStatement(current))&&current!==node)path.push(regions.get(current)??{definition:current});
+            if((ts.isClassLike(current)||ts.isSwitchStatement(current)||ts.isBinaryExpression(current)&&this.assignments.has(current))&&current!==node)path.push(regions.get(current)??{definition:current});
         }
         path.reverse();this.paths.set(node,path);return path;
     }
     before(left:ts.Node,right:ts.Node):boolean {
-        if(left.getSourceFile()!==right.getSourceFile())return false;
+        if(left===right||left.getSourceFile()!==right.getSourceFile())return false;
         const before=this.path(left),after=this.path(right);
         for(let index=0;index<Math.min(before.length,after.length);index++){
             const a=before[index]!,b=after[index]!;
@@ -65,6 +88,9 @@ export class SourceEvaluationOrder {
             if(!('domain' in a)||!('domain' in b)||a.domain!==b.domain)return false;
             if(a.index!==b.index)return a.index<b.index;
         }
-        return left.getEnd()<=right.getStart();
+        const end=left.getEnd(),start=right.getStart();
+        // Coincident completion points carry no order unless their region
+        // stages establish one. In particular, before is irreflexive.
+        return end<start||end===start&&(left.getStart()!==end||right.getEnd()!==start);
     }
 }
