@@ -1,3 +1,5 @@
+- Canonicalize incomparable source capture filters through their retained phase graph, preserving timing predicates while removing permutation duplication.
+
 - Reuse each originating opaque source site's escape worklist for recursive synthetic invocations, retaining normal and abrupt reachable values without a depth cutoff.
 
 - Preserve String conversion inputs, numeric property-key constraints and TypeError paths for joined Symbol values in finite source analysis.

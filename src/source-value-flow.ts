@@ -202,7 +202,7 @@ interface EvaluationEnvironment {
     readonly declarations:Map<string,{node:ts.Identifier;function?:ts.FunctionDeclaration}>;
 }
 interface SourceRealmRecord {objectPrototype?:Cell;readonly bindings:Map<string,Cell>;owner?:ObjectOwner;host?:ObjectOwner;readonly global:Atom;readonly record:Atom;readonly operations:Map<Operation,Atom>;readonly intrinsics:Map<string,Atom>;}
-interface SourceCapturePhase {readonly kind:"capture";readonly context:ts.Node;readonly argumentsRead:boolean;}
+interface SourceCapturePhase {readonly id:number;readonly kind:"capture";readonly context:ts.Node;readonly argumentsRead:boolean;}
 type SourceProjectionPhase = SourceCapturePhase | {readonly kind:"return"};
 
 const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
@@ -420,6 +420,7 @@ class SourceValueFlow {
     private readonly sourceStarts = new WeakMap<ts.Node, number>();
     private readonly executionGuards = new WeakMap<ts.Node, readonly {condition: Cell; truthy: boolean}[]>();
     private readonly captureInputs=new WeakMap<Cell,{source:Cell;phase:SourceCapturePhase}>();
+    private nextCapturePhase=0;
     private readonly capturePhases=new Map<ts.Node,Map<boolean,SourceCapturePhase>>();
     private readonly propertyLocations=new Set<Cell>();
     private readonly privateAccesses=new Map<ts.Node,Map<string,Cell>>();
@@ -1013,13 +1014,13 @@ class SourceValueFlow {
     }
     private captureRead(from: Cell, context?: ts.Node, argumentsRead = false): Cell {
         if (!context || this.dynamicContext(context) && !(this.enclosingActivation(context) && this.propertyLocations.has(from))) return from;
-        let contexts = this.readCaptures.get(from);
-        if (!contexts) {contexts = new Map(); this.readCaptures.set(from,contexts);}
-        let phases = contexts.get(context);
-        if (!phases) {phases = new Map(); contexts.set(context,phases);}
-        const previous = phases.get(argumentsRead); if (previous) return previous;
         let phaseKinds=this.capturePhases.get(context);if(!phaseKinds){phaseKinds=new Map();this.capturePhases.set(context,phaseKinds);}
-        let phase=phaseKinds.get(argumentsRead);if(!phase){phase={kind:"capture",context,argumentsRead};phaseKinds.set(argumentsRead,phase);}
+        let phase=phaseKinds.get(argumentsRead);if(!phase){phase={id:this.nextCapturePhase++,kind:"capture",context,argumentsRead};phaseKinds.set(argumentsRead,phase);}
+        return this.captureProjection(from,phase);
+    }
+    private captureProjection(from:Cell,phase:SourceCapturePhase):Cell {
+        const {context,argumentsRead}=phase;
+        const previous=this.readCaptures.get(from)?.get(context)?.get(argumentsRead);if(previous)return previous;
         const pending:Cell[]=[];
         const project=(source:Cell):Cell=>{
             // Comparable acyclic filters intersect at the earlier phase.
@@ -1031,6 +1032,11 @@ class SourceValueFlow {
                 if(!prior||!this.capturePrecedes(phase!,prior.phase))break;
                 source=prior.source;
             }
+            const outer=this.captureInputs.get(source);
+            // Capture filters intersect. Intern incomparable filters in one
+            // order so cyclic aliases cannot retain every permutation.
+            if(outer&&outer.phase!==phase&&!this.capturePrecedes(outer.phase,phase)&&phase.id<outer.phase.id)
+                return this.captureProjection(this.captureProjection(outer.source,phase),outer.phase);
             const inherited=this.projectedCellPhases.get(source);
             // A later acyclic capture cannot undo the earlier filtering.
             // Reuse that canonical projection instead of composing an alias
