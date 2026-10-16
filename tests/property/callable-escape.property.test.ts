@@ -17,6 +17,7 @@ const graphPartitions=[
  {name:'sloppy-callback-this',source:'var read=function(body){print(eval(body));};read("17;");function callback(){this.read("19;");}external(callback);',external:'callback=>callback()'},
  {name:'construct',source:constructor+'external(C);',external:'C=>new C("19;")'},
  {name:'throw',source:'const executeSource=eval;function read(body){print(executeSource(body));}read("17;");function make(){throw read;}external(make);',external:'make=>{try{make();}catch(callback){callback("19;");}}'},
+ {name:'recursive-opaque-return',source:'const executeSource=eval;function read(body){print(executeSource(body));}read("17;");function make(){return new Proxy({read,make},{});}external(make);',external:'make=>make().read("19;")'},
  {name:'return',source:'const executeSource=eval;function read(body){print(executeSource(body));}read("17;");function make(){return read;}external(make);',external:'make=>make()("19;")'},
  {name:'receiver',source:'const executeSource=eval;function read(body){print(executeSource(body));}read("17;");const owner={read,invoke:external};owner.invoke();',external:'function(){this.read("19;");}'},
  {name:'global-receiver',source:'var read=function(body){print(eval(body));};read("17;");globalThis.invoke=external;globalThis.invoke();',external:'function(){this.read("19;");}'},

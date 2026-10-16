@@ -295,6 +295,8 @@ class SourceValueFlow {
     private readonly sourceObjectOwners=new WeakSet<ObjectOwner>();
     private readonly opaqueCaptureCalls=new Map<ts.Node,Set<Cell>>();
     private readonly escapedCallableCalls=new Map<ts.Node,{visit:(input:Cell)=>void}>();
+    private readonly escapedInvocationOrigins=new WeakMap<ts.Node,ts.Node>();
+    private readonly escapeContexts=new WeakMap<ts.Node,ts.Node>();
     private readonly promiseReactions = new Map<ts.Node,Map<string,Cell>>();
     private readonly sourceCells = new WeakMap<SourceFacts,Cell>();
     private readonly formalInputs = new Map<Cell,Set<Cell>>();
@@ -853,10 +855,22 @@ class SourceValueFlow {
     private opaqueEffect(context?: ts.Node): void {
         this.copy(this.executionOrigins(context),this.opaqueMutation);
     }
+    /** Synthetic invocations are internal edges of their originating opaque
+     * site. Recursive escape reuses that graph; real source sites keep their
+     * own activation, ordering and exception context. */
+    private escapeContext(context:ts.Node):ts.Node {
+        const previous=this.escapeContexts.get(context);if(previous)return previous;
+        for(let node:ts.Node|undefined=context;node;node=node.parent){
+            const origin=this.escapedInvocationOrigins.get(node);
+            if(origin){this.escapeContexts.set(context,origin);return origin;}
+        }
+        this.escapeContexts.set(context,context);return context;
+    }
     /** Opaque code can invoke callbacks reachable through represented data,
      * accessors, prototypes and returned values. One call-site graph retains
      * those edges and one unknown actual List, including cyclic containers. */
     private escapeCallableArgument(argument:Cell,context:ts.Node):void {
+        context=this.escapeContext(context);
         let graph=this.escapedCallableCalls.get(context);
         if(!graph){
             const target=this.newCell(),actuals=this.newCell(),returned=this.newCell(),seen=new Set<Cell>(),pending:Cell[]=[];
@@ -893,6 +907,7 @@ class SourceValueFlow {
             graph={visit};this.escapedCallableCalls.set(context,graph);
             const invocation=ts.setTextRange(ts.factory.createEmptyStatement(),context);
             (invocation as ts.Node&{parent:ts.Node}).parent=context;
+            this.escapedInvocationOrigins.set(invocation,context);
             const thrown=this.exceptionCell(),constructed=this.newCell();
             this.exceptionHandlers.set(invocation,thrown);
             const handler=this.exceptionHandlers.get(context);if(handler)this.copy(thrown,handler);
