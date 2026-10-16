@@ -120,7 +120,7 @@ type Atom =
     | { readonly tag: "descriptor"; readonly identity: object }
     | { readonly tag: "unknown"; readonly origin?: ts.Node }
     | { readonly tag: "opaque-object" }
-    | { readonly tag: "text-operation"; readonly operation: "numeric" | "template" | "bound-name" | "prefix" | "coerce" | "error-text" | "primitive-string" | "util-format"; readonly numeric?: SourceNumericOperation; readonly conversion?: string; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
+    | { readonly tag: "text-operation"; readonly operation: "to-string" | "numeric" | "template" | "bound-name" | "prefix" | "coerce" | "error-text" | "primitive-string" | "util-format"; readonly numeric?: SourceNumericOperation; readonly conversion?: string; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
     | { readonly tag: "text-operation"; readonly operation: "array-join"; readonly parts: readonly Cell[]; readonly indexedRange: {readonly length:number;readonly positions:readonly number[]} }
     | { readonly tag: "text-operation"; readonly operation: "json-container"; readonly parts: readonly Cell[]; readonly keys:readonly string[]; readonly arrayLength:number|null; readonly level:number }
     | { readonly tag: "promise"; readonly value: Cell; readonly rejection: Cell }
@@ -1823,30 +1823,10 @@ class SourceValueFlow {
     }
     /** ToString rejects Symbol results except the String call's direct
      * Symbol argument, which uses SymbolDescriptiveString. */
-    private stringHintTexts(key: Cell, rule: Rule, context?: ts.Node, descriptiveSymbols = false): readonly string[] | null | undefined {
-        const input = key;
-        key = this.primitiveConversion(key, context);
-        const {proof, pending, unresolved} = this.primitiveState(key, rule);
-        if (proof.primitiveComplete) {
-            const values = proof.values.filter(value => typeof value !== "symbol" || descriptiveSymbols && input.values.has(this.primitive(value)));
-            if (values.length !== proof.values.length && context) {
-                const handler = this.exceptionHandlers.get(context);
-                if (handler) this.publish(handler, this.nativeException(context!));
-            }
-            return [...new Set(values.map(String))];
-        }
-        if (pending && !unresolved) return undefined;
-        if (context) {
-            const opaque = this.primitiveState(key, rule, true).unresolved;
-            const handler = this.exceptionHandlers.get(context);
-            if (handler) {
-                const kinds=this.primitiveKinds(key);
-                if(opaque)this.publish(handler,this.unknown);
-                else if(kinds&KIND_SYMBOL)this.publish(handler,this.nativeException(context));
-            }
-            if (opaque) this.activateOpaqueEffect(context);
-        }
-        return null;
+    private stringHintTexts(key: Cell, rule: Rule, context: ts.Node, descriptiveSymbols = false): readonly string[] | null | undefined {
+        const {proof,pending,unresolved}=this.primitiveState(this.stringHintCell(key,context,descriptiveSymbols),rule);
+        if(proof.primitiveComplete)return proof.values.map(String);
+        return pending&&!unresolved?undefined:null;
     }
     private propertyKeys(key: Cell, rule: Rule, context?: ts.Node): readonly SourcePropertyKey[] | null | undefined {
         key = this.primitiveConversion(key, context);
@@ -1908,15 +1888,30 @@ class SourceValueFlow {
         if (!conversions) {conversions = new Map(); contexts.set(context, conversions);}
         const previous = conversions.get(descriptiveSymbols); if (previous) return previous;
         const result = this.newCell(); conversions.set(descriptiveSymbols, result);
-        let rule!: Rule;
-        rule = this.rule([source], () => {
-            const choices = this.stringHintTexts(source, rule, context, descriptiveSymbols);
-            if (choices === null) this.publish(result, this.unknownString);
-            else if (choices?.length === 0) this.publish(result, this.abrupt);
-            else if (choices === undefined && this.primitiveState(this.primitiveConversion(source, context), rule).pendingSource)
-                this.publish(result, this.pendingSource);
-            else for (const choice of choices ?? []) this.publish(result, this.text(choice));
-        });
+        const primitive=this.primitiveConversion(source,context),normal=this.newCell();
+        const operation:Atom={tag:"text-operation",operation:"to-string",parts:[normal]};
+        const filtered=new Map<number,Atom>(),atoms=new Map<Atom,Cell>();
+        const convert=(atom:Atom):void=>{
+            let value=atoms.get(atom);if(!value){value=this.newCell();atoms.set(atom,value);this.publish(value,atom);}
+            // String primitives keep their original graph, so repeated
+            // conversions preserve every existing text-domain constraint.
+            if(this.primitiveKinds(value)===KIND_STRING)this.publish(result,atom);
+            else {this.publish(normal,atom);this.publish(result,operation);}
+        };
+        this.rule([source,primitive],()=>{for(const atom of primitive.values){
+            const symbols=descriptiveSymbols&&source.values.has(atom);
+            const symbol=atom.tag==="primitive"&&typeof atom.value==="symbol"||atom.tag==="non-string"&&!!((atom.kinds??(KIND_PRIMITIVE&~KIND_STRING))&KIND_SYMBOL);
+            // A joined direct Symbol and Object result can share one Symbol
+            // fact. Keep the Object conversion's TypeError alternative.
+            if(symbol&&(!symbols||!!(this.primitiveKinds(source)&(KIND_OBJECT|KIND_FUNCTION)))){
+                this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));
+            }
+            if(atom.tag==="primitive"&&typeof atom.value==="symbol"&&!symbols)continue;
+            if(atom.tag==="non-string"&&!symbols&&symbol){
+                const kinds=(atom.kinds??(KIND_PRIMITIVE&~KIND_STRING))&~KIND_SYMBOL;
+                let value=filtered.get(kinds);if(!value){value=kinds?{tag:"non-string",kinds}:this.abrupt;filtered.set(kinds,value);}convert(value);
+            }else convert(atom);
+        }});
         return result;
     }
     private projectMemberKeys(name: string | ts.PropertyName, context: ts.Node, project: (key: SourcePropertyKey | null) => void, owner?: ObjectOwner): void {
@@ -1990,7 +1985,8 @@ class SourceValueFlow {
                 keys.add(typeof atom.value === "symbol" ? atom.value : String(atom.value));
                 continue;
             }
-            if (atom.tag === "non-string" && !!atom.kinds && !(atom.kinds & ~KIND_NUMERIC) ||
+            if (atom.tag === "text-operation" && atom.operation === "to-string" && !(this.primitiveKinds(atom.parts[0]!) & ~KIND_NUMERIC) ||
+                atom.tag === "non-string" && !!atom.kinds && !(atom.kinds & ~KIND_NUMERIC) ||
                 atom.tag === "text-operation" && (atom.operation === "coerce" ||
                     atom.operation === "numeric" && atom.numeric!.result !== "boolean" && atom.numeric!.conversion !== "default")) numeric = true;
             else return null;
@@ -5781,6 +5777,7 @@ class SourceValueFlow {
                                 const open=atom.arrayLength===null?"{":"[",close=atom.arrayLength===null?"}":"]";
                                 add(!pieces.length?open+close:gap?open+"\n"+indent+pieces.join(",\n"+indent)+"\n"+stepback+close:open+pieces.join(",")+close);
                             }
+                            else if(atom.operation==="to-string"){add(String(tuple[0]));}
                             else if (atom.operation === "template") {if (!tuple.some(value => typeof value === "symbol")) add(tuple.map(String).join(""));}
                         }
                     } else {primitiveComplete = false; if (atom.tag === "unknown-string") textComplete = false;}

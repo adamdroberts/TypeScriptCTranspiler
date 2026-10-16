@@ -1,3 +1,5 @@
+- Preserve String conversion inputs, numeric property-key constraints and TypeError paths for joined Symbol values in finite source analysis.
+
 - Retain installed native-owner callback values and allocated descriptors in source analysis, using abstract ActualLists for opaque callback arguments.
 
 - Initialize globalThis through the shared Realm source binding for ordinary, eval and generated Function References.
