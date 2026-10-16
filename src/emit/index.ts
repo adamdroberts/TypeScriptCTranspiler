@@ -34031,7 +34031,10 @@ class Emitter {
             return !this.isDirectScopeLexicalDeclaration(decl);
         }
         const commonJsValueDecl = decl ? this.commonJsObjectExportValueDeclaration(decl) : null;
-        if (commonJsValueDecl && ts.isFunctionDeclaration(commonJsValueDecl)) return true;
+        // Imported source functions use the same callable ABI decision as
+        // local declarations; their export property does not create a C entry.
+        if (commonJsValueDecl && ts.isFunctionDeclaration(commonJsValueDecl))
+            return !hasCanonicalValueFormals(commonJsValueDecl) && !this.isDirectScopeLexicalDeclaration(commonJsValueDecl);
         return false;
     }
 
