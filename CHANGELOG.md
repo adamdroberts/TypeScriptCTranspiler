@@ -1,3 +1,5 @@
+- Project captured source aliases through one retained worklist, preserving derived operands and origin-only effects without cloning every copy edge.
+
 - Canonicalize incomparable source capture filters through their retained phase graph, preserving timing predicates while removing permutation duplication.
 
 - Reuse each originating opaque source site's escape worklist for recursive synthetic invocations, retaining normal and abrupt reachable values without a depth cutoff.

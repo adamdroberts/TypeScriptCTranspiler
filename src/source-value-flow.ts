@@ -358,7 +358,6 @@ class SourceValueFlow {
     private readonly moduleMetadata = new Map<ts.SourceFile, Cell>();
     private readonly importTargetCells = new Map<ts.CallExpression,Cell>();
     private readonly moduleNamespacePending: {source: ts.SourceFile; symbol: ts.Symbol|undefined; owner: ObjectOwner}[] = [];
-    private readonly capturedOrigins=new WeakMap<Cell,Map<SourceCapturePhase,Cell>>();
     private readonly queue: Rule[] = [];
     private queueCursor = 0;
     private readonly initializers: Array<{ node: ts.Node; result: Cell }> = [];
@@ -807,13 +806,6 @@ class SourceValueFlow {
         let written=contexts.get(context);if(!written){written=this.newCell();contexts.set(context,written);this.knownWriteOrigins.set(written,{tag:"unknown",origin:context});this.copy(from,written);}
         this.copy(written,into);
     }
-    private captureOrigins(from:Cell,phase:SourceCapturePhase):Cell {
-        let phases=this.capturedOrigins.get(from);if(!phases){phases=new Map();this.capturedOrigins.set(from,phases);}let result=phases.get(phase);if(result)return result;
-        result=this.newCell();phases.set(phase,result);const target=result,activation=this.enclosingActivation(phase.context);
-        this.rule([from,...(activation?[activation.active,this.activationTiming(activation)]:[])],()=>{
-            for(const atom of from.values)if(atom.tag==="unknown"&&this.effectVisible(atom,phase.context,phase.argumentsRead))this.publish(target,atom);
-        });return target;
-    }
     /** Activation origins use the same monotone Cell graph as values. A
      * recursive call shares its caller's origins rather than growing a path. */
     private executionOrigins(context?:ts.Node):Cell {
@@ -1052,24 +1044,35 @@ class SourceValueFlow {
         };
         const captured=project(from);
         const extend=()=>{while(pending.length){const source=pending.pop()!,target=project(source),atoms=new Map<Atom,Atom>();
-            this.rule([source,...(this.enclosingActivation(context)?[this.enclosingActivation(context)!.active,this.activationTiming(this.enclosingActivation(context)!)]:[])],()=>{
-                const written=this.knownWriteOrigins.get(source);
-                if(written&&!this.effectVisible(written,context,argumentsRead))return;
-                const transform=this.returnTransforms.get(source);
-                if(transform){const replay=transform.evaluate(transform.inputs.map(project));
-                    if(replay!==source){this.copy(project(replay),target);extend();return;}}
-                for(const atom of Set.prototype.values.call(source.values) as Iterable<Atom>){
-                    if(!this.effectVisible(atom,context,argumentsRead))continue;
-                    let value=atom;
-                    if(atom.tag==="text-operation"){
-                        const inherited=this.projectedAtomPhases.get(atom);
-                        if(!inherited?.has(phase!)){let prior=atoms.get(atom);if(!prior){prior={...atom,parts:atom.parts.map(project)};atoms.set(atom,prior);
-                            this.projectedAtomPhases.set(prior,new Set([...(inherited??[]),phase!]));}value=prior;}
+            let read!:Rule;
+            read=this.rule([source,...(this.enclosingActivation(context)?[this.enclosingActivation(context)!.active,this.activationTiming(this.enclosingActivation(context)!)]:[])],()=>{
+                // A read projects its retained copy graph with one worklist.
+                // Only derived operands need their own value view; alias
+                // edges do not allocate a clone for every source cell.
+                const worklist=[{source,origins:false}],visited=new Map<Cell,number>();
+                while(worklist.length){const {source,origins}=worklist.pop()!,bit=origins?1:2;
+                    if((visited.get(source)??0)&bit)continue;visited.set(source,(visited.get(source)??0)|bit);this.watch(read,source);
+                    if(!origins){
+                        const written=this.knownWriteOrigins.get(source);
+                        if(written&&!this.effectVisible(written,context,argumentsRead))continue;
+                        const transform=this.returnTransforms.get(source);
+                        if(transform){const replay=transform.evaluate(transform.inputs.map(project));
+                            if(replay!==source){worklist.push({source:replay,origins:false});continue;}}
                     }
-                    this.publish(target,value);
+                    for(const atom of Set.prototype.values.call(source.values) as Iterable<Atom>){
+                        if(origins&&atom.tag!=="unknown"||!this.effectVisible(atom,context,argumentsRead))continue;
+                        let value=atom;
+                        if(atom.tag==="text-operation"){
+                            const inherited=this.projectedAtomPhases.get(atom);
+                            if(!inherited?.has(phase)){let prior=atoms.get(atom);if(!prior){prior={...atom,parts:atom.parts.map(project)};atoms.set(atom,prior);
+                                this.projectedAtomPhases.set(prior,new Set([...(inherited??[]),phase]));}value=prior;}
+                        }
+                        this.publish(target,value);
+                    }
+                    for(const [facts,kind]of source.values.sources)worklist.push({source:this.sourceCells.get(facts)!,origins:origins||kind==="origin"});
                 }
-                for(const [facts,kind]of source.values.sources){const origin=this.sourceCells.get(facts)!;this.copy(kind==="value"?project(origin):this.captureOrigins(origin,phase!),target);}
-                extend();});
+                extend();
+            });
         }};
         extend();return captured;
     }
