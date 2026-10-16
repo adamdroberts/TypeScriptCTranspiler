@@ -1,14 +1,15 @@
 import ts from 'typescript';
 import {classDefinitionPlan} from './emit/class-definition';
 
-interface Region {readonly definition:ts.ClassLikeDeclaration;readonly domain:object;readonly index:number;}
-/** Source offsets order ordinary sibling evaluations. Class definitions have
- * an explicit evaluation plan: all keys precede static initialization, while
- * instance initializers and callable bodies belong to separate activations. */
+type Definition=ts.ClassLikeDeclaration|ts.SwitchStatement;
+interface Region {readonly definition:Definition;readonly domain:object;readonly index:number;}
+/** Source offsets order ordinary siblings within an evaluation region.
+ * Class keys precede static initialization; switch selection precedes every
+ * body it selects. Deferred class bodies retain their separate activations. */
 export class SourceEvaluationOrder {
     private readonly indexed=new WeakSet<ts.SourceFile>();
     private readonly regions=new WeakMap<ts.Node,Region>();
-    private readonly paths=new WeakMap<ts.Node,readonly (Region|{definition:ts.ClassLikeDeclaration})[]>();
+    private readonly paths=new WeakMap<ts.Node,readonly (Region|{definition:Definition})[]>();
     private index(source:ts.SourceFile):void {
         if(this.indexed.has(source))return;this.indexed.add(source);
         const pending:ts.Node[]=[source];
@@ -34,16 +35,24 @@ export class SourceEvaluationOrder {
                     if('body' in member)retain(member.body,member,0);
                 }
             }
+            if(ts.isSwitchStatement(node)){
+                const definition=node,retain=(root:ts.Node,index:number)=>this.regions.set(root,{definition,domain:definition,index});
+                retain(definition.expression,0);
+                for(const clause of definition.caseBlock.clauses){
+                    if(ts.isCaseClause(clause))retain(clause.expression,1);
+                    for(const statement of clause.statements)retain(statement,2);
+                }
+            }
             ts.forEachChild(node,child=>{pending.push(child);});
         }
     }
-    private path(node:ts.Node):readonly (Region|{definition:ts.ClassLikeDeclaration})[] {
+    private path(node:ts.Node):readonly (Region|{definition:Definition})[] {
         const prior=this.paths.get(node);if(prior)return prior;
         this.index(node.getSourceFile());
-        const regions=new Map<ts.ClassLikeDeclaration,Region>(),path:(Region|{definition:ts.ClassLikeDeclaration})[]=[];
+        const regions=new Map<Definition,Region>(),path:(Region|{definition:Definition})[]=[];
         for(let current:ts.Node|undefined=node;current;current=current.parent){
             const region=this.regions.get(current);if(region&&!regions.has(region.definition))regions.set(region.definition,region);
-            if(ts.isClassLike(current)&&current!==node)path.push(regions.get(current)??{definition:current});
+            if((ts.isClassLike(current)||ts.isSwitchStatement(current))&&current!==node)path.push(regions.get(current)??{definition:current});
         }
         path.reverse();this.paths.set(node,path);return path;
     }

@@ -1,3 +1,5 @@
+- Order switch selection effects before selected body source captures through the shared evaluation-region plan.
+
 - Normalize source capture intersections through one canonical constraint collection, retaining complete RHS and return projections.
 
 - Project imported and required callback timer owners through the shared native-module source descriptor collection.
