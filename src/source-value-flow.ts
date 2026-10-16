@@ -1,4 +1,5 @@
 import {SourceEvaluationOrder} from "./source-evaluation-order";
+import {SourceReachingWrites,type SourceLexicalWrite} from "./source-reaching-writes";
 import {runtimeObjectStaticMethods,runtimeReflectMethods,runtimeArrayPrototypeMethods,runtimeFunctionPrototypeMethods,runtimeFunctionRestrictedProperties,runtimeStringStaticMethods} from "./global-bindings";
 import {sourceNumericOperation, type SourceNumericOperation, type SourcePrimitive} from "./source-numeric-operations";
 import {bufferStaticDescriptors} from "./buffer-statics";
@@ -190,7 +191,7 @@ class SourceFacts extends Set<Atom> {
     override get size(): number {let size=0; for (const _ of this) size++; return size;}
 }
 interface PrimitiveCellCache {proof?:PrimitiveChoiceProof;kind?:number;readiness?:PrimitiveReadiness;}
-interface Cell { primitiveCache?:PrimitiveCellCache;readonly id: number; readonly values: SourceFacts; readonly users: Set<Rule>; }
+interface Cell { ownRevision:number;primitiveCache?:PrimitiveCellCache;readonly id: number; readonly values: SourceFacts; readonly users: Set<Rule>; }
 /** One lazy record retains cache storage while invalidation releases stale
  * proof/readiness values immediately. Undefined is a miss; a zero kind mask
  * remains a present value. */
@@ -239,7 +240,7 @@ interface EvaluationEnvironment {
     readonly declarations:Map<string,{node:ts.Identifier;function?:ts.FunctionDeclaration}>;
 }
 interface SourceRealmRecord {objectPrototype?:Cell;readonly bindings:Map<string,Cell>;owner?:ObjectOwner;host?:ObjectOwner;readonly global:Atom;readonly record:Atom;readonly operations:Map<Operation,Atom>;readonly intrinsics:Map<string,Atom>;}
-interface SourceLexicalWrite {readonly id:number;readonly origin:ts.Node;readonly reference:ts.Identifier;}
+type SourceActivation=FunctionOwner|ts.SourceFile;
 interface SourcePromiseDestination {readonly value:Cell;readonly rejection:Cell;readonly origin:ts.Node;resolvers?:Map<ts.Node,readonly Cell[]>;}
 type SourceReferenceExpression=ts.PropertyAccessExpression|ts.ElementAccessExpression;
 interface SourceReference {readonly target:SourceReferenceExpression;readonly operation:ts.Node;readonly completion:ts.Node;readonly read:boolean;base?:Cell;key?:Cell;readContext?:ts.Node;writeContext?:ts.Node;}
@@ -351,7 +352,7 @@ class SourceValueFlow {
     private readonly projectedCellPhases = new WeakMap<Cell,ReadonlySet<SourceProjectionPhase>>();
     private readonly projectedAtomPhases = new WeakMap<Atom,ReadonlySet<SourceProjectionPhase>>();
     private readonly bindingDefaults = new Map<Cell,Map<Cell,Cell>>();
-    private readonly returnTransforms = new Map<Cell,{kind:"projection"|"allocation";inputs:readonly Cell[];evaluate:(inputs:readonly Cell[])=>Cell}>();
+    private readonly returnTransforms = new Map<Cell,{kind:"projection"|"allocation"|"binding-read";inputs:readonly Cell[];evaluate:(inputs:readonly Cell[])=>Cell}>();
     private readonly normalResults = new Map<Cell, Atom>();
     private readonly exceptionHandlers = new Map<ts.Node, Cell>();
     private readonly exceptionCells = new Set<Cell>();
@@ -393,8 +394,11 @@ class SourceValueFlow {
     private undefinedCallReceiver?:Cell;
     private readonly functionThisBindings=new Map<FunctionOwner,Map<Cell,Cell>>();
     private readonly functions = new Map<CallableDefinition, FunctionOwner>();
-    private readonly activationCalls=new Map<FunctionOwner,{targets:Set<FunctionOwner>;callers:Set<FunctionOwner>}>();
-    private readonly cyclicActivationTiming=new Map<FunctionOwner,Cell>();
+    private readonly activationCalls=new Map<SourceActivation,{targets:Set<SourceActivation>;callers:Set<SourceActivation>}>();
+    private readonly cyclicActivationTiming=new Map<SourceActivation,Cell>();
+    private readonly reachingWriteGraphs=new Map<SourceActivation,SourceReachingWrites>();
+    private readonly bindingReads=new WeakMap<ts.Identifier,Map<Cell,Cell>>();
+    private readonly projectedFormalInputs=new WeakMap<Cell,Set<Cell>>();
     private readonly ownerAtoms = new WeakMap<ObjectOwner | FunctionOwner, Map<Atom["tag"], Atom>>();
     private readonly promiseAtoms = new WeakMap<Cell, WeakMap<Cell, Atom>>();
     private readonly restLocations = new Map<ts.ParameterDeclaration, {value: Cell; owner: ObjectOwner}>();
@@ -426,7 +430,7 @@ class SourceValueFlow {
     private readonly opaqueObject: Atom = { tag: "opaque-object" };
     private readonly abrupt: Atom = {tag:"abrupt"};
     private readonly pendingSource: Atom = {tag:"pending-source"};
-    private readonly evaluations = new Map<string, Cell[]>();
+    private readonly evaluations = new Map<string, {file:ts.SourceFile|null;completion:Cell}[]>();
     private readonly evaluationThrows = new Map<string,Cell[]>();
     private readonly scriptCompletions = new Map<ts.SourceFile,{summary:StatementBodyCompletions;throws:Cell}>();
     private readonly evaluationOrigins = new Map<string, Cell[]>();
@@ -546,7 +550,7 @@ class SourceValueFlow {
                 this.invalidEvaluations.add(contextKey);
                 const completion = this.newCell(); this.publish(completion, this.abrupt);
                 const values = this.evaluations.get(contextKey) ?? [];
-                values.push(completion); this.evaluations.set(contextKey, values);
+                values.push({file:null,completion}); this.evaluations.set(contextKey, values);
                 continue;
             }
             const file = entry.entry ? program.getSourceFile(path.resolve(entry.entry)) : undefined;
@@ -580,7 +584,7 @@ class SourceValueFlow {
             const errors=this.evaluationThrows.get(contextKey)??[];
             errors.push(exceptions);this.evaluationThrows.set(contextKey,errors);
             const values = this.evaluations.get(contextKey) ?? [];
-            values.push(completion); this.evaluations.set(contextKey, values);
+            values.push({file,completion}); this.evaluations.set(contextKey, values);
         }
         for (const entry of entries.functions ?? []) {
             const key=functionConstructorSourceKey(entry),file=entry.entry?program.getSourceFile(path.resolve(entry.entry)):undefined;
@@ -700,7 +704,7 @@ class SourceValueFlow {
             }
         }
     }
-    private newCell(): Cell { const cell={id:this.nextCell++,values:new SourceFacts(),users:new Set<Rule>()};this.sourceCells.set(cell.values,cell);return cell; }
+    private newCell(): Cell { const cell={id:this.nextCell++,ownRevision:0,values:new SourceFacts(),users:new Set<Rule>()};this.sourceCells.set(cell.values,cell);return cell; }
     /** Return copy graphs retain actual formal inputs independently of other
      * invocations. Local writes and derived facts stay conservative; the
      * ordinary invocation graph still owns all effects and exceptions. */
@@ -735,7 +739,11 @@ class SourceValueFlow {
                     this.publish(target,value);
                 }
                 const actual=inputs.get(source),arguments_=actual?this.formalInputs.get(source):undefined;
-                if(actual)this.copy(actual,target);
+                if(actual){
+                    let entries=this.projectedFormalInputs.get(target);if(!entries){entries=new Set();this.projectedFormalInputs.set(target,entries);}
+                    if(!entries.has(actual)){entries.add(actual);target.ownRevision++;for(const user of target.users)this.schedule(user);}
+                    this.copy(actual,target);
+                }
                 for(const [facts,kind]of source.values.sources){const origin=this.sourceCells.get(facts)!;if(arguments_?.has(origin))continue;this.copy(kind==="value"?project(origin):origin,target,kind);}
                 extend();
             });
@@ -838,7 +846,7 @@ class SourceValueFlow {
             if (!parents) {parents = new Set(); this.primitiveProofParents.set(part,parents);}
             parents.add(cell);
         }
-        cell.values.add(atom);this.factRevision++;
+        cell.values.add(atom);cell.ownRevision++;this.factRevision++;
         this.primitiveChanges.add(cell);
         for (const user of cell.users) this.schedule(user);
     }
@@ -867,7 +875,7 @@ class SourceValueFlow {
     }
     private copy(from:Cell,into:Cell,kind:"value"|"origin"="value"):void {
         const previous=into.values.sources.get(from.values);if(previous==="value"||previous===kind)return;
-        into.values.sources.set(from.values,kind);this.factRevision++;
+        into.values.sources.set(from.values,kind);into.ownRevision++;this.factRevision++;
         let parents=this.primitiveProofParents.get(from);if(!parents){parents=new Set();this.primitiveProofParents.set(from,parents);}parents.add(into);
         this.primitiveChanges.add(into);for(const user of into.users)this.schedule(user);
     }
@@ -1018,23 +1026,23 @@ class SourceValueFlow {
     }
     /** Close represented call cycles through one adjacency graph. An origin
      * alone cannot distinguish successive recursive activations. */
-    private connectActivation(caller:FunctionOwner|null,callee:FunctionOwner):void {
-        if(!caller)return;
+    private sourceActivation(context:ts.Node):SourceActivation {return this.enclosingActivation(context)??this.sourceFile(context);}
+    private connectActivation(caller:SourceActivation,callee:SourceActivation):void {
         const from=this.activationEdges(caller),to=this.activationEdges(callee);
         if(from.targets.has(callee))return;from.targets.add(callee);to.callers.add(caller);
-        if(caller.kind!=="ordinary")this.publish(this.activationTiming(callee),this.primitive(true));
+        if(!("fileName"in caller)&&caller.kind!=="ordinary")this.publish(this.activationTiming(callee),this.primitive(true));
         this.copy(this.activationTiming(caller),this.activationTiming(callee));
-        const pending=[callee],reachable=new Set<FunctionOwner>();
+        const pending=[callee],reachable=new Set<SourceActivation>();
         while(pending.length){const owner=pending.pop()!;if(reachable.has(owner))continue;reachable.add(owner);for(const next of this.activationCalls.get(owner)?.targets??[])pending.push(next);}
         if(!reachable.has(caller))return;
-        const reverse=[caller],returns=new Set<FunctionOwner>();
+        const reverse=[caller],returns=new Set<SourceActivation>();
         while(reverse.length){const owner=reverse.pop()!;if(returns.has(owner))continue;returns.add(owner);for(const prior of this.activationCalls.get(owner)?.callers??[])reverse.push(prior);}
         for(const owner of reachable)if(returns.has(owner))this.publish(this.activationTiming(owner),this.primitive(true));
     }
-    private activationEdges(owner:FunctionOwner):{targets:Set<FunctionOwner>;callers:Set<FunctionOwner>} {
+    private activationEdges(owner:SourceActivation):{targets:Set<SourceActivation>;callers:Set<SourceActivation>} {
         let edges=this.activationCalls.get(owner);if(!edges){edges={targets:new Set(),callers:new Set()};this.activationCalls.set(owner,edges);}return edges;
     }
-    private activationTiming(owner:FunctionOwner):Cell {
+    private activationTiming(owner:SourceActivation):Cell {
         let timing=this.cyclicActivationTiming.get(owner);if(!timing){timing=this.newCell();this.cyclicActivationTiming.set(owner,timing);}return timing;
     }
     private dynamicContext(node: ts.Node): boolean {
@@ -1312,6 +1320,7 @@ class SourceValueFlow {
                             if(actor){this.watch(read,actor.active);this.watch(read,this.activationTiming(actor));}
                             let visible=true;
                             for(const phase of constraints.phases){
+                                if(!visible)break;
                                 if(phase.activationOnly)continue;
                                 const {context,argumentsRead}=phase,activation=this.enclosingActivation(context);
                                 if(phase.scalar){
@@ -1342,6 +1351,47 @@ class SourceValueFlow {
             });
         }};
         extend();return captured;
+    }
+    /** Definition selection is a read operator. Its copied store inputs retain
+     * their own RHS reads; temporal captures must not replay the selection on
+     * those earlier snapshots. Return projection substitutes the binding input
+     * through the same operator, retaining actual formal provenance. */
+    private bindingRead(input:Cell,context:ts.Identifier,location=input):Cell {
+        const symbol=this.bindingSymbol(context);if(!symbol||!this.bindingWriteSites.has(symbol))return input;
+        let calls=this.bindingReads.get(context);if(!calls){calls=new Map();this.bindingReads.set(context,calls);}
+        const previous=calls.get(input);if(previous)return previous;
+        const result=this.newCell(),frame=this.sourceActivation(context),timing=this.activationTiming(frame);calls.set(input,result);
+        this.returnTransforms.set(result,{kind:"binding-read",inputs:[input],evaluate:inputs=>this.bindingRead(inputs[0]!,context,location)});
+        let revision=-1,timed:boolean|undefined,entryVersion=-1;
+        let read!:Rule;read=this.rule([input,timing,...("fileName"in frame?[]:[frame.actualChanges])],()=>{
+            const repeated=timing.values.nonempty,entries=this.formalInputs.get(input)??this.projectedFormalInputs.get(input),version=entries?.size??0;
+            if(revision===input.ownRevision&&timed===repeated&&entryVersion===version)return;
+            revision=input.ownRevision;timed=repeated;entryVersion=version;
+            const definitions=this.reachingDefinitions(context,read);
+            if(definitions===null){this.copy(input,result);return;}
+            for(const atom of Set.prototype.values.call(input.values) as Iterable<Atom>)this.publish(result,atom);
+            for(const[facts,kind]of input.values.sources){const source=this.sourceCells.get(facts)!,write=this.knownWriteOrigins.get(source);
+                if(kind==="value"&&!entries?.has(source)&&write?.lexical&&write.event&&write.location===location&&this.sourceActivation(write.origin)===frame&&!definitions.has(write.event))continue;
+                this.copy(source,result,kind);
+            }
+        });return result;
+    }
+    private reachingDefinitions(context:ts.Identifier,rule:Rule):ReadonlySet<SourceLexicalWrite>|null {
+        const symbol=this.bindingSymbol(context);if(!symbol)return null;
+        if(ts.isExportSpecifier(context.parent)||(symbol.declarations??[]).some(declaration=>sourceDeclarationIntroducesBinding(declaration)&&(declaration as ts.NamedDeclaration).name===context))return null;
+        const frame=this.sourceActivation(context),timing=this.activationTiming(frame);this.watch(rule,timing);
+        if(timing.values.nonempty||this.repeatedActivationContext(context))return null;
+        let root:ts.Node,parameters:readonly ts.ParameterDeclaration[]=[];
+        if("fileName"in frame){
+            if(this.sourceOrigins.has(frame)||this.dynamicContext(context))return null;
+            root=frame;
+        }else{
+            if(frame.kind!=="ordinary"||!frame.node?.body)return null;
+            root=frame.node.body;parameters=frame.parameters;
+        }
+        let graph=this.reachingWriteGraphs.get(frame);
+        if(!graph){graph=new SourceReachingWrites(root,this.lexicalWriteEvents,node=>this.sourceActivation(node)===frame,node=>this.bindingSymbol(node),parameters,target=>this.assignmentTarget(target));this.reachingWriteGraphs.set(frame,graph);}
+        return graph.reaching(context);
     }
     private bindingSymbol(node: ts.Identifier): ts.Symbol | undefined {
         // Ordinary checker lookup stops at with. Resolve the declarative
@@ -5725,16 +5775,16 @@ class SourceValueFlow {
             }
             const ambient=this.isAmbientIdentifier(node);
             const binding=this.binding(node);
-            let absence!:Rule;absence=this.rule([binding],()=>{
+            if(ambient){let absence!:Rule;absence=this.rule([binding],()=>{
                 if(!this.presenceClosed){this.presenceRules.add(absence);return;}
-                if(ambient&&this.evaluationDeclarationUnavailable(binding,node))this.publish(result,this.unknown);
-            });
+                if(this.evaluationDeclarationUnavailable(binding,node))this.publish(result,this.unknown);
+            });}
             // Lexical, imported and global source bindings share the same
             // origin capture. Dynamic/repeated contexts remain conservative.
             const symbol=this.bindingSymbol(node),declaration=symbol?.valueDeclaration,activation=this.enclosingActivation(node);
             const location=activation&&declaration&&this.enclosingActivation(declaration)===activation&&!this.repeatedActivationContext(node)&&
                 [...this.bindingWriteSites.get(symbol!)??[]].some(([site,leaves])=>this.enclosingActivation(site)===activation&&!this.repeatedActivationContext(site)&&[...leaves.values()].some(event=>this.readBeforeWrite(node,site,event.reference)))?binding:undefined;
-            this.copy(this.captureRead(binding,node,false,location),result);
+            this.copy(this.captureRead(this.bindingRead(binding,node),node,false,location),result);
             if (this.bindingMayBeUninitialized(node)) this.publish(result,this.primitive(undefined));
             for (const base of this.withBindingObjects(node)) this.copy(this.property(base, node.text, node), result);
             if (ambient && !this.evaluationGlobalTargets.has(node) && !this.evaluationEnvironments.has(this.sourceFile(node)) && !this.globalLexicals.has(node.text)) {
@@ -6439,7 +6489,7 @@ class SourceValueFlow {
                             this.publish(result!,this.abrupt);
                             continue;
                         }
-                        this.onActive(node,()=>{this.connectActivation(this.enclosingActivation(node),atom.owner);if(this.hasInvocationTiming(node))this.publish(this.activationTiming(atom.owner),this.primitive(true));this.copy(this.executionOrigins(node),atom.owner.active);this.recordCallArguments(atom.owner,signature,argv,invocation.sequence,node);});
+                        this.onActive(node,()=>{this.connectActivation(this.sourceActivation(node),atom.owner);if(this.hasInvocationTiming(node))this.publish(this.activationTiming(atom.owner),this.primitive(true));this.copy(this.executionOrigins(node),atom.owner.active);this.recordCallArguments(atom.owner,signature,argv,invocation.sequence,node);});
                         if (invocation.construct) {
                             const instance = this.owner(node);
                             this.markPropertyAlgorithm(instance,ts.isClassLike(atom.owner.definition)&&atom.owner.base?"opaque":"ordinary");
@@ -6730,6 +6780,7 @@ class SourceValueFlow {
                                     const sharedKey=evaluationContextKey(String(text),undefined);
                                     const generated=[...(this.evaluations.get(contextKey)??[]),...(this.evaluations.get(sharedKey)??[])];
                                     if(!handled(atom,signature+":environment:"+contextKey))this.onActive(node,()=>{
+                                        if(atom.operation!=="agent-start")for(const record of generated)if(record.file)this.connectActivation(this.sourceActivation(node),record.file);
                                         if(atom.operation==="eval")this.connectEvaluationEnvironment(String(text),node,direct,atom.realm??this.currentRealm);
                                         for(const origins of [...(this.evaluationOrigins.get(contextKey)??[]),...(this.evaluationOrigins.get(sharedKey)??[])])
                                             this.copy(this.executionOrigins(node),origins);
@@ -6739,7 +6790,7 @@ class SourceValueFlow {
                                         const handler = this.exceptionHandlers.get(node);
                                         if (handler) this.onActive(node, () => this.publish(handler, this.nativeException(node)));
                                     }
-                                    for (const value of generated) this.copy(value, result!);
+                                    for (const value of generated) this.copy(value.completion, result!);
                                     const handler=this.exceptionHandlers.get(node);
                                     if(handler)for(const errors of [...(this.evaluationThrows.get(contextKey)??[]),...(this.evaluationThrows.get(sharedKey)??[])])this.copy(errors,handler);
                                 }

@@ -31,9 +31,16 @@ test('eval source facts join actual caller bindings while indirect eval keeps gl
   const calls=sourceEvaluationInvocations(built.program,{roots:[entry],evaluations:[{source:'value',entry:direct,kind:'direct'},{source:'value',entry:indirect,kind:'indirect'}]});
   expect(calls.find(call=>call.node.getText()==='eval(direct())')?.choices).toEqual(['19;']);
   expect(calls.find(call=>call.node.getText()==='eval(indirect())')?.choices).toEqual(['17;']);
-  await writeFile(entry,"function first(){let value='29;';return eval('value')}function second(){let value='31;';return eval('value')}eval(first());eval(second());");
+  const sharedSource="function first(){let value='29;';return eval('value')}function second(){let value='31;';return eval('value')}eval(first());eval(second());";
+  await writeFile(entry,sharedSource);
+  const oracle=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm"),context=vm.createContext({});vm.runInContext(fs.readFileSync(process.argv[1],"utf8"),context);fs.writeSync(1,JSON.stringify(vm.runInContext("[first(),second()]",context)));',entry],{stdout:'pipe',stderr:'pipe',timeout:30000});
+  expect({code:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({code:0,stderr:''});
+  const actualSources=JSON.parse(oracle.stdout.toString()) as string[];expect(actualSources).toEqual(['29;','31;']);
   const shared=buildProgram({entry,packageRoot:resolvePackageRoot(),additionalRoots:[direct],isolatedScriptRoots:[direct]});
-  for(const call of sourceEvaluationInvocations(shared.program,{roots:[entry],evaluations:[{source:'value',entry:direct,kind:'direct'}]}).filter(call=>['eval(first())','eval(second())'].includes(call.node.getText())))expect(call.choices).toEqual(expect.arrayContaining(['29;','31;']));
+  const sharedCalls=sourceEvaluationInvocations(shared.program,{roots:[entry],evaluations:[{source:'value',entry:direct,kind:'direct'}]}).filter(call=>['eval(first())','eval(second())'].includes(call.node.getText()));
+  expect(sharedCalls.map(call=>call.node.getText())).toEqual(['eval(first())','eval(second())']);
+  for(const [index,call]of sharedCalls.entries())expect(call.choices).toContain(actualSources[index]!);
+  expect([...new Set(sharedCalls.flatMap(call=>call.choices??[]))].sort()).toEqual(actualSources);
   await writeFile(entry,"function read(){let value='37;';with({value:'41;'})return eval('value')}eval(read());");
   const withOwner=buildProgram({entry,packageRoot:resolvePackageRoot(),additionalRoots:[direct],isolatedScriptRoots:[direct]});
   expect(sourceEvaluationInvocations(withOwner.program,{roots:[entry],evaluations:[{source:'value',entry:direct,kind:'direct'}]}).find(call=>call.node.getText()==='eval(read())')?.choices).toContain('41;');

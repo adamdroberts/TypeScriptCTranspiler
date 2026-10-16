@@ -103,6 +103,7 @@
     "src/resolve.ts",
     "src/source-bindings.ts",
     "src/source-file-expression-proof.ts",
+    "src/source-reaching-writes.ts",
     "src/source-value-flow.ts",
     "src/test262-agent-operations.ts",
     "src/runtime-code-aot.ts",
