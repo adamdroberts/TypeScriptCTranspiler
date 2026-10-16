@@ -5181,7 +5181,9 @@ class SourceValueFlow {
         if(!calls){calls=new Map();this.callResults.set(node,calls);}
         const existing=calls.get(signature);
         if(existing){this.copy(existing,result);return;}
-        calls.set(signature,result);
+        // The invocation owns its result location. Consumers can attach
+        // derived read projections without changing the cached call itself.
+        const returned=this.newCell();calls.set(signature,returned);this.copy(returned,result);result=returned;
         const sequence = this.argumentSequence(node, parts);
         const constructedReceiver=this.newCell();
         this.publish(constructedReceiver,{tag:"object",owner:this.owner(node)});
@@ -6055,6 +6057,18 @@ class SourceValueFlow {
             return [expression,this.choices(target??cells[index]!)];
         }));
     }
+    private sealSourceValue(node:ts.Node,cell:Cell):boolean {
+        if(cell.values.nonempty)return false;
+        const activation=this.enclosingActivation(node);
+        if(activation&&!activation.active.values.nonempty)return false;
+        const origins=this.sourceOrigins.get(this.sourceFile(node));
+        if(!activation&&origins&&!origins.values.nonempty)return false;
+        if(this.guards(node).some(guard=>{
+            const proof=this.primitiveChoiceProof(guard.condition);
+            return proof.primitiveComplete&&!proof.values.some(value=>!!value===guard.truthy);
+        })){this.publish(cell,this.abrupt);return true;}
+        this.publish(cell,this.normalResults.get(cell)??(ts.isNewExpression(node)?this.opaqueObject:this.unknown));return true;
+    }
     solve(): { constructors: ConstructorInvocation[]; evaluations: EvaluationInvocation[] } {
         for (;;) {
             while (this.moduleNamespacePending.length || this.initializers.length || this.queueCursor < this.queue.length || this.primitiveChanges.size) {
@@ -6094,20 +6108,12 @@ class SourceValueFlow {
             for (const cell of this.exceptionCells) if (!cell.values.nonempty) {this.publish(cell, this.abrupt); changed = true;}
             for (const cell of this.accessorSlots) if (!cell.values.nonempty) {this.publish(cell, this.primitive(undefined)); changed = true;}
             if (changed) continue;
-            for (const [node, cell] of this.cells) if (!cell.values.nonempty) {
-                const activation = this.enclosingActivation(node);
-                if (activation && !activation.active.values.nonempty) continue;
-                const origins=this.sourceOrigins.get(this.sourceFile(node));
-                if(!activation&&origins&&!origins.values.nonempty)continue;
-                if(this.guards(node).some(guard=>{
-                    const proof=this.primitiveChoiceProof(guard.condition);
-                    return proof.primitiveComplete&&!proof.values.some(value=>!!value===guard.truthy);
-                })){this.publish(cell,this.abrupt);changed=true;continue;}
-                // [[Construct]] either throws or returns an Object. Its
-                // properties and conversion remain opaque, but eval retains
-                // the object unchanged without needing a source-text proof.
-                this.publish(cell, this.normalResults.get(cell) ?? (ts.isNewExpression(node) ? this.opaqueObject : this.unknown)); changed = true;
-            }
+            // Close canonical invocation locations before their expression
+            // consumers, so native normal categories cannot become top at an
+            // otherwise empty forwarding edge.
+            for(const [node,calls]of this.callResults)for(const cell of calls.values())if(this.normalResults.has(cell))changed=this.sealSourceValue(node,cell)||changed;
+            if(changed)continue;
+            for(const [node,cell]of this.cells)changed=this.sealSourceValue(node,cell)||changed;
             if (!changed) break;
         }
         // A guarded call may never initialize its callee/invocation rule.

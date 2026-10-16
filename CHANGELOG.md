@@ -856,6 +856,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Give each source invocation a canonical result cell, separating callback output from projected property readers and preserving native normal-result sealing without fabricating absent hooks.
+
 - Lower every object literal spread through native CopyDataProperties, preserving own data, getters, symbols and properties beyond typed target fields.
 - Retain callable construction, receiver and returned/thrown reachability through the shared source owner graph, including copied values and private slots resolved from canonical class-private names.
 - Select the canonical source callable ABI for CommonJS named imports; make CommonJS owner-test package context explicit for Node references under repository-local TMPDIR.
