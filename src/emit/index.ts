@@ -17451,7 +17451,7 @@ class Emitter {
         return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
     }
 
-    private emitNativeAddonRequireDestructureValue(
+    private emitOwnerRequireDestructureValue(
         nativeAddon: EmitResult,
         exportName: string,
         element: ts.BindingElement,
@@ -17475,7 +17475,7 @@ class Emitter {
         if (!ts.isObjectBindingPattern(d.name)) {
             unsupported(d.name, "destructuring at module scope");
         }
-        const nativeAddon = this.emitNativeAddonValue(spec, d.getSourceFile().fileName);
+        const nativeAddon = this.emitNativeAddonValue(spec, d.getSourceFile().fileName) ?? this.nativeHostModuleOwner(spec);
         if (nativeAddon) {
             const excluded = this.requireDestructureExcludedExportNames(d.name);
             for (const element of d.name.elements) {
@@ -17494,7 +17494,7 @@ class Emitter {
                     unsupported(element.name, "top-level require destructuring requires identifier bindings");
                 }
                 const localName = this.declaredName(element.name);
-                const value = this.emitNativeAddonRequireDestructureValue(nativeAddon, exportName, element);
+                const value = this.emitOwnerRequireDestructureValue(nativeAddon, exportName, element);
                 this.agentStorage.declare("tsc_value_t",localName);
                 initBuf.line(`${localName} = ${value.c};`);
                 const sym = this.symbolForIdentifier(element.name);
@@ -17616,7 +17616,7 @@ class Emitter {
         const spec = this.nativeAddonSpecifierFromExpression(varDecl.initializer) ??
             this.requireCallSpecifier(varDecl.initializer);
         if (!spec) return null;
-        if (this.nativeAddonPathForSpecifier(spec, varDecl.getSourceFile().fileName)) {
+        if (this.nativeAddonPathForSpecifier(spec, varDecl.getSourceFile().fileName) || this.nativeHostModuleOwner(spec,false,false)) {
             if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
             return T_VALUE;
         }
@@ -28319,7 +28319,7 @@ class Emitter {
         if (!ts.isObjectBindingPattern(d.name)) {
             unsupported(d.name, "require destructuring requires an object binding pattern");
         }
-        const nativeAddon = this.emitNativeAddonValue(spec, d.getSourceFile().fileName);
+        const nativeAddon = this.emitNativeAddonValue(spec, d.getSourceFile().fileName) ?? this.nativeHostModuleOwner(spec);
         if (nativeAddon) {
             const excluded = this.requireDestructureExcludedExportNames(d.name);
             for (const element of d.name.elements) {
@@ -28343,7 +28343,7 @@ class Emitter {
                     unsupported(element.name, "require destructuring requires identifier bindings");
                 }
                 const localName = mangleIdent(element.name.text);
-                const value = this.emitNativeAddonRequireDestructureValue(nativeAddon, exportName, element);
+                const value = this.emitOwnerRequireDestructureValue(nativeAddon, exportName, element);
                 const sym = this.symbolForIdentifier(element.name);
                 if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
                 const cell = this.currentFunctionCellForSymbol(sym);
@@ -32751,41 +32751,43 @@ class Emitter {
             this.isDefaultImportFrom(expr, ["events", "node:events"])
         );
     }
+    private readonly nativeHostModules=new Map<string,{
+        module:(namespace:boolean)=>string;export:(name:string)=>string;members:{has(name:string):boolean};libuv?:boolean;
+    }>([
+        ["fs",{module:namespace=>`tsc_fs_module_value(false,${namespace})`,export:name=>`tsc_fs_export_value(false,${this.stringLit(name)})`,members:new Set([...runtimeFsExports.get("sync")!,"constants","promises","Dirent"]),libuv:true}],
+        ["fs/promises",{module:namespace=>`tsc_fs_module_value(true,${namespace})`,export:name=>`tsc_fs_export_value(true,${this.stringLit(name)})`,members:new Set([...runtimeFsExports.get("promises")!,"constants"]),libuv:true}],
+        ["crypto",{module:namespace=>`tsc_crypto_module_value(${namespace})`,export:name=>`tsc_crypto_export_value(${this.stringLit(name)})`,members:cryptoExports}],
+        ["child_process",{module:namespace=>`tsc_child_process_module_value(${namespace})`,export:name=>`tsc_child_process_export_value(${this.stringLit(name)})`,members:new Set(runtimeChildProcessOperations.keys())}],
+        ["buffer",{module:namespace=>`tsc_buffer_module_value(${namespace})`,export:name=>`tsc_buffer_module_export_value(${this.stringLit(name)})`,members:runtimeBufferExports}],
+        ["util",{module:namespace=>`tsc_util_module_value(${namespace})`,export:name=>`tsc_util_export_value(${this.stringLit(name)})`,members:runtimeUtilExports}],
+        ["timers",{module:namespace=>`tsc_callback_timers_module_value(${namespace})`,export:name=>`tsc_callback_timers_export_value(${this.stringLit(name)})`,members:callbackTimerOperations}],
+        ["timers/promises",{module:namespace=>`tsc_timers_promises_module_value(${namespace})`,export:name=>`tsc_timers_promises_export_value(${this.stringLit(name)})`,members:new Set([...timersPromiseOperations.keys()].map(name=>name.split(".")[0]!))}],
+        ["url",{module:namespace=>`tsc_url_module_value(${namespace})`,export:name=>`tsc_url_module_export_value(${this.stringLit(name)})`,members:new Set(["URL","URLSearchParams","fileURLToPath","pathToFileURL"])}],
+        ["console",{module:namespace=>`tsc_console_module_value(${namespace})`,export:name=>`tsc_console_module_export_value(${this.stringLit(name)})`,members:consoleOperations}],
+    ]);
+    private nativeHostModuleOwner(specifier:string,namespace=false,trackRuntime=true):EmitResult|null {
+        const owner=this.nativeHostModules.get(specifier.replace(/^node:/,""));if(!owner)return null;
+        if(trackRuntime&&owner.libuv)this.usesLibuv=true;
+        return {c:owner.module(namespace),ty:T_VALUE};
+    }
     private importedHostModuleOwner(expression: ts.Expression, trackRuntime = true): EmitResult | null {
         const expr = unwrapTransparentExpression(expression);
         if (ts.isIdentifier(expr) && this.namedImportExportName(expr,["os","node:os"]) === "userInfo" ||
             ts.isPropertyAccessExpression(expr) && expr.name.text === "userInfo" && ts.isIdentifier(expr.expression) && this.isOsModuleIdentifier(expr.expression))
             return {c:"tsc_os_user_info_function()",ty:T_VALUE};
-        const fsNames = ["fs", "node:fs"];
-        if (ts.isIdentifier(expr)) {
-            const namespace=this.isNamespaceImportFrom(expr,fsNames),ordinary=this.isDefaultImportFrom(expr,fsNames)||this.isUnshadowedGlobalIdentifier(expr,"fs");
-            const promiseNamespace=this.isNamespaceImportFrom(expr,["fs/promises","node:fs/promises"]),promiseDefault=this.isDefaultImportFrom(expr,["fs/promises","node:fs/promises"]);
-            if(namespace||ordinary||promiseNamespace||promiseDefault){if(trackRuntime)this.usesLibuv=true;return {c:`tsc_fs_module_value(${promiseNamespace||promiseDefault},${namespace||promiseNamespace})`,ty:T_VALUE};}
-            for(const promises of [false,true]) {
-                const names=promises?["fs/promises","node:fs/promises"]:fsNames;
-                const name=this.namedImportExportName(expr,names);
-                if(name&&(runtimeFsExports.get(promises?"promises":"sync")!.has(name)||name==="constants"||!promises&&(name==="promises"||name==="Dirent"))){if(trackRuntime)this.usesLibuv=true;return {c:`tsc_fs_export_value(${promises},${this.stringLit(name)})`,ty:T_VALUE};}
-            }
-        }
-
         if(ts.isIdentifier(expr)&&this.isUnshadowedGlobalIdentifier(expr,"crypto"))
-            return {c:"tsc_crypto_module_value(false)",ty:T_VALUE};
-        const modules = [
-            { names: ["crypto", "node:crypto"], value: "tsc_crypto_module_value", export: "tsc_crypto_export_value", members: cryptoExports },
-            { names: ["child_process", "node:child_process"], value: "tsc_child_process_module_value", export: "tsc_child_process_export_value", members: new Set(runtimeChildProcessOperations.keys()) },
-            { names: ["buffer", "node:buffer"], value: "tsc_buffer_module_value", export: "tsc_buffer_module_export_value", members: runtimeBufferExports },
-            { names: ["util", "node:util"], value: "tsc_util_module_value", export: "tsc_util_export_value", members: runtimeUtilExports },
-            { names: ["timers", "node:timers"], value: "tsc_callback_timers_module_value", export: "tsc_callback_timers_export_value", members: callbackTimerOperations },
-            { names: ["timers/promises", "node:timers/promises"], value: "tsc_timers_promises_module_value", export: "tsc_timers_promises_export_value", members: new Set([...timersPromiseOperations.keys()].map(name => name.split(".")[0]!)) },
-            { names: ["url", "node:url"], value: "tsc_url_module_value", export: "tsc_url_module_export_value", members: new Set(["URL", "URLSearchParams", "fileURLToPath", "pathToFileURL"]) },
-            { names: ["console", "node:console"], value: "tsc_console_module_value", export: "tsc_console_module_export_value", members: consoleOperations },
-        ];
-        if (ts.isIdentifier(expr)) for (const owner of modules) {
-            if (this.isNamespaceImportFrom(expr, owner.names)) return { c: owner.value + "(true)", ty: T_VALUE };
-            if (this.isDefaultImportFrom(expr, owner.names)) return { c: owner.value + "(false)", ty: T_VALUE };
-            const name = this.namedImportExportName(expr, owner.names);
-            if (name && owner.members.has(name)) return { c: owner.export + "(" + this.stringLit(name) + ")", ty: T_VALUE };
-            if (name) unsupported(expr, "ambient host export requires an ordinary runtime owner");
+            return this.nativeHostModuleOwner("crypto",false,trackRuntime);
+        if(ts.isIdentifier(expr))for(const[specifier,owner]of this.nativeHostModules){
+            const names=[specifier,"node:"+specifier],namespace=this.isNamespaceImportFrom(expr,names);
+            if(namespace||this.isDefaultImportFrom(expr,names)||specifier==="fs"&&this.isUnshadowedGlobalIdentifier(expr,"fs"))
+                return this.nativeHostModuleOwner(specifier,namespace,trackRuntime);
+            const name=this.namedImportExportName(expr,names);
+            if(name==="default")return this.nativeHostModuleOwner(specifier,false,trackRuntime);
+            if(name&&owner.members.has(name)){
+                if(trackRuntime&&owner.libuv)this.usesLibuv=true;
+                return {c:owner.export(name),ty:T_VALUE};
+            }
+            if(name)unsupported(expr,"ambient host export requires an ordinary runtime owner");
         }
         if (ts.isPropertyAccessExpression(expr)) {
             const owner = this.importedHostModuleOwner(expr.expression,trackRuntime);
@@ -32793,8 +32795,6 @@ class Emitter {
         }
         return null;
     }
-
-
 
     private isEventEmitterConstructorIdentifier(id: ts.Identifier): boolean {
         return (
@@ -33253,8 +33253,6 @@ class Emitter {
         name: string,
         edgeKind: "import" | "require" = "require",
     ): EmitResult | null {
-        const info = this.resolvedModuleInfoForSpecifier(spec, node.getSourceFile().fileName, edgeKind);
-        if (!info) unsupported(node, `unresolved require("${spec}")`);
         const moduleValue = this.emitCommonJsRequireModuleValue(node, spec, edgeKind);
         return {
             c: `tsc_value_get_prop(${moduleValue.c}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))`,
@@ -33274,6 +33272,7 @@ class Emitter {
     ): EmitResult {
         const nativeAddon = this.emitNativeAddonValue(spec, containingFile);
         if (nativeAddon) return nativeAddon;
+        const nativeHost=this.nativeHostModuleOwner(spec);if(nativeHost)return nativeHost;
         const info = this.resolvedModuleInfoForSpecifier(spec, containingFile, edgeKind);
         if (!info) unsupported(node, `unresolved require("${spec}")`);
         if (this.isCommonJsSourceFile(info.sf)) return this.commonJsModuleValue(info, true);

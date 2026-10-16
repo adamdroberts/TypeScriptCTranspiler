@@ -1267,44 +1267,17 @@ class SourceValueFlow {
             return reference.value;
         }
         for(const declaration of origin?.declarations??[]){
-            let current:ts.Node|undefined=declaration;while(current&&!ts.isImportDeclaration(current)&&!ts.isSourceFile(current))current=current.parent;
+            let current:ts.Node|undefined=declaration;
+            while(current&&!ts.isImportDeclaration(current)&&!ts.isSourceFile(current))current=current.parent;
             if(!current||!ts.isImportDeclaration(current)||!ts.isStringLiteralLike(current.moduleSpecifier))continue;
-            const specifier=current.moduleSpecifier.text,promises=["fs/promises","node:fs/promises"].includes(specifier);
-            if(!promises&&!["fs","node:fs"].includes(specifier))continue;
+            const descriptor=this.nativeModuleSource(current.moduleSpecifier.text);if(!descriptor)continue;
             if(current.importClause?.isTypeOnly||ts.isImportSpecifier(declaration)&&declaration.isTypeOnly)continue;
-            if(ts.isImportSpecifier(declaration))return this.fsExport(promises,(declaration.propertyName??declaration.name).text);
-            if(ts.isNamespaceImport(declaration))return this.fsModule(promises,true);
-            if(ts.isImportClause(declaration)&&declaration.name)return this.fsModule(promises,false);
-        }
-        for(const declaration of origin?.declarations??[]){
-            let current:ts.Node|undefined=declaration;
-            while(current&&!ts.isImportDeclaration(current)&&!ts.isSourceFile(current))current=current.parent;
-            if(!current||!ts.isImportDeclaration(current)||!ts.isStringLiteralLike(current.moduleSpecifier)||
-                !["util","node:util"].includes(current.moduleSpecifier.text))continue;
-            if(current.importClause?.isTypeOnly||ts.isImportSpecifier(declaration)&&declaration.isTypeOnly)continue;
-            if(ts.isImportSpecifier(declaration))return this.utilExport((declaration.propertyName??declaration.name).text);
-            if(ts.isNamespaceImport(declaration))return this.utilModule(true);
-            if(ts.isImportClause(declaration)&&declaration.name)return this.utilModule(false);
-        }
-        for(const declaration of origin?.declarations??[]){
-            let current:ts.Node|undefined=declaration;
-            while(current&&!ts.isImportDeclaration(current)&&!ts.isSourceFile(current))current=current.parent;
-            if(!current||!ts.isImportDeclaration(current)||!ts.isStringLiteralLike(current.moduleSpecifier)||
-                !["buffer","node:buffer"].includes(current.moduleSpecifier.text))continue;
-            if(current.importClause?.isTypeOnly||ts.isImportSpecifier(declaration)&&declaration.isTypeOnly)continue;
-            if(ts.isImportSpecifier(declaration))return this.bufferModuleExport((declaration.propertyName??declaration.name).text);
-            if(ts.isNamespaceImport(declaration))return this.bufferModule(true);
-            if(ts.isImportClause(declaration)&&declaration.name)return this.bufferModule(false);
-        }
-        for(const declaration of origin?.declarations??[]){
-            let current:ts.Node|undefined=declaration;
-            while(current&&!ts.isImportDeclaration(current)&&!ts.isSourceFile(current))current=current.parent;
-            if(!current||!ts.isImportDeclaration(current)||!ts.isStringLiteralLike(current.moduleSpecifier)||
-                !["child_process","node:child_process"].includes(current.moduleSpecifier.text))continue;
-            if(current.importClause?.isTypeOnly||ts.isImportSpecifier(declaration)&&declaration.isTypeOnly)continue;
-            if(ts.isImportSpecifier(declaration))return this.childProcessExport((declaration.propertyName??declaration.name).text);
-            if(ts.isNamespaceImport(declaration))return this.childProcessModule(true);
-            if(ts.isImportClause(declaration)&&declaration.name)return this.childProcessModule(false);
+            if(ts.isImportSpecifier(declaration)){
+                const name=(declaration.propertyName??declaration.name).text;
+                return name==="default"?descriptor.module(false):descriptor.export(name);
+            }
+            if(ts.isNamespaceImport(declaration))return descriptor.module(true);
+            if(ts.isImportClause(declaration)&&declaration.name)return descriptor.module(false);
         }
         const projected = sourceBindingTarget(this.checker, origin), symbol = projected.symbol;
         const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
@@ -2962,6 +2935,38 @@ class SourceValueFlow {
         for(const name of runtimeChildProcessOperations.keys())this.defineField(owner,name,this.childProcessExport(name));
         if(namespace)this.defineField(owner,"default",this.childProcessModule(false));
         this.copy(this.opaqueMutation,owner.shape);return value;
+    }
+    /** Imports and require project one native module descriptor collection.
+     * Callable/export owners stay independent of mutable global bindings. */
+    private readonly nativeModuleSources=new Map<string,{export:(name:string)=>Cell;module:(namespace:boolean)=>Cell}>([
+        ["fs",{export:name=>this.fsExport(false,name),module:namespace=>this.fsModule(false,namespace)}],
+        ["fs/promises",{export:name=>this.fsExport(true,name),module:namespace=>this.fsModule(true,namespace)}],
+        ["util",{export:name=>this.utilExport(name),module:namespace=>this.utilModule(namespace)}],
+        ["buffer",{export:name=>this.bufferModuleExport(name),module:namespace=>this.bufferModule(namespace)}],
+        ["child_process",{export:name=>this.childProcessExport(name),module:namespace=>this.childProcessModule(namespace)}],
+        ["timers",{export:name=>this.callbackTimerExport(name),module:namespace=>this.callbackTimerModule(namespace)}],
+    ]);
+    private readonly callbackTimerExports=new Map<string,Cell>();
+    private readonly callbackTimerModules=new Map<boolean,Cell>();
+    private nativeModuleSource(specifier:unknown) {
+        return typeof specifier==="string"?this.nativeModuleSources.get(specifier.replace(/^node:/,"")):undefined;
+    }
+    private callbackTimerExport(name:string):Cell {
+        const prior=this.callbackTimerExports.get(name);if(prior)return prior;
+        const value=this.newCell();this.callbackTimerExports.set(name,value);
+        if(runtimeCallbackTimerDescriptors.get(name)?.moduleExport)this.publish(value,this.operation(`callback-timer:${name}`));
+        else this.publish(value,this.unknown);
+        return value;
+    }
+    private callbackTimerModule(namespace:boolean):Cell {
+        const prior=this.callbackTimerModules.get(namespace);if(prior)return prior;
+        const value=this.newCell(),prototype=namespace?this.newCell():this.objectPrototype();
+        if(namespace)this.publish(prototype,this.primitive(null));
+        const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype,ordinary:true};
+        this.callbackTimerModules.set(namespace,value);this.publish(value,{tag:"object",owner});
+        for(const[name,descriptor]of runtimeCallbackTimerDescriptors)if(descriptor.moduleExport)this.defineField(owner,name,this.callbackTimerExport(name));
+        if(namespace)this.defineField(owner,"default",this.callbackTimerModule(false));else this.copy(this.opaqueMutation,owner.shape);
+        return value;
     }
     private readonly bufferModuleOwners=new Map<boolean,{value:Cell;owner:ObjectOwner}>();
     private readonly bufferModuleExports=new Map<string,Cell>();
@@ -5887,8 +5892,8 @@ class SourceValueFlow {
                     if(atom.tag==="operation"&&atom.operation==="native-require") {
                         const specifier=argument(0);
                         if(specifier){this.watchText(rule,specifier);const state=this.primitiveState(specifier,rule,true);if(state.pending)continue;
-                            for(const name of state.proof.values)if(name==="util"||name==="node:util")this.copy(this.utilModule(false),result);
-                            if(state.proof.primitiveComplete&&state.proof.values.every(name=>name==="util"||name==="node:util"))continue;
+                            for(const name of state.proof.values){const descriptor=this.nativeModuleSource(name);if(descriptor)this.copy(descriptor.module(false),result);}
+                            if(state.proof.primitiveComplete&&state.proof.values.every(name=>!!this.nativeModuleSource(name)))continue;
                         }
                         this.publish(result,this.opaqueObject);this.opaqueEffect(node);
                         const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.unknown);
