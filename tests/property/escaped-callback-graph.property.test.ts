@@ -23,7 +23,14 @@ test('escaped callback reachability follows represented data, prototypes, payloa
  expect(facts("class Receiver{callback(body){Function(body)}}const receiver=new Receiver();receiver.callback('return 307;');unknownCall(receiver);").some(value=>value.choices===null)).toBe(true);
  expect(facts("let body='return 307;';unknownCall({get callback(){body=opaque();return undefined}});Function(body);").some(value=>value.choices===null)).toBe(true);
  expect(facts(start+"const untouched={callback};")).toEqual([{kind:'ordinary',choices:[['return 307;']]}]);
- expect(facts(start+"unknownCall([callback].keys());")).toEqual([{kind:'ordinary',choices:[['return 307;']]}]);
+ const publicKeys=start+"unknownCall([callback].keys());",privateKeys='"use strict";{'+publicKeys+'}';
+ const setup='const NativeFunction=Function;globalThis.Function=new Proxy(NativeFunction,{apply(target,receiver,args){record(args[0]);return Reflect.apply(target,receiver,args);}});function unknownCall(iterator){for(const key of iterator){if(typeof key!=="number")throw "non-key";}if(typeof callback==="function")callback("return 311;");}';
+ for(const [source,expected]of [[publicKeys,'return 307;\nreturn 311;\n'],[privateKeys,'return 307;\n']] as const){
+  const code='const fs=require("node:fs"),vm=require("node:vm");const context=vm.createContext({record:v=>fs.writeSync(1,String(v)+"\\n")});new vm.Script('+JSON.stringify(setup)+').runInContext(context);new vm.Script(fs.readFileSync(0,"utf8")).runInContext(context);';
+  const node=nodeReferenceSync(['node','-e',code],{stdin:Buffer.from(source),stdout:'pipe',stderr:'pipe',timeout:30000});expect({code:node.exitCode,stderr:node.stderr.toString(),stdout:node.stdout.toString()}).toEqual({code:0,stderr:'',stdout:expected});
+ }
+ expect(facts(publicKeys)).toEqual([{kind:'ordinary',choices:null}]);
+ expect(facts(privateKeys)).toEqual([{kind:'ordinary',choices:[['return 307;']]}]);
 });
 
 test('escaped cyclic callback data uses explicit source closure and matches Node natively',async()=>{

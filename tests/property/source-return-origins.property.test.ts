@@ -13,13 +13,16 @@ test('shared returns preserve earlier captures and retain unknown call partition
   const source=definitions+`const saved=forward("17;");eval(saved);forward(${expression});`;
   expect({expression,error:finiteEvalScriptSourceGraph([{path:'main.js',source}]).error}).toEqual({expression,error:null});
  }
- for(const body of [
+ for(const [index,body] of [
   'for(let i=0;i<2;i++){const saved=forward("17;");forward(opaque());eval(saved);}',
   'function run(){const saved=forward("17;");if(flag)run();forward(opaque());eval(saved);}run();',
   'async function run(){const saved=forward("17;");await 0;forward(opaque());eval(saved);}run();',
- ]){
-  const result=finiteEvalScriptSourceGraph([{path:'main.js',source:definitions+body}]);expect({body,error:result.error}).toEqual({body,error:null});expect(result.directEvalSources.some(entry=>entry.source==='17;')).toBe(true);
-  const oracle=nodeReferenceSync(['node','-e','const flag=false;function opaque(){return 0}'+definitions+body],{stdout:'pipe',stderr:'pipe'});expect({code:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({code:0,stderr:''});
+ ].entries()){
+  const source=definitions+body,result=finiteEvalScriptSourceGraph([{path:'main.js',source}]);expect({body,error:result.error}).toEqual({body,error:expect.stringContaining('direct eval source is not a finite static string expression')});
+  const setup='const flag=false;let calls=0;function opaque(){forward=()=>"19;";'+(index?'if(calls++===0)run();':'')+'return 0;}',code='const fs=require("node:fs"),vm=require("node:vm");new vm.Script('+JSON.stringify(setup+source.replaceAll('eval(saved)','print(eval(saved))'))+').runInNewContext({print:v=>fs.writeSync(1,String(v)+"\\n")});';
+  const counter=nodeReferenceSync(['node','-e',code],{stdout:'pipe',stderr:'pipe',timeout:30000});expect({code:counter.exitCode,stderr:counter.stderr.toString(),stdout:counter.stdout.toString()}).toEqual({code:0,stderr:'',stdout:['17\n19\n','19\n17\n','17\n19\n'][index]});
+  const privateControl='"use strict";{const forward=value=>value;'+body+'}',finite=finiteEvalScriptSourceGraph([{path:'main.js',source:privateControl}]);expect({body,error:finite.error}).toEqual({body,error:null});expect(finite.directEvalSources.some(entry=>entry.source==='17;')).toBe(true);
+  const oracle=nodeReferenceSync(['node','-e','const flag=false;function opaque(){return 0}'+privateControl],{stdout:'pipe',stderr:'pipe',timeout:30000});expect({code:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({code:0,stderr:''});
  }
  for(const body of [
   'forward("17;");const source=forward(opaque());eval(source);',

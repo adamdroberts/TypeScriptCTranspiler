@@ -17,12 +17,22 @@ test('execution domains and fresh actual Lists preserve finite sources while exp
   expect(closed.error).toBeNull();expect(closed.agentSources).toEqual([worker]);
   const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:`globalThis.body=${JSON.stringify(worker)};const start=$262.agent.start;for(let i=0;i<2;i++){opaque();${call};}`}]);
   const iterates=call.includes('...');
-  if(iterates)expect(graph.error).toContain('agent.start source is not a finite static string expression');
-  else{expect(graph.error).toBeNull();expect(graph.agentSources).toEqual([worker]);}
+  // Opaque code may replace the global property even without iteration.
+  expect(graph.error).toContain('agent.start source is not a finite static string expression');
+  const lexical=finiteEvalScriptSourceGraph([{path:'main.js',source:`const body=${JSON.stringify(worker)};const start=$262.agent.start;for(let i=0;i<2;i++){opaque();${call};}`}]);
+  if(call==='start(body)'){expect(lexical.error).toBeNull();expect(lexical.agentSources).toEqual([worker]);}
+  else expect(lexical.error).toContain('agent.start source is not a finite static string expression');
   const reference=`const fs=require('node:fs');const body='original';function start(value){fs.writeSync(1,value+'\\n');}function opaque(){Array.prototype[Symbol.iterator]=function*(){yield 'changed';};}for(let i=0;i<2;i++){opaque();${call};}`;
   const node=nodeReferenceSync(['node','-e',reference],{stdout:'pipe',stderr:'pipe'});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   expect(node.stdout.toString()).toBe((iterates?'changed\n':'original\n').repeat(2));
+  const mutable=`const fs=require('node:fs');globalThis.body='original';function start(value){fs.writeSync(1,value+'\\n');}function opaque(){globalThis.body='changed';Array.prototype[Symbol.iterator]=function*(){yield 'changed';};}for(let i=0;i<2;i++){opaque();${call};}`;
+  const globalNode=nodeReferenceSync(['node','-e',mutable],{stdout:'pipe',stderr:'pipe'});
+  expect({code:globalNode.exitCode,stderr:globalNode.stderr.toString()}).toEqual({code:0,stderr:''});expect(globalNode.stdout.toString()).toBe('changed\n'.repeat(2));
+  if(call==='start.apply(undefined,[body])'){
+   const changedApply=`const fs=require('node:fs');const body='original';function start(value){fs.writeSync(1,value+'\\n');}function opaque(){Function.prototype.apply=function(receiver,args){return Reflect.apply(this,receiver,['changed']);};}for(let i=0;i<2;i++){opaque();${call};}`;
+   const applyNode=nodeReferenceSync(['node','-e',changedApply],{stdout:'pipe',stderr:'pipe'});expect({code:applyNode.exitCode,stderr:applyNode.stderr.toString()}).toEqual({code:0,stderr:''});expect(applyNode.stdout.toString()).toBe('changed\n'.repeat(2));
+  }
  }
  for(const call of ['const args=[body];mutate(args);Reflect.apply(start,undefined,args);','Reflect.apply(start,undefined,[readSource()]);']){
   const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:`const body=${JSON.stringify(worker)};const start=$262.agent.start;${call}`}]);

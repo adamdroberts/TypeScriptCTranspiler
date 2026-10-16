@@ -9,8 +9,8 @@ import {nodeReferenceSync} from './node-reference';
 import {parseHostObservation} from '../test262/protocol';
 
 const constructor='const executeSource=eval;class C{constructor(body){print(executeSource(body));}}new C("17;");';
-const reference=(source:string,external='()=>{}')=>{
- const node=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({external:'+external+',print:value=>fs.writeSync(1,String(value)+"\\n")});'],{stdin:Buffer.from(source),stdout:'pipe',stderr:'pipe',timeout:30000});
+const reference=(source:string,external='()=>{}',sameRealm='')=>{
+ const node=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");new vm.Script('+JSON.stringify(sameRealm)+'+fs.readFileSync(0,"utf8")).runInNewContext({external:'+external+',print:value=>fs.writeSync(1,String(value)+"\\n")});'],{stdin:Buffer.from(source),stdout:'pipe',stderr:'pipe',timeout:30000});
  expect({exitCode:node.exitCode,stderr:node.stderr.toString()}).toEqual({exitCode:0,stderr:''});return node.stdout.toString();
 };
 const graphPartitions=[
@@ -45,7 +45,8 @@ test('opaque escape retains call, construct, completion and owner graph alternat
   expect({name:part.name,calls:await choices(directory,part.name,part.source)}).toMatchObject({calls:expect.arrayContaining([null])});
  }
  const disconnected=constructor+'external({token:19});';
- expect(reference(disconnected)).toBe('17\n');expect(await choices(directory,'disconnected',disconnected)).toEqual([['17;']]);
+ expect(reference(disconnected)).toBe('17\n');expect(reference(disconnected,'()=>{}','function external(){new C("19;");}')).toBe('17\n19\n');expect(await choices(directory,'disconnected',disconnected)).toEqual([null]);
+ const privateControl='{'+disconnected+'}';expect(reference(privateControl)).toBe('17\n');expect(await choices(directory,'private-disconnected',privateControl)).toEqual([['17;']]);
  const deep=constructor+ownerGraph(512)+'external(owner512);';
  expect(reference(deep,'owner=>{while(owner.next)owner=owner.next;new owner.callback("19;");}')).toBe('17\n19\n');
  expect(await choices(directory,'deep',deep)).toEqual([null]);

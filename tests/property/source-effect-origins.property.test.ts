@@ -8,6 +8,10 @@ import {finiteEvalScriptSourceGraph} from '../test262/native-host';
 import {parseHostObservation} from '../test262/protocol';
 
 const admitted='var admitted=1;';
+function observedSources(scripts:readonly string[],setup:string):string[]{
+ const code='const fs=require("node:fs"),vm=require("node:vm"),values=[],context=vm.createContext({$262:{evalScript:value=>values.push(value)},eval:value=>values.push(value)});new vm.Script('+JSON.stringify(setup)+').runInContext(context);for(const source of '+JSON.stringify(scripts)+')new vm.Script(source).runInContext(context);fs.writeSync(1,JSON.stringify(values));';
+ const node=nodeReferenceSync(['node','-e',code],{stdout:'pipe',stderr:'pipe',timeout:30000});expect({exitCode:node.exitCode,stderr:node.stderr.toString()}).toEqual({exitCode:0,stderr:''});expect(node.stdout.length).toBeGreaterThan(0);return JSON.parse(node.stdout.toString());
+}
 test('generated Script effects preserve caller and actual argument ordering',()=>{
  for(const prior of [false,true]){
   const read='$262.evalScript(owner.code);',effect='$262.evalScript("opaque(globalThis);");';
@@ -15,8 +19,13 @@ test('generated Script effects preserve caller and actual argument ordering',()=
   if(prior)expect(graph.error).toContain('evalScript source is not a finite static string expression');else expect(graph.error).toBeNull();
  }
  for(const prefix of ['', 'mutate(owner),']){
-  const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:`function run(owner,text){opaque(owner);$262.evalScript(text);}const owner={code:${JSON.stringify(admitted)}};run(owner,(${prefix}owner.code));`}]);
-  if(prefix)expect(graph.error).toContain('evalScript source is not a finite static string expression');else expect(graph.error).toBeNull();
+  const original=`function run(owner,text){opaque(owner);$262.evalScript(text);}const owner={code:${JSON.stringify(admitted)}};run(owner,(${prefix}owner.code));`;
+  const setup='let entered=false;function opaque(owner){if(!entered){entered=true;run(owner,"var other=19;");}owner.code="var changed=23;";}function mutate(owner){owner.code="var changed=23;";}';
+  expect(observedSources([original],setup)).toEqual(['var other=19;',prefix?'var changed=23;':admitted]);
+  const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:original}]);expect(graph.error).toContain('evalScript source is not a finite static string expression');
+  const privateSource=`{const run=function(owner,text){opaque(owner);$262.evalScript(text);};const owner={code:${JSON.stringify(admitted)}};run(owner,(${prefix}owner.code));}`;
+  expect(observedSources([privateSource],'function opaque(owner){owner.code="var changed=23;";}function mutate(owner){owner.code="var changed=23;";}')).toEqual([prefix?'var changed=23;':admitted]);
+  const privateGraph=finiteEvalScriptSourceGraph([{path:'main.js',source:privateSource}]);if(prefix)expect(privateGraph.error).toContain('evalScript source is not a finite static string expression');else expect(privateGraph.error).toBeNull();
  }
  const later=finiteEvalScriptSourceGraph([{path:'main.js',source:`function run(owner,text){opaque(owner);$262.evalScript(text);}const owner={code:${JSON.stringify(admitted)}};run(owner,owner.code);$262.evalScript(owner.code);`}]);
  expect(later.error).toContain('evalScript source is not a finite static string expression');
@@ -75,8 +84,14 @@ test('top-level repeated effects retain their source phase around saved reads',(
  }
  const repeated=finiteEvalScriptSourceGraph([{path:'subject.js',source:'const owner={body:"17;"};for(let index=0;index<2;index++){const saved=owner.body;opaque(owner);eval(saved);}'}]);
  expect(repeated.error).toContain('direct eval source is not a finite static string expression');
- const across=finiteEvalScriptSourceGraph([{path:'setup.js',goal:'script',source:'var owner={body:"17;"};var saved=owner.body;'}, {path:'later.js',goal:'script',source:'for(let index=0;index<2;index++)opaque(owner);eval(saved);'}]);
- expect(across.error).toBeNull();expect(across.directEvalSources.map(entry=>entry.source)).toEqual(['17;']);
+ const scripts=['var owner={body:"17;"};var saved=owner.body;','for(let index=0;index<2;index++)opaque(owner);eval(saved);'];
+ expect(observedSources(scripts,'function opaque(owner){owner.body="23;";globalThis.saved="19;";}')).toEqual(['19;']);
+ const across=finiteEvalScriptSourceGraph(scripts.map((source,index)=>({path:index?'later.js':'setup.js',goal:'script' as const,source})));
+ expect(across.error).toContain('direct eval source is not a finite static string expression');
+ const privateScripts=['const owner={body:"17;"};const saved=owner.body;',scripts[1]!];
+ expect(observedSources(privateScripts,'function opaque(owner){owner.body="23;";globalThis.saved="19;";}')).toEqual(['17;']);
+ const privateSnapshot=finiteEvalScriptSourceGraph(privateScripts.map((source,index)=>({path:index?'later.js':'setup.js',goal:'script' as const,source})));
+ expect(privateSnapshot.error).toBeNull();expect(privateSnapshot.directEvalSources.map(entry=>entry.source)).toEqual(['17;']);
 });
 
 test('completed root effects precede later owner creation',()=>{

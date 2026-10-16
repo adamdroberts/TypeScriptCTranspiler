@@ -1,3 +1,5 @@
+- Retain global source mutation and public callback effects with phase-aware captures, mutable lexical bindings and shared effect queries.
+
 - Query opaque source shapes lazily, stopping on the first visible effect instead of allocating their full fact closure.
 
 - Walk callback copy edges directly and retain monotone nonempty proofs, avoiding repeated alias-graph scans.

@@ -65,7 +65,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
-type Operation = "object-is" | `object-has-own:${"static"|"prototype"}` | `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
+type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-has-own:${"static"|"prototype"}` | `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
     "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}`;
 type Primitive = SourcePrimitive;
 type SourcePropertyKey = string | symbol;
@@ -85,24 +85,31 @@ const NUMERIC_CONVERSIONS: ReadonlyMap<string, (value: Primitive) => Primitive> 
     }],
 ]);
 const SOURCE_OBJECT_PROTOTYPE_OPERATIONS:ReadonlyMap<string,Operation>=new Map([["toString","object-text"],["hasOwnProperty","object-has-own:prototype"]]);
-const SOURCE_NATIVE_METHODS:ReadonlyMap<Operation,{name:string;length:number;owner:"Array"|"Function"|"String"|null;opaque:boolean}>=(()=>{
-    const methods=new Map<Operation,{name:string;length:number;owner:"Array"|"Function"|"String"|null;opaque:boolean}>();
+// Initial intrinsic member identities, installed on their canonical owners.
+// Source lookups and later writes use the ordinary field graph.
+const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operation>> = new Map<string, ReadonlyMap<string, Operation>>([
+    ["Error", new Map([["isError", "error-brand"]])],
+    ["JSON", new Map([...jsonMethods.values()].map(descriptor=>[descriptor.name,descriptor.operation]))],
+    ["console", new Map([...consoleOperations].map(name=>[name,"host-print" as const]))],
+    ["Object", new Map([["is","object-is"],["hasOwn","object-has-own:static"],["getPrototypeOf", "object-get-prototype"], ["setPrototypeOf", "set-prototype:object"], ["create", "create-object"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
+        ["getOwnPropertyDescriptor", "own-descriptor"], ["getOwnPropertyDescriptors", "own-descriptors"], ["getOwnPropertyNames", "object-own-keys:string"], ["getOwnPropertySymbols", "object-own-keys:symbol"]])],
+    ["Reflect", new Map([["ownKeys", "reflect-own-keys"], ["get", "reflect-get"], ["getPrototypeOf", "reflect-get-prototype"], ["setPrototypeOf", "set-prototype:reflect"], ["apply", "reflect-apply"], ["construct", "construct"],
+        ["defineProperty", "define-property"], ["set", "set-property"], ["deleteProperty", "delete-property"], ["getOwnPropertyDescriptor", "own-descriptor"]])],
+]);
+const SOURCE_NATIVE_METHODS:ReadonlyMap<Operation,{name:string;length:number;owner:"Array"|"Function"|"String"|"Object"|"Reflect"|null;opaque:boolean}>=(()=>{
+    const methods=new Map<Operation,{name:string;length:number;owner:"Array"|"Function"|"String"|"Object"|"Reflect"|null;opaque:boolean}>();
     const collections=[
+        {owner:"Object" as const,methods:runtimeObjectStaticMethods,prefix:"native-object-static:",precise:INITIAL_SOURCE_OPERATIONS.get("Object")!},
+        {owner:"Reflect" as const,methods:runtimeReflectMethods,prefix:"native-reflect:",precise:INITIAL_SOURCE_OPERATIONS.get("Reflect")!},
         {owner:"Array" as const,methods:runtimeArrayPrototypeMethods,prefix:"native-array:",precise:new Map<string,Operation>([["some","array-predicate:some"],["every","array-predicate:every"],["push","array-push"],["toString","array-text"],["join","array-join"],["keys","array-keys"],["values","array-values"],["entries","array-entries"]])},
         {owner:"String" as const,methods:runtimeStringStaticMethods,prefix:"native-string-static:",precise:new Map<string,Operation>([["fromCharCode","string-codes:unit"],["fromCodePoint","string-codes:point"]])},
         {owner:"Function" as const,methods:runtimeFunctionPrototypeMethods,prefix:"native-function:",precise:new Map<string,Operation>([["call","call"],["apply","apply"],["bind","bind"],["toString","function-text"]])},
     ];
     for(const collection of collections)for(const[name,descriptor]of collection.methods){
         const known=collection.precise.get(name),operation=known??(collection.prefix+name) as Operation;
-        if(methods.has(operation))throw new Error("native prototype collection cannot be represented");
+        const prior=methods.get(operation);
+        if(prior){if(prior.name!==name||prior.length!==descriptor.length)throw new Error("native method alias cannot be represented");continue;}
         methods.set(operation,{name,length:descriptor.length,owner:collection.owner,opaque:!known});
-    }
-    for(const collection of [
-        {methods:runtimeObjectStaticMethods,operations:new Map<string,Operation>([["is","object-is"],["hasOwn","object-has-own:static"],["getOwnPropertyNames","object-own-keys:string"],["getOwnPropertySymbols","object-own-keys:symbol"]])},
-        {methods:runtimeReflectMethods,operations:new Map<string,Operation>([["ownKeys","reflect-own-keys"],["get","reflect-get"]])},
-    ])for(const[name,operation]of collection.operations){
-        const descriptor=collection.methods.get(name);if(!descriptor)throw new Error("native reflection operation cannot be represented");
-        methods.set(operation,{name,length:descriptor.length,owner:null,opaque:false});
     }
     for(const[name,operation]of SOURCE_OBJECT_PROTOTYPE_OPERATIONS){
         const descriptor=runtimeObjectPrototypeDescriptors.get(name);if(!descriptor||methods.has(operation))throw new Error("native Object.prototype operation cannot be represented");
@@ -224,17 +231,6 @@ type SourceProjectionPhase = SourceCapturePhase | {readonly kind:"return"};
 const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
     ts.SyntaxKind.InKeyword, ts.SyntaxKind.InstanceOfKeyword,
 ]);
-// Initial intrinsic member identities, installed on their canonical owners.
-// Source lookups and later writes use the ordinary field graph.
-const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operation>> = new Map<string, ReadonlyMap<string, Operation>>([
-    ["Error", new Map([["isError", "error-brand"]])],
-    ["JSON", new Map([...jsonMethods.values()].map(descriptor=>[descriptor.name,descriptor.operation]))],
-    ["console", new Map([...consoleOperations].map(name=>[name,"host-print" as const]))],
-    ["Object", new Map([["is","object-is"],["hasOwn","object-has-own:static"],["getPrototypeOf", "object-get-prototype"], ["create", "create-object"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
-        ["getOwnPropertyDescriptor", "own-descriptor"], ["getOwnPropertyDescriptors", "own-descriptors"], ["getOwnPropertyNames", "object-own-keys:string"], ["getOwnPropertySymbols", "object-own-keys:symbol"]])],
-    ["Reflect", new Map([["ownKeys", "reflect-own-keys"], ["get", "reflect-get"], ["getPrototypeOf", "reflect-get-prototype"], ["apply", "reflect-apply"], ["construct", "construct"],
-        ["defineProperty", "define-property"], ["set", "set-property"], ["deleteProperty", "delete-property"], ["getOwnPropertyDescriptor", "own-descriptor"]])],
-]);
 const PROPERTY_MUTATIONS = new Set<Operation>(["define-property", "define-properties", "set-property", "delete-property"]);
 
 function conversionOperands(node: ts.Node): readonly ts.Expression[] | null {
@@ -266,6 +262,9 @@ function propertyName(node: ts.Node | undefined): string | null {
  * to actual formals/results, so recursion and aliases close the same worklist.
  * Property discovery never asks TypeScript to infer a receiver/member type. */
 class SourceValueFlow {
+    private readonly enclosingActivations=new WeakMap<ts.Node,FunctionOwner|null>();
+    private factRevision=0;
+    private readonly opaqueQueries=new Map<ts.Node|undefined,Map<boolean,{revision:number;known:WeakMap<SourceFacts,boolean>}>>();
     private readonly cells = new Map<ts.Node, Cell>();
     private readonly presenceRules = new Set<Rule>();
     private presenceClosed = false;
@@ -292,6 +291,8 @@ class SourceValueFlow {
     private readonly proxyCreations=new Map<ts.Node,Map<string,Cell>>();
     private readonly objectCoercions = new Map<ts.Node,Map<Cell,Cell>>();
     private readonly prototypeReads = new Map<ts.Node,Map<string,Cell>>();
+    private readonly prototypeWrites = new Map<ts.Node,Map<string,Cell>>();
+    private readonly writablePrototypes = new Map<ObjectOwner,Cell>();
     private readonly arrayPredicates=new Map<ts.Node,Map<string,Cell>>();
     private readonly repeatedInvocations=new WeakSet<ts.Node>();
     private readonly arrayPushes=new Map<ts.Node,Map<string,Cell>>();
@@ -318,7 +319,7 @@ class SourceValueFlow {
     private readonly asyncIteratorPrototypes=new WeakMap<SourceRealmRecord,Cell>();
     private readonly sourceObjectOwners=new WeakSet<ObjectOwner>();
     private readonly opaqueCaptureCalls=new Map<ts.Node,Set<Cell>>();
-    private readonly escapedCallableCalls=new Map<ts.Node,{visit:(input:Cell)=>void}>();
+    private readonly escapedCallableCalls=new Map<ts.Node,Map<boolean,{visit:(input:Cell)=>void}>>();
     private readonly escapedInvocationOrigins=new WeakMap<ts.Node,ts.Node>();
     private readonly escapeContexts=new WeakMap<ts.Node,ts.Node>();
     private readonly promiseReactions = new Map<ts.Node,Map<string,Cell>>();
@@ -343,7 +344,7 @@ class SourceValueFlow {
     private readonly utilExportValues = new Map<string,Cell>();
     private readonly fsModules = new Map<string,{value:Cell;owner:ObjectOwner}>();
     private readonly fsExportValues = new Map<string,Cell>();
-    private readonly globalLexicals = new Map<string, Cell>();
+    private readonly globalLexicals = new Map<string,{value:Cell;mutable:boolean}>();
     private readonly collectionKeys=new Map<Cell,Cell>();
     private readonly collectionPrototypes=new Map<CollectionKind,Cell>();
     private readonly collectionConstruction=new Map<ts.Node,Map<string,Cell>>();
@@ -491,13 +492,13 @@ class SourceValueFlow {
                     while (pending.length) {
                         const name = pending.pop()!;
                         if (ts.isIdentifier(name)) {
-                            if (!this.globalLexicals.has(name.text)) this.globalLexicals.set(name.text, this.newCell());
+                            if (!this.globalLexicals.has(name.text)) this.globalLexicals.set(name.text,{value:this.newCell(),mutable:!(statement.declarationList.flags&(ts.NodeFlags.Const|ts.NodeFlags.Using))});
                         } else for (const element of name.elements) if (!ts.isOmittedExpression(element)) pending.push(element.name);
                     }
                 }
             } else if (ts.isClassDeclaration(statement) && statement.name) {
-                if (!this.globalLexicals.has(statement.name.text)) this.globalLexicals.set(statement.name.text, this.newCell());
-                this.copy(this.cell(statement), this.globalLexicals.get(statement.name.text)!);
+                if (!this.globalLexicals.has(statement.name.text)) this.globalLexicals.set(statement.name.text,{value:this.newCell(),mutable:true});
+                this.copy(this.cell(statement), this.globalLexicals.get(statement.name.text)!.value);
             } else if (ts.isFunctionDeclaration(statement) && statement.name)
                 this.copy(this.cell(statement), this.globalBinding(statement.name.text));
         }
@@ -683,6 +684,8 @@ class SourceValueFlow {
         const result=project(root);this.returnProjections.set(key,result);
         const extend=()=>{while(pending.length){const source=pending.pop()!,target=projected.get(source)!;let read!:Rule;
             read=this.rule([source],()=>{
+                const capture=this.captureInputs.get(source);
+                if(capture){this.copy(this.captureProjection(project(capture.source),capture.phase),target);extend();return;}
                 const transform=this.returnTransforms.get(source);
                 if(transform){this.copy(transform.evaluate(transform.inputs.map(project)),target);extend();return;}
                 for(const atom of Set.prototype.values.call(source.values) as Iterable<Atom>){
@@ -712,14 +715,16 @@ class SourceValueFlow {
         return condition;
     }
     private enclosingActivation(node: ts.Node): FunctionOwner | null {
+        const cached=this.enclosingActivations.get(node);if(cached!==undefined)return cached;
+        const remember=(owner:FunctionOwner|null)=>{this.enclosingActivations.set(node,owner);return owner;};
         let child = node, parent = node.parent;
         while (parent) {
-            if (functionNode(parent) && (child === parent.body || ts.isParameter(child))) return this.function(parent);
+            if (functionNode(parent) && (child === parent.body || ts.isParameter(child))) return remember(this.function(parent));
             if (ts.isPropertyDeclaration(parent) && child === parent.initializer && ts.isClassLike(parent.parent) &&
-                !(ts.getModifiers(parent)??[]).some(modifier=>modifier.kind===ts.SyntaxKind.StaticKeyword)) return this.function(parent.parent);
+                !(ts.getModifiers(parent)??[]).some(modifier=>modifier.kind===ts.SyntaxKind.StaticKeyword)) return remember(this.function(parent.parent));
             child = parent;parent = parent.parent;
         }
-        return null;
+        return remember(null);
     }
     private onActive(node: ts.Node, action: () => void): void {
         const owner = this.enclosingActivation(node);
@@ -783,7 +788,7 @@ class SourceValueFlow {
             if (!parents) {parents = new Set(); this.primitiveProofParents.set(part,parents);}
             parents.add(cell);
         }
-        cell.values.add(atom);
+        cell.values.add(atom);this.factRevision++;
         this.primitiveChanges.add(cell);
         for (const user of cell.users) this.schedule(user);
     }
@@ -813,7 +818,7 @@ class SourceValueFlow {
     }
     private copy(from:Cell,into:Cell,kind:"value"|"origin"="value"):void {
         const previous=into.values.sources.get(from.values);if(previous==="value"||previous===kind)return;
-        into.values.sources.set(from.values,kind);
+        into.values.sources.set(from.values,kind);this.factRevision++;
         let parents=this.primitiveProofParents.get(from);if(!parents){parents=new Set();this.primitiveProofParents.set(from,parents);}parents.add(into);
         this.primitiveChanges.add(into);for(const user of into.users)this.schedule(user);
     }
@@ -865,7 +870,10 @@ class SourceValueFlow {
         this.onActive(context,()=>this.opaqueEffect(context));
     }
     private opaqueEffect(context?: ts.Node): void {
-        this.copy(this.executionOrigins(context),this.opaqueMutation);
+        const origins=this.executionOrigins(context);
+        this.copy(origins,this.opaqueMutation);
+        this.copy(origins,this.globalMutation);
+        for(const binding of this.globalLexicals.values())if(binding.mutable)this.copy(origins,binding.value);
     }
     /** Synthetic invocations are internal edges of their originating opaque
      * site. Recursive escape reuses that graph; real source sites keep their
@@ -882,9 +890,10 @@ class SourceValueFlow {
      * accessors, prototypes and returned values. One call-site graph retains
      * those edges and one unknown actual List, including cyclic containers.
      * Interned values own inspection subscriptions independently of aliases. */
-    private escapeCallableArgument(argument:Cell,context:ts.Node):void {
+    private escapeCallableArgument(argument:Cell,context:ts.Node,sourceCallbacksOnly=false):void {
         context=this.escapeContext(context);
-        let graph=this.escapedCallableCalls.get(context);
+        let modes=this.escapedCallableCalls.get(context);if(!modes){modes=new Map();this.escapedCallableCalls.set(context,modes);}
+        let graph=modes.get(sourceCallbacksOnly);
         if(!graph){
             const target=this.newCell(),actuals=this.newCell(),returned=this.newCell(),seen=new Set<Cell>(),atoms=new Set<Atom>(),pending:Cell[]=[];
             this.publish(actuals,this.unknown);
@@ -898,14 +907,14 @@ class SourceValueFlow {
                         const owner=this.ordinaryOwner(atom);
                         if(atom.tag==="promise"){visit(atom.value);visit(atom.rejection);}
                         if(atom.tag==="generator"){visit(atom.yielded);visit(atom.returned);}
-                        if(atom.tag==="function"||atom.tag==="bound"||atom.tag==="intrinsic"||atom.tag==="operation"||atom.tag==="promise-resolver"||atom.tag==="builtin"&&atom.normalResult!=="not-callable"||owner?.proxy)this.publish(target,atom);
+                        if(atom.tag==="function"||atom.tag==="bound"||atom.tag==="promise-resolver"||owner?.proxy||!sourceCallbacksOnly&&(atom.tag==="intrinsic"||atom.tag==="operation"||atom.tag==="builtin"&&atom.normalResult!=="not-callable"))this.publish(target,atom);
                         if(!owner)continue;
                         let inspect!:Rule;
                         inspect=this.rule([owner.shape],()=>{
                         for(const property of owner.own?.values()??[])for(const write of property.writes.values())visit(write.values);
                         for(const accessor of owner.accessors.values())if(this.accessorDefinitions.has(accessor.get)){visit(accessor.get);visit(accessor.set);}
                         const stored=this.unknownPropertyLocations.get(owner);if(stored)visit(stored.value);
-                        if(atom.tag!=="function"&&!this.sourceObjectOwners.has(owner)&&!this.ownerCreations.has(owner)&&!this.ownerRealms.has(owner)&&!owner.collections&&!owner.collectionIterator)return;
+                        if(!sourceCallbacksOnly&&atom.tag!=="function"&&!this.sourceObjectOwners.has(owner)&&!this.ownerCreations.has(owner)&&!this.ownerRealms.has(owner)&&!owner.collections&&!owner.collectionIterator)return;
                         for(const field of owner.fields.values())visit(field);
                         for(const accessor of owner.accessors.values()){visit(accessor.get);visit(accessor.set);}
                         if(owner.prototype)visit(owner.prototype);
@@ -922,7 +931,7 @@ class SourceValueFlow {
                     }});
                 }
             };
-            graph={visit};this.escapedCallableCalls.set(context,graph);
+            graph={visit};modes.set(sourceCallbacksOnly,graph);
             const invocation=ts.setTextRange(ts.factory.createEmptyStatement(),context);
             (invocation as ts.Node&{parent:ts.Node}).parent=context;
             this.escapedInvocationOrigins.set(invocation,context);
@@ -943,6 +952,7 @@ class SourceValueFlow {
         if(!caller)return;
         const from=this.activationEdges(caller),to=this.activationEdges(callee);
         if(from.targets.has(callee))return;from.targets.add(callee);to.callers.add(caller);
+        if(caller.kind!=="ordinary")this.publish(this.activationTiming(callee),this.primitive(true));
         this.copy(this.activationTiming(caller),this.activationTiming(callee));
         const pending=[callee],reachable=new Set<FunctionOwner>();
         while(pending.length){const owner=pending.pop()!;if(reachable.has(owner))continue;reachable.add(owner);for(const next of this.activationCalls.get(owner)?.targets??[])pending.push(next);}
@@ -986,18 +996,24 @@ class SourceValueFlow {
         if(activation&&activation.kind==="ordinary"&&!this.activationTiming(activation).values.nonempty&&!this.repeatedActivationContext(context)&&!this.dynamicContext(effect)){
             const origins=[...activation.active.values];
             if(origins.length&&origins.every(origin=>origin.tag==="unknown"&&origin.origin&&origin.origin!==effect&&
-                !this.dynamicContext(origin.origin)&&!this.effectVisible(atom,origin.origin,true)))return false;
+                (!this.dynamicContext(origin.origin)||ts.isCallExpression(origin.origin)&&!this.enclosingActivation(origin.origin))&&
+                !this.effectVisible(atom,origin.origin,true)))return false;
         }
-        // Unrepresented, repeated or overlapping activations remain opaque.
+        // Unrepresented or overlapping activations remain opaque. A repeated
+        // root phase still finishes before the next surrounding source phase.
         if (this.dynamicContext(effect) || this.dynamicContext(context)) {
             // Repetition cannot move an operation before an earlier read in
             // the surrounding source activation. Reads inside a repeated or
             // overlapping activation retain the conservative origin union.
-            if(!this.enclosingActivation(effect)&&!activation&&!this.repeatedActivationContext(context)){
+            if(!this.enclosingActivation(effect)&&!activation){
                 if(this.sourceFile(effect)!==this.sourceFile(context)){
                     const before=this.scriptOrder.get(this.sourceFile(context)),after=this.scriptOrder.get(this.sourceFile(effect));
                     if(before!==undefined&&after!==undefined&&before<after)return false;
-                }else if(context.getEnd()<=effect.getStart())return false;
+                }else{
+                    let phase=context;
+                    for(let node=context.parent;node&&!ts.isSourceFile(node);node=node.parent)if(ts.isIterationStatement(node,false))phase=node;
+                    if(phase.getEnd()<=effect.getStart())return false;
+                }
             }
             return true;
         }
@@ -1019,7 +1035,21 @@ class SourceValueFlow {
         return true;
     }
     private opaqueShape(owner: ObjectOwner, context?: ts.Node, argumentsRead = false): boolean {
-        for(const atom of owner.shape.values)if(atom.tag==="unknown"&&this.effectVisible(atom,context,argumentsRead))return true;
+        let modes=this.opaqueQueries.get(context);if(!modes){modes=new Map();this.opaqueQueries.set(context,modes);}
+        let query=modes.get(argumentsRead);if(!query||query.revision!==this.factRevision){query={revision:this.factRevision,known:new WeakMap()};modes.set(argumentsRead,query);}
+        const known=query.known,root=owner.shape.values,prior=known.get(root);if(prior!==undefined)return prior;
+        // Unknown atoms flow through both value and origin-only edges. This
+        // predicate therefore needs one reachability state per fact node.
+        const parents=new Map<SourceFacts,SourceFacts|null>([[root,null]]),pending=[root];
+        const found=(source:SourceFacts):boolean=>{for(let current:SourceFacts|null=source;current;current=parents.get(current)??null)known.set(current,true);return true;};
+        while(pending.length){const current=pending.pop()!,cached=known.get(current);
+            if(cached===true)return found(current);if(cached===false)continue;
+            for(const atom of Set.prototype.values.call(current) as Iterable<Atom>)if(atom.tag==="unknown"&&this.effectVisible(atom,context,argumentsRead))return found(current);
+            for(const source of current.sources.keys())if(!parents.has(source)){parents.set(source,current);pending.push(source);}
+        }
+        // Exhausting the shared worklist proves every visited subgraph false,
+        // including cycles. A graph or timing change invalidates the memo.
+        for(const source of parents.keys())known.set(source,false);
         return false;
     }
     private copyRead(from: Cell, into: Cell, context?: ts.Node, argumentsRead = false): void {
@@ -1031,7 +1061,7 @@ class SourceValueFlow {
         return left===right&&!this.repeatedActivationContext(before.context)&&!this.repeatedActivationContext(after.context)&&(!left||!this.activationTiming(left).values.nonempty);
     }
     private captureRead(from: Cell, context?: ts.Node, argumentsRead = false): Cell {
-        if (!context || this.dynamicContext(context) && !(this.enclosingActivation(context) && this.propertyLocations.has(from))) return from;
+        if (!context) return from;
         let phaseKinds=this.capturePhases.get(context);if(!phaseKinds){phaseKinds=new Map();this.capturePhases.set(context,phaseKinds);}
         let phase=phaseKinds.get(argumentsRead);if(!phase){phase={id:this.nextCapturePhase++,kind:"capture",context,argumentsRead};phaseKinds.set(argumentsRead,phase);}
         return this.captureProjection(from,phase);
@@ -1072,6 +1102,8 @@ class SourceValueFlow {
         const extend=()=>{while(pending.length){const source=pending.pop()!,target=project(source),atoms=new Map<Atom,Atom>();
             let read!:Rule;
             read=this.rule([source,...(this.enclosingActivation(context)?[this.enclosingActivation(context)!.active,this.activationTiming(this.enclosingActivation(context)!)]:[])],()=>{
+                const activation=this.enclosingActivation(context);
+                if(activation&&!activation.active.values.nonempty)return;
                 // A read projects its retained copy graph with one worklist.
                 // Only derived operands need their own value view; alias
                 // edges do not allocate a clone for every source cell.
@@ -1119,7 +1151,7 @@ class SourceValueFlow {
     }
     private binding(node: ts.Identifier): Cell {
         const origin = declarativeSourceBindingSymbol(this.checker, node);
-        if(this.evaluationGlobalTargets.has(node)){const realm=this.evaluationGlobalTargets.get(node)!;return (realm===this.currentRealm?this.globalLexicals.get(node.text):undefined)??this.realmBinding(realm,node.text);}
+        if(this.evaluationGlobalTargets.has(node)){const realm=this.evaluationGlobalTargets.get(node)!;return (realm===this.currentRealm?this.globalLexicals.get(node.text)?.value:undefined)??this.realmBinding(realm,node.text);}
         const activation=this.enclosingActivation(node);
         const injected=activation&&this.evaluationVarBindings.get(activation)?.get(node.text);
         if(injected&&!!this.evaluationDeclarationBindings.get(injected)?.origins.size&&!(origin?.declarations??[]).some(declaration=>
@@ -1193,15 +1225,15 @@ class SourceValueFlow {
         }
         if (declaration && ts.isExportAssignment(declaration)) return this.cell(declaration.expression);
         if (declaration && callableDefinition(declaration) && !sourceDeclarationIntroducesBinding(declaration)) return this.cell(declaration);
-        if (declaration && isAmbientSourceDeclaration(declaration)) return this.globalLexicals.get(node.text) ?? this.globalBinding(node.text);
+        if (declaration && isAmbientSourceDeclaration(declaration)) return this.globalLexicals.get(node.text)?.value ?? this.globalBinding(node.text);
         if (!symbol || !(symbol.declarations ?? []).some(sourceDeclarationIntroducesBinding)) {
             const owner=this.enclosingActivation(node);
             if(owner){
                 let names=this.evaluationVarBindings.get(owner);if(!names){names=new Map();this.evaluationVarBindings.set(owner,names);}
-                let binding=names.get(node.text);if(!binding){binding=this.newCell();names.set(node.text,binding);this.evaluationDeclarationBindings.set(binding,{origins:new Set(),fallback:this.globalLexicals.get(node.text)??this.globalBinding(node.text)});}
+                let binding=names.get(node.text);if(!binding){binding=this.newCell();names.set(node.text,binding);this.evaluationDeclarationBindings.set(binding,{origins:new Set(),fallback:this.globalLexicals.get(node.text)?.value??this.globalBinding(node.text)});}
                 return binding;
             }
-            return this.globalLexicals.get(node.text) ?? this.globalBinding(node.text);
+            return this.globalLexicals.get(node.text)?.value ?? this.globalBinding(node.text);
         }
         const sourceGlobal = declaration && this.scriptDeclarationBinding(declaration, node.text);
         if (sourceGlobal) {
@@ -1289,10 +1321,10 @@ class SourceValueFlow {
         const source = selected.getSourceFile();
         if (!this.scriptOrder.has(source) || isAmbientSourceDeclaration(selected)) return null;
         if (ts.isFunctionDeclaration(selected) && selected.parent === source) return this.globalBinding(name);
-        if (ts.isClassDeclaration(selected) && selected.parent === source) return this.globalLexicals.get(name) ?? null;
+        if (ts.isClassDeclaration(selected) && selected.parent === source) return this.globalLexicals.get(name)?.value ?? null;
         if (!ts.isVariableDeclaration(selected) || !ts.isVariableDeclarationList(selected.parent)) return null;
         if (selected.parent.flags & ts.NodeFlags.BlockScoped)
-            return selected.parent.parent?.parent === source ? this.globalLexicals.get(name) ?? null : null;
+            return selected.parent.parent?.parent === source ? this.globalLexicals.get(name)?.value ?? null : null;
         for (let owner: ts.Node | undefined = selected.parent; owner; owner = owner.parent) {
             if (ts.isFunctionLike(owner) || ts.isClassLike(owner) || ts.isModuleBlock(owner) || ts.isModuleDeclaration(owner)) return null;
             if (ts.isSourceFile(owner)) return this.globalBinding(name);
@@ -1576,11 +1608,17 @@ class SourceValueFlow {
         if(!record.events.has(key)){const event={mode,context};record.events.set(key,event);this.publish(owner.shape,{tag:"descriptor",identity:event});}
         return record;
     }
-    /** An unknown ordinary Set can select the legacy prototype setter.
-     * Retain possible Object/null prototypes without inventing a new value. */
+    /** Internal prototype writes retain one location per owner; initial
+     * canonical prototype collections are inputs, never the write target. */
+    private prototypeLocation(owner:ObjectOwner):Cell {
+        let location=this.writablePrototypes.get(owner);
+        if(!location){location=this.newCell();this.writablePrototypes.set(owner,location);const inherited=owner.prototype;owner.prototype=location;if(inherited)this.copy(inherited,location);this.publish(owner.shape,{tag:"descriptor",identity:location});}
+        return location;
+    }
+    /** Unknown Set can select the legacy prototype setter. */
     private unknownSetPrototype(owner:ObjectOwner,value:Cell):void {
         const record=this.unknownPropertyRecord(owner);if(record.prototypeInputs.has(value))return;record.prototypeInputs.add(value);
-        const prototype=owner.prototype??=this.newCell();
+        const prototype=this.prototypeLocation(owner);
         this.rule([value],()=>{for(const atom of value.values)if(this.ordinaryOwner(atom)||atom===this.primitive(null)||atom.tag==="unknown"||atom.tag==="opaque-object"||atom.tag==="pending-source")this.publish(prototype,atom);});
     }
     private ownPresence(owner:ObjectOwner,key:SourcePropertyKey):OwnPresence {
@@ -2942,7 +2980,7 @@ class SourceValueFlow {
                 for (const [name, operation] of INITIAL_SOURCE_OPERATIONS.get(key) ?? []) {
                     const value = this.newCell();this.publish(value,this.operation(operation));this.defineField(fields,name,value);
                 }
-                if(key==="String")for(const[operation,method]of SOURCE_NATIVE_METHODS)if(method.owner==="String"){
+                if(key==="String"||key==="Object"||key==="Reflect")for(const[operation,method]of SOURCE_NATIVE_METHODS)if(method.owner===key&&!INITIAL_SOURCE_OPERATIONS.get(key)?.has(method.name)){
                     const value=this.newCell();this.publish(value,this.operation(operation));this.defineField(fields,method.name,value,false);
                 }
                 if(key==="Math") {
@@ -3455,6 +3493,37 @@ class SourceValueFlow {
         }});
         this.copy(this.objectValue(coercible,context),result);return result;
     }
+    /** Ordinary prototype writes have no callback or global-binding effects.
+     * The changed owner retains both prototype alternatives and an opaque shape
+     * origin until prototype history is represented. Proxy/unknown targets use
+     * the shared opaque boundary instead. */
+    private setPrototype(target:Cell,prototype:Cell,context:ts.Node,reflect:boolean):Cell {
+        let calls=this.prototypeWrites.get(context);if(!calls){calls=new Map();this.prototypeWrites.set(context,calls);}
+        const signature=target.id+":"+prototype.id+":"+reflect,prior=calls.get(signature);if(prior)return prior;
+        const result=this.newCell(),valid=this.newCell();calls.set(signature,result);
+        const fail=()=>{this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context,"TypeError"));};
+        this.rule([prototype],()=>{for(const atom of prototype.values){
+            if(this.ordinaryOwner(atom)||atom===this.primitive(null)||atom.tag==="unknown"||atom.tag==="opaque-object")this.publish(valid,atom);
+            if(atom.tag==="abrupt"||atom.tag==="pending-source")this.publish(result,atom);
+            else if(!this.ordinaryOwner(atom)&&atom!==this.primitive(null))fail();
+        }});
+        const selected=new Set<Atom>();
+        this.rule([target,valid],()=>{if(!valid.values.nonempty)return;for(const atom of target.values){
+            if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
+            const owner=this.ordinaryOwner(atom);
+            if(owner&&!owner.proxy){
+                if(!selected.has(atom)){selected.add(atom);this.copy(valid,this.prototypeLocation(owner));this.copy(this.executionOrigins(context),owner.shape);}
+                if(reflect){this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));}else this.publish(result,atom);
+                // Cycles, immutable prototypes and nonextensible owners may
+                // fail; neither that failure nor ordinary success calls hooks.
+                if(!reflect)fail();
+            }else if(owner?.proxy||atom.tag==="unknown"||atom.tag==="opaque-object"){
+                this.publish(result,reflect?this.primitive(true):atom);if(reflect)this.publish(result,this.primitive(false));fail();
+                if(!selected.has(atom)){selected.add(atom);this.activateOpaqueEffect(context);this.onActive(context,()=>{this.escapeCallableArgument(target,context);this.escapeCallableArgument(prototype,context);});}
+            }else if(reflect||this.primitiveKinds(target)&(KIND_NULL|KIND_UNDEFINED))fail();
+            else this.publish(result,atom);
+        }});return result;
+    }
     /** One worklist handles ordinary owners and Proxy default forwarding.
      * Opaque shape origins also cover unrepresented internal prototype writes. */
     private getPrototype(input:Cell,context:ts.Node,coerce:boolean):Cell {
@@ -3604,7 +3673,7 @@ class SourceValueFlow {
         let calls=this.arrayPredicates.get(context);if(!calls){calls=new Map();this.arrayPredicates.set(context,calls);}
         const key=mode+":"+receiver.id+":"+callback.id+":"+thisArg.id,previous=calls.get(key);if(previous)return previous;
         const result=this.newCell(),objects=this.toObject(receiver,context),checked=this.newCell(),selected=this.newCell(),indices=this.newCell(),callee=this.newCell(),returned=this.newCell();calls.set(key,result);
-        const step=ts.setTextRange(ts.factory.createEmptyStatement(),context);(step as ts.Node&{parent:ts.Node}).parent=context;this.repeatedInvocations.add(step);
+        const step=ts.setTextRange(ts.factory.createEmptyStatement(),context);(step as ts.Node&{parent:ts.Node}).parent=context;this.repeatedInvocations.add(step);this.factRevision++;
         const caught=this.exceptionHandlers.get(context);if(caught)this.exceptionHandlers.set(step,caught);
         let number=this.numericValues.get(KIND_NUMBER);if(!number){number={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,number);}this.publish(indices,number);
         const length=this.coerceCell(this.property(objects,"length",context),context,"length"),target=this.callableTarget(checked,step);this.copy(target.completion,result);
@@ -3938,7 +4007,7 @@ class SourceValueFlow {
                     // locations, so those locations retain an opaque effect.
                     this.opaqueCallableCaptures(cell,context);
                 }else if(atom.tag!=="builtin"||atom.name!=="Promise"){
-                    this.copy(this.executionOrigins(context),this.globalMutation);for(const binding of this.globalLexicals.values())this.copy(this.executionOrigins(context),binding);
+                    this.opaqueEffect(context);
                 }
             }
         }});return normal;
@@ -5627,6 +5696,11 @@ class SourceValueFlow {
                         // share one signature, independent of origin count.
                         if (!handled(this.unknown,signature)) this.onActive(node,()=>{
                             this.opaqueEffect(node);
+                            if(atom.tag==="unknown"||atom.tag==="opaque-object"||proxy){
+                                this.publish(this.globalReceiver,this.global);
+                                this.escapeCallableArgument(this.globalReceiver,node,true);
+                                for(const binding of this.globalLexicals.values())this.escapeCallableArgument(binding.value,node,true);
+                            }
                             this.writeProperty(invocation.receiver,null,this.empty,false,"set",node);
                             this.escapeCallableArgument(invocation.receiver,node);
                             const argumentsEscaping = invocation.args ?? (invocation.sequence ? [this.allArgumentValues(invocation.sequence)] : []);
@@ -5658,6 +5732,10 @@ class SourceValueFlow {
                     }
                     if(atom.tag==="operation"&&atom.operation.startsWith("collection-member:")){
                         if(!handled(atom,signature)){const [,kind,operation]=atom.operation.split(":");this.collectionMember(kind as CollectionKind,operation!,invocation.receiver,argv,node,result,invocation.construct);}continue;
+                    }
+                    if(atom.tag==="operation"&&atom.operation.startsWith("set-prototype:")){
+                        if(!handled(atom,signature))this.copy(this.setPrototype(argument(0)??omittedArgument,argument(1)??omittedArgument,node,atom.operation==="set-prototype:reflect"),result);
+                        continue;
                     }
                     if(atom.tag==="operation"&&atom.operation==="error-brand") {
                         // ErrorData is private and cannot invoke coercion or
@@ -6520,7 +6598,7 @@ class SourceValueFlow {
                     const origins=this.sourceOrigins.get(this.sourceFile(node));
                     if(origins&&!origins.values.nonempty)continue;
                     const binding=this.binding(node);
-                    if(!binding.values.has(this.unknown)){this.publish(binding,this.unknown);changed=true;}
+                    if(!binding.values.nonempty){this.publish(binding,this.unknown);changed=true;}
                 }
                 if(changed)continue;
                 this.presenceClosed=true;for(const rule of this.presenceRules)this.schedule(rule);continue;

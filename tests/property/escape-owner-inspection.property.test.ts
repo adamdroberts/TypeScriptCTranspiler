@@ -6,8 +6,8 @@ import {finiteEvalScriptSourceGraph as graph} from '../test262/native-host';
 import {compile} from '../../src/compile';
 import {nodeReferenceSync} from './node-reference';
 import {parseHostObservation} from '../test262/protocol';
-function reference(source:string,external='()=>{}'):string{
- const node=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(0,"utf8")).runInNewContext({external:'+external+',print:v=>fs.writeSync(1,String(v)+"\\n")});'],{stdin:Buffer.from(source),stdout:'pipe',stderr:'pipe',timeout:30000});
+function reference(source:string,external='()=>{}',sameRealm=''):string{
+ const node=nodeReferenceSync(['node','-e','const fs=require("node:fs"),vm=require("node:vm");new vm.Script('+JSON.stringify(sameRealm)+'+fs.readFileSync(0,"utf8")).runInNewContext({external:'+external+',print:v=>fs.writeSync(1,String(v)+"\\n")});'],{stdin:Buffer.from(source),stdout:'pipe',stderr:'pipe',timeout:30000});
  expect({exitCode:node.exitCode,stderr:node.stderr.toString()}).toEqual({exitCode:0,stderr:''});return node.stdout.toString();
 }
 const prelude='function first(body){print(eval(body));}function second(body){print(eval(body));}first("17;");second("23;");';
@@ -21,7 +21,8 @@ test('canonical escaped values observe later descriptors, prototypes and collect
  for(const item of cases){
   const source=prelude+item.body;expect(reference(source,item.external)).toBe('17\n23\n19\n29\n');expect({source,error:graph([{path:'subject.js',source}]).error}).toEqual({source,error:expect.stringContaining('direct eval source is not a finite static string expression')});
  }
- const disconnected=prelude+'external({value:1});';expect(reference(disconnected)).toBe('17\n23\n');const result=graph([{path:'subject.js',source:disconnected}]);expect(result.error).toBeNull();expect(new Set(result.directEvalSources.map(value=>value.source))).toEqual(new Set(['17;','23;']));
+ const disconnected=prelude+'external({value:1});';expect(reference(disconnected)).toBe('17\n23\n');expect(reference(disconnected,'()=>{}','function external(){first("19;");second("29;");}')).toBe('17\n23\n19\n29\n');expect(graph([{path:'subject.js',source:disconnected}]).error).toContain('direct eval source is not a finite static string expression');
+ const privateControl='{'+disconnected+'}',result=graph([{path:'subject.js',source:privateControl}]);expect(reference(privateControl)).toBe('17\n23\n');expect(result.error).toBeNull();expect(new Set(result.directEvalSources.map(value=>value.source))).toEqual(new Set(['17;','23;']));
 });
 function ownerGraph():string{
  return 'const owner0={callback:C};'+Array.from({length:512},(_,index)=>'const owner'+(index+1)+'={next:owner'+index+',alias:owner'+index+'};').join('\n');
