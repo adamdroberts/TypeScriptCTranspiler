@@ -155,6 +155,7 @@ class SourceFacts extends Set<Atom> {
     // from origin-only effects without copying every origin into each field.
     readonly sources = new Map<SourceFacts,"value"|"origin">();
     private readonly memberships = new Set<Atom>();
+    private knownNonempty=false;
     override *[Symbol.iterator](): SetIterator<Atom> {
         const pending:{facts:SourceFacts;origins:boolean}[]=[{facts:this,origins:false}],visited=new Map<SourceFacts,number>(),values=new Set<Atom>();
         while(pending.length){const {facts,origins}=pending.pop()!,bit=origins?1:2,prior=visited.get(facts)??0;if(prior&bit)continue;visited.set(facts,prior|bit);
@@ -177,7 +178,7 @@ class SourceFacts extends Set<Atom> {
         }
         return false;
     }
-    get nonempty():boolean{for(const _ of this)return true;return false;}
+    get nonempty():boolean{if(this.knownNonempty)return true;for(const _ of this){this.knownNonempty=true;return true;}return false;}
     override get size(): number {let size=0; for (const _ of this) size++; return size;}
 }
 interface Cell { readonly id: number; readonly values: SourceFacts; readonly users: Set<Rule>; }
@@ -890,7 +891,9 @@ class SourceValueFlow {
             const visit=(input:Cell):void=>{
                 if(seen.has(input))return;seen.add(input);pending.push(input);
                 while(pending.length){const current=pending.pop()!;let rule!:Rule;
-                    rule=this.rule([current],()=>{for(const atom of current.values){
+                    rule=this.rule([current],()=>{
+                        for(const[facts,kind]of current.values.sources)if(kind==="value")visit(this.sourceCells.get(facts)!);
+                        for(const atom of Set.prototype.values.call(current.values) as Iterable<Atom>){
                         if(atoms.has(atom))continue;atoms.add(atom);
                         const owner=this.ordinaryOwner(atom);
                         if(atom.tag==="promise"){visit(atom.value);visit(atom.rejection);}
@@ -1016,7 +1019,8 @@ class SourceValueFlow {
         return true;
     }
     private opaqueShape(owner: ObjectOwner, context?: ts.Node, argumentsRead = false): boolean {
-        return [...owner.shape.values].some(atom => atom.tag === "unknown" && this.effectVisible(atom, context, argumentsRead));
+        for(const atom of owner.shape.values)if(atom.tag==="unknown"&&this.effectVisible(atom,context,argumentsRead))return true;
+        return false;
     }
     private copyRead(from: Cell, into: Cell, context?: ts.Node, argumentsRead = false): void {
         this.copy(this.captureRead(from,context,argumentsRead),into);

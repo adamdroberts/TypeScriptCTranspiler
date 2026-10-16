@@ -1,3 +1,7 @@
+- Query opaque source shapes lazily, stopping on the first visible effect instead of allocating their full fact closure.
+
+- Walk callback copy edges directly and retain monotone nonempty proofs, avoiding repeated alias-graph scans.
+
 - Retain known Function constructor sources independently of exhaustive proof completeness, with shared lazy source tuple traversal and unchanged runtime rejection of unregistered text.
 
 - Share opaque callback owner inspection across aliases while retaining later shape, collection, accessor and prototype discoveries.
