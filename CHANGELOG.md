@@ -1,3 +1,5 @@
+- Retain scalar binding write events and capture fresh local source reads before later assignment or initialization commits.
+
 - Retain arguments-object actual lists and mapped parameter source writes through ordinary property and descriptor reads.
 
 - Retain global source mutation and public callback effects with phase-aware captures, mutable lexical bindings and shared effect queries.

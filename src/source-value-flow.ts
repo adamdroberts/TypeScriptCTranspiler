@@ -228,7 +228,7 @@ interface EvaluationEnvironment {
     readonly declarations:Map<string,{node:ts.Identifier;function?:ts.FunctionDeclaration}>;
 }
 interface SourceRealmRecord {objectPrototype?:Cell;readonly bindings:Map<string,Cell>;owner?:ObjectOwner;host?:ObjectOwner;readonly global:Atom;readonly record:Atom;readonly operations:Map<Operation,Atom>;readonly intrinsics:Map<string,Atom>;}
-interface SourceCapturePhase {readonly id:number;readonly kind:"capture";readonly context:ts.Node;readonly argumentsRead:boolean;}
+interface SourceCapturePhase {readonly id:number;readonly kind:"capture";readonly context:ts.Node;readonly argumentsRead:boolean;readonly location?:Cell;}
 type SourceProjectionPhase = SourceCapturePhase | {readonly kind:"return"};
 
 const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
@@ -448,7 +448,7 @@ class SourceValueFlow {
     private readonly executionGuards = new WeakMap<ts.Node, readonly {condition: Cell; truthy: boolean}[]>();
     private readonly captureInputs=new WeakMap<Cell,{source:Cell;phase:SourceCapturePhase}>();
     private nextCapturePhase=0;
-    private readonly capturePhases=new Map<ts.Node,Map<boolean,SourceCapturePhase>>();
+    private readonly capturePhases=new Map<ts.Node,Map<boolean,Map<Cell|undefined,SourceCapturePhase>>>();
     private readonly propertyLocations=new Set<Cell>();
     private readonly privateAccesses=new Map<ts.Node,Map<string,Cell>>();
     private readonly privateTemplates=new Map<ClassPrivateName,SourcePrivateSlot>();
@@ -457,10 +457,12 @@ class SourceValueFlow {
     private readonly evaluationThisValues=new Map<EvaluationEnvironment,Cell>();
     private readonly unresolvedPrivateContexts=new Set<ts.Node>();
     private unresolvedPrivate=false;
-    private readonly knownWrites=new Map<Cell,Map<ts.Node,Cell>>();
-    private readonly knownWriteOrigins=new WeakMap<Cell,Atom>();
+    private readonly knownWrites=new Map<Cell,Map<ts.Node,Map<Cell,Map<boolean,Map<ts.Identifier|undefined,Cell>>>>>();
+    private readonly bindingWriteSites=new Map<ts.Symbol,Map<ts.Node,Set<ts.Identifier>>>();
+    private readonly assignmentTargets=new WeakMap<ts.Expression,{binding:ts.BindingName|null;references:Map<ts.Identifier,ts.Expression>}>();
+    private readonly knownWriteOrigins=new WeakMap<Cell,{tag:"unknown";origin:ts.Node;location:Cell;lexical:boolean;reference?:ts.Identifier}>();
     private readonly ownerCreations=new WeakMap<ObjectOwner,ts.Node>();
-    private readonly readCaptures = new Map<Cell, Map<ts.Node | undefined, Map<boolean, Cell>>>();
+    private readonly readCaptures = new Map<Cell,Map<SourceCapturePhase,Cell>>();
     private readonly empty = this.newCell();
     private readonly globalMutation = this.newCell();
     private readonly globalReceiver = this.newCell();
@@ -625,13 +627,15 @@ class SourceValueFlow {
                         if(node.asteriskToken)this.iteratorCloseEffects(yielded,node);
                     }
                 }
-                if (ts.isVariableDeclaration(node) && node.initializer) this.onActive(node, () => this.bind(node.name, this.cell(node.initializer!)));
+                if (ts.isVariableDeclaration(node) && node.initializer){this.recordBindingWrites(node.name,node);this.onActive(node, () => this.bind(node.name,this.cell(node.initializer!),undefined,node));}
                 if (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment) {
+                    this.recordAssignmentWrites(node.left,node);
                     const value = NAME_EVALUATING_ASSIGNMENTS.has(node.operatorToken.kind) ? this.cell(node.right) : this.cell(node);
                     this.onActive(node, () => this.writeTarget(node.left, value, node));
                 }
-                if (ts.isPrefixUnaryExpression(node) && (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) || ts.isPostfixUnaryExpression(node))
-                    this.onActive(node, () => this.writeTarget(node.operand, this.updateStored(node), node));
+                if (ts.isPrefixUnaryExpression(node) && (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) || ts.isPostfixUnaryExpression(node)){
+                    this.recordAssignmentWrites(node.operand,node);this.onActive(node, () => this.writeTarget(node.operand, this.updateStored(node), node));
+                }
                 if (ts.isDeleteExpression(node)) {
                     const target = unwrap(node.expression);
                     if (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target)) {
@@ -827,10 +831,13 @@ class SourceValueFlow {
     }
     /** Keep the completion point on the copy edge, rather than attaching it
      * to an interned value identity shared by unrelated writes. */
-    private copyWrite(from:Cell,into:Cell,context?:ts.Node):void {
+    private copyWrite(from:Cell,into:Cell,context?:ts.Node,lexical=false,reference?:ts.Identifier):void {
         if(!context){this.copy(from,into);return;}
         let contexts=this.knownWrites.get(from);if(!contexts){contexts=new Map();this.knownWrites.set(from,contexts);}
-        let written=contexts.get(context);if(!written){written=this.newCell();contexts.set(context,written);this.knownWriteOrigins.set(written,{tag:"unknown",origin:context});this.copy(from,written);}
+        let locations=contexts.get(context);if(!locations){locations=new Map();contexts.set(context,locations);}
+        let modes=locations.get(into);if(!modes){modes=new Map();locations.set(into,modes);}
+        let references=modes.get(lexical);if(!references){references=new Map();modes.set(lexical,references);}
+        let written=references.get(reference);if(!written){written=this.newCell();references.set(reference,written);this.knownWriteOrigins.set(written,{tag:"unknown",origin:context,location:into,lexical,...(reference?{reference}:{})});this.copy(from,written);}
         this.copy(written,into);
     }
     /** Activation origins use the same monotone Cell graph as values. A
@@ -1059,19 +1066,35 @@ class SourceValueFlow {
         this.copy(this.captureRead(from,context,argumentsRead),into);
     }
     private capturePrecedes(before:SourceCapturePhase,after:SourceCapturePhase):boolean {
-        if(before.argumentsRead!==after.argumentsRead||this.sourceFile(before.context)!==this.sourceFile(after.context)||before.context.getEnd()>after.context.getStart())return false;
+        if(before.location!==after.location||before.argumentsRead!==after.argumentsRead||this.sourceFile(before.context)!==this.sourceFile(after.context)||before.context.getEnd()>after.context.getStart())return false;
         const left=this.enclosingActivation(before.context),right=this.enclosingActivation(after.context);
         return left===right&&!this.repeatedActivationContext(before.context)&&!this.repeatedActivationContext(after.context)&&(!left||!this.activationTiming(left).values.nonempty);
     }
-    private captureRead(from: Cell, context?: ts.Node, argumentsRead = false): Cell {
-        if (!context) return from;
-        let phaseKinds=this.capturePhases.get(context);if(!phaseKinds){phaseKinds=new Map();this.capturePhases.set(context,phaseKinds);}
-        let phase=phaseKinds.get(argumentsRead);if(!phase){phase={id:this.nextCapturePhase++,kind:"capture",context,argumentsRead};phaseKinds.set(argumentsRead,phase);}
+    private readBeforeWrite(read:ts.Node,write:ts.Node,reference?:ts.Identifier):boolean {
+        if(this.sourceFile(read)!==this.sourceFile(write))return false;
+        if(read.getEnd()<=write.getStart())return true;
+        const within=(root:ts.Node|undefined)=>{for(let node:ts.Node|undefined=read;node;node=node.parent)if(node===root)return true;return false;};
+        if(ts.isVariableDeclaration(write)&&within(write.initializer)||ts.isBinaryExpression(write)&&within(write.right)||
+            (ts.isPrefixUnaryExpression(write)||ts.isPostfixUnaryExpression(write))&&within(write.operand))return true;
+        if(!reference||!within(write))return false;
+        let leaf:ts.Node=reference;
+        for(let node:ts.Node|undefined=reference.parent;node&&node!==write;node=node.parent){
+            if(ts.isBindingElement(node)){if(within(node.initializer)||node.propertyName&&ts.isComputedPropertyName(node.propertyName)&&within(node.propertyName.expression))return true;if(leaf===reference)leaf=node;}
+            else if(ts.isShorthandPropertyAssignment(node)&&node.name===reference){if(within(node.objectAssignmentInitializer))return true;leaf=node;}
+            else if(ts.isBinaryExpression(node)&&node.operatorToken.kind===ts.SyntaxKind.EqualsToken&&within(node.right)&&node.left.getStart()<=reference.getStart()&&reference.getEnd()<=node.left.getEnd())return true;
+        }
+        return read.getEnd()<=leaf.getStart()||within(leaf);
+    }
+    private captureRead(from: Cell, context?: ts.Node, argumentsRead = false,location?:Cell): Cell {
+        if(!context)return from;
+        let kinds=this.capturePhases.get(context);if(!kinds){kinds=new Map();this.capturePhases.set(context,kinds);}
+        let locations=kinds.get(argumentsRead);if(!locations){locations=new Map();kinds.set(argumentsRead,locations);}
+        let phase=locations.get(location);if(!phase){phase={id:this.nextCapturePhase++,kind:"capture",context,argumentsRead,...(location?{location}:{})};locations.set(location,phase);}
         return this.captureProjection(from,phase);
     }
     private captureProjection(from:Cell,phase:SourceCapturePhase):Cell {
         const {context,argumentsRead}=phase;
-        const previous=this.readCaptures.get(from)?.get(context)?.get(argumentsRead);if(previous)return previous;
+        const previous=this.readCaptures.get(from)?.get(phase);if(previous)return previous;
         const pending:Cell[]=[];
         const project=(source:Cell):Cell=>{
             // Comparable acyclic filters intersect at the earlier phase.
@@ -1093,12 +1116,11 @@ class SourceValueFlow {
             // Reuse that canonical projection instead of composing an alias
             // path of equivalent phase filters through every saved binding.
             if(inherited?.has(phase!)||[...(inherited??[])].some(prior=>prior.kind==="capture"&&this.capturePrecedes(prior,phase!)))return source;
-            let contexts=this.readCaptures.get(source);if(!contexts){contexts=new Map();this.readCaptures.set(source,contexts);}
-            let phases=contexts.get(context);if(!phases){phases=new Map();contexts.set(context,phases);}
-            let target=phases.get(argumentsRead);
-            if(!target){target=this.newCell();phases.set(argumentsRead,target);
+            let phases=this.readCaptures.get(source);if(!phases){phases=new Map();this.readCaptures.set(source,phases);}
+            let target=phases.get(phase);
+            if(!target){target=this.newCell();phases.set(phase,target);
                 this.projectedCellPhases.set(target,new Set([...(inherited??[]),phase!]));this.captureInputs.set(target,{source,phase:phase!});
-                this.readCaptures.set(target,new Map([[context,new Map([[argumentsRead,target]])]]));pending.push(source);}
+                this.readCaptures.set(target,new Map([[phase,target]]));pending.push(source);}
             return target;
         };
         const captured=project(from);
@@ -1115,7 +1137,9 @@ class SourceValueFlow {
                     if((visited.get(source)??0)&bit)continue;visited.set(source,(visited.get(source)??0)|bit);this.watch(read,source);
                     if(!origins){
                         const written=this.knownWriteOrigins.get(source);
-                        if(written&&!this.effectVisible(written,context,argumentsRead))continue;
+                        if(written&&(!this.effectVisible(written,context,argumentsRead)||phase.location===written.location&&written.lexical&&
+                            this.enclosingActivation(written.origin)===activation&&!this.repeatedActivationContext(written.origin)&&!this.repeatedActivationContext(context)&&
+                            this.readBeforeWrite(context,written.origin,written.reference)))continue;
                         const transform=this.returnTransforms.get(source);
                         // A captured allocation keeps the materialized heap
                         // identity and its later property writes. Formal
@@ -1469,16 +1493,16 @@ class SourceValueFlow {
         }
         return objects;
     }
-    private writeBinding(node: ts.Identifier, value: Cell): void {
+    private writeBinding(node: ts.Identifier, value: Cell, context?:ts.Node): void {
         const environment=this.evaluationGlobalTargets.has(node)?undefined:this.evaluationReferenceEnvironment(node);
         if(environment) {
-            this.binding(node);this.copy(value,environment.references.get(node)!.writes);return;
+            this.binding(node);this.copyWrite(value,environment.references.get(node)!.writes,context,true,node);return;
         }
-        this.copy(value, this.binding(node));
+        this.copyWrite(value,this.binding(node),context,true,node);
         if(this.isAmbientIdentifier(node)){
             const realm=this.evaluationGlobalTargets.get(node)??this.currentRealm;
             const receiver=this.newCell();this.publish(receiver,realm.global);
-            this.writeProperty(receiver,node.text,value,true,"set",node);
+            this.writeProperty(receiver,node.text,value,true,"set",context??node);
         }
         // Presence and unscopables can change during execution. Keep both
         // object-record and declarative destinations in this may-flow graph;
@@ -1486,7 +1510,7 @@ class SourceValueFlow {
         for (const base of this.withBindingObjects(node)) this.rule([base], () => {
             for (const atom of base.values) {
                 const owner = this.ordinaryOwner(atom);
-                if (owner) this.copy(value, this.field(owner, node.text));
+                if (owner) this.copyWrite(value,this.field(owner,node.text),context);
             }
         });
     }
@@ -2393,9 +2417,25 @@ class SourceValueFlow {
         });
         return result;
     }
+    private assignmentTarget(target:ts.Expression):{binding:ts.BindingName|null;references:Map<ts.Identifier,ts.Expression>}{
+        let record=this.assignmentTargets.get(target);if(!record){const references=new Map<ts.Identifier,ts.Expression>();record={binding:normalizeAssignmentTarget(target,references),references};this.assignmentTargets.set(target,record);}return record;
+    }
+    private recordBindingWrites(name:ts.BindingName,context:ts.Node,references?:ReadonlyMap<ts.Identifier,ts.Expression>):void {
+        const pending=[name];while(pending.length){const current=pending.pop()!;
+            if(ts.isIdentifier(current)){const raw=references?.get(current)??current,target=unwrap(raw);if(!ts.isIdentifier(target))continue;const symbol=this.bindingSymbol(target);if(!symbol)continue;
+                let sites=this.bindingWriteSites.get(symbol);if(!sites){sites=new Map();this.bindingWriteSites.set(symbol,sites);}
+                let leaves=sites.get(context);if(!leaves){leaves=new Set();sites.set(context,leaves);}leaves.add(target);
+            }else for(const element of current.elements)if(ts.isBindingElement(element))pending.push(element.name);
+        }
+    }
+    private recordAssignmentWrites(raw:ts.Expression,context:ts.Node):void {
+        const target=unwrap(raw);if(ts.isIdentifier(target)){this.recordBindingWrites(target,context);return;}
+        if(ts.isPropertyAccessExpression(target)||ts.isElementAccessExpression(target))return;
+        const {binding,references}=this.assignmentTarget(target);if(binding)this.recordBindingWrites(binding,context,references);
+    }
     private writeTarget(raw: ts.Expression, value: Cell, context: ts.Node, mode: "set"|"delete" = "set"): void {
         const target = unwrap(raw);
-        if (ts.isIdentifier(target)) { this.writeBinding(target, value); return; }
+        if (ts.isIdentifier(target)) { this.writeBinding(target,value,context); return; }
         if (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target)) {
             if (ts.isPropertyAccessExpression(target) && ts.isPrivateIdentifier(target.name)) {this.privateAccess(this.cell(target.expression),target.name,context,"set",value);return;}
             const base = this.cell(target.expression);
@@ -2403,8 +2443,7 @@ class SourceValueFlow {
             else this.writeProperty(base, target.name.text, value, true, mode, context);
             return;
         }
-        const references = new Map<ts.Identifier, ts.Expression>();
-        const binding = normalizeAssignmentTarget(target, references);
+        const {binding,references}=this.assignmentTarget(target);
         if (binding) this.bind(binding, value, references, context);
         else this.opaqueEffect(context);
     }
@@ -4537,7 +4576,7 @@ class SourceValueFlow {
             if (ts.isIdentifier(entry.name)) {
                 const reference = references?.get(entry.name);
                 if (reference) this.writeTarget(reference, entry.value, context!);
-                else this.writeBinding(entry.name, entry.value);
+                else this.writeBinding(entry.name,entry.value,context);
                 continue;
             }
             for (const [index, element] of entry.name.elements.entries()) {
@@ -5397,7 +5436,10 @@ class SourceValueFlow {
             });
             // Lexical, imported and global source bindings share the same
             // origin capture. Dynamic/repeated contexts remain conservative.
-            this.copyRead(binding,result,node);
+            const symbol=this.bindingSymbol(node),declaration=symbol?.valueDeclaration,activation=this.enclosingActivation(node);
+            const location=activation&&declaration&&this.enclosingActivation(declaration)===activation&&!this.repeatedActivationContext(node)&&
+                [...this.bindingWriteSites.get(symbol!)??[]].some(([site,leaves])=>this.enclosingActivation(site)===activation&&!this.repeatedActivationContext(site)&&[...leaves].some(leaf=>this.readBeforeWrite(node,site,leaf)))?binding:undefined;
+            this.copy(this.captureRead(binding,node,false,location),result);
             if (this.bindingMayBeUninitialized(node)) this.publish(result,this.primitive(undefined));
             for (const base of this.withBindingObjects(node)) this.copy(this.property(base, node.text, node), result);
             if (ambient && !this.evaluationGlobalTargets.has(node) && !this.evaluationEnvironments.has(this.sourceFile(node)) && !this.globalLexicals.has(node.text)) {
