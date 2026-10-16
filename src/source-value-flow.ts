@@ -189,14 +189,16 @@ class SourceFacts extends Set<Atom> {
     get nonempty():boolean{if(this.knownNonempty)return true;for(const _ of this){this.knownNonempty=true;return true;}return false;}
     override get size(): number {let size=0; for (const _ of this) size++; return size;}
 }
-interface Cell { cacheRevision:number;readonly id: number; readonly values: SourceFacts; readonly users: Set<Rule>; }
-/** Invalidated entries retain their allocation; a cell revision makes the
- * next lookup miss without repeatedly deleting large proof-cache tables. */
-class SourceCellCache<T> {
-    private readonly entries=new WeakMap<Cell,{revision:number;value:T}>();
-    get(cell:Cell):T|undefined {const entry=this.entries.get(cell);return entry?.revision===cell.cacheRevision?entry.value:undefined;}
-    has(cell:Cell):boolean {const entry=this.entries.get(cell);return entry!==undefined&&entry.revision===cell.cacheRevision;}
-    set(cell:Cell,value:T):void {this.entries.set(cell,{revision:cell.cacheRevision,value});}
+interface PrimitiveCellCache {proof?:PrimitiveChoiceProof;kind?:number;readiness?:PrimitiveReadiness;}
+interface Cell { primitiveCache?:PrimitiveCellCache;readonly id: number; readonly values: SourceFacts; readonly users: Set<Rule>; }
+/** One lazy record retains cache storage while invalidation releases stale
+ * proof/readiness values immediately. Undefined is a miss; a zero kind mask
+ * remains a present value. */
+class SourceCellCache<Key extends keyof PrimitiveCellCache> {
+    constructor(private readonly key:Key){}
+    get(cell:Cell):PrimitiveCellCache[Key] {return cell.primitiveCache?.[this.key];}
+    has(cell:Cell):boolean {return this.get(cell)!==undefined;}
+    set(cell:Cell,value:NonNullable<PrimitiveCellCache[Key]>):void {(cell.primitiveCache??={})[this.key]=value;}
 }
 interface Rule { readonly inputs: Set<Cell>; readonly run: () => void; queued: boolean; }
 interface SourcePropertyWrite {readonly context:ts.Node;readonly base:Cell;readonly receiver:Cell;readonly mode:"set"|"define"|"delete";readonly weak:Cell;readonly values:Cell;}
@@ -482,10 +484,10 @@ class SourceValueFlow {
     private readonly orderedConversions = new Map<ts.Node, Map<string, readonly Cell[]>>();
     private readonly numericConversions = new Map<Cell, Map<ts.Node, Map<string, Cell>>>();
     private readonly numericWrites = new Map<ts.Node, Cell>();
-    private readonly primitiveProofCache = new SourceCellCache<PrimitiveChoiceProof>();
-    private readonly primitiveKindCache = new SourceCellCache<number>();
+    private readonly primitiveProofCache = new SourceCellCache("proof");
+    private readonly primitiveKindCache = new SourceCellCache("kind");
     private readonly primitiveProofParents = new Map<Cell, Set<Cell>>();
-    private readonly primitiveReadyCache = new SourceCellCache<PrimitiveReadiness>();
+    private readonly primitiveReadyCache = new SourceCellCache("readiness");
     private readonly primitiveChanges = new Set<Cell>();
     private readonly hostOwners = new Map<"host" | "agent", ObjectOwner>();
     private readonly intrinsicOwners = new Map<Atom, ObjectOwner>();
@@ -678,7 +680,7 @@ class SourceValueFlow {
             }
         }
     }
-    private newCell(): Cell { const cell={cacheRevision:0,id:this.nextCell++,values:new SourceFacts(),users:new Set<Rule>()};this.sourceCells.set(cell.values,cell);return cell; }
+    private newCell(): Cell { const cell={id:this.nextCell++,values:new SourceFacts(),users:new Set<Rule>()};this.sourceCells.set(cell.values,cell);return cell; }
     /** Return copy graphs retain actual formal inputs independently of other
      * invocations. Local writes and derived facts stay conservative; the
      * ordinary invocation graph still owns all effects and exceptions. */
@@ -816,7 +818,8 @@ class SourceValueFlow {
         while (pending.length) {
             const value = pending.pop()!;
             if (visited.has(value)) continue; visited.add(value);
-            value.cacheRevision++;
+            const cache=value.primitiveCache;
+            if(cache){cache.proof=undefined;cache.kind=undefined;cache.readiness=undefined;}
             for (const user of value.users) this.schedule(user);
             for (const parent of this.primitiveProofParents.get(value) ?? []) pending.push(parent);
         }

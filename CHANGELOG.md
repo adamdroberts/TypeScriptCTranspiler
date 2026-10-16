@@ -1,3 +1,5 @@
+- Release invalidated source proof and readiness values through one reusable typed cache record per cell.
+
 - Retain native method source text from canonical initial-name descriptors during finite eval source analysis.
 
 - Preserve class definition evaluation order in source captures and analyze static blocks with their own statement-completion region.
