@@ -20,12 +20,12 @@ const imports="import ordinary from 'util';import * as namespace from 'node:util
 test('finite formatter queries follow callable locations, actual Lists and return projections',()=>{
  const partitions=[
   ["ordinary.format=()=> './other';const query=ordinary.format('./first');",['./first','./other']],
-  ["const saved=ordinary.format;ordinary.format=()=> './other';const query=saved('./first');",['./first','./other']],
+  ["const saved=ordinary.format;ordinary.format=()=> './other';const query=saved('./first');",['./first']],
   ["ordinary.format=()=> './other';const query=named('./first');",['./first']],
   ["ordinary.format=()=> './other';const query=namespace.format('./first');",['./first']],
   ["Object.defineProperty(ordinary,'format',{get(){return ()=> './other'}});const query=ordinary.format('./first');",['./first','./other']],
   ["const inherited=Object.create({get format(){return ()=> './other'}});const query=inherited.format('./first');",['./other']],
-  ["const target=named.bind(null,'%s:%d');function forward(fn,...args){return Reflect.apply(fn,null,args)}const query=forward(target,'part',17);",['part:17','part:NaN','undefined:17','undefined:NaN']],
+  ["const target=named.bind(null,'%s:%d');function forward(fn,...args){return Reflect.apply(fn,null,args)}const query=forward(target,'part',17);",['part:17']],
   ["const owner=require('node:util');owner.format=()=> './other';const query=owner.format('./first');",['./first','./other']],
   ["const query=named(...['%s:%s','a\\0b','']);",['a\0b:']],
   ["opaque();const query=namespace.format('./first');",['./first']],
@@ -35,7 +35,14 @@ test('finite formatter queries follow callable locations, actual Lists and retur
   ["Object.defineProperty(ordinary,'format',{get(){return opaque()}});const query=ordinary.format('./first');",null],
   ["const query=named('%s',{toString(){return './other'}});",null],
  ] as const;
- for(const [source,expected]of partitions){const actual=proof(imports+source);expect({source,actual:actual&&[...actual].sort()}).toEqual({source,actual:expected&&[...expected].sort()})}
+ for(const [source,expected]of partitions){
+  const actual=proof(imports+source);expect({source,actual:actual&&[...actual].sort()}).toEqual({source,actual:expected&&[...expected].sort()});
+  if(expected!==null){
+   const setup='import {createRequire} from "node:module";const require=createRequire(import.meta.url);function opaque(){ordinary.format=()=>"./other";}';
+   const node=nodeReferenceSync(['node','--input-type=module','-e',imports+setup+source+'import {writeSync} from "node:fs";writeSync(1,JSON.stringify(query));'],{stdout:'pipe',stderr:'pipe',timeout:30000});
+   expect({exitCode:node.exitCode,stderr:node.stderr.toString()}).toEqual({exitCode:0,stderr:''});expect(node.stdout.toString()).not.toBe('');expect(actual).toContain(JSON.parse(node.stdout.toString()));
+  }
+ }
  const synthetic=ts.factory.createCallExpression(ts.factory.createIdentifier('format'),undefined,[]);
  expect(sourceFileExpressionTexts(synthetic)).toBeNull();
 });
