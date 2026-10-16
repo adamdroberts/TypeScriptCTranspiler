@@ -1,3 +1,5 @@
+- Share opaque callback owner inspection across aliases while retaining later shape, collection, accessor and prototype discoveries.
+
 - Compare Object.is source values without coercion or callback escape, preserving SameValue primitives and conservative abstract identities.
 
 - Retain Object.hasOwn and borrowed hasOwnProperty source presence and conversion order without invoking getters or escaping ordinary stored callbacks.
