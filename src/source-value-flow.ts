@@ -2449,6 +2449,7 @@ class SourceValueFlow {
             if (key === "eval") this.publish(cell,this.realmOperation(this.currentRealm,"eval"));
             if (key === "require") this.publish(cell,this.operation("native-require"));
             if (key === "print") this.publish(cell,this.operation("host-print"));
+            if (key === "globalThis") this.publish(cell,this.currentRealm.global);
             if (key === "$262") this.publish(cell,this.host);
             if (key === "undefined") this.publish(cell,this.primitive(undefined));
             if (key === "NaN") this.publish(cell,this.primitive(NaN));
@@ -4665,7 +4666,6 @@ class SourceValueFlow {
             if (this.bindingMayBeUninitialized(node)) this.publish(result,this.primitive(undefined));
             for (const base of this.withBindingObjects(node)) this.copy(this.property(base, node.text, node), result);
             if (ambient && !this.evaluationGlobalTargets.has(node) && !this.evaluationEnvironments.has(this.sourceFile(node)) && !this.globalLexicals.has(node.text)) {
-                if (node.text === "globalThis") this.publish(result, this.global);
                 this.copyRead(this.globalBinding(node.text),result,node);
             }
             if(node.text!=="globalThis"&&binding===this.currentRealm.bindings.get(node.text)) {
