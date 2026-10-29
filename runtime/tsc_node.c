@@ -358,15 +358,43 @@ static double crypto_export_number(tsc_value_t value){
 tsc_value_t tsc_crypto_digest_prototype_value(bool hmac){return crypto_realm()->prototype[hmac];}
 tsc_value_t tsc_crypto_digest_create_value(bool hmac,tsc_array_t* args){return tsc_value_construct(crypto_realm()->constructor[hmac],tsc_value_array(args));}
 
+/* Node ERR_OUT_OF_RANGE validation for crypto sizes and counts that reach
+ * OpenSSL's int parameters; out-of-range doubles are rejected before any
+ * (int) conversion, which would otherwise be undefined behavior. */
+static _Noreturn void crypto_range_error(const char* name,const char* requirement,double value) {
+    tsc_str_t* received=tsc_str_from_num(value);
+    if(isfinite(value)&&value==floor(value)&&fabs(value)>4294967296.0) {
+        /* Node addNumericalSeparator groups large integers by thousands. */
+        size_t start=received->len&&received->data[0]=='-'?1:0,i=received->len;
+        tsc_str_t* tail=tsc_str_from_lit("",0);
+        for(;i>=start+4;i-=3)tail=tsc_str_concat_n(3,tsc_str_from_lit("_",1),tsc_str_from_lit(received->data+i-3,3),tail);
+        received=tsc_str_concat(tsc_str_from_lit(received->data,i),tail);
+    }
+    tsc_str_t* message=tsc_str_concat_n(5,tsc_str_from_lit("The value of \"",14),tsc_str_from_cstr(name),
+        tsc_str_from_lit("\" is out of range. It must be ",30),tsc_str_from_cstr(requirement),
+        tsc_str_concat(tsc_str_from_lit(". Received ",11),received));
+    tsc_error_t* error=tsc_error_new_named(tsc_str_from_lit("RangeError",10),message);
+    tsc_error_set_value_field(error,TSC_ERROR_VALUE_FIELD_code,tsc_value_string(tsc_str_from_lit("ERR_OUT_OF_RANGE",16)));
+    tsc_throw_value(tsc_value_error(error));
+}
+static void crypto_int32(double value,const char* name,double minimum,const char* requirement) {
+    if(!isfinite(value)||value!=floor(value))crypto_range_error(name,"an integer",value);
+    if(value<minimum||value>2147483647.0)crypto_range_error(name,requirement,value);
+}
+/* RAND_bytes takes an int count; fill arbitrarily large regions in chunks so
+ * no byte is left unrandomized behind a truncated length. */
+static void crypto_random_fill(uint8_t* data,size_t length,const char* failure) {
+    while(length) {
+        int chunk=length>(size_t)INT_MAX?INT_MAX:(int)length;
+        if(RAND_bytes(data,chunk)!=1)crypto_digest_error(failure,NULL);
+        data+=chunk;length-=(size_t)chunk;
+    }
+}
+
 tsc_buffer_t* tsc_crypto_random_bytes(double size) {
-    if (isnan(size) || isinf(size) || size < 0) {
-        tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("crypto.randomBytes size must be a non-negative finite number"));
-    }
+    if (!(size >= 0 && size <= 2147483647.0)) crypto_range_error("size", ">= 0 && <= 2147483647", size);
     tsc_buffer_t* out = tsc_buffer_alloc(size, 0);
-    if (out->len == 0) return out;
-    if (RAND_bytes(out->data, (int)out->len) != 1) {
-        crypto_digest_error("crypto.randomBytes entropy generation failed",NULL);
-    }
+    crypto_random_fill(out->data, out->len, "crypto.randomBytes entropy generation failed");
     return out;
 }
 
@@ -419,9 +447,7 @@ tsc_buffer_t* tsc_crypto_random_fill_sync(tsc_buffer_t* buffer, double offset, d
         return buffer;
     }
     uint8_t* ptr = buffer->data + off;
-    if (RAND_bytes(ptr, (int)len) != 1) {
-        crypto_digest_error("crypto.randomFillSync entropy generation failed",NULL);
-    }
+    crypto_random_fill(ptr, len, "crypto.randomFillSync entropy generation failed");
     return buffer;
 }
 
@@ -434,19 +460,16 @@ bool tsc_crypto_timing_safe_equal(const tsc_buffer_t* a, const tsc_buffer_t* b) 
 }
 
 static tsc_buffer_t* crypto_pbkdf2_bytes(const void* password_data, size_t password_len, const void* salt_data, size_t salt_len, double iterations, double keylen, const tsc_str_t* digest) {
-    if (isnan(iterations) || isinf(iterations) || iterations <= 0) {
-        tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("crypto.pbkdf2Sync: iterations must be a positive finite number"));
-    }
-    if (isnan(keylen) || isinf(keylen) || keylen < 0) {
-        tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("crypto.pbkdf2Sync: keylen must be a non-negative finite number"));
-    }
+    crypto_int32(iterations, "iterations", 1, ">= 1 && <= 2147483647");
+    crypto_int32(keylen, "keylen", 0, ">= 0 && <= 2147483647");
+    if (password_len > (size_t)INT_MAX || salt_len > (size_t)INT_MAX)
+        tsc_throw_error(TSC_ERROR_RANGE,tsc_str_from_cstr("crypto.pbkdf2Sync: password and salt must be at most 2147483647 bytes"));
 
     const EVP_MD* md = crypto_digest_lookup(digest);
 
+    /* Node derives through OpenSSL's KDF API, which rejects empty output. */
+    if (keylen == 0) tsc_throw_error(TSC_ERROR_ERROR, tsc_str_from_cstr("Deriving bits failed"));
     tsc_buffer_t* out = tsc_buffer_alloc(keylen, 0.0);
-    if (out->len == 0) {
-        return out;
-    }
 
     int res = PKCS5_PBKDF2_HMAC(
         (const char*)password_data, (int)password_len,
@@ -2504,7 +2527,9 @@ static tsc_value_t crypto_export_apply(void* environment,tsc_value_t receiver,ts
             return tsc_value_array(tsc_array_set_value_codec(names,crypto_export_box_string,crypto_export_unbox_string));
         }
         case CRYPTO_EXPORT_RANDOM_BYTES:{
-            size_t length=crypto_export_extent(crypto_argument(args,0),1,INT_MAX,"crypto.randomBytes size is outside its byte range");
+            double requested=crypto_export_number(crypto_argument(args,0));
+            if(!(requested>=0&&requested<=2147483647.0))crypto_range_error("size",">= 0 && <= 2147483647",requested);
+            size_t length=(size_t)requested;
             /* The existing native profile is synchronous; callback overloads
              * require the queued host operation rather than ignored execution. */
             if(!tsc_value_is_undefined(crypto_argument(args,1)))
@@ -2541,15 +2566,18 @@ static tsc_value_t crypto_export_apply(void* environment,tsc_value_t receiver,ts
             if(!crypto_is_string(digest))tsc_throw_error(TSC_ERROR_TYPE,crypto_key("crypto.pbkdf2Sync digest must be a String"));
             tsc_str_t* volatile algorithm=tsc_value_as_string(digest);
             crypto_input_t password=crypto_export_input(crypto_argument(args,0),true),salt=crypto_export_input(crypto_argument(args,1),true);
-            double iterations=crypto_export_integer(crypto_argument(args,2),1,INT_MAX,"crypto.pbkdf2Sync iterations must be a positive integer");
-            double length=crypto_export_integer(crypto_argument(args,3),0,INT_MAX,"crypto.pbkdf2Sync keylen must be a non-negative integer");
+            double iterations=crypto_export_number(crypto_argument(args,2));
+            crypto_int32(iterations,"iterations",1,">= 1 && <= 2147483647");
+            double length=crypto_export_number(crypto_argument(args,3));
+            crypto_int32(length,"keylen",0,">= 0 && <= 2147483647");
             tsc_buffer_t* volatile p=crypto_export_bytes(password);tsc_buffer_t* volatile s=crypto_export_bytes(salt);
             if(p->len>INT_MAX||s->len>INT_MAX)tsc_throw_error(TSC_ERROR_RANGE,crypto_key("crypto.pbkdf2Sync input is too large"));
             return tsc_value_buffer(crypto_pbkdf2_bytes(p->data,p->len,s->data,s->len,iterations,length,algorithm));
         }
         case CRYPTO_EXPORT_SCRYPT:{
             crypto_input_t password=crypto_export_input(crypto_argument(args,0),true),salt=crypto_export_input(crypto_argument(args,1),true);
-            double length=crypto_export_integer(crypto_argument(args,2),0,INT_MAX,"crypto.scryptSync keylen must be a non-negative integer");
+            double length=crypto_export_number(crypto_argument(args,2));
+            crypto_int32(length,"keylen",0,">= 0 && <= 2147483647");
             double options[4];crypto_export_scrypt_options(crypto_argument(args,3),options);
             tsc_buffer_t* volatile p=crypto_export_bytes(password);tsc_buffer_t* volatile s=crypto_export_bytes(salt);
             return tsc_value_buffer(crypto_scrypt_bytes(p->data,p->len,s->data,s->len,length,options[0],options[1],options[2],options[3]));
@@ -5618,7 +5646,7 @@ static SSL_CTX* tsc_https_server_tls_context(tsc_value_t options) {
     SSL_CTX_set_options(ctx, SSL_OP_IGNORE_UNEXPECTED_EOF);
 #endif
 
-    BIO* certificate_bio = BIO_new_mem_buf(certificate_text->data, (int)certificate_text->len);
+    BIO* certificate_bio = certificate_text->len <= (size_t)INT_MAX ? BIO_new_mem_buf(certificate_text->data, (int)certificate_text->len) : NULL;
     X509* certificate = certificate_bio ? PEM_read_bio_X509(certificate_bio, NULL, 0, NULL) : NULL;
     if (!certificate_bio || !certificate || SSL_CTX_use_certificate(ctx, certificate) != 1) {
         if (certificate) X509_free(certificate);
@@ -5629,7 +5657,7 @@ static SSL_CTX* tsc_https_server_tls_context(tsc_value_t options) {
     X509_free(certificate);
     BIO_free(certificate_bio);
 
-    BIO* private_key_bio = BIO_new_mem_buf(private_key_text->data, (int)private_key_text->len);
+    BIO* private_key_bio = private_key_text->len <= (size_t)INT_MAX ? BIO_new_mem_buf(private_key_text->data, (int)private_key_text->len) : NULL;
     EVP_PKEY* private_key = private_key_bio ? PEM_read_bio_PrivateKey(private_key_bio, NULL, 0, NULL) : NULL;
     if (!private_key_bio || !private_key || SSL_CTX_use_PrivateKey(ctx, private_key) != 1 || SSL_CTX_check_private_key(ctx) != 1) {
         if (private_key) EVP_PKEY_free(private_key);

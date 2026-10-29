@@ -1,3 +1,4 @@
+- Validate crypto int32 counts and sizes with Node's ERR_OUT_OF_RANGE before OpenSSL int conversion and fill random regions in chunks.
 - Escape `?` in emitted C literals so trigraphs cannot rewrite generated C.
 - Harden native builds with probed exploit mitigations and add a fail-closed `TSC2C_SANITIZE` profile.
 - Fail closed on native allocation failure, unrepresentable no-GC arena sizes and partial child errno writes.
