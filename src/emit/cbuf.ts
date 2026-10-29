@@ -44,6 +44,9 @@ export function escapeCString(s: string): string {
     for (const byte of encodeWtf8(s)) {
         if (byte === 0x5c /* \ */) out += "\\\\";
         else if (byte === 0x22 /* " */) out += '\\"';
+        // ISO C modes translate trigraphs (`??/` is `\`) before tokenizing, so
+        // a literal `??` pair would let source text rewrite the C token stream.
+        else if (byte === 0x3f /* ? */) out += "\\?";
         else if (byte === 0x0a) out += "\\n";
         else if (byte === 0x0d) out += "\\r";
         else if (byte === 0x09) out += "\\t";
