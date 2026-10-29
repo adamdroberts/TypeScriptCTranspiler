@@ -1160,9 +1160,16 @@
     {
       "tag": "json-parse-with-source",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-json.parse",
+        "sec-json.rawjson",
+        "sec-json.israwjson",
+        "sec-internalizejsonproperty",
+        "sec-createjsonparserecord",
+        "sec-json-parse-record"
+      ],
+      "rationale": "Every pinned Test262 anchor carrying this standard feature resolves to JSON.parse reviver source context, JSON.rawJSON and JSON.isRawJSON and their parse-record and internalization operations. The pinned built-ins/JSON/isRawJSON and rawJSON runs pass every scenario and every json-parse-with-source parse scenario passes in strict mode; the two sloppy forward-modification scenarios fail closed in AOT eval-source admission, not in the feature semantics. This mapping enables verification without promoting conformance or host eligibility."
     },
     {
       "tag": "json-superset",

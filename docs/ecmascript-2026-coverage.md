@@ -2846,7 +2846,7 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `iterator-sequencing` — standard, tracking: `todo`; no clause mapping.
 - `joint-iteration` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `json-modules` — standard, tracking: `ready-for-verification`; `sec-ParseJSON`, `sec-create-default-export-synthetic-module`, `sec-parse-json-module`, `sec-setsyntheticmoduleexport`, `sec-synthetic-module-records`.
-- [ ] `json-parse-with-source` — standard, tracking: `todo`; no clause mapping.
+- [ ] `json-parse-with-source` — standard, tracking: `ready-for-verification`; `sec-json.parse`, `sec-json.rawjson`, `sec-json.israwjson`, `sec-internalizejsonproperty`, `sec-createjsonparserecord`, `sec-json-parse-record`.
 - [ ] `json-superset` — standard, tracking: `todo`; no clause mapping.
 - `legacy-regexp` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `let` — standard, tracking: `todo`; no clause mapping.
