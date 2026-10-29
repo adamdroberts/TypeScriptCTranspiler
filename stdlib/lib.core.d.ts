@@ -811,8 +811,26 @@ interface TypedArrayConstructor<T, V extends TypedArray<T>> {
 }
 interface Int8Array extends TypedArray<number> {}
 declare var Int8Array: TypedArrayConstructor<number, Int8Array>;
-interface Uint8Array extends TypedArray<number> {}
-declare var Uint8Array: TypedArrayConstructor<number, Uint8Array>;
+interface Uint8ArrayBase64Options {
+    alphabet?: "base64" | "base64url";
+}
+interface Uint8ArrayFromBase64Options extends Uint8ArrayBase64Options {
+    lastChunkHandling?: "loose" | "strict" | "stop-before-partial";
+}
+interface Uint8ArrayToBase64Options extends Uint8ArrayBase64Options {
+    omitPadding?: boolean;
+}
+interface Uint8Array extends TypedArray<number> {
+    toBase64(options?: Uint8ArrayToBase64Options, ...ignored: any[]): string;
+    toHex(...ignored: any[]): string;
+    setFromBase64(string: string, options?: Uint8ArrayFromBase64Options, ...ignored: any[]): { read: number; written: number };
+    setFromHex(string: string, ...ignored: any[]): { read: number; written: number };
+}
+interface Uint8ArrayConstructor extends TypedArrayConstructor<number, Uint8Array> {
+    fromBase64(string: string, options?: Uint8ArrayFromBase64Options, ...ignored: any[]): Uint8Array;
+    fromHex(string: string, ...ignored: any[]): Uint8Array;
+}
+declare var Uint8Array: Uint8ArrayConstructor;
 interface Uint8ClampedArray extends TypedArray<number> {}
 declare var Uint8ClampedArray: TypedArrayConstructor<number, Uint8ClampedArray>;
 interface Int16Array extends TypedArray<number> {}

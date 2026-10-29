@@ -1,0 +1,7 @@
+11 68656c6c6f20776f726c64 aGVsbG8gd29ybGQ= aGVsbG8gd29ybGQ
+4 2 4869000000000000
+yv4= 2
+aGVsbG8= fromBase64 1
+SyntaxError
+SyntaxError 01020300
+{"read":4,"written":3} 666f6f

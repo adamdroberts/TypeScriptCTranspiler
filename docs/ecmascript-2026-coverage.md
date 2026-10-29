@@ -2883,7 +2883,7 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `template` — standard, tracking: `todo`; no clause mapping.
 - [ ] `top-level-await` — standard, tracking: `todo`; no clause mapping.
 - [ ] `u180e` — standard, tracking: `ready-for-verification`; `sec-unicode-format-control-characters`, `sec-white-space`.
-- [ ] `uint8array-base64` — standard, tracking: `todo`; no clause mapping.
+- [ ] `uint8array-base64` — standard, tracking: `ready-for-verification`; `sec-uint8array.frombase64`, `sec-uint8array.fromhex`, `sec-uint8array.prototype.setfrombase64`, `sec-uint8array.prototype.setfromhex`, `sec-uint8array.prototype.tobase64`, `sec-uint8array.prototype.tohex`, `sec-validateuint8array`, `sec-getuint8arraybytes`, `sec-setuint8arraybytes`, `sec-skipasciiwhitespace`, `sec-decodefinalbase64chunk`, `sec-decodefulllengthbase64chunk`, `sec-frombase64`, `sec-fromhex`, `sec-getoptionsobject`.
 - [ ] `upsert` — standard, tracking: `ready-for-verification`; `sec-map.prototype.getorinsert`, `sec-map.prototype.getorinsertcomputed`, `sec-weakmap.prototype.getorinsert`, `sec-weakmap.prototype.getorinsertcomputed`, `sec-canonicalizekeyedcollectionkey`, `sec-canbeheldweakly`.
 - [ ] `well-formed-json-stringify` — standard, tracking: `todo`; no clause mapping.
 

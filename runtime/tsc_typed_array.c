@@ -497,6 +497,220 @@ static tsc_value_t traversal_apply(void* environment,tsc_value_t receiver,tsc_ar
     (void)receiver_root;(void)first_root;(void)accumulator_root;(void)result_root;
     return reduce?accumulator:operation->kind==MAP||operation->kind==FILTER?result:operation->kind==SOME?tsc_value_bool(false):operation->kind==EVERY?tsc_value_bool(true):operation->kind==FIND_INDEX?tsc_value_num(-1):tsc_value_undefined();
 }
+/* ES2026 Uint8Array base64/hex (sec-uint8array-objects). Strings are WTF-8;
+ * every accepted character is ASCII and decoding stops at the first non-ASCII
+ * byte, so byte positions equal UTF-16 positions wherever [[Read]] is
+ * reported. Decoding never invokes user code. */
+typedef enum {CODEC_FROM_BASE64,CODEC_FROM_HEX,CODEC_SET_FROM_BASE64,CODEC_SET_FROM_HEX,CODEC_TO_BASE64,CODEC_TO_HEX} codec_kind_t;
+typedef struct {const char* name;codec_kind_t kind;size_t arity;bool on_constructor;} codec_member_t;
+static const codec_member_t codec_members[]={
+    {"fromBase64",CODEC_FROM_BASE64,1,true},{"fromHex",CODEC_FROM_HEX,1,true},
+    {"setFromBase64",CODEC_SET_FROM_BASE64,1,false},{"setFromHex",CODEC_SET_FROM_HEX,1,false},
+    {"toBase64",CODEC_TO_BASE64,0,false},{"toHex",CODEC_TO_HEX,0,false}};
+typedef enum {CHUNK_LOOSE,CHUNK_STRICT,CHUNK_STOP_BEFORE_PARTIAL} last_chunk_t;
+typedef struct {size_t read,written;bool error;} codec_result_t;
+static size_t codec_skip_space(const tsc_str_t* s,size_t index){
+    while(index<s->len){
+        unsigned char c=(unsigned char)s->data[index];
+        if(c!=0x09&&c!=0x0a&&c!=0x0c&&c!=0x0d&&c!=0x20)break;
+        ++index;
+    }
+    return index;
+}
+/* DecodeFinalBase64Chunk: false reports nonzero padding bits in strict mode. */
+static bool codec_final_chunk(const int* chunk,size_t chunk_length,bool strict,uint8_t* out,codec_result_t* result){
+    int third=chunk_length>2?chunk[2]:0;
+    uint8_t first=(uint8_t)(chunk[0]<<2|chunk[1]>>4),second=(uint8_t)((chunk[1]&15)<<4|third>>2),last=(uint8_t)((third&3)<<6);
+    if(chunk_length==2){
+        if(strict&&second)return false;
+        out[result->written++]=first;return true;
+    }
+    if(strict&&last)return false;
+    out[result->written++]=first;out[result->written++]=second;return true;
+}
+/* FromBase64; out holds at least min(max, s->len) bytes. */
+static codec_result_t codec_from_base64(const tsc_str_t* s,bool url,last_chunk_t last,size_t max,uint8_t* out){
+    codec_result_t result={0,0,false};
+    if(max==0)return result;
+    int chunk[4];size_t chunk_length=0,index=0,length=s->len;
+    for(;;){
+        index=codec_skip_space(s,index);
+        if(index==length){
+            if(chunk_length>0){
+                if(last==CHUNK_STOP_BEFORE_PARTIAL)return result;
+                if(last==CHUNK_STRICT||chunk_length==1){result.error=true;return result;}
+                (void)codec_final_chunk(chunk,chunk_length,false,out,&result);
+            }
+            result.read=length;return result;
+        }
+        unsigned char c=(unsigned char)s->data[index++];
+        if(c=='='){
+            if(chunk_length<2){result.error=true;return result;}
+            index=codec_skip_space(s,index);
+            if(chunk_length==2){
+                if(index==length){
+                    if(last!=CHUNK_STOP_BEFORE_PARTIAL)result.error=true;
+                    return result;
+                }
+                if(s->data[index]=='=')index=codec_skip_space(s,index+1);
+            }
+            if(index<length||!codec_final_chunk(chunk,chunk_length,last==CHUNK_STRICT,out,&result)){result.error=true;return result;}
+            result.read=length;return result;
+        }
+        if(url){
+            if(c=='+'||c=='/'){result.error=true;return result;}
+            if(c=='-')c='+';else if(c=='_')c='/';
+        }
+        int value=base64_value(c);
+        if(value<0){result.error=true;return result;}
+        size_t remaining=max-result.written;
+        if((remaining==1&&chunk_length==2)||(remaining==2&&chunk_length==3))return result;
+        chunk[chunk_length++]=value;
+        if(chunk_length==4){
+            out[result.written++]=(uint8_t)(chunk[0]<<2|chunk[1]>>4);
+            out[result.written++]=(uint8_t)((chunk[1]&15)<<4|chunk[2]>>2);
+            out[result.written++]=(uint8_t)((chunk[2]&3)<<6|chunk[3]);
+            chunk_length=0;result.read=index;
+            if(result.written==max)return result;
+        }
+    }
+}
+/* FromHex; parity uses the UTF-16 length, hexits are read bytewise. */
+static codec_result_t codec_from_hex(const tsc_str_t* s,size_t max,uint8_t* out){
+    codec_result_t result={0,0,false};
+    if(tsc_str_utf16_length(s)%2){result.error=true;return result;}
+    while(result.read<s->len&&result.written<max){
+        int high=hex_value((unsigned char)s->data[result.read]);
+        int low=result.read+1<s->len?hex_value((unsigned char)s->data[result.read+1]):-1;
+        if(high<0||low<0){result.error=true;return result;}
+        result.read+=2;out[result.written++]=(uint8_t)(high<<4|low);
+    }
+    return result;
+}
+static void codec_require_string(tsc_value_t value){
+    if(!value_is_box(value)||value_tag(value)!=TSC_VALUE_TAG_STRING)
+        tsc_throw_error(TSC_ERROR_TYPE,key("Uint8Array encoding input must be a String"));
+}
+/* GetOptionsObject: undefined behaves as an empty null-prototype object. */
+static tsc_value_t codec_option(tsc_value_t options,const char* name){
+    return tsc_value_is_undefined(options)?tsc_value_undefined():tsc_value_get_prop(options,key(name));
+}
+static void codec_require_options(tsc_value_t options){
+    if(!tsc_value_is_undefined(options)&&!tsc_value_is_object(options))
+        tsc_throw_error(TSC_ERROR_TYPE,key("Uint8Array encoding options must be an object"));
+}
+static bool codec_text_is(tsc_value_t value,const char* text){
+    return value_is_box(value)&&value_tag(value)==TSC_VALUE_TAG_STRING&&tsc_str_eq(value_ptr(value),key(text));
+}
+static bool codec_alphabet_url(tsc_value_t options){
+    tsc_value_t alphabet=codec_option(options,"alphabet");
+    if(tsc_value_is_undefined(alphabet)||codec_text_is(alphabet,"base64"))return false;
+    if(codec_text_is(alphabet,"base64url"))return true;
+    tsc_throw_error(TSC_ERROR_TYPE,key("Uint8Array alphabet must be \"base64\" or \"base64url\""));
+}
+static last_chunk_t codec_last_chunk(tsc_value_t options){
+    tsc_value_t handling=codec_option(options,"lastChunkHandling");
+    if(tsc_value_is_undefined(handling)||codec_text_is(handling,"loose"))return CHUNK_LOOSE;
+    if(codec_text_is(handling,"strict"))return CHUNK_STRICT;
+    if(codec_text_is(handling,"stop-before-partial"))return CHUNK_STOP_BEFORE_PARTIAL;
+    tsc_throw_error(TSC_ERROR_TYPE,key("Uint8Array lastChunkHandling must be \"loose\", \"strict\" or \"stop-before-partial\""));
+}
+static tsc_object_t* codec_validate(tsc_value_t receiver){
+    tsc_object_t* object=typed_object(receiver);
+    if(!object||owner_kind(object)!=TSC_ELEMENT_Uint8Array)tsc_throw_error(TSC_ERROR_TYPE,key("Uint8Array method receiver is not a Uint8Array"));
+    return object;
+}
+static tsc_typed_array_witness_t codec_bytes(const tsc_object_t* object){
+    tsc_typed_array_witness_t witness=owner_witness(object);
+    if(!witness.valid)tsc_throw_error(TSC_ERROR_TYPE,key("Uint8Array is detached or out of bounds"));
+    return witness;
+}
+static _Noreturn void codec_syntax_error(void){tsc_throw_error(TSC_ERROR_SYNTAX,key("Uint8Array encoding input is invalid"));}
+static tsc_value_t codec_new_uint8(const uint8_t* bytes,size_t length){
+    tsc_value_t result=tsc_typed_array_create_from_constructor(tsc_typed_array_constructor_value(TSC_ELEMENT_Uint8Array),length_arguments(length));
+    void* volatile result_root=tsc_value_gc_root(result);
+    if(length)memcpy(require_witness(require_typed(result)).data,bytes,length);
+    (void)result_root;return result;
+}
+static tsc_value_t codec_set_result(tsc_object_t* into,const uint8_t* bytes,codec_result_t result){
+    if(result.written)memcpy(owner_witness(into).data,bytes,result.written);
+    if(result.error)codec_syntax_error();
+    tsc_value_t object=tsc_value_object(tsc_object_new());void* volatile object_root=tsc_value_gc_root(object);
+    tsc_value_set_prop(object,key("read"),tsc_value_num((double)result.read));
+    tsc_value_set_prop(object,key("written"),tsc_value_num((double)result.written));
+    (void)object_root;return object;
+}
+static tsc_str_t* codec_encode_base64(const uint8_t* bytes,size_t length,bool url,bool omit_padding){
+    static const char standard[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    static const char url_safe[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const char* digits=url?url_safe:standard;
+    size_t capacity=tsc_alloc_size(length/3+(length%3?1:0),4);
+    char* out=TSC_GC_MALLOC_ATOMIC(capacity?capacity:1);size_t size=0,index=0;
+    for(;index+3<=length;index+=3){
+        uint32_t group=(uint32_t)bytes[index]<<16|(uint32_t)bytes[index+1]<<8|bytes[index+2];
+        out[size++]=digits[group>>18];out[size++]=digits[group>>12&63];out[size++]=digits[group>>6&63];out[size++]=digits[group&63];
+    }
+    if(length-index==1){
+        uint32_t group=(uint32_t)bytes[index]<<16;
+        out[size++]=digits[group>>18];out[size++]=digits[group>>12&63];
+        if(!omit_padding){out[size++]='=';out[size++]='=';}
+    }else if(length-index==2){
+        uint32_t group=(uint32_t)bytes[index]<<16|(uint32_t)bytes[index+1]<<8;
+        out[size++]=digits[group>>18];out[size++]=digits[group>>12&63];out[size++]=digits[group>>6&63];
+        if(!omit_padding)out[size++]='=';
+    }
+    return tsc_str_from_lit(out,size);
+}
+static tsc_str_t* codec_encode_hex(const uint8_t* bytes,size_t length){
+    static const char digits[]="0123456789abcdef";
+    char* out=TSC_GC_MALLOC_ATOMIC(length?tsc_alloc_size(length,2):1);
+    for(size_t index=0;index<length;++index){out[2*index]=digits[bytes[index]>>4];out[2*index+1]=digits[bytes[index]&15];}
+    return tsc_str_from_lit(out,length*2);
+}
+static tsc_value_t codec_apply(void* environment,tsc_value_t receiver,tsc_array_t* args){
+    const codec_member_t* member=environment;
+    void* volatile receiver_root=tsc_value_gc_root(receiver);tsc_array_t* volatile actuals=args;
+    tsc_value_t input=argument(actuals,0),options=argument(actuals,1);
+    void* volatile input_root=tsc_value_gc_root(input);void* volatile options_root=tsc_value_gc_root(options);
+    tsc_value_t result=tsc_value_undefined();
+    switch(member->kind){
+        case CODEC_FROM_BASE64:case CODEC_FROM_HEX:{
+            codec_require_string(input);
+            const tsc_str_t* text=value_ptr(input);
+            bool url=false;last_chunk_t last=CHUNK_LOOSE;
+            if(member->kind==CODEC_FROM_BASE64){codec_require_options(options);url=codec_alphabet_url(options);last=codec_last_chunk(options);}
+            uint8_t* bytes=TSC_GC_MALLOC_ATOMIC(text->len?text->len:1);
+            codec_result_t decoded=member->kind==CODEC_FROM_BASE64?codec_from_base64(text,url,last,SIZE_MAX,bytes):codec_from_hex(text,SIZE_MAX,bytes);
+            if(decoded.error)codec_syntax_error();
+            result=codec_new_uint8(bytes,decoded.written);break;
+        }
+        case CODEC_SET_FROM_BASE64:case CODEC_SET_FROM_HEX:{
+            tsc_object_t* into=codec_validate(receiver);
+            codec_require_string(input);
+            const tsc_str_t* text=value_ptr(input);
+            bool url=false;last_chunk_t last=CHUNK_LOOSE;
+            if(member->kind==CODEC_SET_FROM_BASE64){codec_require_options(options);url=codec_alphabet_url(options);last=codec_last_chunk(options);}
+            size_t capacity=codec_bytes(into).length;
+            uint8_t* bytes=TSC_GC_MALLOC_ATOMIC(text->len?text->len:1);
+            codec_result_t decoded=member->kind==CODEC_SET_FROM_BASE64?codec_from_base64(text,url,last,capacity,bytes):codec_from_hex(text,capacity,bytes);
+            result=codec_set_result(into,bytes,decoded);break;
+        }
+        case CODEC_TO_BASE64:{
+            tsc_object_t* object=codec_validate(receiver);
+            tsc_value_t encode_options=argument(actuals,0);
+            codec_require_options(encode_options);
+            bool url=codec_alphabet_url(encode_options);
+            bool omit=tsc_value_is_truthy(codec_option(encode_options,"omitPadding"));
+            tsc_typed_array_witness_t witness=codec_bytes(object);
+            result=tsc_value_string(codec_encode_base64(witness.data,witness.length,url,omit));break;
+        }
+        case CODEC_TO_HEX:{
+            tsc_typed_array_witness_t witness=codec_bytes(codec_validate(receiver));
+            result=tsc_value_string(codec_encode_hex(witness.data,witness.length));break;
+        }
+    }
+    (void)receiver_root;(void)input_root;(void)options_root;return result;
+}
 static void initialize_intrinsic(intrinsic_t* intrinsic,const char* name,size_t arity,tsc_generic_function_t construct,void* environment,tsc_value_t parent,tsc_value_t prototype_parent){
     intrinsic->prototype=tsc_value_object(tsc_object_new_with_prototype(prototype_parent));intrinsic->prototype_root=tsc_value_gc_root(intrinsic->prototype);
     intrinsic->constructor=tsc_value_function_named_kind(constructor_call,construct,environment,arity,key(name),TSC_FUNCTION_IDENTITY_BUILTIN);
@@ -528,6 +742,13 @@ static typed_realm_t* typed_realm(void){
         ((tsc_function_identity_t*)value_ptr(intrinsic->constructor))->construct_default_prototype=element->prototype;
         define_value(intrinsic->constructor,key("BYTES_PER_ELEMENT"),tsc_value_num((double)element->width),false,false);
         define_value(intrinsic->prototype,key("BYTES_PER_ELEMENT"),tsc_value_num((double)element->width),false,false);
+    }
+    intrinsic_t* uint8=&realm->concrete[TSC_ELEMENT_Uint8Array];
+    for(size_t index=0;index<sizeof(codec_members)/sizeof(codec_members[0]);++index){
+        const codec_member_t* member=&codec_members[index];
+        tsc_value_t function=tsc_value_function_named_kind(codec_apply,NULL,(void*)member,member->arity,key(member->name),TSC_FUNCTION_IDENTITY_BUILTIN);
+        void* volatile function_root=tsc_value_gc_root(function);
+        define_value(member->on_constructor?uint8->constructor:uint8->prototype,key(member->name),function,true,true);(void)function_root;
     }
     return realm;
 }

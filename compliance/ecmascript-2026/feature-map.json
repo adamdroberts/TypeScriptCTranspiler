@@ -1436,9 +1436,25 @@
     {
       "tag": "uint8array-base64",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-uint8array.frombase64",
+        "sec-uint8array.fromhex",
+        "sec-uint8array.prototype.setfrombase64",
+        "sec-uint8array.prototype.setfromhex",
+        "sec-uint8array.prototype.tobase64",
+        "sec-uint8array.prototype.tohex",
+        "sec-validateuint8array",
+        "sec-getuint8arraybytes",
+        "sec-setuint8arraybytes",
+        "sec-skipasciiwhitespace",
+        "sec-decodefinalbase64chunk",
+        "sec-decodefulllengthbase64chunk",
+        "sec-frombase64",
+        "sec-fromhex",
+        "sec-getoptionsobject"
+      ],
+      "rationale": "Every pinned Test262 anchor carrying this standard feature resolves to the Uint8Array base64/hex constructor and prototype methods and their FromBase64/FromHex, option and byte-transfer operations. The Realm-owned %Uint8Array% members follow the pinned algorithms, including maxLength stops and partial writes before SyntaxError; scoped transcription/Node/native properties and the pinned built-ins/Uint8Array run provide review inputs. This mapping enables verification without promoting conformance or host eligibility."
     },
     {
       "tag": "upsert",

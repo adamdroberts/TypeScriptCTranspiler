@@ -1,3 +1,4 @@
+- Implement ES2026 Uint8Array base64/hex: fromBase64, fromHex, setFromBase64, setFromHex, toBase64 and toHex.
 - Route native count*size allocation products through overflow-checked tsc_alloc_size.
 - Validate crypto int32 counts and sizes with Node's ERR_OUT_OF_RANGE before OpenSSL int conversion and fill random regions in chunks.
 - Escape `?` in emitted C literals so trigraphs cannot rewrite generated C.
