@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import * as path from "node:path";
+import { cxxCompileFlags, hardeningFlags } from "./hardening";
 
 export interface CcOptions {
     sources: string[];
@@ -36,6 +37,13 @@ function cxxCommand(): string {
 }
 
 export async function invokeCc(opts: CcOptions): Promise<CcResult> {
+    try {
+        await hardeningFlags(ccCommand());
+    } catch (error) {
+        const stderr = `tsc2c: ${error instanceof Error ? error.message : String(error)}\n`;
+        (opts.stderrWriter ?? ((message: string) => process.stderr.write(message)))(stderr);
+        return { exitCode: 1, stderr };
+    }
     const hasCxx = opts.sources.some((source) => /\.(cc|cpp|cxx)$/i.test(source));
     if (hasCxx) return invokeCcWithCxx(opts);
 
@@ -57,11 +65,14 @@ export async function invokeCc(opts: CcOptions): Promise<CcResult> {
         "-Wno-parentheses-equality",
         "-Wno-stringop-overflow",
     ];
+    const hardening = await hardeningFlags(ccCommand());
+    args.push(...hardening.compile);
     if (opts.release) args.push("-s");
     for (const dir of opts.includeDirs) args.push("-I", dir);
     args.push(...(opts.extraFlags ?? []));
     args.push(...opts.sources);
     args.push(...sectionGcLinkFlags);
+    args.push(...hardening.link);
     args.push(...(opts.linkFlags ?? []));
     for (const lib of opts.libs) args.push("-l" + lib);
     args.push("-o", opts.output);
@@ -104,6 +115,7 @@ async function invokeCcWithCxx(opts: CcOptions): Promise<CcResult> {
         "-Wno-parentheses-equality",
         "-Wno-stringop-overflow",
     ];
+    const hardening = await hardeningFlags(ccCommand());
     const includeFlags = opts.includeDirs.flatMap((dir) => ["-I", dir]);
     const extraFlags = opts.extraFlags ?? [];
     const objects = opts.sources.map((source) =>
@@ -118,6 +130,7 @@ async function invokeCcWithCxx(opts: CcOptions): Promise<CcResult> {
         const args = [
             isCxx ? "-std=c++20" : "-std=c11",
             ...commonFlags,
+            ...(isCxx ? cxxCompileFlags(hardening) : hardening.compile),
             ...includeFlags,
             ...extraFlags,
             "-c",
@@ -134,6 +147,7 @@ async function invokeCcWithCxx(opts: CcOptions): Promise<CcResult> {
     linkArgs.push(...optimizationFlags);
     linkArgs.push(...objects);
     linkArgs.push(...sectionGcLinkFlags);
+    linkArgs.push(...hardening.link);
     linkArgs.push(...(opts.linkFlags ?? []));
     for (const lib of opts.libs) linkArgs.push("-l" + lib);
     linkArgs.push("-o", opts.output);
