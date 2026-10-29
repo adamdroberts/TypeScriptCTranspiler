@@ -1,7 +1,7 @@
 import {expect,test} from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import {featureDisposition,featureIntroductionId,featureIntroductionTrees,featureIntroductionTreeId,introductionCheckout,loadFeatureEditionReviews,postEditionFeatureTags,requirePostEditionFeatureTags,validateFeatureEditionReviews,verifyFeatureIntroductions,type FeatureEditionReviews} from '../test262/feature-edition';
+import {featureDisposition,featureIntroductionId,testEditionReviews,featureIntroductionTrees,featureIntroductionTreeId,introductionCheckout,loadFeatureEditionReviews,postEditionFeatureTags,requirePostEditionFeatureTags,validateFeatureEditionReviews,verifyFeatureIntroductions,type FeatureEditionReviews} from '../test262/feature-edition';
 import {scopeFor} from '../test262/inventory';
 import {parseFeatureRegistry,type FeatureRegistry} from '../test262/metadata';
 import {complianceDir,defaultCacheRoot,loadBaseline,readJson,sha256Text,type Baseline} from '../test262/model';
@@ -13,7 +13,7 @@ function input(depth:number):{baseline:Baseline;catalog:ClauseCatalog;document:F
  const baseline={ecma262:{repository:'https://github.com/tc39/ecma262.git',commit,tree,specSource:'spec.html',specSourceSha256:sha},test262:{ecma402FeatureTags:['intl'],postEditionFeatureTags:['proposal','later']}} as Baseline;
  const catalog={commit,tree,specSourceSha256:sha,anchors:[{id:'target'}]} as ClauseCatalog;
  const sourceId=featureIntroductionId({repository:baseline.ecma262.repository,commit:introduced,specSource:'spec.html'});
- const document:FeatureEditionReviews={schemaVersion:2,target:{commit,specSourceSha256:sha},sources:[{id:sourceId,repository:baseline.ecma262.repository,commit:introduced,tree:'5'.repeat(40),specSource:'spec.html',specSourceSha256:'6'.repeat(64),excerpts:[{clause:'new-0',byteStart:0,byteEnd:Buffer.byteLength(text),sha256:sha256Text(text),text}]}],reviews:[{feature:'later',evidence:[{source:sourceId,introducedClauses:['new-0']}],primarySource:'https://github.com/tc39/ecma262/pull/3000',reviewedBy:'property review',rationale:'Exact later source forest absent from target.'}]};return{baseline,catalog,document};
+ const document:FeatureEditionReviews={schemaVersion:3,target:{commit,specSourceSha256:sha},sources:[{id:sourceId,repository:baseline.ecma262.repository,commit:introduced,tree:'5'.repeat(40),specSource:'spec.html',specSourceSha256:'6'.repeat(64),excerpts:[{clause:'new-0',byteStart:0,byteEnd:Buffer.byteLength(text),sha256:sha256Text(text),text}]}],reviews:[{feature:'later',evidence:[{source:sourceId,introducedClauses:['new-0']}],primarySource:'https://github.com/tc39/ecma262/pull/3000',reviewedBy:'property review',rationale:'Exact later source forest absent from target.'}],revisions:[],testReviews:[]};return{baseline,catalog,document};
 }
 
 test('one edition review forest classifies registry categories and rejects incomplete evidence',()=>{
@@ -70,4 +70,30 @@ test('reviewed standard tag rejoins the exact primary introduction and pinned ta
  const corrupt=structuredClone(document);corrupt.sources[0]!.specSourceSha256='0'.repeat(64);await expect(verifyFeatureIntroductions(corrupt)).rejects.toThrow('primary source bytes');
  const corruptTree=structuredClone(document),seen=new Set<string>(),duplicate=corruptTree.sources.find(source=>{const key=featureIntroductionTreeId(source);if(seen.has(key))return true;seen.add(key);return false;});expect(duplicate).toBeDefined();duplicate!.tree='0'.repeat(40);await expect(verifyFeatureIntroductions(corruptTree)).rejects.toThrow('inconsistent introduction tree');
  const corruptExcerpt=structuredClone(document);corruptExcerpt.sources[0]!.excerpts[0]!.byteStart++;await expect(verifyFeatureIntroductions(corruptExcerpt)).rejects.toThrow('primary clause forest bytes');
+});
+
+test('per-file edition reviews scope only exact revised-clause evidence and reject unchanged or unrepresented revisions',()=>{
+ const tags=registry({standard:['target','later','intl'],proposed:['proposal'],harness:['cross-realm']});
+ const base=input(1),repository=base.baseline.ecma262.repository,revised='7'.repeat(40);
+ const text='<emu-clause id="target"><h1>revised</h1><emu-clause id="target-step"></emu-clause></emu-clause>';
+ const revisionId=featureIntroductionId({repository,commit:revised,specSource:'spec.html'});
+ const with_=()=>{const value=structuredClone(base);value.catalog.anchors=[{id:'target'},{id:'target-step'}] as ClauseCatalog['anchors'];
+  value.document.revisions=[{id:revisionId,repository,commit:revised,tree:'8'.repeat(40),specSource:'spec.html',specSourceSha256:'9'.repeat(64),excerpts:[{clause:'target',byteStart:0,byteEnd:Buffer.byteLength(text),sha256:sha256Text(text),text,targetByteStart:10,targetByteEnd:90,targetSha256:'a'.repeat(64)}]}];
+  value.document.testReviews=[{test:'test/built-ins/Target/revised.js',sourceSha256:'b'.repeat(64),feature:'target',evidence:[{source:revisionId,changedClauses:['target']}],primarySource:'https://github.com/tc39/ecma262/pull/3883',reviewedBy:'property review',rationale:'Later revision of a target clause.'}];return value;};
+ const valid=with_(),reviews=testEditionReviews(valid.baseline,valid.catalog,valid.document,tags),review=reviews.get('test/built-ins/Target/revised.js')!;
+ expect([...reviews.keys()]).toEqual(['test/built-ins/Target/revised.js']);
+ const post=new Set(postEditionFeatureTags(tags,validateFeatureEditionReviews(valid.baseline,valid.catalog,valid.document,tags)));
+ expect(scopeFor('test/built-ins/Target/revised.js',['target'],post,new Map(),review)).toMatchObject({scope:'post-edition',reason:expect.stringContaining('pull/3883')});
+ expect(scopeFor('test/built-ins/Target/other.js',['target'],post,new Map(),undefined).scope).toBe('in-scope');
+ expect(scopeFor('test/built-ins/Target/revised.js',['later-only'],post,new Map(),review).scope).toBe('in-scope');
+ const reject=(mutate:(value:ReturnType<typeof with_>)=>void,message:string)=>{const value=with_();mutate(value);expect(()=>testEditionReviews(value.baseline,value.catalog,value.document,tags)).toThrow(message);};
+ reject(value=>{value.document.revisions[0]!.excerpts[0]!.targetSha256=value.document.revisions[0]!.excerpts[0]!.sha256;},'revised clause is unchanged from target');
+ reject(value=>{value.catalog.anchors=[{id:'other'}] as ClauseCatalog['anchors'];},'revised clause is absent from target');
+ reject(value=>{value.document.testReviews=[];},'unused revision source');
+ reject(value=>{value.document.testReviews[0]!.primarySource='https://github.com/tc39/unrepresented/pull/1';},'test review primary source authority');
+ reject(value=>{value.document.testReviews[0]!.test='test/../escape.js';},'test review identity');
+ reject(value=>{value.document.testReviews[0]!.feature='proposal';},'reviewed test feature is not a pinned standard feature');
+ reject(value=>{value.document.testReviews.push(structuredClone(value.document.testReviews[0]!));},'test review identity');
+ reject(value=>{value.document.testReviews[0]!.evidence[0]!.changedClauses=['target-step'];},'unrepresented changed clause');
+ reject(value=>{value.document.revisions[0]!.excerpts[0]!.text=text.replace('revised','tampered');},'revised clause bytes');
 });

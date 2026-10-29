@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "target": {
     "commit": "0248456c758431e4bb8e5d26333ff1865123c9cd",
     "specSourceSha256": "ce7bc30174061fd8d212270b81cf6511661180c1e174f6911d10ced0581527b0"
@@ -282,6 +282,62 @@
       "primarySource": "https://github.com/tc39/proposal-iterator-chunking/pull/30",
       "reviewedBy": "tsc2c compliance review",
       "rationale": "The exact official TC39 proposal source at b195c38f903f1feef4f6b9370faeafbccd64412a declares status proposal and stage 2.7. Its Iterator prototype method clauses are absent from the fixed es2026 source/catalog. The retained pull request updates proposal semantics; it is not a merge into the published ECMA-262 edition. The later Test262 standard label cannot move this proposal into the target. Exact primary repository/tree/source bytes are verified independently."
+    }
+  ],
+  "revisions": [
+    {
+      "id": "[\"https://github.com/tc39/ecma262.git\",\"3d4a6e7124a6878cb5af3132af7e01e01a88317f\",\"spec.html\"]",
+      "repository": "https://github.com/tc39/ecma262.git",
+      "commit": "3d4a6e7124a6878cb5af3132af7e01e01a88317f",
+      "tree": "c0111cae4b24e2a9f92c94561cddc6a21a6c330c",
+      "specSource": "spec.html",
+      "specSourceSha256": "334145b6436cdf6dcbca36ac5ace9631bfcd4560248b77d3f49e5265b61c5963",
+      "excerpts": [
+        {
+          "clause": "sec-promise.try",
+          "byteStart": 2836410,
+          "byteEnd": 2837405,
+          "sha256": "6abac95ec9e29f89949d00e1d3f19bf4e0e7cb771ec75f02335c3275263a885f",
+          "text": "<emu-clause id=\"sec-promise.try\" type=\"built-in function\">\n        <h1>Promise.try ( _callback_, ..._args_ )</h1>\n        <p>This function performs the following steps when called:</p>\n        <emu-alg>\n          1. Let _ctor_ be the *this* value.\n          1. If _ctor_ is not an Object, throw a *TypeError* exception.\n          1. Let _status_ be Completion(Call(_callback_, *undefined*, _args_)).\n          1. If _status_ is an abrupt completion, then\n            1. Let _promiseCapability_ be ? NewPromiseCapability(_ctor_).\n            1. Perform ? Call(_promiseCapability_.[[Reject]], *undefined*, « _status_.[[Value]] »).\n            1. Return _promiseCapability_.[[Promise]].\n          1. Else,\n            1. Return ? PromiseResolve(_ctor_, ! _status_).\n        </emu-alg>\n        <emu-note>\n          <p>This function expects its *this* value to be a constructor function that supports the parameter conventions of the Promise constructor.</p>\n        </emu-note>\n      </emu-clause>",
+          "targetByteStart": 2733860,
+          "targetByteEnd": 2734885,
+          "targetSha256": "498e54e44b5ef0d5b7faaa243a5b4f9c8505d90f820c9c3a01b33858f18b6535"
+        }
+      ]
+    }
+  ],
+  "testReviews": [
+    {
+      "test": "test/built-ins/Promise/try/avoids-wrap-for-subclass.js",
+      "sourceSha256": "96c263037c9be38105ab34d20bef4a5cbf17c437d6258828483e3201cffa854c",
+      "feature": "promise-try",
+      "evidence": [
+        {
+          "source": "[\"https://github.com/tc39/ecma262.git\",\"3d4a6e7124a6878cb5af3132af7e01e01a88317f\",\"spec.html\"]",
+          "changedClauses": [
+            "sec-promise.try"
+          ]
+        }
+      ],
+      "primarySource": "https://github.com/tc39/ecma262/pull/3883",
+      "reviewedBy": "tsc2c compliance review",
+      "rationale": "ECMA-262 PR #3883 (Normative: make Promise.try use PromiseResolve in non-error case) was merged on 2026-08-28, after the pinned es2026 edition. The pinned sec-promise.try always creates a new promise capability and resolves it with the callback result, so a returned promise is wrapped; the later revision returns PromiseResolve(ctor, status), which returns a same-constructor promise unchanged. This file asserts that later identity. Every other promise-try scenario remains in scope."
+    },
+    {
+      "test": "test/built-ins/Promise/try/avoids-wrap.js",
+      "sourceSha256": "bbcb3cb7f9c20c7042e85b28a5c12d02f16d61e17d47cddbb401e12c31f37342",
+      "feature": "promise-try",
+      "evidence": [
+        {
+          "source": "[\"https://github.com/tc39/ecma262.git\",\"3d4a6e7124a6878cb5af3132af7e01e01a88317f\",\"spec.html\"]",
+          "changedClauses": [
+            "sec-promise.try"
+          ]
+        }
+      ],
+      "primarySource": "https://github.com/tc39/ecma262/pull/3883",
+      "reviewedBy": "tsc2c compliance review",
+      "rationale": "ECMA-262 PR #3883 (Normative: make Promise.try use PromiseResolve in non-error case) was merged on 2026-08-28, after the pinned es2026 edition. The pinned sec-promise.try always creates a new promise capability and resolves it with the callback result, so a returned promise is wrapped; the later revision returns PromiseResolve(ctor, status), which returns a same-constructor promise unchanged. This file asserts that later identity. Every other promise-try scenario remains in scope."
     }
   ]
 }

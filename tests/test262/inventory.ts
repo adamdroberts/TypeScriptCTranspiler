@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import {loadFeatureEditionReviews,postEditionFeatureTags,requirePostEditionFeatureTags,verifyFeatureIntroductions,type FeatureEditionReview} from "./feature-edition";
+import {loadFeatureEditionReviews,postEditionFeatureTags,requirePostEditionFeatureTags,verifyFeatureIntroductions,type FeatureEditionReview,type TestEditionReview} from "./feature-edition";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -260,6 +260,7 @@ export function scopeFor(
     features: readonly string[],
     postEdition: ReadonlySet<string>,
     reviews:ReadonlyMap<string,FeatureEditionReview>=new Map(),
+    testReview?:TestEditionReview,
 ): { scope: ScenarioScope; reason: string } {
     if (test.startsWith("test/intl402/") || test.startsWith("test/staging/intl402/")) {
         return { scope: "ecma402", reason: "ECMA-402 is outside the ECMA-262 claim" };
@@ -271,6 +272,9 @@ export function scopeFor(
     if (proposal) {
         const review=reviews.get(proposal);
         return { scope: "post-edition", reason: review ? `feature ${proposal} is outside pinned ECMAScript 2026; introduction ${review.evidence.map(evidence=>evidence.source).join("; ")}; ${review.primarySource}; ${review.rationale}` : `feature ${proposal} is post-ECMAScript-2026 at the pin` };
+    }
+    if (testReview && features.includes(testReview.feature)) {
+        return { scope: "post-edition", reason: `test asserts ${testReview.evidence.flatMap(evidence=>evidence.changedClauses).join(", ")} as revised after pinned ECMAScript 2026; ${testReview.primarySource}; ${testReview.rationale}` };
     }
     return { scope: "in-scope", reason: "ECMA-262 2026 language/built-in/Annex B evidence" };
 }
@@ -473,7 +477,8 @@ export async function buildInventory(options: {
     ) {
         throw new Error("feature-map.json is stale or incomplete for the pinned Test262 feature registry");
     }
-    const {document,reviews}=await loadFeatureEditionReviews(baseline,catalog,registry);
+    const {document,reviews,testReviews}=await loadFeatureEditionReviews(baseline,catalog,registry);
+    const usedTestReviews=new Set<string>();
     requirePostEditionFeatureTags(baseline,registry,reviews);await verifyFeatureIntroductions(document);
     const postEdition=new Set(postEditionFeatureTags(registry,reviews));
     const issues: InventoryIssue[] = [];
@@ -504,7 +509,17 @@ export async function buildInventory(options: {
             });
             continue;
         }
-        const scope = scopeFor(test, metadata.features, postEdition, reviews);
+        // A per-file edition review applies only to the exact reviewed source
+        // and feature; any drift is claim-blocking rather than silently scoped.
+        const testReview = testReviews.get(test);
+        if (testReview) {
+            usedTestReviews.add(test);
+            if (testReview.sourceSha256 !== sha256Text(source) || !metadata.features.includes(testReview.feature)) {
+                issues.push({ code: "invalid-override", test, detail: "test edition review source hash or feature differs from the pinned corpus", claimBlocking: true });
+            }
+        }
+        const scope = scopeFor(test, metadata.features, postEdition, reviews,
+            testReview && testReview.sourceSha256 === sha256Text(source) ? testReview : undefined);
         let mappedClauses: string[] = [];
         const mappingSources: string[] = [];
         for (const feature of metadata.features) {
@@ -669,6 +684,9 @@ export async function buildInventory(options: {
         }
     }
     if (options.filter === null && options.shard === null) {
+        for (const test of testReviews.keys()) {
+            if (!usedTestReviews.has(test)) issues.push({ code: "invalid-override", test, detail: "test edition review is unused by the pinned eligible corpus", claimBlocking: true });
+        }
         for (const esid of mappings.aliases.keys()) {
             if (!usedAliases.has(esid)) issues.push({ code: "invalid-override", test: esid, detail: "esid alias is unused by the pinned eligible corpus", claimBlocking: true });
         }

@@ -8,7 +8,15 @@ export type FeatureDisposition='standard'|'ecma402-only'|'harness-only'|'post-ed
 interface IntroductionExcerpt {clause:string;byteStart:number;byteEnd:number;sha256:string;text:string;}
 export interface FeatureIntroduction extends PinnedRepository {id:string;specSource:string;specSourceSha256:string;excerpts:IntroductionExcerpt[];}
 export interface FeatureEditionReview {feature:string;evidence:Array<{source:string;introducedClauses:string[]}>;primarySource:string;reviewedBy:string;rationale:string;}
-export interface FeatureEditionReviews {schemaVersion:2;target:{commit:string;specSourceSha256:string};sources:FeatureIntroduction[];reviews:FeatureEditionReview[];}
+/** A later primary revision of a clause that already exists in the target:
+ * the later excerpt and the exact pinned target bytes are both retained by
+ * hash, and must differ. */
+interface RevisionExcerpt {clause:string;byteStart:number;byteEnd:number;sha256:string;text:string;targetByteStart:number;targetByteEnd:number;targetSha256:string;}
+export interface ClauseRevision extends PinnedRepository {id:string;specSource:string;specSourceSha256:string;excerpts:RevisionExcerpt[];}
+/** A single source-hashed Test262 file whose assertions follow a later revised
+ * clause of an in-scope feature, so it is post-edition evidence for that file only. */
+export interface TestEditionReview {test:string;sourceSha256:string;feature:string;evidence:Array<{source:string;changedClauses:string[]}>;primarySource:string;reviewedBy:string;rationale:string;}
+export interface FeatureEditionReviews {schemaVersion:3;target:{commit:string;specSourceSha256:string};sources:FeatureIntroduction[];reviews:FeatureEditionReview[];revisions:ClauseRevision[];testReviews:TestEditionReview[];}
 export function featureIntroductionId(source:Pick<FeatureIntroduction,'repository'|'commit'|'specSource'>):string{return JSON.stringify([source.repository,source.commit,source.specSource]);}
 export function featureIntroductionTreeId(source:Pick<FeatureIntroduction,'repository'|'commit'>):string{return JSON.stringify([source.repository,source.commit]);}
 function primaryRepository(repository:string,baseline:Baseline):boolean{
@@ -26,9 +34,9 @@ function strings(values:readonly string[],label:string):void{if(!Array.isArray(v
 /** One retained source forest proves reviewed introductions independently of
  * the registry's current standard/proposal category and review cardinality. */
 export function validateFeatureEditionReviews(baseline:Baseline,catalog:ClauseCatalog,document:FeatureEditionReviews,registry?:FeatureRegistry):ReadonlyMap<string,FeatureEditionReview>{
- object(document,['schemaVersion','target','sources','reviews'],'document');object(document.target,['commit','specSourceSha256'],'target');
+ object(document,['schemaVersion','target','sources','reviews','revisions','testReviews'],'document');object(document.target,['commit','specSourceSha256'],'target');
  if(catalog.commit!==baseline.ecma262.commit||catalog.tree!==baseline.ecma262.tree||catalog.specSourceSha256!==baseline.ecma262.specSourceSha256)fail('target catalog identity');
- if(document.schemaVersion!==2||document.target.commit!==baseline.ecma262.commit||document.target.specSourceSha256!==baseline.ecma262.specSourceSha256||!Array.isArray(document.sources)||!Array.isArray(document.reviews))fail('target identity');
+ if(document.schemaVersion!==3||document.target.commit!==baseline.ecma262.commit||document.target.specSourceSha256!==baseline.ecma262.specSourceSha256||!Array.isArray(document.sources)||!Array.isArray(document.reviews)||!Array.isArray(document.revisions)||!Array.isArray(document.testReviews))fail('target identity');
  const target=new Set(catalog.anchors.map(anchor=>anchor.id)),sources=new Map<string,FeatureIntroduction>(),trees=new Map<string,string>(),used=new Map<string,Set<string>>(),reviews=new Map<string,FeatureEditionReview>();
  for(const source of document.sources){
   object(source,["id","repository","commit","tree","specSource","specSourceSha256","excerpts"],"introduction");
@@ -66,15 +74,64 @@ export function validateFeatureEditionReviews(baseline:Baseline,catalog:ClauseCa
   if(registry&&(!registry.standard.has(review.feature)||registry.proposed.has(review.feature)||registry.harness.has(review.feature)))fail('reviewed tag is not a pinned standard feature');
   reviews.set(review.feature,review);
  }
- if(used.size!==sources.size)fail('unused introduction source');for(const source of sources.values())if(source.excerpts.some(excerpt=>!used.get(source.id)!.has(excerpt.clause)))fail('unused introduced clause');return reviews;
+ if(used.size!==sources.size)fail('unused introduction source');for(const source of sources.values())if(source.excerpts.some(excerpt=>!used.get(source.id)!.has(excerpt.clause)))fail('unused introduced clause');
+ validateTestEditionReviews(baseline,target,trees,document,registry);return reviews;
 }
-export async function loadFeatureEditionReviews(baseline:Baseline,catalog:ClauseCatalog,registry?:FeatureRegistry):Promise<{document:FeatureEditionReviews;reviews:ReadonlyMap<string,FeatureEditionReview>}>{
+function testPath(test:string):boolean{return typeof test==='string'&&test.startsWith('test/')&&!test.includes('\\')&&path.posix.normalize(test)===test&&!test.split('/').some(part=>part==='.'||part==='..')&&test.endsWith('.js')&&!test.includes('_FIXTURE');}
+/** Revised target clauses and the per-file reviews that cite them. Every
+ * revision excerpt must be cited and every review must cite a revision. */
+function validateTestEditionReviews(baseline:Baseline,target:ReadonlySet<string>,trees:Map<string,string>,document:FeatureEditionReviews,registry?:FeatureRegistry):ReadonlyMap<string,TestEditionReview>{
+ const revisions=new Map<string,ClauseRevision>(),used=new Map<string,Set<string>>(),reviews=new Map<string,TestEditionReview>();
+ for(const revision of document.revisions){
+  object(revision,["id","repository","commit","tree","specSource","specSourceSha256","excerpts"],"revision");
+  fullSha(revision.commit,'revision commit');fullSha(revision.tree,'revision tree');digest(revision.specSourceSha256,'revision source');
+  if(revision.id!==featureIntroductionId(revision)||revisions.has(revision.id)||!primaryRepository(revision.repository,baseline)||revision.commit===baseline.ecma262.commit||!primarySourcePath(revision.specSource)||!Array.isArray(revision.excerpts)||!revision.excerpts.length)fail('revision identity');
+  const treeKey=featureIntroductionTreeId(revision),tree=trees.get(treeKey);if(tree&&tree!==revision.tree)fail('inconsistent introduction tree');trees.set(treeKey,revision.tree);
+  const clauses=new Set<string>();let previousEnd=0;
+  for(const excerpt of revision.excerpts){
+   object(excerpt,["clause","byteStart","byteEnd","sha256","text","targetByteStart","targetByteEnd","targetSha256"],"revision excerpt");
+   if(typeof excerpt.clause!=="string"||typeof excerpt.text!=="string")fail("revision excerpt text");
+   digest(excerpt.sha256,'revised clause');digest(excerpt.targetSha256,'target clause');
+   if(!Number.isSafeInteger(excerpt.byteStart)||!Number.isSafeInteger(excerpt.byteEnd)||excerpt.byteStart<previousEnd||excerpt.byteEnd<=excerpt.byteStart||Buffer.byteLength(excerpt.text)!==excerpt.byteEnd-excerpt.byteStart||sha256Text(excerpt.text)!==excerpt.sha256||clauses.has(excerpt.clause))fail('revised clause bytes');
+   if(!Number.isSafeInteger(excerpt.targetByteStart)||!Number.isSafeInteger(excerpt.targetByteEnd)||excerpt.targetByteStart<0||excerpt.targetByteEnd<=excerpt.targetByteStart)fail('target clause range');
+   if(!target.has(excerpt.clause))fail('revised clause is absent from target');
+   if(excerpt.targetSha256===excerpt.sha256)fail('revised clause is unchanged from target');
+   const root=/^<emu-clause\b[^>]*\bid="([^"]+)"/.exec(excerpt.text);if(!root||root[1]!==excerpt.clause||!excerpt.text.endsWith('</emu-clause>'))fail('revised clause shape');
+   clauses.add(excerpt.clause);previousEnd=excerpt.byteEnd;
+  }
+  revisions.set(revision.id,revision);
+ }
+ for(const review of document.testReviews){
+  object(review,['test','sourceSha256','feature','evidence','primarySource','reviewedBy','rationale'],'test review');
+  if([review.test,review.sourceSha256,review.feature,review.primarySource,review.reviewedBy,review.rationale].some(value=>typeof value!=='string')||!Array.isArray(review.evidence)||!review.evidence.length)fail('test review fields');
+  if(!testPath(review.test)||reviews.has(review.test)||!review.feature||!review.reviewedBy.trim()||!review.rationale.trim())fail('test review identity');
+  digest(review.sourceSha256,'reviewed test source');
+  const represented=new Set<string>(),repositories=new Set<string>();
+  for(const evidence of review.evidence){
+   object(evidence,['source','changedClauses'],'test review evidence');strings(evidence.changedClauses,'changed clauses');const revision=revisions.get(evidence.source);
+   if(!revision||represented.has(evidence.source))fail('unrepresented or duplicated revision source');represented.add(evidence.source);repositories.add(revision.repository);
+   const changed=new Set(revision.excerpts.map(excerpt=>excerpt.clause));if(evidence.changedClauses.some(clause=>!changed.has(clause)))fail('unrepresented changed clause');
+   let clauses=used.get(revision.id);if(!clauses){clauses=new Set();used.set(revision.id,clauses);}for(const clause of evidence.changedClauses)clauses.add(clause);
+  }
+  if(!primaryReviewSource(review.primarySource,repositories))fail('test review primary source authority');
+  if(baseline.test262.ecma402FeatureTags.includes(review.feature))fail('ECMA-402 scope collision');
+  if(registry&&(!registry.standard.has(review.feature)||registry.proposed.has(review.feature)||registry.harness.has(review.feature)))fail('reviewed test feature is not a pinned standard feature');
+  reviews.set(review.test,review);
+ }
+ if(used.size!==revisions.size)fail('unused revision source');for(const revision of revisions.values())if(revision.excerpts.some(excerpt=>!used.get(revision.id)!.has(excerpt.clause)))fail('unused revised clause');
+ return reviews;
+}
+export function testEditionReviews(baseline:Baseline,catalog:ClauseCatalog,document:FeatureEditionReviews,registry?:FeatureRegistry):ReadonlyMap<string,TestEditionReview>{
+ validateFeatureEditionReviews(baseline,catalog,document,registry);
+ return validateTestEditionReviews(baseline,new Set(catalog.anchors.map(anchor=>anchor.id)),new Map(document.sources.map(source=>[featureIntroductionTreeId(source),source.tree])),document,registry);
+}
+export async function loadFeatureEditionReviews(baseline:Baseline,catalog:ClauseCatalog,registry?:FeatureRegistry):Promise<{document:FeatureEditionReviews;reviews:ReadonlyMap<string,FeatureEditionReview>;testReviews:ReadonlyMap<string,TestEditionReview>}>{
  const filename=path.join(complianceDir,'feature-edition-reviews.json');digest(baseline.test262.featureEditionReviewSha256,'review collection');if(await sha256File(filename)!==baseline.test262.featureEditionReviewSha256)fail('review collection bytes');
- const document=await readJson<FeatureEditionReviews>(filename);return {document,reviews:validateFeatureEditionReviews(baseline,catalog,document,registry)};
+ const document=await readJson<FeatureEditionReviews>(filename);return {document,reviews:validateFeatureEditionReviews(baseline,catalog,document,registry),testReviews:testEditionReviews(baseline,catalog,document,registry)};
 }
 export function introductionCheckout(source:FeatureIntroduction,cacheRoot=defaultCacheRoot):string{return path.join(cacheRoot,'edition-introductions',sha256Text(featureIntroductionTreeId(source)));}
-export function featureIntroductionTrees(document:FeatureEditionReviews):FeatureIntroduction[]{
- const trees=new Map<string,FeatureIntroduction>();for(const source of document.sources){const key=featureIntroductionTreeId(source),prior=trees.get(key);if(prior&&prior.tree!==source.tree)fail('inconsistent introduction tree');if(!prior)trees.set(key,source);}return [...trees.values()];
+export function featureIntroductionTrees(document:FeatureEditionReviews):Array<FeatureIntroduction|ClauseRevision>{
+ const trees=new Map<string,FeatureIntroduction|ClauseRevision>();for(const source of [...document.sources,...document.revisions]){const key=featureIntroductionTreeId(source),prior=trees.get(key);if(prior&&prior.tree!==source.tree)fail('inconsistent introduction tree');if(!prior)trees.set(key,source);}return [...trees.values()];
 }
 /** Full corpus verification independently rejoins authored excerpts with the
  * exact immutable primary Git tree and source bytes; missing evidence rejects. */
@@ -86,6 +143,20 @@ export async function verifyFeatureIntroductions(document:FeatureEditionReviews,
   if(!tree){await verifyPinnedCheckout('ECMA-262',checkout,source);verified.set(key,source.tree);}
   const data=await fs.readFile(path.join(checkout,source.specSource));if(sha256Text(data)!==source.specSourceSha256)fail('primary source bytes');
   for(const excerpt of source.excerpts)if(!data.subarray(excerpt.byteStart,excerpt.byteEnd).equals(Buffer.from(excerpt.text)))fail('primary clause forest bytes');
+ }
+ const targetSpec=await fs.readFile(path.join(cacheRoot,'ecma262','spec.html'));
+ if(sha256Text(targetSpec)!==document.target.specSourceSha256)fail('target source bytes');
+ for(const revision of document.revisions){
+  const checkout=introductionCheckout(revision,cacheRoot),key=featureIntroductionTreeId(revision);
+  const tree=verified.get(key);if(tree&&tree!==revision.tree)fail('inconsistent introduction tree');
+  if(!tree){await verifyPinnedCheckout('ECMA-262',checkout,revision);verified.set(key,revision.tree);}
+  const data=await fs.readFile(path.join(checkout,revision.specSource));if(sha256Text(data)!==revision.specSourceSha256)fail('revision source bytes');
+  for(const excerpt of revision.excerpts){
+   if(!data.subarray(excerpt.byteStart,excerpt.byteEnd).equals(Buffer.from(excerpt.text)))fail('revised clause bytes');
+   const original=targetSpec.subarray(excerpt.targetByteStart,excerpt.targetByteEnd);
+   if(excerpt.targetByteEnd>targetSpec.length||sha256Text(original)!==excerpt.targetSha256)fail('target clause bytes');
+   const root=/^<emu-clause\b[^>]*\bid="([^"]+)"/.exec(original.toString('utf8'));if(!root||root[1]!==excerpt.clause||!original.toString('utf8').endsWith('</emu-clause>'))fail('target clause shape');
+  }
  }
 }
 
