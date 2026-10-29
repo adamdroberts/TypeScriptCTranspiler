@@ -2736,7 +2736,7 @@ The claim profile implements all normative-optional material, including inline a
 - `IsHTMLDDA` — harness-only, tracking: `ready-for-verification`; no clause mapping.
 - `Iterator.prototype.join` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `Map` — standard, tracking: `todo`; no clause mapping.
-- [ ] `Math.sumPrecise` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Math.sumPrecise` — standard, tracking: `ready-for-verification`; `sec-math.sumprecise`.
 - [ ] `Object.fromEntries` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Object.hasOwn` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Object.is` — standard, tracking: `todo`; no clause mapping.
@@ -2749,7 +2749,7 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `Reflect.construct` — standard, tracking: `ready-for-verification`; `sec-reflect.construct`.
 - [ ] `Reflect.set` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Reflect.setPrototypeOf` — standard, tracking: `todo`; no clause mapping.
-- [ ] `RegExp.escape` — standard, tracking: `todo`; no clause mapping.
+- [ ] `RegExp.escape` — standard, tracking: `ready-for-verification`; `sec-regexp.escape`, `sec-encodeforregexpescape`.
 - [ ] `Set` — standard, tracking: `todo`; no clause mapping.
 - `ShadowRealm` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `SharedArrayBuffer` — standard, tracking: `todo`; no clause mapping.
@@ -2794,7 +2794,7 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `align-detached-buffer-semantics-with-web-reality` — standard, tracking: `todo`; no clause mapping.
 - [ ] `arbitrary-module-namespace-names` — standard, tracking: `todo`; no clause mapping.
 - [ ] `array-find-from-last` — standard, tracking: `todo`; no clause mapping.
-- [ ] `array-grouping` — standard, tracking: `todo`; no clause mapping.
+- [ ] `array-grouping` — standard, tracking: `ready-for-verification`; `sec-object.groupby`, `sec-map.groupby`, `sec-groupby`, `sec-add-value-to-keyed-group`.
 - [ ] `arraybuffer-transfer` — standard, tracking: `todo`; no clause mapping.
 - [ ] `arrow-function` — standard, tracking: `ready-for-verification`; `sec-arrow-function-definitions`.
 - [ ] `async-functions` — standard, tracking: `todo`; no clause mapping.
@@ -2843,7 +2843,7 @@ The claim profile implements all normative-optional material, including inline a
 - `iterator-chunking` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `iterator-helpers` — standard, tracking: `todo`; no clause mapping.
 - `iterator-includes` — post-edition, tracking: `ready-for-verification`; no clause mapping.
-- [ ] `iterator-sequencing` — standard, tracking: `todo`; no clause mapping.
+- [ ] `iterator-sequencing` — standard, tracking: `ready-for-verification`; `sec-iterator.concat`.
 - `joint-iteration` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `json-modules` — standard, tracking: `ready-for-verification`; `sec-ParseJSON`, `sec-create-default-export-synthetic-module`, `sec-parse-json-module`, `sec-setsyntheticmoduleexport`, `sec-synthetic-module-records`.
 - [ ] `json-parse-with-source` — standard, tracking: `ready-for-verification`; `sec-json.parse`, `sec-json.rawjson`, `sec-json.israwjson`, `sec-internalizejsonproperty`, `sec-createjsonparserecord`, `sec-json-parse-record`.
@@ -2858,8 +2858,8 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `object-spread` — standard, tracking: `todo`; no clause mapping.
 - [ ] `optional-catch-binding` — standard, tracking: `todo`; no clause mapping.
 - [ ] `optional-chaining` — standard, tracking: `todo`; no clause mapping.
-- [ ] `promise-try` — standard, tracking: `todo`; no clause mapping.
-- [ ] `promise-with-resolvers` — standard, tracking: `todo`; no clause mapping.
+- [ ] `promise-try` — standard, tracking: `ready-for-verification`; `sec-promise.try`.
+- [ ] `promise-with-resolvers` — standard, tracking: `ready-for-verification`; `sec-promise.withResolvers`.
 - [ ] `proxy-missing-checks` — standard, tracking: `todo`; no clause mapping.
 - [ ] `regexp-dotall` — standard, tracking: `todo`; no clause mapping.
 - [ ] `regexp-duplicate-named-groups` — standard, tracking: `todo`; no clause mapping.

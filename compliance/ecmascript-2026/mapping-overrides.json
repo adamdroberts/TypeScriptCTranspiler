@@ -27,6 +27,18 @@
       ],
       "reason": "Reviewed historical RegExp prototype @@matchAll anchor denotes the same intrinsic as the pinned canonical %Symbol.matchAll% clause. It preserves the separate RegExp owner for the String-directory Unicode flag forwarding source rather than reassigning it to the outer String protocol.",
       "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "esid": "sec-encodeforregexescape",
+      "clauses": ["sec-encodeforregexpescape"],
+      "reason": "The pinned RegExp.escape scenarios cite the misspelled encodeforregexescape anchor for the current EncodeForRegExpEscape clause.",
+      "reviewedBy": "tsc2c compliance review"
+    },
+    {
+      "esid": "sec-promise.withresolvers",
+      "clauses": ["sec-promise.withResolvers"],
+      "reason": "The pinned Promise.withResolvers scenarios use the lower-case withresolvers anchor for the current camel-case Promise.withResolvers clause.",
+      "reviewedBy": "tsc2c compliance review"
     }
   ],
   "legacyIdRules": [

@@ -353,9 +353,11 @@
     {
       "tag": "Math.sumPrecise",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-math.sumprecise"
+      ],
+      "rationale": "Every pinned Test262 anchor carrying this standard feature resolves to Math.sumPrecise. All 20 pinned built-ins/Math/sumPrecise scenarios pass. This mapping enables verification without promoting conformance or host eligibility."
     },
     {
       "tag": "Object.fromEntries",
@@ -448,9 +450,12 @@
     {
       "tag": "RegExp.escape",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-regexp.escape",
+        "sec-encodeforregexpescape"
+      ],
+      "rationale": "Every pinned Test262 anchor carrying this standard feature resolves to RegExp.escape and EncodeForRegExpEscape (including the reviewed misspelled anchor alias). All 42 pinned built-ins/RegExp/escape scenarios pass. This mapping enables verification without promoting conformance or host eligibility."
     },
     {
       "tag": "Set",
@@ -786,9 +791,14 @@
     {
       "tag": "array-grouping",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-object.groupby",
+        "sec-map.groupby",
+        "sec-groupby",
+        "sec-add-value-to-keyed-group"
+      ],
+      "rationale": "Every pinned Test262 anchor carrying this standard feature resolves to Object.groupBy, Map.groupBy, GroupBy and AddValueToKeyedGroup. All 56 pinned built-ins/Object/groupBy and built-ins/Map/groupBy scenarios pass. This mapping enables verification without promoting conformance or host eligibility."
     },
     {
       "tag": "arraybuffer-transfer",
@@ -1133,9 +1143,11 @@
     {
       "tag": "iterator-sequencing",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-iterator.concat"
+      ],
+      "rationale": "Every pinned Test262 anchor carrying this standard feature resolves to Iterator.concat. All 64 pinned built-ins/Iterator/concat scenarios pass. This mapping enables verification without promoting conformance or host eligibility."
     },
     {
       "tag": "joint-iteration",
@@ -1251,16 +1263,20 @@
     {
       "tag": "promise-try",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-promise.try"
+      ],
+      "rationale": "Every pinned Test262 anchor carrying this standard feature resolves to Promise.try. All 26 in-scope pinned built-ins/Promise/try scenarios pass; the two avoids-wrap files assert the later PR #3883 PromiseResolve revision and are scoped post-edition by a reviewed per-file revision of sec-promise.try. This mapping enables verification without promoting conformance or host eligibility."
     },
     {
       "tag": "promise-with-resolvers",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-promise.withResolvers"
+      ],
+      "rationale": "Every pinned Test262 anchor carrying this standard feature resolves to Promise.withResolvers (including the reviewed lower-case anchor alias). All 12 pinned built-ins/Promise/withResolvers scenarios and the three in-scope module top-level-await scenarios carrying the tag pass; the import-defer scenario is post-edition by its own feature. This mapping enables verification without promoting conformance or host eligibility."
     },
     {
       "tag": "proxy-missing-checks",
