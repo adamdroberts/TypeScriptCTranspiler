@@ -50,9 +50,22 @@ async function exists(p: string): Promise<boolean> {
 async function discoverCases(): Promise<Case[]> {
     const filterIdx = process.argv.indexOf('--filter');
     const filterStr = filterIdx >= 0 ? process.argv[filterIdx + 1] : undefined;
+    // --shard <index>/<count> runs the index-th of count disjoint partitions.
+    const shardIdx = process.argv.indexOf('--shard');
+    const shardMatch = shardIdx >= 0 ? /^(\d+)\/(\d+)$/.exec(process.argv[shardIdx + 1] ?? '') : null;
+    if (shardIdx >= 0 && (!shardMatch || Number(shardMatch[1]) >= Number(shardMatch[2]))) {
+        throw new Error('--shard expects <index>/<count> with index < count');
+    }
+    const shard = shardMatch ? { index: Number(shardMatch[1]), count: Number(shardMatch[2]) } : null;
 
     const cases: Case[] = [];
-    for (const manifest of await discoverE2eCaseManifest(filterStr)) {
+    // --exact makes --filter select only the case with exactly that name.
+    const exact = process.argv.includes('--exact');
+    const manifests = (await discoverE2eCaseManifest(filterStr))
+        .filter((manifest) => !exact || manifest.name === filterStr)
+        .sort((left, right) => left.name.localeCompare(right.name));
+    for (const [position, manifest] of manifests.entries()) {
+        if (shard && position % shard.count !== shard.index) continue;
         const d = manifest.name;
         const entry = manifest.entry;
         const expectedPath = path.join(casesDir, d, "expected.stdout");
