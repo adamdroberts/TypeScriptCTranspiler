@@ -1,3 +1,4 @@
+- Map Object.hasOwn, Object.fromEntries and Float16Array to their pinned clauses after full targeted Test262 passes.
 - Scope reviewed Test262 files that assert post-ES2026 clause revisions (Promise.try avoids-wrap) and map six verified ES2026 features to their pinned clauses.
 - Implement ES2026 Uint8Array base64/hex: fromBase64, fromHex, setFromBase64, setFromHex, toBase64 and toHex.
 - Route native count*size allocation products through overflow-checked tsc_alloc_size.

@@ -2710,7 +2710,7 @@ The claim profile implements all normative-optional material, including inline a
 - [ ] `DataView.prototype.setUint8` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Error.isError` — standard, tracking: `ready-for-verification`; `sec-error.iserror`.
 - [ ] `FinalizationRegistry` — standard, tracking: `todo`; no clause mapping.
-- [ ] `Float16Array` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Float16Array` — standard, tracking: `ready-for-verification`; `sec-math.f16round`, `sec-dataview.prototype.getfloat16`, `sec-dataview.prototype.setfloat16`.
 - [ ] `Float32Array` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Float64Array` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Int16Array` — standard, tracking: `todo`; no clause mapping.
@@ -2737,8 +2737,8 @@ The claim profile implements all normative-optional material, including inline a
 - `Iterator.prototype.join` — post-edition, tracking: `ready-for-verification`; no clause mapping.
 - [ ] `Map` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Math.sumPrecise` — standard, tracking: `ready-for-verification`; `sec-math.sumprecise`.
-- [ ] `Object.fromEntries` — standard, tracking: `todo`; no clause mapping.
-- [ ] `Object.hasOwn` — standard, tracking: `todo`; no clause mapping.
+- [ ] `Object.fromEntries` — standard, tracking: `ready-for-verification`; `sec-object.fromentries`.
+- [ ] `Object.hasOwn` — standard, tracking: `ready-for-verification`; `sec-object.hasown`.
 - [ ] `Object.is` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Promise` — standard, tracking: `todo`; no clause mapping.
 - [ ] `Promise.allSettled` — standard, tracking: `todo`; no clause mapping.

@@ -171,9 +171,13 @@
     {
       "tag": "Float16Array",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-math.f16round",
+        "sec-dataview.prototype.getfloat16",
+        "sec-dataview.prototype.setfloat16"
+      ],
+      "rationale": "Every pinned Test262 file carrying this standard feature resolves to Math.f16round and DataView.prototype.getFloat16/setFloat16; all 98 pinned scenarios across built-ins/Math/f16round and built-ins/DataView/prototype/getFloat16 and setFloat16 pass. Float16Array element semantics shared with other TypedArray kinds are exercised through the generic TypedArray tests. This mapping enables verification without promoting conformance or host eligibility."
     },
     {
       "tag": "Float32Array",
@@ -362,16 +366,20 @@
     {
       "tag": "Object.fromEntries",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-object.fromentries"
+      ],
+      "rationale": "Every pinned Test262 anchor carrying this standard feature resolves to Object.fromEntries. All 50 pinned built-ins/Object/fromEntries scenarios pass. This mapping enables verification without promoting conformance or host eligibility."
     },
     {
       "tag": "Object.hasOwn",
       "disposition": "standard",
-      "tracking": "todo",
-      "clauses": [],
-      "rationale": "Map this standard feature tag to every pinned clause it exercises before verification."
+      "tracking": "ready-for-verification",
+      "clauses": [
+        "sec-object.hasown"
+      ],
+      "rationale": "Every pinned Test262 anchor carrying this standard feature resolves to Object.hasOwn. All 124 pinned built-ins/Object/hasOwn scenarios pass. This mapping enables verification without promoting conformance or host eligibility."
     },
     {
       "tag": "Object.is",
