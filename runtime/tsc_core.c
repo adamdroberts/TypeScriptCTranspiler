@@ -1530,7 +1530,10 @@ tsc_value_t tsc_process_features(void) {
     return tsc_value_object(out);
 }
 
+/* A NUL-bearing name can never alias another variable: reads find nothing,
+ * deletes are no-ops and writes fail closed. */
 tsc_str_t* tsc_process_env_get(const tsc_str_t* name) {
+    if (!tsc_os_text_valid(name)) return NULL;
     char* key = cstr_dup(name);
     const char* v = getenv(key);
     tsc_str_t* result = v ? tsc_str_from_cstr(v) : NULL;
@@ -1544,6 +1547,11 @@ tsc_value_t tsc_process_env_get_value(const tsc_str_t* name) {
 }
 
 void tsc_process_env_set(const tsc_str_t* name, const tsc_str_t* value) {
+    if (!value && !tsc_os_text_valid(name)) return;
+    if (!tsc_os_text_valid(name) || !tsc_os_text_valid(value)) {
+        tsc_str_t* subject = tsc_str_concat(tsc_str_concat(tsc_str_from_lit("property 'process.env['", 23), (tsc_str_t*)name), tsc_str_from_lit("']'", 3));
+        tsc_throw_value(tsc_os_nul_error_subject(tsc_os_text_valid(name) ? value : name, subject, TSC_OS_TEXT_STRING));
+    }
     char* key = cstr_dup(name);
     if (!value) {
         int r = unsetenv(key);
@@ -1563,6 +1571,7 @@ void tsc_process_env_set(const tsc_str_t* name, const tsc_str_t* value) {
 }
 
 bool tsc_process_env_unset(const tsc_str_t* name) {
+    if (!tsc_os_text_valid(name)) return true;
     char* key = cstr_dup(name);
     int r = unsetenv(key);
     bool is_tz = strcmp(key, "TZ") == 0;
@@ -1581,7 +1590,7 @@ tsc_str_t* tsc_process_cwd(void) {
 }
 
 void tsc_process_chdir(const tsc_str_t* directory) {
-    char* path = cstr_dup(directory);
+    char* path = tsc_os_cstr(directory, "argument 'directory'", TSC_OS_TEXT_STRING);
     int r = chdir(path);
     free(path);
     if (r != 0) tsc_throw_str(tsc_str_from_cstr("process.chdir: could not change directory"));

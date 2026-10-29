@@ -19,6 +19,13 @@ struct tsc_fs_dirent {
 
 /* Async-signal-safe errno report from a forked child to its parent. A
  * failed or interrupted write must not be mistaken for a successful exec. */
+/* Conversion inside a forked child: a NUL that escaped parent validation
+ * terminates the child instead of unwinding into the parent's JS state. */
+static char* tsc_child_cstr(const tsc_str_t* s) {
+    if (!tsc_os_text_valid(s)) _exit(127);
+    return cstr_dup(s);
+}
+
 static void tsc_child_report_errno(int fd, int err) {
     const char* bytes = (const char*)&err;
     size_t done = 0;
@@ -42,7 +49,7 @@ static int fs_write_mode_flags(bool append,bool exclusive,bool update) {
 /* ---------------- crypto ---------------- */
 
 static const EVP_MD* crypto_digest_lookup(const tsc_str_t* algorithm) {
-    char* name=cstr_dup(algorithm);
+    char* name=tsc_os_cstr(algorithm,"argument 'algorithm'",TSC_OS_TEXT_STRING);
     const EVP_MD* digest=EVP_get_digestbyname(name);free(name);
     if(!digest)tsc_throw_error(TSC_ERROR_ERROR,tsc_str_from_cstr("Unsupported digest algorithm"));
     return digest;
@@ -533,7 +540,7 @@ void child_apply_env(const tsc_array_t* env) {
     for (size_t i = 0; i < env->len; i++) {
         tsc_str_t* pair = TSC_ARR(tsc_str_t*, env, i);
         if (!pair) continue;
-        char* raw = cstr_dup(pair);
+        char* raw = tsc_child_cstr(pair);
         (void)putenv(raw);
     }
 }
@@ -629,7 +636,7 @@ tsc_buffer_t* tsc_child_process_exec_file_sync(const tsc_str_t* file, const tsc_
         close(err_pipe[1]);
         if (input) close(in_pipe[0]);
         if (cwd) {
-            char* cwd_cstr = cstr_dup(cwd);
+            char* cwd_cstr = tsc_child_cstr(cwd);
             if (chdir(cwd_cstr) != 0) {
                 int err = errno;
                 tsc_child_report_errno(exec_err_pipe[1], err);
@@ -651,13 +658,13 @@ tsc_buffer_t* tsc_child_process_exec_file_sync(const tsc_str_t* file, const tsc_
             tsc_child_report_errno(exec_err_pipe[1], err);
             _exit(127);
         }
-        argv[0] = cstr_dup(argv0 ? argv0 : actual_file);
+        argv[0] = tsc_child_cstr(argv0 ? argv0 : actual_file);
         for (size_t i = 1; i < argc; i++) {
             tsc_str_t* arg = TSC_ARR(tsc_str_t*, actual_args, i - 1);
-            argv[i] = cstr_dup(arg ? arg : tsc_str_from_lit("", 0));
+            argv[i] = tsc_child_cstr(arg ? arg : tsc_str_from_lit("", 0));
         }
         argv[argc] = NULL;
-        char* exec_file = cstr_dup(actual_file);
+        char* exec_file = tsc_child_cstr(actual_file);
         execvp(exec_file, argv);
         int err = errno;
         tsc_child_report_errno(exec_err_pipe[1], err);
@@ -1016,7 +1023,7 @@ tsc_value_t tsc_child_process_spawn_sync(const tsc_str_t* file, const tsc_array_
             _exit(127);
         }
         if (cwd) {
-            char* cwd_cstr = cstr_dup(cwd);
+            char* cwd_cstr = tsc_child_cstr(cwd);
             if (chdir(cwd_cstr) != 0) {
                 int err = errno;
                 tsc_child_report_errno(exec_err_pipe[1], err);
@@ -1034,13 +1041,13 @@ tsc_value_t tsc_child_process_spawn_sync(const tsc_str_t* file, const tsc_array_
         size_t argc = 1 + (actual_args ? actual_args->len : 0);
         char** argv = (char**)calloc(argc + 1, sizeof(char*));
         if (!argv) _exit(127);
-        argv[0] = cstr_dup(argv0 ? argv0 : actual_file);
+        argv[0] = tsc_child_cstr(argv0 ? argv0 : actual_file);
         for (size_t i = 1; i < argc; i++) {
             tsc_str_t* arg = TSC_ARR(tsc_str_t*, actual_args, i - 1);
-            argv[i] = cstr_dup(arg ? arg : tsc_str_from_lit("", 0));
+            argv[i] = tsc_child_cstr(arg ? arg : tsc_str_from_lit("", 0));
         }
         argv[argc] = NULL;
-        char* exec_file = cstr_dup(actual_file);
+        char* exec_file = tsc_child_cstr(actual_file);
         execvp(exec_file, argv);
         int err = errno;
         tsc_child_report_errno(exec_err_pipe[1], err);
@@ -2260,7 +2267,7 @@ tsc_value_t tsc_child_process_spawn(const tsc_str_t* file, const tsc_array_t* ar
             _exit(127);
         }
         if (cwd) {
-            char* cwd_cstr = cstr_dup(cwd);
+            char* cwd_cstr = tsc_child_cstr(cwd);
             if (chdir(cwd_cstr) != 0) {
                 int error = errno;
                 tsc_child_report_errno(exec_err_pipe[1], error);
@@ -2280,13 +2287,13 @@ tsc_value_t tsc_child_process_spawn(const tsc_str_t* file, const tsc_array_t* ar
             errno = ENOMEM;
             tsc_child_report_setup_error(exec_err_pipe[1]);
         }
-        argv[0] = cstr_dup(argv0 ? argv0 : actual_file);
+        argv[0] = tsc_child_cstr(argv0 ? argv0 : actual_file);
         for (size_t i = 1; i < argc; i++) {
             tsc_str_t* arg = TSC_ARR(tsc_str_t*, actual_args, i - 1);
-            argv[i] = cstr_dup(arg ? arg : tsc_str_from_lit("", 0));
+            argv[i] = tsc_child_cstr(arg ? arg : tsc_str_from_lit("", 0));
         }
         argv[argc] = NULL;
-        char* exec_file = cstr_dup(actual_file);
+        char* exec_file = tsc_child_cstr(actual_file);
         execvp(exec_file, argv);
         int error = errno;
         tsc_child_report_errno(exec_err_pipe[1], error);
@@ -2606,6 +2613,10 @@ static tsc_array_t* child_arguments(tsc_value_t value) {
     double length=tsc_array_length(tsc_value_as_array(value));
     for (double index=0;index<length;++index) {
         tsc_str_t* item=tsc_value_to_string(tsc_value_get_index(value,index));
+        if (!tsc_os_text_valid(item)) {
+            char subject[64];snprintf(subject,sizeof subject,"argument 'args[%.0f]'",index);
+            tsc_throw_value(tsc_os_nul_error(item,subject,TSC_OS_TEXT_STRING));
+        }
         tsc_array_push_raw(out,&item);
     }
     return out;
@@ -2621,6 +2632,10 @@ static tsc_array_t* child_environment(tsc_value_t value) {
         tsc_value_t item=tsc_value_get_prop(value,name);
         if (tsc_value_is_undefined(item)) continue;
         tsc_str_t* text=tsc_value_to_string(item);
+        if (!tsc_os_text_valid(name) || !tsc_os_text_valid(text)) {
+            tsc_str_t* subject=tsc_str_concat_n(3,tsc_str_from_lit("property 'options.env['",23),name,tsc_str_from_lit("']'",3));
+            tsc_throw_value(tsc_os_nul_error_subject(tsc_os_text_valid(name)?text:name,subject,TSC_OS_TEXT_STRING));
+        }
         tsc_str_t* pair=tsc_str_concat_n(3,name,tsc_str_from_lit("=",1),text);
         tsc_array_push_raw(out,&pair);
     }
@@ -2650,6 +2665,7 @@ static tsc_value_t child_operation_apply(void* environment, tsc_value_t receiver
         tsc_throw_error(TSC_ERROR_TYPE,tsc_str_from_cstr("child_process.fork requires an AOT child-module and IPC owner"));
     }
     tsc_str_t* volatile file=child_string(child_actual(actuals,0));
+    tsc_os_text_check(file,descriptor->file_arguments?"argument 'file'":"argument 'command'",TSC_OS_TEXT_STRING);
     size_t cursor=1;
     tsc_array_t* volatile arguments=NULL;
     if (descriptor->file_arguments && tsc_value_is_array(child_actual(actuals,cursor))) {
@@ -2671,14 +2687,18 @@ static tsc_value_t child_operation_apply(void* environment, tsc_value_t receiver
         roots[index]=tsc_value_gc_root(slots[index]);
     }
     tsc_str_t* volatile cwd=child_optional_string(slots[CHILD_CWD]);
+    tsc_os_text_check(cwd,"property 'options.cwd'",TSC_OS_TEXT_PATH);
     tsc_str_t* volatile input=child_optional_string(slots[CHILD_INPUT]);
-    tsc_array_t* volatile env=child_environment(slots[CHILD_ENV]);
     tsc_str_t* volatile shell=NULL;
     if (!tsc_value_is_undefined(slots[CHILD_SHELL])) {
         if (child_type(slots[CHILD_SHELL],"boolean")) {if(tsc_value_as_bool(slots[CHILD_SHELL]))shell=tsc_str_from_lit("/bin/sh",7);}
         else shell=child_string(slots[CHILD_SHELL]);
     }
+    tsc_os_text_check(shell,"property 'options.shell'",TSC_OS_TEXT_STRING);
     tsc_str_t* volatile argv0=child_optional_string(slots[CHILD_ARGV0]);
+    tsc_os_text_check(argv0,"property 'options.argv0'",TSC_OS_TEXT_STRING);
+    /* Node validates the environment after the scalar spawn options. */
+    tsc_array_t* volatile env=child_environment(slots[CHILD_ENV]);
     double uid=child_number(slots[CHILD_UID]),gid=child_number(slots[CHILD_GID]);
     double max_buffer=child_number(slots[CHILD_MAX_BUFFER]),timeout=child_number(slots[CHILD_TIMEOUT]);
     int signal=child_signal(slots[CHILD_KILL_SIGNAL]);
@@ -3315,6 +3335,7 @@ void tsc_dns_set_default_result_order(tsc_str_t* order) {
 }
 
 tsc_dns_lookup_result_t tsc_dns_lookup(tsc_str_t* hostname, double family, double hints_value, double order_value) {
+    tsc_os_text_check(hostname, "argument 'hostname'", TSC_OS_TEXT_STRING);
     tsc_dns_lookup_result_t out;
     out.error = NULL;
     out.address = NULL;
@@ -3371,6 +3392,7 @@ tsc_dns_lookup_result_t tsc_dns_lookup(tsc_str_t* hostname, double family, doubl
 }
 
 tsc_dns_lookup_all_result_t tsc_dns_lookup_all(tsc_str_t* hostname, double family, double hints_value, double order_value) {
+    tsc_os_text_check(hostname, "argument 'hostname'", TSC_OS_TEXT_STRING);
     tsc_dns_lookup_all_result_t out;
     out.error = NULL;
     out.addresses = NULL;
@@ -3436,6 +3458,7 @@ static void tsc_dns_resolve_any_append_family(tsc_array_t* records, struct addri
 }
 
 tsc_dns_lookup_all_result_t tsc_dns_resolve_any(tsc_str_t* hostname) {
+    tsc_os_text_check(hostname, "argument 'hostname'", TSC_OS_TEXT_STRING);
     tsc_dns_lookup_all_result_t out;
     out.error = NULL;
     out.addresses = NULL;
@@ -3565,6 +3588,7 @@ static tsc_dns_resolve_ttl_result_t tsc_dns_resolve_with_ttl(
 }
 
 tsc_dns_resolve_ttl_result_t tsc_dns_resolve4_ttl(tsc_str_t* hostname) {
+    tsc_os_text_check(hostname, "argument 'hostname'", TSC_OS_TEXT_STRING);
     return tsc_dns_resolve_with_ttl(
         hostname,
         AF_INET,
@@ -3574,6 +3598,7 @@ tsc_dns_resolve_ttl_result_t tsc_dns_resolve4_ttl(tsc_str_t* hostname) {
 }
 
 tsc_dns_resolve_ttl_result_t tsc_dns_resolve6_ttl(tsc_str_t* hostname) {
+    tsc_os_text_check(hostname, "argument 'hostname'", TSC_OS_TEXT_STRING);
     return tsc_dns_resolve_with_ttl(
         hostname,
         AF_INET6,
@@ -3583,6 +3608,7 @@ tsc_dns_resolve_ttl_result_t tsc_dns_resolve6_ttl(tsc_str_t* hostname) {
 }
 
 tsc_dns_resolve4_result_t tsc_dns_resolve4(tsc_str_t* hostname) {
+    tsc_os_text_check(hostname, "argument 'hostname'", TSC_OS_TEXT_STRING);
     tsc_dns_resolve4_result_t out;
     out.error = NULL;
     out.addresses = NULL;
@@ -3623,6 +3649,7 @@ tsc_dns_resolve4_result_t tsc_dns_resolve4(tsc_str_t* hostname) {
 }
 
 tsc_dns_resolve6_result_t tsc_dns_resolve6(tsc_str_t* hostname) {
+    tsc_os_text_check(hostname, "argument 'hostname'", TSC_OS_TEXT_STRING);
     tsc_dns_resolve6_result_t out;
     out.error = NULL;
     out.addresses = NULL;
@@ -3663,6 +3690,7 @@ tsc_dns_resolve6_result_t tsc_dns_resolve6(tsc_str_t* hostname) {
 }
 
 tsc_dns_resolve_ptr_result_t tsc_dns_resolve_ptr(tsc_str_t* address) {
+    tsc_os_text_check(address, "argument 'ip'", TSC_OS_TEXT_STRING);
     tsc_dns_resolve_ptr_result_t out;
     out.error = NULL;
     out.addresses = NULL;
@@ -3714,6 +3742,7 @@ tsc_dns_resolve_ptr_result_t tsc_dns_resolve_ptr(tsc_str_t* address) {
 }
 
 tsc_dns_resolve_cname_result_t tsc_dns_resolve_cname(tsc_str_t* hostname) {
+    tsc_os_text_check(hostname, "argument 'hostname'", TSC_OS_TEXT_STRING);
     tsc_dns_resolve_cname_result_t out;
     out.error = NULL;
     out.addresses = NULL;
@@ -3755,6 +3784,7 @@ tsc_dns_resolve_cname_result_t tsc_dns_resolve_cname(tsc_str_t* hostname) {
 }
 
 tsc_dns_lookup_service_result_t tsc_dns_lookup_service(tsc_str_t* address, double port) {
+    tsc_os_text_check(address, "argument 'address'", TSC_OS_TEXT_FLAGS);
     tsc_dns_lookup_service_result_t out;
     out.error = NULL;
     out.hostname = NULL;
@@ -3814,7 +3844,7 @@ tsc_dns_lookup_service_result_t tsc_dns_lookup_service(tsc_str_t* address, doubl
 }
 
 bool tsc_net_is_ipv4(tsc_str_t* input) {
-    if (!input) return false;
+    if (!input || !tsc_os_text_valid(input)) return false;
     char* cstr = cstr_dup(input);
     struct in_addr addr4;
     int ok = inet_pton(AF_INET, cstr, &addr4) == 1;
@@ -3823,7 +3853,7 @@ bool tsc_net_is_ipv4(tsc_str_t* input) {
 }
 
 bool tsc_net_is_ipv6(tsc_str_t* input) {
-    if (!input) return false;
+    if (!input || !tsc_os_text_valid(input)) return false;
     char* cstr = cstr_dup(input);
     struct in6_addr addr6;
     int ok = inet_pton(AF_INET6, cstr, &addr6) == 1;
@@ -3934,7 +3964,7 @@ tsc_value_t tsc_net_socket_address_new(tsc_value_t options) {
 }
 
 tsc_value_t tsc_net_socket_address_parse(tsc_str_t* input) {
-    if (!input || input->len == 0) {
+    if (!input || input->len == 0 || !tsc_os_text_valid(input) || input->len > INT_MAX - 1) {
         return tsc_value_undefined();
     }
 
@@ -5117,6 +5147,7 @@ static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_ar
     if (server->fd >= 0) return this_arg;
     struct sockaddr_storage endpoint;
     socklen_t endpoint_len = 0;
+    tsc_os_text_check(host, "argument 'hostname'", TSC_OS_TEXT_STRING);
     if (!tsc_net_resolve_endpoint(host, AF_UNSPEC, &endpoint, &endpoint_len)) {
         tsc_throw_str(tsc_str_from_cstr("net.Server.listen host could not be resolved"));
     }
@@ -5272,6 +5303,13 @@ typedef struct {
 } tsc_net_connect_socket_options_t;
 
 static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, int address_family, tsc_str_t* local_address, double local_port, bool local_port_set, double timeout_ms, bool timeout_set, tsc_value_t abort_signal, const tsc_net_connect_socket_options_t* socket_options, tsc_value_t connect_listener, tsc_net_socket_t** out_socket) {
+    tsc_os_text_check(host, "property 'options.host'", TSC_OS_TEXT_STRING);
+    if (!tsc_os_text_valid(local_address)) {
+        tsc_error_t* error = tsc_error_new_named(tsc_str_from_lit("TypeError", 9),
+            tsc_str_concat(tsc_str_from_lit("Invalid IP address: ", 20), local_address));
+        tsc_error_set_value_field(error, TSC_ERROR_VALUE_FIELD_code, tsc_value_string(tsc_str_from_lit("ERR_INVALID_IP_ADDRESS", 22)));
+        tsc_throw_value(tsc_value_error(error));
+    }
     if (!tsc_value_number_is_finite(tsc_value_num(port)) || !tsc_value_number_is_integer(tsc_value_num(port)) || port < 1.0 || port > 65535.0) {
         tsc_throw_str(tsc_str_from_cstr("net.connect port must be an integer from 1 to 65535"));
     }
@@ -5477,6 +5515,8 @@ tsc_value_t tsc_net_connect_options(tsc_value_t options, tsc_value_t connect_lis
 }
 
 static tsc_value_t tsc_net_tls_connect_internal(double port, tsc_str_t* host, bool reject_unauthorized, tsc_str_t* servername, tsc_value_t connect_listener, tsc_net_socket_t** out_socket) {
+    tsc_os_text_check(host, "property 'options.host'", TSC_OS_TEXT_STRING);
+    tsc_os_text_check(servername, "property 'options.servername'", TSC_OS_TEXT_STRING);
     if (!tsc_value_number_is_finite(tsc_value_num(port)) || !tsc_value_number_is_integer(tsc_value_num(port)) || port < 1.0 || port > 65535.0) {
         tsc_throw_str(tsc_str_from_cstr("https.request port must be an integer from 1 to 65535"));
     }
@@ -8184,17 +8224,39 @@ typedef struct console_inspect_frame {
 static void console_inspect_append(tsc_jsonbuf_t* output,const char* text) {
     tsc_jsonbuf_append(output,text,strlen(text));
 }
+/* Node util.inspect string quoting (strEscape) over WTF-8 storage: quote
+ * selection avoids escaping where possible; C0/C1 controls and lone
+ * surrogates are escaped so the rendering is unambiguous. */
+static bool console_inspect_contains(const tsc_str_t* text,const char* needle,size_t length) {
+    for(size_t index=0;text&&index+length<=text->len;++index)
+        if(memcmp(text->data+index,needle,length)==0)return true;
+    return false;
+}
 static void console_inspect_quote(tsc_jsonbuf_t* output,tsc_str_t* text) {
-    tsc_jsonbuf_byte(output,'\'');
-    for(size_t index=0;text&&index<text->len;++index) {
-        unsigned char byte=text->data[index];
-        if(byte=='\''||byte=='\\')tsc_jsonbuf_byte(output,'\\');
-        if(byte=='\n')console_inspect_append(output,"\\n");
-        else if(byte=='\r')console_inspect_append(output,"\\r");
-        else if(byte=='\t')console_inspect_append(output,"\\t");
-        else tsc_jsonbuf_byte(output,byte);
+    char quote='\'';
+    if(console_inspect_contains(text,"'",1)) {
+        if(!console_inspect_contains(text,"\"",1))quote='"';
+        else if(!console_inspect_contains(text,"`",1)&&!console_inspect_contains(text,"${",2))quote='`';
     }
-    tsc_jsonbuf_byte(output,'\'');
+    tsc_jsonbuf_byte(output,quote);
+    for(size_t index=0;text&&index<text->len;++index) {
+        unsigned char byte=(unsigned char)text->data[index];
+        char escape[8];
+        if(byte<0x20||byte==0x7f) {
+            const char* named=byte=='\b'?"\\b":byte=='\t'?"\\t":byte=='\n'?"\\n":byte=='\f'?"\\f":byte=='\r'?"\\r":NULL;
+            if(named)console_inspect_append(output,named);
+            else{snprintf(escape,sizeof escape,"\\x%02X",byte);console_inspect_append(output,escape);}
+        } else if(byte==(unsigned char)quote||byte=='\\') {
+            tsc_jsonbuf_byte(output,'\\');tsc_jsonbuf_byte(output,byte);
+        } else if(byte==0xC2&&index+1<text->len&&(unsigned char)text->data[index+1]<=0x9F) {
+            snprintf(escape,sizeof escape,"\\x%02X",(unsigned char)text->data[++index]);
+            console_inspect_append(output,escape);
+        } else if(byte==0xED&&index+2<text->len&&(unsigned char)text->data[index+1]>=0xA0) {
+            unsigned unit=0xD000u|(((unsigned char)text->data[index+1]&0x3Fu)<<6)|((unsigned char)text->data[index+2]&0x3Fu);
+            snprintf(escape,sizeof escape,"\\u%04x",unit);console_inspect_append(output,escape);index+=2;
+        } else tsc_jsonbuf_byte(output,byte);
+    }
+    tsc_jsonbuf_byte(output,quote);
 }
 /* An explicit descriptor worklist keeps container traversal independent of
  * source shape. Accessors are displayed without invoking user code. */
@@ -8439,10 +8501,51 @@ bool tsc_instanceof(const char* type_chain, const char* class_name) {
 
 /* ---------------- fs (sync) ---------------- */
 
+/* Canonical host C-string boundary. C consumers stop at the first NUL, so a
+ * string containing one would silently name a different path, program,
+ * argument, host or variable. Every conversion therefore rejects embedded
+ * NUL with Node's ERR_INVALID_ARG_VALUE TypeError instead of truncating. */
+bool tsc_os_text_valid(const tsc_str_t* s) {
+    return !s || !s->len || !memchr(s->data, '\0', s->len);
+}
+
+tsc_value_t tsc_os_nul_error(const tsc_str_t* s, const char* subject, tsc_os_text_kind_t kind) {
+    return tsc_os_nul_error_subject(s, tsc_str_from_cstr(subject), kind);
+}
+
+tsc_value_t tsc_os_nul_error_subject(const tsc_str_t* s, tsc_str_t* subject, tsc_os_text_kind_t kind) {
+    tsc_jsonbuf_t received; tsc_jsonbuf_init(&received);
+    console_inspect_quote(&received, (tsc_str_t*)s);
+    tsc_str_t* inspected = tsc_jsonbuf_finish(&received);
+    if (tsc_str_utf16_length(inspected) > 128)
+        inspected = tsc_str_concat(tsc_str_slice(inspected, 0, 128), tsc_str_from_lit("...", 3));
+    const char* requirement = kind == TSC_OS_TEXT_PATH ? " must be a string, Uint8Array, or URL without null bytes. Received "
+        : kind == TSC_OS_TEXT_FLAGS ? " is invalid. Received " : " must be a string without null bytes. Received ";
+    tsc_str_t* message = tsc_str_concat(tsc_str_concat(tsc_str_concat(tsc_str_from_lit("The ", 4),
+        subject), tsc_str_from_cstr(requirement)), inspected);
+    tsc_error_t* error = tsc_error_new_named(tsc_str_from_lit("TypeError", 9), message);
+    tsc_error_set_value_field(error, TSC_ERROR_VALUE_FIELD_code, tsc_value_string(tsc_str_from_lit("ERR_INVALID_ARG_VALUE", 21)));
+    return tsc_value_error(error);
+}
+
+void tsc_os_text_check(const tsc_str_t* s, const char* subject, tsc_os_text_kind_t kind) {
+    if (!tsc_os_text_valid(s)) tsc_throw_value(tsc_os_nul_error(s, subject, kind));
+}
+
+char* tsc_os_cstr(const tsc_str_t* s, const char* subject, tsc_os_text_kind_t kind) {
+    tsc_os_text_check(s, subject, kind);
+    return cstr_dup(s);
+}
+
 char* cstr_dup(const tsc_str_t* s) {
-    char* c = (char*)malloc(s->len + 1);
-    memcpy(c, s->data, s->len);
-    c[s->len] = '\0';
+    /* Backstop for conversions not validated at their API boundary. */
+    tsc_os_text_check(s, "argument", TSC_OS_TEXT_STRING);
+    size_t len = s ? s->len : 0;
+    if (len == SIZE_MAX) tsc_alloc_failure(len);
+    char* c = (char*)malloc(len + 1);
+    if (!c) tsc_alloc_failure(len + 1);
+    if (len) memcpy(c, s->data, len);
+    c[len] = '\0';
     return c;
 }
 
@@ -8735,7 +8838,7 @@ static tsc_fs_file_handle_metadata_async_t* g_tsc_fs_file_handle_metadata_async 
 static tsc_fs_file_handle_append_async_t* g_tsc_fs_file_handle_append_async = NULL;
 
 static bool tsc_fs_open_flags_from_string(const tsc_str_t* flags_str, int* out_flags) {
-    char* flags_c = flags_str ? cstr_dup(flags_str) : NULL;
+    char* flags_c = flags_str ? tsc_os_cstr(flags_str, "argument 'flags'", TSC_OS_TEXT_FLAGS) : NULL;
     const char* f = flags_c ? flags_c : "r";
     bool valid = true;
     int flags = 0;
@@ -10097,6 +10200,8 @@ static void tsc_fs_open_async_cb(tsc_uv_fs_t* req) {
 }
 
 tsc_promise_t* tsc_fs_promises_open_async(const tsc_str_t* path, const tsc_str_t* flags_str, double flags_num, bool flags_is_num, double mode) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
+    if (!flags_is_num && !tsc_os_text_valid(flags_str)) return tsc_promise_reject(tsc_os_nul_error(flags_str, "argument 'flags'", TSC_OS_TEXT_FLAGS));
     tsc_promise_t* promise = tsc_promise_pending();
     int open_flags = 0;
     if (flags_is_num) {
@@ -10335,10 +10440,12 @@ static tsc_promise_t* tsc_fs_promises_read_file_options_async(
 }
 
 tsc_promise_t* tsc_fs_promises_read_file_async(const tsc_str_t* path, bool want_buffer, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_read_file_options_async(path, want_buffer, NULL, signal);
 }
 
 tsc_promise_t* tsc_fs_promises_read_file_encoded_async(const tsc_str_t* path, tsc_str_t* encoding, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_read_file_options_async(path, false, encoding, signal);
 }
 
@@ -11120,6 +11227,7 @@ tsc_promise_t* tsc_fs_promises_write_file_string_async(
     bool flush,
     tsc_value_t signal
 ) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_write_file_async(path, (const uint8_t*)data->data, data->len, data, NULL, fs_write_mode_flags(append, exclusive, update), file_mode, flush, signal,tsc_value_undefined());
 }
 
@@ -11133,10 +11241,12 @@ tsc_promise_t* tsc_fs_promises_write_file_buffer_async(
     bool flush,
     tsc_value_t signal
 ) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_write_file_async(path, data->data, data->len, NULL, data, fs_write_mode_flags(append, exclusive, update), file_mode, flush, signal,tsc_value_undefined());
 }
 
 tsc_promise_t* tsc_fs_promises_write_file_buffer_flags_async(const tsc_str_t* path,const tsc_buffer_t* data,int flags,double mode,bool flush,tsc_value_t signal,tsc_value_t opened_options) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_write_file_async(path,data->data,data->len,NULL,data,flags,mode,flush,signal,opened_options);
 }
 
@@ -11275,14 +11385,17 @@ static tsc_promise_t* tsc_fs_promises_readdir_options_async(
 }
 
 tsc_promise_t* tsc_fs_promises_readdir_async(const tsc_str_t* path, bool want_buffer, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_readdir_options_async(path, want_buffer, false, NULL, signal);
 }
 
 tsc_promise_t* tsc_fs_promises_readdir_encoded_async(const tsc_str_t* path, tsc_str_t* encoding, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_readdir_options_async(path, false, false, encoding, signal);
 }
 
 tsc_promise_t* tsc_fs_promises_readdir_dirents_async(const tsc_str_t* path, tsc_str_t* encoding, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_readdir_options_async(path, false, true, encoding, signal);
 }
 
@@ -11542,14 +11655,17 @@ static tsc_promise_t* tsc_fs_promises_readdir_recursive_options_async(
 }
 
 tsc_promise_t* tsc_fs_promises_readdir_recursive_async(const tsc_str_t* path, bool want_buffer, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_readdir_recursive_options_async(path, want_buffer, false, NULL, signal);
 }
 
 tsc_promise_t* tsc_fs_promises_readdir_recursive_encoded_async(const tsc_str_t* path, tsc_str_t* encoding, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_readdir_recursive_options_async(path, false, false, encoding, signal);
 }
 
 tsc_promise_t* tsc_fs_promises_readdir_recursive_dirents_async(const tsc_str_t* path, tsc_str_t* encoding, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_readdir_recursive_options_async(path, false, true, encoding, signal);
 }
 
@@ -11625,6 +11741,7 @@ static void tsc_fs_access_async_cb(tsc_uv_fs_t* req) {
 }
 
 tsc_promise_t* tsc_fs_promises_access_async(const tsc_str_t* path, double mode, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_access_async_t* task = (tsc_fs_access_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_access_async_t));
     memset(task, 0, sizeof(*task));
@@ -11785,10 +11902,12 @@ static tsc_promise_t* tsc_fs_promises_stats_libuv_async(
 }
 
 tsc_promise_t* tsc_fs_promises_stat_async(const tsc_str_t* path, bool throw_if_no_entry, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_stats_libuv_async(path, throw_if_no_entry, false, signal);
 }
 
 tsc_promise_t* tsc_fs_promises_lstat_async(const tsc_str_t* path, bool throw_if_no_entry, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_stats_libuv_async(path, throw_if_no_entry, true, signal);
 }
 
@@ -11889,6 +12008,7 @@ static void tsc_fs_statfs_libuv_cb(tsc_uv_fs_t* req) {
 }
 
 tsc_promise_t* tsc_fs_promises_statfs_async(const tsc_str_t* path, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_statfs_libuv_async_t* task = (tsc_fs_statfs_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_statfs_libuv_async_t));
     memset(task, 0, sizeof(*task));
@@ -11966,6 +12086,8 @@ static void tsc_fs_copy_file_libuv_cb(tsc_uv_fs_t* req) {
 }
 
 tsc_promise_t* tsc_fs_promises_copy_file_async(const tsc_str_t* src, const tsc_str_t* dest, double mode) {
+    if (!tsc_os_text_valid(src)) return tsc_promise_reject(tsc_os_nul_error(src, "argument 'src'", TSC_OS_TEXT_PATH));
+    if (!tsc_os_text_valid(dest)) return tsc_promise_reject(tsc_os_nul_error(dest, "argument 'dest'", TSC_OS_TEXT_PATH));
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_copy_file_libuv_async_t* task = (tsc_fs_copy_file_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_copy_file_libuv_async_t));
     memset(task, 0, sizeof(*task));
@@ -12170,6 +12292,8 @@ tsc_promise_t* tsc_fs_promises_cp_async(
     double mode,
     bool preserve_timestamps
 ) {
+    if (!tsc_os_text_valid(src)) return tsc_promise_reject(tsc_os_nul_error(src, "argument 'src'", TSC_OS_TEXT_PATH));
+    if (!tsc_os_text_valid(dest)) return tsc_promise_reject(tsc_os_nul_error(dest, "argument 'dest'", TSC_OS_TEXT_PATH));
     if (recursive) {
         return tsc_fs_promises_cp_recursive_async(
             src,
@@ -12709,6 +12833,8 @@ static void tsc_fs_rename_libuv_cb(tsc_uv_fs_t* req) {
 }
 
 tsc_promise_t* tsc_fs_promises_rename_async(const tsc_str_t* old_path, const tsc_str_t* new_path) {
+    if (!tsc_os_text_valid(old_path)) return tsc_promise_reject(tsc_os_nul_error(old_path, "argument 'oldPath'", TSC_OS_TEXT_PATH));
+    if (!tsc_os_text_valid(new_path)) return tsc_promise_reject(tsc_os_nul_error(new_path, "argument 'newPath'", TSC_OS_TEXT_PATH));
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_rename_libuv_async_t* task = (tsc_fs_rename_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_rename_libuv_async_t));
     memset(task, 0, sizeof(*task));
@@ -12801,10 +12927,14 @@ static tsc_promise_t* tsc_fs_promises_link_libuv_async(
 }
 
 tsc_promise_t* tsc_fs_promises_symlink_async(const tsc_str_t* target, const tsc_str_t* path) {
+    if (!tsc_os_text_valid(target)) return tsc_promise_reject(tsc_os_nul_error(target, "argument 'target'", TSC_OS_TEXT_PATH));
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_link_libuv_async(target, path, true);
 }
 
 tsc_promise_t* tsc_fs_promises_link_async(const tsc_str_t* existing_path, const tsc_str_t* new_path) {
+    if (!tsc_os_text_valid(existing_path)) return tsc_promise_reject(tsc_os_nul_error(existing_path, "argument 'existingPath'", TSC_OS_TEXT_PATH));
+    if (!tsc_os_text_valid(new_path)) return tsc_promise_reject(tsc_os_nul_error(new_path, "argument 'newPath'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_link_libuv_async(existing_path, new_path, false);
 }
 
@@ -12885,10 +13015,12 @@ static tsc_promise_t* tsc_fs_promises_times_libuv_async(
 }
 
 tsc_promise_t* tsc_fs_promises_utimes_async(const tsc_str_t* path, double atime, double mtime) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_times_libuv_async(path, atime, mtime, false);
 }
 
 tsc_promise_t* tsc_fs_promises_lutimes_async(const tsc_str_t* path, double atime, double mtime) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_times_libuv_async(path, atime, mtime, true);
 }
 
@@ -12936,6 +13068,7 @@ static void tsc_fs_chmod_libuv_cb(tsc_uv_fs_t* req) {
 }
 
 tsc_promise_t* tsc_fs_promises_chmod_async(const tsc_str_t* path, double mode) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_chmod_libuv_async_t* task = (tsc_fs_chmod_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_chmod_libuv_async_t));
     memset(task, 0, sizeof(*task));
@@ -13030,10 +13163,12 @@ static tsc_promise_t* tsc_fs_promises_chown_libuv_async(
 }
 
 tsc_promise_t* tsc_fs_promises_chown_async(const tsc_str_t* path, double uid, double gid) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_chown_libuv_async(path, uid, gid, false);
 }
 
 tsc_promise_t* tsc_fs_promises_lchown_async(const tsc_str_t* path, double uid, double gid) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_chown_libuv_async(path, uid, gid, true);
 }
 
@@ -13165,6 +13300,7 @@ static tsc_promise_t* tsc_fs_promises_simple_mutation_libuv_async(
 }
 
 tsc_promise_t* tsc_fs_promises_mkdir_async(const tsc_str_t* path, double mode, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_simple_mutation_libuv_async(path, mode, TSC_FS_SIMPLE_MKDIR, false, signal);
 }
 
@@ -13336,6 +13472,7 @@ static void tsc_fs_mkdir_recursive_libuv_start_next(tsc_fs_mkdir_recursive_libuv
 }
 
 tsc_promise_t* tsc_fs_promises_mkdir_recursive_async(const tsc_str_t* path, double mode, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_mkdir_recursive_libuv_async_t* task = (tsc_fs_mkdir_recursive_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_mkdir_recursive_libuv_async_t));
     memset(task, 0, sizeof(*task));
@@ -13359,14 +13496,17 @@ tsc_promise_t* tsc_fs_promises_mkdir_recursive_async(const tsc_str_t* path, doub
 }
 
 tsc_promise_t* tsc_fs_promises_unlink_async(const tsc_str_t* path) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_simple_mutation_libuv_async(path, 0.0, TSC_FS_SIMPLE_UNLINK, false, tsc_value_undefined());
 }
 
 tsc_promise_t* tsc_fs_promises_rmdir_async(const tsc_str_t* path, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_simple_mutation_libuv_async(path, 0.0, TSC_FS_SIMPLE_RMDIR, false, signal);
 }
 
 tsc_promise_t* tsc_fs_promises_rm_async(const tsc_str_t* path, bool force, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_simple_mutation_libuv_async(path, 0.0, TSC_FS_SIMPLE_RM, force, signal);
 }
 
@@ -13678,10 +13818,12 @@ static tsc_promise_t* tsc_fs_promises_recursive_remove_async(const tsc_str_t* pa
 }
 
 tsc_promise_t* tsc_fs_promises_rm_recursive_async(const tsc_str_t* path, bool force, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_recursive_remove_async(path, force, false, signal);
 }
 
 tsc_promise_t* tsc_fs_promises_rmdir_recursive_async(const tsc_str_t* path, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_recursive_remove_async(path, false, true, signal);
 }
 
@@ -13776,6 +13918,7 @@ static void tsc_fs_truncate_libuv_open_cb(tsc_uv_fs_t* req) {
 }
 
 tsc_promise_t* tsc_fs_promises_truncate_async(const tsc_str_t* path, double len) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_truncate_libuv_async_t* task = (tsc_fs_truncate_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_truncate_libuv_async_t));
     memset(task, 0, sizeof(*task));
@@ -13966,14 +14109,17 @@ static tsc_promise_t* tsc_fs_promises_path_result_async(
 }
 
 tsc_promise_t* tsc_fs_promises_realpath_async(const tsc_str_t* path, int encoding, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_path_result_async(path, encoding, false, false, signal);
 }
 
 tsc_promise_t* tsc_fs_promises_readlink_async(const tsc_str_t* path, int encoding, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_path_result_async(path, encoding, true, false, signal);
 }
 
 tsc_promise_t* tsc_fs_promises_mkdtemp_async(const tsc_str_t* prefix, int encoding, tsc_value_t signal) {
+    if (!tsc_os_text_valid(prefix)) return tsc_promise_reject(tsc_os_nul_error(prefix, "argument 'prefix'", TSC_OS_TEXT_PATH));
     return tsc_fs_promises_path_result_async(prefix, encoding, false, true, signal);
 }
 
@@ -14297,7 +14443,7 @@ char* fs_join_path(const char* left, const char* right) {
 }
 
 tsc_str_t* tsc_fs_read_file_sync(const tsc_str_t* path) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     FILE* f = fopen(p, "rb");
     free(p);
     if (!f) {
@@ -14321,7 +14467,7 @@ tsc_buffer_t* tsc_fs_read_file_buffer_sync(const tsc_str_t* path) {
 }
 
 static void fs_write_bytes_flags(const tsc_str_t* path,const uint8_t* data,size_t length,int flags,double file_mode,bool flush,const char* label) {
-    char* name=cstr_dup(path);mode_t mode=file_mode<0?(mode_t)0666:(mode_t)file_mode;
+    char* name=tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);mode_t mode=file_mode<0?(mode_t)0666:(mode_t)file_mode;
     int fd=open(name,flags,mode);free(name);
     if(fd<0)tsc_throw_str(tsc_str_from_cstr(errno==EEXIST?"fs.writeFileSync: file already exists":label));
     size_t offset=0;
@@ -14377,6 +14523,7 @@ void tsc_fs_append_file_buffer_sync(const tsc_str_t* path, const tsc_buffer_t* d
 }
 
 bool tsc_fs_exists_sync(const tsc_str_t* path) {
+    if (!tsc_os_text_valid(path)) return false;
     char* p = cstr_dup(path);
     struct stat st;
     int r = stat(p, &st);
@@ -14397,7 +14544,7 @@ bool tsc_fs_exists_sync_value(tsc_value_t value) {
 }
 
 tsc_fs_stats_t* tsc_fs_stat_sync(const tsc_str_t* path) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     struct stat st;
     int r = stat(p, &st);
     free(p);
@@ -14411,7 +14558,7 @@ tsc_fs_stats_t* tsc_fs_stat_sync(const tsc_str_t* path) {
 }
 
 tsc_fs_stats_t* tsc_fs_stat_sync_no_throw(const tsc_str_t* path) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     struct stat st;
     int r = stat(p, &st);
     int err = errno;
@@ -14427,7 +14574,7 @@ tsc_fs_stats_t* tsc_fs_stat_sync_no_throw(const tsc_str_t* path) {
 }
 
 tsc_value_t tsc_fs_statfs_sync(const tsc_str_t* path) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     struct statvfs st;
     int r = statvfs(p, &st);
     free(p);
@@ -14447,7 +14594,7 @@ tsc_value_t tsc_fs_statfs_sync(const tsc_str_t* path) {
 }
 
 tsc_fs_stats_t* tsc_fs_lstat_sync(const tsc_str_t* path) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     struct stat st;
     int r = lstat(p, &st);
     free(p);
@@ -14461,7 +14608,7 @@ tsc_fs_stats_t* tsc_fs_lstat_sync(const tsc_str_t* path) {
 }
 
 tsc_fs_stats_t* tsc_fs_lstat_sync_no_throw(const tsc_str_t* path) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     struct stat st;
     int r = lstat(p, &st);
     int err = errno;
@@ -14526,18 +14673,20 @@ static tsc_promise_t* tsc_fs_promises_stats_async(const tsc_str_t* path, bool th
 }
 
 tsc_promise_t* tsc_fs_promises_stat_async(const tsc_str_t* path, bool throw_if_no_entry, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     (void)signal;
     return tsc_fs_promises_stats_async(path, throw_if_no_entry, false);
 }
 
 tsc_promise_t* tsc_fs_promises_lstat_async(const tsc_str_t* path, bool throw_if_no_entry, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     (void)signal;
     return tsc_fs_promises_stats_async(path, throw_if_no_entry, true);
 }
 #endif
 
 tsc_str_t* tsc_fs_realpath_sync(const tsc_str_t* path) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     char* resolved = realpath(p, NULL);
     free(p);
     if (!resolved) {
@@ -14550,7 +14699,7 @@ tsc_str_t* tsc_fs_realpath_sync(const tsc_str_t* path) {
 }
 
 tsc_str_t* tsc_fs_readlink_sync(const tsc_str_t* path) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     size_t cap = PATH_MAX > 0 ? (size_t)PATH_MAX : 4096;
     for (;;) {
         char* buf = (char*)malloc(cap);
@@ -14579,8 +14728,8 @@ tsc_str_t* tsc_fs_readlink_sync(const tsc_str_t* path) {
 }
 
 void tsc_fs_symlink_sync(const tsc_str_t* target, const tsc_str_t* path) {
-    char* t = cstr_dup(target);
-    char* p = cstr_dup(path);
+    char* t = tsc_os_cstr(target, "argument 'target'", TSC_OS_TEXT_PATH);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     int r = symlink(t, p);
     free(t);
     free(p);
@@ -14590,8 +14739,8 @@ void tsc_fs_symlink_sync(const tsc_str_t* target, const tsc_str_t* path) {
 }
 
 void tsc_fs_link_sync(const tsc_str_t* existing_path, const tsc_str_t* new_path) {
-    char* oldp = cstr_dup(existing_path);
-    char* newp = cstr_dup(new_path);
+    char* oldp = tsc_os_cstr(existing_path, "argument 'existingPath'", TSC_OS_TEXT_PATH);
+    char* newp = tsc_os_cstr(new_path, "argument 'newPath'", TSC_OS_TEXT_PATH);
     int r = link(oldp, newp);
     free(oldp);
     free(newp);
@@ -14601,7 +14750,7 @@ void tsc_fs_link_sync(const tsc_str_t* existing_path, const tsc_str_t* new_path)
 }
 
 tsc_str_t* tsc_fs_mkdtemp_sync(const tsc_str_t* prefix) {
-    char* p = cstr_dup(prefix);
+    char* p = tsc_os_cstr(prefix, "argument 'prefix'", TSC_OS_TEXT_PATH);
     size_t len = strlen(p);
     char* tmpl = (char*)malloc(len + 7);
     memcpy(tmpl, p, len);
@@ -14619,7 +14768,7 @@ tsc_str_t* tsc_fs_mkdtemp_sync(const tsc_str_t* prefix) {
 }
 
 void tsc_fs_truncate_sync(const tsc_str_t* path, double len) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     off_t n = len < 0 ? 0 : (off_t)len;
     int r = truncate(p, n);
     free(p);
@@ -14649,7 +14798,7 @@ struct timespec fs_seconds_to_timespec(double seconds) {
 }
 
 void fs_utimes_path_sync(const tsc_str_t* path, double atime, double mtime, int flags, const char* message) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     struct timespec times[2];
     times[0] = fs_seconds_to_timespec(atime);
     times[1] = fs_seconds_to_timespec(mtime);
@@ -14669,14 +14818,14 @@ void tsc_fs_lutimes_sync(const tsc_str_t* path, double atime, double mtime) {
 }
 
 void tsc_fs_chown_sync(const tsc_str_t* path, double uid, double gid) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     int r = chown(p, (uid_t)uid, (gid_t)gid);
     free(p);
     if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.chownSync: could not change ownership"));
 }
 
 void tsc_fs_lchown_sync(const tsc_str_t* path, double uid, double gid) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     int r = lchown(p, (uid_t)uid, (gid_t)gid);
     free(p);
     if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.lchownSync: could not change ownership"));
@@ -15632,7 +15781,7 @@ static tsc_value_t tsc_fs_dir_value(tsc_fs_dir_t* state) {
 }
 
 tsc_value_t tsc_fs_opendir_sync(const tsc_str_t* path, bool recursive, const tsc_str_t* encoding, size_t buffer_size) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     DIR* dir = opendir(p);
     free(p);
     if (!dir) {
@@ -15644,7 +15793,7 @@ tsc_value_t tsc_fs_opendir_sync(const tsc_str_t* path, bool recursive, const tsc
     memset(state, 0, sizeof(*state));
     state->dir = dir;
     state->path = (tsc_str_t*)path;
-    state->current_path = cstr_dup(path);
+    state->current_path = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     state->recursive = recursive;
     state->encoding = (tsc_str_t*)encoding;
     state->buffer_size = buffer_size > 0 ? buffer_size : 32;
@@ -15765,6 +15914,7 @@ static void tsc_fs_dir_open_async_cb(tsc_uv_fs_t* req) {
 }
 
 tsc_promise_t* tsc_fs_promises_opendir_async(const tsc_str_t* path, bool recursive, const tsc_str_t* encoding, size_t buffer_size, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_dir_open_async_t* task = (tsc_fs_dir_open_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_dir_open_async_t));
     memset(task, 0, sizeof(*task));
@@ -15800,6 +15950,7 @@ tsc_promise_t* tsc_fs_promises_opendir_async(const tsc_str_t* path, bool recursi
 }
 #else
 tsc_promise_t* tsc_fs_promises_opendir_async(const tsc_str_t* path, bool recursive, const tsc_str_t* encoding, size_t buffer_size, tsc_value_t signal) {
+    if (!tsc_os_text_valid(path)) return tsc_promise_reject(tsc_os_nul_error(path, "argument 'path'", TSC_OS_TEXT_PATH));
     if (tsc_abort_signal_is_aborted(signal)) {
         return tsc_promise_reject(
             tsc_value_get_prop(signal, tsc_str_from_lit("reason", 6))
@@ -15814,7 +15965,7 @@ void tsc_fs_access_sync(const tsc_str_t* path) {
 }
 
 void tsc_fs_access_sync_mode(const tsc_str_t* path, double mode) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     int m = isnan(mode) ? F_OK : (int)mode;
     int r = access(p, m);
     free(p);
@@ -15822,7 +15973,7 @@ void tsc_fs_access_sync_mode(const tsc_str_t* path, double mode) {
 }
 
 void tsc_fs_chmod_sync(const tsc_str_t* path, double mode) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     mode_t m = mode < 0 ? 0 : (mode_t)mode;
     int r = chmod(p, m);
     free(p);
@@ -15839,7 +15990,7 @@ void tsc_fs_mkdir_sync(const tsc_str_t* path) {
 }
 
 void fs_mkdir_one_sync(const tsc_str_t* path, mode_t mode, const char* message) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     int r = mkdir(p, mode);
     free(p);
     if (r != 0) tsc_throw_str(tsc_str_from_cstr(message));
@@ -15880,21 +16031,21 @@ void tsc_fs_mkdir_sync_opts(const tsc_str_t* path, bool recursive, double mode) 
         fs_mkdir_one_sync(path, m, "fs.mkdirSync: could not create directory");
         return;
     }
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     int r = mkdir_recursive_cstr(p, m);
     free(p);
     if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.mkdirSync: could not create directory recursively"));
 }
 
 void tsc_fs_unlink_sync(const tsc_str_t* path) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     int r = unlink(p);
     free(p);
     if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.unlinkSync: could not remove file"));
 }
 
 void tsc_fs_rm_sync(const tsc_str_t* path) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     int r = remove(p);
     free(p);
     if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.rmSync: could not remove path"));
@@ -15940,7 +16091,7 @@ int rm_recursive_cstr(const char* path, bool force) {
 }
 
 void tsc_fs_rm_sync_opts(const tsc_str_t* path, bool recursive, bool force) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     int r;
     if (recursive) {
         r = rm_recursive_cstr(p, force);
@@ -15953,14 +16104,14 @@ void tsc_fs_rm_sync_opts(const tsc_str_t* path, bool recursive, bool force) {
 }
 
 void tsc_fs_rmdir_sync(const tsc_str_t* path) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     int r = rmdir(p);
     free(p);
     if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.rmdirSync: could not remove directory"));
 }
 
 void tsc_fs_rmdir_sync_opts(const tsc_str_t* path, bool recursive) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     int r = recursive ? rm_recursive_cstr(p, false) : rmdir(p);
     free(p);
     if (r != 0) tsc_throw_str(tsc_str_from_cstr("fs.rmdirSync: could not remove directory"));
@@ -16146,8 +16297,8 @@ int fs_cp_recursive_cstr(const char* src, const char* dest, bool recursive, bool
 }
 
 void tsc_fs_cp_sync_opts(const tsc_str_t* src, const tsc_str_t* dest, bool recursive, bool force, bool error_on_exist, bool dereference, bool verbatim_symlinks, double mode, bool preserve_timestamps) {
-    char* s = cstr_dup(src);
-    char* d = cstr_dup(dest);
+    char* s = tsc_os_cstr(src, "argument 'src'", TSC_OS_TEXT_PATH);
+    char* d = tsc_os_cstr(dest, "argument 'dest'", TSC_OS_TEXT_PATH);
     int flags = (isnan(mode) || isinf(mode)) ? 0 : (int)mode;
     int r = fs_cp_recursive_cstr(s, d, recursive, force, error_on_exist, dereference, verbatim_symlinks, flags, preserve_timestamps);
     free(s);
@@ -16156,7 +16307,8 @@ void tsc_fs_cp_sync_opts(const tsc_str_t* src, const tsc_str_t* dest, bool recur
 }
 
 void tsc_fs_copy_file_sync_mode(const tsc_str_t* src, const tsc_str_t* dest, double mode) {
-    char* dest_path = cstr_dup(dest);
+    tsc_os_text_check(src, "argument 'src'", TSC_OS_TEXT_PATH);
+    char* dest_path = tsc_os_cstr(dest, "argument 'dest'", TSC_OS_TEXT_PATH);
     int flags = (isnan(mode) || isinf(mode)) ? 0 : (int)mode;
     if ((flags & 1) && access(dest_path, F_OK) == 0) {
         free(dest_path);
@@ -16173,8 +16325,8 @@ void tsc_fs_copy_file_sync(const tsc_str_t* src, const tsc_str_t* dest) {
 }
 
 void tsc_fs_rename_sync(const tsc_str_t* old_path, const tsc_str_t* new_path) {
-    char* oldp = cstr_dup(old_path);
-    char* newp = cstr_dup(new_path);
+    char* oldp = tsc_os_cstr(old_path, "argument 'oldPath'", TSC_OS_TEXT_PATH);
+    char* newp = tsc_os_cstr(new_path, "argument 'newPath'", TSC_OS_TEXT_PATH);
     int r = rename(oldp, newp);
     free(oldp);
     free(newp);
@@ -16182,7 +16334,7 @@ void tsc_fs_rename_sync(const tsc_str_t* old_path, const tsc_str_t* new_path) {
 }
 
 tsc_array_t* tsc_fs_readdir_sync(const tsc_str_t* path) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     DIR* d = opendir(p);
     free(p);
     if (!d) {
@@ -16201,7 +16353,7 @@ tsc_array_t* tsc_fs_readdir_sync(const tsc_str_t* path) {
 }
 
 tsc_array_t* tsc_fs_readdir_buffer_sync(const tsc_str_t* path) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     DIR* d = opendir(p);
     free(p);
     if (!d) {
@@ -16300,7 +16452,7 @@ void fs_readdir_recursive_dirents_into(const char* root, const char* rel, tsc_ar
 }
 
 tsc_array_t* tsc_fs_readdir_recursive_sync(const tsc_str_t* path) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     DIR* d = opendir(p);
     if (!d) {
         free(p);
@@ -16315,7 +16467,7 @@ tsc_array_t* tsc_fs_readdir_recursive_sync(const tsc_str_t* path) {
 }
 
 tsc_array_t* tsc_fs_readdir_recursive_buffer_sync(const tsc_str_t* path) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     DIR* d = opendir(p);
     if (!d) {
         free(p);
@@ -16330,7 +16482,7 @@ tsc_array_t* tsc_fs_readdir_recursive_buffer_sync(const tsc_str_t* path) {
 }
 
 tsc_array_t* tsc_fs_readdir_recursive_dirents_sync(const tsc_str_t* path) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     DIR* d = opendir(p);
     if (!d) {
         free(p);
@@ -16345,7 +16497,7 @@ tsc_array_t* tsc_fs_readdir_recursive_dirents_sync(const tsc_str_t* path) {
 }
 
 tsc_array_t* tsc_fs_readdir_dirents_sync(const tsc_str_t* path) {
-    char* p = cstr_dup(path);
+    char* p = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     DIR* d = opendir(p);
     if (!d) {
         free(p);
@@ -18443,7 +18595,7 @@ tsc_str_t* tsc_path_format(tsc_value_t path_object) {
 }
 
 double tsc_fs_open_sync(const tsc_str_t* path, const tsc_str_t* flags_str, double flags_num, bool flags_is_num, double mode) {
-    char* path_c = cstr_dup(path);
+    char* path_c = tsc_os_cstr(path, "argument 'path'", TSC_OS_TEXT_PATH);
     int open_flags = 0;
     char* flags_c = NULL;
     if (flags_is_num) {
@@ -18451,7 +18603,7 @@ double tsc_fs_open_sync(const tsc_str_t* path, const tsc_str_t* flags_str, doubl
     } else {
         const char* f = "r";
         if (flags_str && flags_str->data) {
-            flags_c = cstr_dup(flags_str);
+            flags_c = tsc_os_cstr(flags_str, "argument 'flags'", TSC_OS_TEXT_FLAGS);
             f = flags_c;
         }
         if (strcmp(f, "r") == 0) {

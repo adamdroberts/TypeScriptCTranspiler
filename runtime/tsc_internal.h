@@ -800,6 +800,14 @@ double value_as_num(tsc_value_t v);
 void console_write_str(FILE* f, const tsc_str_t* s);
 void console_write(FILE* f, size_t n, va_list ap);
 char* cstr_dup(const tsc_str_t* s);
+/* Host C-string boundary: subjects are Node's "argument 'name'" or
+ * "property 'options.name'" phrases used in ERR_INVALID_ARG_VALUE messages. */
+typedef enum { TSC_OS_TEXT_STRING, TSC_OS_TEXT_PATH, TSC_OS_TEXT_FLAGS } tsc_os_text_kind_t;
+bool tsc_os_text_valid(const tsc_str_t* s);
+tsc_value_t tsc_os_nul_error(const tsc_str_t* s, const char* subject, tsc_os_text_kind_t kind);
+tsc_value_t tsc_os_nul_error_subject(const tsc_str_t* s, tsc_str_t* subject, tsc_os_text_kind_t kind);
+void tsc_os_text_check(const tsc_str_t* s, const char* subject, tsc_os_text_kind_t kind);
+char* tsc_os_cstr(const tsc_str_t* s, const char* subject, tsc_os_text_kind_t kind);
 void fs_kind_from_mode(mode_t mode, bool* is_file, bool* is_directory, bool* is_symbolic_link, bool* is_block_device, bool* is_character_device, bool* is_fifo, bool* is_socket);
 double fs_timespec_to_ms(time_t sec, long nsec);
 double fs_stat_atime_ms(const struct stat* st);
