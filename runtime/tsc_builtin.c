@@ -929,7 +929,7 @@ tsc_array_buffer_t* tsc_array_buffer_new(double byte_length) {
 }
 
 static uint8_t* array_buffer_byte_block(size_t length) {
-    uint8_t* bytes = TSC_GC_MALLOC_ATOMIC(length ? length : 1);
+    uint8_t* bytes = TSC_GC_TRY_MALLOC_ATOMIC(length ? length : 1);
     if (!bytes) tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("ArrayBuffer byte storage allocation failed"));
     memset(bytes, 0, length ? length : 1);
     return bytes;

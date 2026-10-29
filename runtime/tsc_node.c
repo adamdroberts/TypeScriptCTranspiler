@@ -17,6 +17,19 @@ struct tsc_fs_dirent {
 #include <sys/statvfs.h>
 #include <float.h>
 
+/* Async-signal-safe errno report from a forked child to its parent. A
+ * failed or interrupted write must not be mistaken for a successful exec. */
+static void tsc_child_report_errno(int fd, int err) {
+    const char* bytes = (const char*)&err;
+    size_t done = 0;
+    while (done < sizeof(err)) {
+        ssize_t n = write(fd, bytes + done, sizeof(err) - done);
+        if (n > 0) done += (size_t)n;
+        else if (n < 0 && errno == EINTR) continue;
+        else break;
+    }
+}
+
 static int fs_write_mode_flags(bool append,bool exclusive,bool update) {
     int flags=update?O_RDWR:O_WRONLY;
     if(!update)flags|=O_CREAT;
@@ -599,17 +612,17 @@ tsc_buffer_t* tsc_child_process_exec_file_sync(const tsc_str_t* file, const tsc_
         if (input) close(in_pipe[1]);
         if (dup2(out_pipe[1], STDOUT_FILENO) < 0) {
             int err = errno;
-            (void)write(exec_err_pipe[1], &err, sizeof(err));
+            tsc_child_report_errno(exec_err_pipe[1], err);
             _exit(127);
         }
         if (dup2(err_pipe[1], STDERR_FILENO) < 0) {
             int err = errno;
-            (void)write(exec_err_pipe[1], &err, sizeof(err));
+            tsc_child_report_errno(exec_err_pipe[1], err);
             _exit(127);
         }
         if (input && dup2(in_pipe[0], STDIN_FILENO) < 0) {
             int err = errno;
-            (void)write(exec_err_pipe[1], &err, sizeof(err));
+            tsc_child_report_errno(exec_err_pipe[1], err);
             _exit(127);
         }
         close(out_pipe[1]);
@@ -619,7 +632,7 @@ tsc_buffer_t* tsc_child_process_exec_file_sync(const tsc_str_t* file, const tsc_
             char* cwd_cstr = cstr_dup(cwd);
             if (chdir(cwd_cstr) != 0) {
                 int err = errno;
-                (void)write(exec_err_pipe[1], &err, sizeof(err));
+                tsc_child_report_errno(exec_err_pipe[1], err);
                 _exit(127);
             }
             free(cwd_cstr);
@@ -627,7 +640,7 @@ tsc_buffer_t* tsc_child_process_exec_file_sync(const tsc_str_t* file, const tsc_
         child_apply_env(env);
         int id_err = child_apply_ids(uid, gid);
         if (id_err != 0) {
-            (void)write(exec_err_pipe[1], &id_err, sizeof(id_err));
+            tsc_child_report_errno(exec_err_pipe[1], id_err);
             _exit(127);
         }
 
@@ -635,7 +648,7 @@ tsc_buffer_t* tsc_child_process_exec_file_sync(const tsc_str_t* file, const tsc_
         char** argv = (char**)calloc(argc + 1, sizeof(char*));
         if (!argv) {
             int err = errno ? errno : ENOMEM;
-            (void)write(exec_err_pipe[1], &err, sizeof(err));
+            tsc_child_report_errno(exec_err_pipe[1], err);
             _exit(127);
         }
         argv[0] = cstr_dup(argv0 ? argv0 : actual_file);
@@ -647,7 +660,7 @@ tsc_buffer_t* tsc_child_process_exec_file_sync(const tsc_str_t* file, const tsc_
         char* exec_file = cstr_dup(actual_file);
         execvp(exec_file, argv);
         int err = errno;
-        (void)write(exec_err_pipe[1], &err, sizeof(err));
+        tsc_child_report_errno(exec_err_pipe[1], err);
         _exit(127);
     }
 
@@ -999,14 +1012,14 @@ tsc_value_t tsc_child_process_spawn_sync(const tsc_str_t* file, const tsc_array_
         if (pipe_stdin) close(in_pipe[0]);
         if (detached && setsid() < 0) {
             int err = errno;
-            (void)write(exec_err_pipe[1], &err, sizeof(err));
+            tsc_child_report_errno(exec_err_pipe[1], err);
             _exit(127);
         }
         if (cwd) {
             char* cwd_cstr = cstr_dup(cwd);
             if (chdir(cwd_cstr) != 0) {
                 int err = errno;
-                (void)write(exec_err_pipe[1], &err, sizeof(err));
+                tsc_child_report_errno(exec_err_pipe[1], err);
                 _exit(127);
             }
             free(cwd_cstr);
@@ -1014,7 +1027,7 @@ tsc_value_t tsc_child_process_spawn_sync(const tsc_str_t* file, const tsc_array_
         child_apply_env(env);
         int id_err = child_apply_ids(uid, gid);
         if (id_err != 0) {
-            (void)write(exec_err_pipe[1], &id_err, sizeof(id_err));
+            tsc_child_report_errno(exec_err_pipe[1], id_err);
             _exit(127);
         }
 
@@ -1030,7 +1043,7 @@ tsc_value_t tsc_child_process_spawn_sync(const tsc_str_t* file, const tsc_array_
         char* exec_file = cstr_dup(actual_file);
         execvp(exec_file, argv);
         int err = errno;
-        (void)write(exec_err_pipe[1], &err, sizeof(err));
+        tsc_child_report_errno(exec_err_pipe[1], err);
         _exit(127);
     }
 
@@ -2176,7 +2189,7 @@ static void tsc_child_close_parent_pipe(int pair[2], int keep) {
 
 static void tsc_child_report_setup_error(int fd) {
     int error = errno;
-    (void)write(fd, &error, sizeof(error));
+    tsc_child_report_errno(fd, error);
     _exit(127);
 }
 
@@ -2243,14 +2256,14 @@ tsc_value_t tsc_child_process_spawn(const tsc_str_t* file, const tsc_array_t* ar
         }
         if (detached && setsid() < 0) {
             int error = errno;
-            (void)write(exec_err_pipe[1], &error, sizeof(error));
+            tsc_child_report_errno(exec_err_pipe[1], error);
             _exit(127);
         }
         if (cwd) {
             char* cwd_cstr = cstr_dup(cwd);
             if (chdir(cwd_cstr) != 0) {
                 int error = errno;
-                (void)write(exec_err_pipe[1], &error, sizeof(error));
+                tsc_child_report_errno(exec_err_pipe[1], error);
                 _exit(127);
             }
             free(cwd_cstr);
@@ -2258,7 +2271,7 @@ tsc_value_t tsc_child_process_spawn(const tsc_str_t* file, const tsc_array_t* ar
         child_apply_env(env);
         int id_err = child_apply_ids(uid, gid);
         if (id_err != 0) {
-            (void)write(exec_err_pipe[1], &id_err, sizeof(id_err));
+            tsc_child_report_errno(exec_err_pipe[1], id_err);
             _exit(127);
         }
         size_t argc = 1 + (actual_args ? actual_args->len : 0);
@@ -2276,7 +2289,7 @@ tsc_value_t tsc_child_process_spawn(const tsc_str_t* file, const tsc_array_t* ar
         char* exec_file = cstr_dup(actual_file);
         execvp(exec_file, argv);
         int error = errno;
-        (void)write(exec_err_pipe[1], &error, sizeof(error));
+        tsc_child_report_errno(exec_err_pipe[1], error);
         _exit(127);
     }
 

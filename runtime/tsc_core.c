@@ -842,7 +842,7 @@ typedef struct tsc_no_gc_chunk {
     struct tsc_no_gc_chunk* next;
     size_t cap;
     size_t used;
-    unsigned char data[];
+    _Alignas(max_align_t) unsigned char data[];
 } tsc_no_gc_chunk_t;
 
 static tsc_no_gc_chunk_t* tsc_no_gc_chunks = NULL;
@@ -854,9 +854,10 @@ void* tsc_no_gc_malloc_uninit(size_t n) {
 #ifdef TSC_THREADS
     pthread_mutex_lock(&tsc_no_gc_chunks_mutex);
 #endif
-    const size_t align = sizeof(max_align_t);
+    const size_t align = _Alignof(max_align_t);
+    if (n > SIZE_MAX - sizeof(tsc_no_gc_chunk_t) - align) tsc_alloc_failure(n);
     n = (n + align - 1) & ~(align - 1);
-    if (!tsc_no_gc_chunks || tsc_no_gc_chunks->used + n > tsc_no_gc_chunks->cap) {
+    if (!tsc_no_gc_chunks || n > tsc_no_gc_chunks->cap - tsc_no_gc_chunks->used) {
         size_t cap = n > (1u << 20) ? n : (1u << 20);
         tsc_no_gc_chunk_t* chunk = (tsc_no_gc_chunk_t*)malloc(sizeof(tsc_no_gc_chunk_t) + cap);
         if (!chunk) tsc_panic("out of memory");
@@ -1431,6 +1432,18 @@ void tsc_bootstrap(int argc, char** argv) {
         g_boot_time_set = true;
     }
     (void)tsc_realm_current();
+}
+
+_Noreturn void tsc_alloc_failure(size_t n) {
+    char text[96];
+    int length = snprintf(text, sizeof text, "tsc: fatal: cannot allocate %zu bytes\n", n);
+    for (size_t done = 0; length > 0 && done < (size_t)length;) {
+        ssize_t written = write(STDERR_FILENO, text + done, (size_t)length - done);
+        if (written > 0) done += (size_t)written;
+        else if (written < 0 && errno == EINTR) continue;
+        else break;
+    }
+    abort();
 }
 
 _Noreturn void tsc_panic(const char* msg) {

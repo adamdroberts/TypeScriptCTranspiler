@@ -54,7 +54,11 @@ static bool collector_initialized;
 #endif
 static _Noreturn void weak_collector_failure(void) {
     static const char text[]="weak collection collector cannot represent native allocation\n";
-    (void)write(STDERR_FILENO,text,sizeof(text)-1);_exit(70);
+    for(size_t done=0;done<sizeof(text)-1;){
+        ssize_t n=write(STDERR_FILENO,text+done,sizeof(text)-1-done);
+        if(n>0)done+=(size_t)n;else if(n<0&&errno==EINTR)continue;else break;
+    }
+    _exit(70);
 }
 typedef struct weak_dependency { weak_collection_t* collection; weak_entry_t* entry; struct weak_dependency* next; } weak_dependency_t;
 typedef struct { void* object; weak_dependency_t* dependencies; } weak_index_slot_t;

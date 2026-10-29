@@ -14,22 +14,46 @@
 
 #ifdef TSC_NO_GC
 void* tsc_no_gc_malloc_uninit(size_t n);
-#  define TSC_GC_MALLOC(n)         calloc(1, (n))
-#  define TSC_GC_MALLOC_UNINIT(n)  tsc_no_gc_malloc_uninit((n))
-#  define TSC_GC_MALLOC_ATOMIC(n)  malloc((n))
-#  define TSC_GC_REALLOC(p, n)     realloc((p), (n))
-#  define TSC_GC_INIT()            ((void)0)
+#  define TSC_GC_TRY_MALLOC(n)         calloc(1, (n))
+#  define TSC_GC_TRY_MALLOC_UNINIT(n)  tsc_no_gc_malloc_uninit((n))
+#  define TSC_GC_TRY_MALLOC_ATOMIC(n)  malloc((n))
+#  define TSC_GC_TRY_REALLOC(p, n)     realloc((p), (n))
+#  define TSC_GC_INIT()                ((void)0)
 #else
 #  if defined(TSC_THREADS) && !defined(GC_THREADS)
 #    define GC_THREADS
 #  endif
 #  include <gc/gc.h>
-#  define TSC_GC_MALLOC(n)         GC_MALLOC(n)
-#  define TSC_GC_MALLOC_UNINIT(n)  GC_MALLOC((n))
-#  define TSC_GC_MALLOC_ATOMIC(n)  GC_MALLOC_ATOMIC(n)
-#  define TSC_GC_REALLOC(p, n)     GC_REALLOC((p), (n))
-#  define TSC_GC_INIT()            GC_INIT()
+#  define TSC_GC_TRY_MALLOC(n)         GC_MALLOC(n)
+#  define TSC_GC_TRY_MALLOC_UNINIT(n)  GC_MALLOC((n))
+#  define TSC_GC_TRY_MALLOC_ATOMIC(n)  GC_MALLOC_ATOMIC(n)
+#  define TSC_GC_TRY_REALLOC(p, n)     GC_REALLOC((p), (n))
+#  define TSC_GC_INIT()                GC_INIT()
 #endif
+
+/* Allocation fails closed: exhaustion or an unrepresentable size terminates
+ * the process instead of returning NULL into code that would dereference it.
+ * The TSC_GC_TRY_* forms return NULL and are reserved for operations whose
+ * specification maps allocation failure to a catchable RangeError. */
+_Noreturn void tsc_alloc_failure(size_t n);
+static inline void* tsc_alloc_checked(void* p, size_t n) {
+    if (__builtin_expect(p == NULL && n != 0, 0)) tsc_alloc_failure(n);
+    return p;
+}
+/* count * size for array allocations, failing closed on size_t overflow. */
+static inline size_t tsc_alloc_size(size_t count, size_t size) {
+    size_t total;
+    if (__builtin_expect(__builtin_mul_overflow(count, size, &total), 0)) tsc_alloc_failure(SIZE_MAX);
+    return total;
+}
+static inline void* tsc_gc_malloc(size_t n) { return tsc_alloc_checked(TSC_GC_TRY_MALLOC(n), n); }
+static inline void* tsc_gc_malloc_uninit(size_t n) { return tsc_alloc_checked(TSC_GC_TRY_MALLOC_UNINIT(n), n); }
+static inline void* tsc_gc_malloc_atomic(size_t n) { return tsc_alloc_checked(TSC_GC_TRY_MALLOC_ATOMIC(n), n); }
+static inline void* tsc_gc_realloc(void* p, size_t n) { return tsc_alloc_checked(TSC_GC_TRY_REALLOC(p, n), n); }
+#define TSC_GC_MALLOC(n)         tsc_gc_malloc((size_t)(n))
+#define TSC_GC_MALLOC_UNINIT(n)  tsc_gc_malloc_uninit((size_t)(n))
+#define TSC_GC_MALLOC_ATOMIC(n)  tsc_gc_malloc_atomic((size_t)(n))
+#define TSC_GC_REALLOC(p, n)     tsc_gc_realloc((p), (size_t)(n))
 
 /* TSC_THREADS is defined only for programs that use the optional dispatch
  * API; without it every threading hook compiles to the plain single-threaded
