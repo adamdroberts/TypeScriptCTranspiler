@@ -1,3 +1,7 @@
+- Escape `?` in emitted C literals so trigraphs cannot rewrite generated C.
+- Harden native builds with probed exploit mitigations and add a fail-closed `TSC2C_SANITIZE` profile.
+- Fail closed on native allocation failure, unrepresentable no-GC arena sizes and partial child errno writes.
+- Reject embedded NUL at fs, child_process, DNS, net, TLS, crypto and process host string boundaries with Node's ERR_INVALID_ARG_VALUE.
 - Propagate reaching-definition deltas without repeatedly copying complete sets.
 - Retain reaching lexical definitions through canonical binding/control and generated-evaluation activation graphs.
 - Retain conditional loose-equality object coercions, operand completion and actual return inputs in source analysis; skip ordinary nullish hooks in the native equality kernel.
