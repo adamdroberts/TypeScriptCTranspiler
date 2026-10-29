@@ -182,7 +182,7 @@ static void function_identity_grow(void) {
     size_t capacity = g_function_identity_capacity ? g_function_identity_capacity * 2 : 16;
     if (capacity > SIZE_MAX / sizeof(tsc_function_identity_entry_t))
         tsc_panic("function identity registry capacity overflow");
-    tsc_function_identity_entry_t* entries = TSC_GC_MALLOC(capacity * sizeof(*entries));
+    tsc_function_identity_entry_t* entries = TSC_GC_MALLOC(tsc_alloc_size((size_t)(capacity), sizeof(*entries)));
     if (!entries) tsc_panic("function identity registry allocation failed");
     memset(entries, 0, capacity * sizeof(*entries));
     for (size_t index = 0; index < g_function_identity_capacity; ++index) {
@@ -933,7 +933,7 @@ static void tsc_cross_post(tsc_cross_entry_t entry) {
     pthread_mutex_lock(&g_loop_mutex);
     if (g_cross_len == g_cross_cap) {
         size_t next = g_cross_cap ? g_cross_cap * 2 : 8;
-        tsc_cross_entry_t* entries = (tsc_cross_entry_t*)TSC_GC_REALLOC(g_cross_queue, next * sizeof(tsc_cross_entry_t));
+        tsc_cross_entry_t* entries = (tsc_cross_entry_t*)TSC_GC_REALLOC(g_cross_queue, tsc_alloc_size((size_t)(next), sizeof(tsc_cross_entry_t)));
         if (!entries) tsc_panic("dispatch: out of memory");
         g_cross_queue = entries;
         g_cross_cap = next;
@@ -1148,7 +1148,7 @@ static tsc_value_t abort_signal_add_event_listener(void* env, tsc_value_t this_a
     }
     if (state->listener_len == state->listener_cap) {
         size_t next = state->listener_cap ? state->listener_cap * 2 : 4;
-        state->listeners = (tsc_abort_listener_t*)TSC_GC_REALLOC(state->listeners, next * sizeof(*state->listeners));
+        state->listeners = (tsc_abort_listener_t*)TSC_GC_REALLOC(state->listeners, tsc_alloc_size((size_t)(next), sizeof(*state->listeners)));
         state->listener_cap = next;
     }
     state->listeners[state->listener_len++] = (tsc_abort_listener_t){listener,tsc_value_gc_root(listener)};
@@ -1308,7 +1308,7 @@ void tsc_abort_signal_add_callback(tsc_value_t signal, tsc_abort_callback_fn_t f
     }
     if (state->callback_len == state->callback_cap) {
         size_t next = state->callback_cap ? state->callback_cap * 2 : 4;
-        state->callbacks = (tsc_abort_callback_t*)TSC_GC_REALLOC(state->callbacks, next * sizeof(tsc_abort_callback_t));
+        state->callbacks = (tsc_abort_callback_t*)TSC_GC_REALLOC(state->callbacks, tsc_alloc_size((size_t)(next), sizeof(tsc_abort_callback_t)));
         state->callback_cap = next;
     }
     state->callbacks[state->callback_len].fn = fn;
@@ -1326,7 +1326,7 @@ void tsc_abort_signal_add_promise(tsc_value_t signal, tsc_promise_t* promise) {
     }
     if (state->promise_len == state->promise_cap) {
         size_t next = state->promise_cap ? state->promise_cap * 2 : 4;
-        state->promises = (tsc_promise_t**)TSC_GC_REALLOC(state->promises, next * sizeof(tsc_promise_t*));
+        state->promises = (tsc_promise_t**)TSC_GC_REALLOC(state->promises, tsc_alloc_size((size_t)(next), sizeof(tsc_promise_t*)));
         state->promise_cap = next;
     }
     state->promises[state->promise_len++] = promise;
@@ -1342,7 +1342,7 @@ void tsc_abort_signal_add_timeout(tsc_value_t signal, double timeout_id) {
     }
     if (state->timeout_len == state->timeout_cap) {
         size_t next = state->timeout_cap ? state->timeout_cap * 2 : 4;
-        state->timeout_ids = (double*)TSC_GC_REALLOC(state->timeout_ids, next * sizeof(double));
+        state->timeout_ids = (double*)TSC_GC_REALLOC(state->timeout_ids, tsc_alloc_size((size_t)(next), sizeof(double)));
         state->timeout_cap = next;
     }
     state->timeout_ids[state->timeout_len++] = timeout_id;
@@ -1358,7 +1358,7 @@ void tsc_abort_signal_add_immediate(tsc_value_t signal, double immediate_id) {
     }
     if (state->immediate_len == state->immediate_cap) {
         size_t next = state->immediate_cap ? state->immediate_cap * 2 : 4;
-        state->immediate_ids = (double*)TSC_GC_REALLOC(state->immediate_ids, next * sizeof(double));
+        state->immediate_ids = (double*)TSC_GC_REALLOC(state->immediate_ids, tsc_alloc_size((size_t)(next), sizeof(double)));
         state->immediate_cap = next;
     }
     state->immediate_ids[state->immediate_len++] = immediate_id;
@@ -1626,7 +1626,7 @@ tsc_array_t* tsc_process_getgroups(void) {
 
     gid_t* groups = NULL;
     if (n > 0) {
-        groups = (gid_t*)TSC_GC_MALLOC_ATOMIC(sizeof(gid_t) * (size_t)n);
+        groups = (gid_t*)TSC_GC_MALLOC_ATOMIC(tsc_alloc_size((size_t)((size_t)n), sizeof(gid_t)));
         n = getgroups(n, groups);
         if (n < 0) tsc_throw_str(tsc_str_from_cstr("process.getgroups: could not read groups"));
     }
@@ -2036,7 +2036,7 @@ void tsc_process_next_tick(tsc_next_tick_fn_t fn, void* env) {
 #endif
     if (g_next_tick_len == g_next_tick_cap) {
         size_t next = g_next_tick_cap ? g_next_tick_cap * 2 : 8;
-        tsc_next_tick_entry_t* entries = (tsc_next_tick_entry_t*)TSC_GC_REALLOC(g_next_tick_queue, next * sizeof(tsc_next_tick_entry_t));
+        tsc_next_tick_entry_t* entries = (tsc_next_tick_entry_t*)TSC_GC_REALLOC(g_next_tick_queue, tsc_alloc_size((size_t)(next), sizeof(tsc_next_tick_entry_t)));
         if (!entries) tsc_panic("process.nextTick: out of memory");
         g_next_tick_queue = entries;
         g_next_tick_cap = next;
@@ -2077,7 +2077,7 @@ void tsc_queue_microtask(tsc_microtask_fn_t fn, void* env) {
 #endif
     if (g_microtask_len == g_microtask_cap) {
         size_t next = g_microtask_cap ? g_microtask_cap * 2 : 8;
-        tsc_microtask_entry_t* entries = (tsc_microtask_entry_t*)TSC_GC_REALLOC(g_microtask_queue, next * sizeof(tsc_microtask_entry_t));
+        tsc_microtask_entry_t* entries = (tsc_microtask_entry_t*)TSC_GC_REALLOC(g_microtask_queue, tsc_alloc_size((size_t)(next), sizeof(tsc_microtask_entry_t)));
         if (!entries) tsc_panic("queueMicrotask: out of memory");
         g_microtask_queue = entries;
         g_microtask_cap = next;
@@ -2123,7 +2123,7 @@ double tsc_set_immediate(tsc_immediate_fn_t fn, void* env) {
 #endif
     if (g_immediate_len == g_immediate_cap) {
         size_t next = g_immediate_cap ? g_immediate_cap * 2 : 8;
-        tsc_immediate_entry_t* entries = (tsc_immediate_entry_t*)TSC_GC_REALLOC(g_immediate_queue, next * sizeof(tsc_immediate_entry_t));
+        tsc_immediate_entry_t* entries = (tsc_immediate_entry_t*)TSC_GC_REALLOC(g_immediate_queue, tsc_alloc_size((size_t)(next), sizeof(tsc_immediate_entry_t)));
         if (!entries) tsc_panic("setImmediate: out of memory");
         g_immediate_queue = entries;
         g_immediate_cap = next;
@@ -2212,7 +2212,7 @@ static double tsc_make_timeout(tsc_timeout_fn_t fn, void* env, double delay,bool
 #endif
     if (g_timeout_len == g_timeout_cap) {
         size_t next = g_timeout_cap ? g_timeout_cap * 2 : 8;
-        tsc_timeout_entry_t* entries = (tsc_timeout_entry_t*)TSC_GC_REALLOC(g_timeout_queue, next * sizeof(tsc_timeout_entry_t));
+        tsc_timeout_entry_t* entries = (tsc_timeout_entry_t*)TSC_GC_REALLOC(g_timeout_queue, tsc_alloc_size((size_t)(next), sizeof(tsc_timeout_entry_t)));
         if (!entries) tsc_panic("setTimeout: out of memory");
         g_timeout_queue = entries;
         g_timeout_cap = next;
@@ -2230,7 +2230,7 @@ double tsc_set_interval(tsc_timeout_fn_t fn, void* env, double delay) {
     if (!fn) return 0.0;
     if (g_timeout_len == g_timeout_cap) {
         size_t next = g_timeout_cap ? g_timeout_cap * 2 : 8;
-        tsc_timeout_entry_t* entries = (tsc_timeout_entry_t*)TSC_GC_REALLOC(g_timeout_queue, next * sizeof(tsc_timeout_entry_t));
+        tsc_timeout_entry_t* entries = (tsc_timeout_entry_t*)TSC_GC_REALLOC(g_timeout_queue, tsc_alloc_size((size_t)(next), sizeof(tsc_timeout_entry_t)));
         if (!entries) tsc_panic("setInterval: out of memory");
         g_timeout_queue = entries;
         g_timeout_cap = next;
@@ -2270,7 +2270,7 @@ void tsc_unref_timeout(double id) {
 static void tsc_append_interval(const tsc_timeout_entry_t* entry) {
     if (g_timeout_len == g_timeout_cap) {
         size_t next = g_timeout_cap ? g_timeout_cap * 2 : 8;
-        tsc_timeout_entry_t* entries = (tsc_timeout_entry_t*)TSC_GC_REALLOC(g_timeout_queue, next * sizeof(tsc_timeout_entry_t));
+        tsc_timeout_entry_t* entries = (tsc_timeout_entry_t*)TSC_GC_REALLOC(g_timeout_queue, tsc_alloc_size((size_t)(next), sizeof(tsc_timeout_entry_t)));
         if (!entries) tsc_panic("setInterval reschedule: out of memory");
         g_timeout_queue = entries;
         g_timeout_cap = next;

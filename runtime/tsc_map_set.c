@@ -194,7 +194,7 @@ tsc_array_t* tsc_map_values(const tsc_map_t* m) {
 /* Set ------------ — same architecture, single data array. */
 
 void set_rebuild_buckets(tsc_set_t* s, size_t new_bucket_cap) {
-    size_t* nb = (size_t*)TSC_GC_MALLOC_ATOMIC(new_bucket_cap * sizeof(size_t));
+    size_t* nb = (size_t*)TSC_GC_MALLOC_ATOMIC(tsc_alloc_size((size_t)(new_bucket_cap), sizeof(size_t)));
     for (size_t i = 0; i < new_bucket_cap; i++) nb[i] = TSC_BKT_EMPTY;
     size_t mask = new_bucket_cap - 1;
     for (size_t i = 0; i < s->len; i++) {
@@ -214,12 +214,12 @@ void set_grow_ordered(tsc_set_t* s, size_t want) {
     const size_t old_cap = s->cap;
     void* nd = s->data ? TSC_GC_REALLOC(s->data, cap * s->es) : TSC_GC_MALLOC(cap * s->es);
     s->data = nd;
-    s->order.entries = TSC_GC_REALLOC(s->order.entries, cap * sizeof(*s->order.entries));
+    s->order.entries = TSC_GC_REALLOC(s->order.entries, tsc_alloc_size((size_t)(cap), sizeof(*s->order.entries)));
     memset(s->order.entries + old_cap, 0, (cap - old_cap) * sizeof(*s->order.entries));
     if (s->es == sizeof(tsc_value_t)) {
         s->value_roots = s->value_roots
-            ? (void**)TSC_GC_REALLOC(s->value_roots, cap * sizeof(void*))
-            : (void**)TSC_GC_MALLOC(cap * sizeof(void*));
+            ? (void**)TSC_GC_REALLOC(s->value_roots, tsc_alloc_size((size_t)(cap), sizeof(void*)))
+            : (void**)TSC_GC_MALLOC(tsc_alloc_size((size_t)(cap), sizeof(void*)));
         memset(s->value_roots + old_cap, 0, (cap - old_cap) * sizeof(void*));
     }
     s->cap = cap;

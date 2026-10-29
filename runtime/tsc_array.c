@@ -1555,7 +1555,7 @@ tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
     a->unbox_element = NULL;
     a->data = initial_cap ? TSC_GC_MALLOC(initial_cap * elem_size) : NULL;
     a->value_roots = elem_size == sizeof(tsc_value_t) && initial_cap
-        ? (void**)TSC_GC_MALLOC(initial_cap * sizeof(void*))
+        ? (void**)TSC_GC_MALLOC(tsc_alloc_size((size_t)(initial_cap), sizeof(void*)))
         : NULL;
     if (a->value_roots) memset(a->value_roots, 0, initial_cap * sizeof(void*));
     return a;
@@ -1577,7 +1577,7 @@ tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap) {
     a->unbox_element = NULL;
     a->data = initial_cap ? TSC_GC_MALLOC_ATOMIC(initial_cap * elem_size) : NULL;
     a->value_roots = elem_size == sizeof(tsc_value_t) && initial_cap
-        ? (void**)TSC_GC_MALLOC(initial_cap * sizeof(void*))
+        ? (void**)TSC_GC_MALLOC(tsc_alloc_size((size_t)(initial_cap), sizeof(void*)))
         : NULL;
     if (a->value_roots) memset(a->value_roots, 0, initial_cap * sizeof(void*));
     return a;
@@ -1634,8 +1634,8 @@ void tsc_array_use_value_storage(tsc_array_t* array) {
     }
     if (array->cap > SIZE_MAX / sizeof(tsc_value_t))
         tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("Array value storage is too large"));
-    tsc_value_t* values = array->cap ? TSC_GC_MALLOC(array->cap * sizeof(tsc_value_t)) : NULL;
-    void** roots = array->cap ? TSC_GC_MALLOC(array->cap * sizeof(void*)) : NULL;
+    tsc_value_t* values = array->cap ? TSC_GC_MALLOC(tsc_alloc_size((size_t)(array->cap), sizeof(tsc_value_t))) : NULL;
+    void** roots = array->cap ? TSC_GC_MALLOC(tsc_alloc_size((size_t)(array->cap), sizeof(void*))) : NULL;
     if (roots) memset(roots, 0, array->cap * sizeof(void*));
     for (size_t index = 0; index < array->dense_len; ++index) {
         values[index] = tsc_array_index_present(array, index)
@@ -1852,8 +1852,8 @@ void tsc_array_reserve(tsc_array_t* a, size_t new_cap) {
     a->data = nd;
     if (a->es == sizeof(tsc_value_t)) {
         a->value_roots = a->value_roots
-            ? (void**)TSC_GC_REALLOC(a->value_roots, cap * sizeof(void*))
-            : (void**)TSC_GC_MALLOC(cap * sizeof(void*));
+            ? (void**)TSC_GC_REALLOC(a->value_roots, tsc_alloc_size((size_t)(cap), sizeof(void*)))
+            : (void**)TSC_GC_MALLOC(tsc_alloc_size((size_t)(cap), sizeof(void*)));
         memset(a->value_roots + old_cap, 0, (cap - old_cap) * sizeof(void*));
     }
     a->cap = cap;

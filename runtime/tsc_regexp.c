@@ -268,7 +268,7 @@ static void re_record_named_fixup(
 ) {
     if (p->nnamed_ref == p->named_ref_cap) {
         size_t next = p->named_ref_cap ? p->named_ref_cap * 2 : 4;
-        re_named_fixup_t* items = (re_named_fixup_t*)TSC_GC_MALLOC(sizeof(re_named_fixup_t) * next);
+        re_named_fixup_t* items = (re_named_fixup_t*)TSC_GC_MALLOC(tsc_alloc_size((size_t)(next), sizeof(re_named_fixup_t)));
         for (size_t i = 0; i < p->nnamed_ref; i++) items[i] = p->named_ref[i];
         p->named_ref = items;
         p->named_ref_cap = next;
@@ -283,12 +283,12 @@ static void re_qstr_push(tsc_re_parser_t* p, tsc_re_node_t* cls, const uint16_t*
     (void)p;
     if (cls->u.cls.nstrs == cls->u.cls.strs_cap) {
         size_t next = cls->u.cls.strs_cap ? cls->u.cls.strs_cap * 2 : 4;
-        tsc_re_qstr_t* strs = (tsc_re_qstr_t*)TSC_GC_MALLOC(sizeof(tsc_re_qstr_t) * next);
+        tsc_re_qstr_t* strs = (tsc_re_qstr_t*)TSC_GC_MALLOC(tsc_alloc_size((size_t)(next), sizeof(tsc_re_qstr_t)));
         for (size_t i = 0; i < cls->u.cls.nstrs; i++) strs[i] = cls->u.cls.strs[i];
         cls->u.cls.strs = strs;
         cls->u.cls.strs_cap = next;
     }
-    uint16_t* copy = (uint16_t*)TSC_GC_MALLOC(sizeof(uint16_t) * (len ? len : 1));
+    uint16_t* copy = (uint16_t*)TSC_GC_MALLOC(tsc_alloc_size((size_t)((len ? len : 1)), sizeof(uint16_t)));
     for (size_t i = 0; i < len; i++) copy[i] = units[i];
     cls->u.cls.strs[cls->u.cls.nstrs].units = copy;
     cls->u.cls.strs[cls->u.cls.nstrs].len = len;
@@ -436,7 +436,7 @@ static void re_qbuf_push_cp(uint16_t** buf, size_t* len, size_t* cap, uint32_t c
     if (need > *cap) {
         size_t next = *cap ? *cap * 2 : 8;
         while (next < need) next *= 2;
-        uint16_t* grown = (uint16_t*)TSC_GC_MALLOC(sizeof(uint16_t) * next);
+        uint16_t* grown = (uint16_t*)TSC_GC_MALLOC(tsc_alloc_size((size_t)(next), sizeof(uint16_t)));
         for (size_t i = 0; i < *len; i++) grown[i] = (*buf)[i];
         *buf = grown;
         *cap = next;
@@ -594,7 +594,7 @@ static void re_record_dec_fixup(
 ) {
     if (p->ndec == p->dec_cap) {
         size_t next = p->dec_cap ? p->dec_cap * 2 : 4;
-        re_dec_fixup_t* items = (re_dec_fixup_t*)TSC_GC_MALLOC(sizeof(re_dec_fixup_t) * next);
+        re_dec_fixup_t* items = (re_dec_fixup_t*)TSC_GC_MALLOC(tsc_alloc_size((size_t)(next), sizeof(re_dec_fixup_t)));
         for (size_t i = 0; i < p->ndec; i++) items[i] = p->dec[i];
         p->dec = items;
         p->dec_cap = next;
@@ -621,7 +621,7 @@ static tsc_re_node_t* re_parse_class_dispatch(tsc_re_parser_t* p) {
         /* v classes are parsed bottom-up before group headers. Assign their
          * lexical record through the same set tree when its atom is reached. */
         size_t length = 1, capacity = 16;
-        tsc_re_node_t** work = malloc(capacity * sizeof(*work));
+        tsc_re_node_t** work = malloc(tsc_alloc_size((size_t)(capacity), sizeof(*work)));
         if (!work) abort();
         work[0] = result;
         while (length) {
@@ -631,7 +631,7 @@ static tsc_re_node_t* re_parse_class_dispatch(tsc_re_parser_t* p) {
             for (size_t i = 0; i < node->u.cls.nitems; i++) {
                 if (length == capacity) {
                     capacity *= 2;
-                    void* grown = realloc(work, capacity * sizeof(*work));
+                    void* grown = realloc(work, tsc_alloc_size((size_t)(capacity), sizeof(*work)));
                     if (!grown) abort();
                     work = grown;
                 }
@@ -941,7 +941,7 @@ static tsc_re_node_t* re_group_header(tsc_re_parser_t* p) {
 
 static tsc_re_node_t* re_parse_disjunction(tsc_re_parser_t* p) {
     size_t len = 0, capacity = 16;
-    re_parse_frame_t* frames = TSC_GC_MALLOC(capacity * sizeof(*frames));
+    re_parse_frame_t* frames = TSC_GC_MALLOC(tsc_alloc_size((size_t)(capacity), sizeof(*frames)));
     tsc_re_node_t* wrapper = NULL;
     tsc_re_flags_t outer_flags = p->flags;
     tsc_re_branch_t* outer_branch = p->branch;
@@ -950,7 +950,7 @@ static tsc_re_node_t* re_parse_disjunction(tsc_re_parser_t* p) {
         if (push) {
             if (len == capacity) {
                 capacity *= 2;
-                frames = TSC_GC_REALLOC(frames, capacity * sizeof(*frames));
+                frames = TSC_GC_REALLOC(frames, tsc_alloc_size((size_t)(capacity), sizeof(*frames)));
             }
             re_parse_frame_t frame = {
                 re_new_node(p, RE_N_ALT), re_new_node(p, RE_N_SEQ), wrapper, outer_flags, outer_branch
@@ -1099,9 +1099,9 @@ int tsc_re_parse_flags(const uint16_t* units, size_t len, tsc_re_flags_t* out) {
 
 static bool re_prepare_v_classes(tsc_re_parser_t* p) {
     if (!p->flags.unicode_sets) return true;
-    p->classes = TSC_GC_MALLOC((p->len ? p->len : 1) * sizeof(*p->classes));
-    p->class_ends = TSC_GC_MALLOC((p->len ? p->len : 1) * sizeof(*p->class_ends));
-    size_t* opens = TSC_GC_MALLOC((p->len ? p->len : 1) * sizeof(*opens));
+    p->classes = TSC_GC_MALLOC(tsc_alloc_size((size_t)((p->len ? p->len : 1)), sizeof(*p->classes)));
+    p->class_ends = TSC_GC_MALLOC(tsc_alloc_size((size_t)((p->len ? p->len : 1)), sizeof(*p->class_ends)));
+    size_t* opens = TSC_GC_MALLOC(tsc_alloc_size((size_t)((p->len ? p->len : 1)), sizeof(*opens)));
     size_t depth = 0;
     for (size_t i = 0; i < p->len; i++) {
         if (p->units[i] == '\\') { if (i + 1 < p->len) i++; continue; }
@@ -1362,7 +1362,7 @@ static bool re_match_leaf(re_ctx_t* ctx, const tsc_re_node_t* node) {
         return true;
     }
     case RE_N_CLASS: {
-        size_t* ends = malloc((node->u.cls.nstrs + 1) * sizeof(*ends));
+        size_t* ends = malloc(tsc_alloc_size((size_t)((node->u.cls.nstrs + 1)), sizeof(*ends)));
         if (!ends) abort();
         size_t nends = 0;
         for (size_t i = 0; i < node->u.cls.nstrs; i++) {
@@ -1677,7 +1677,7 @@ static tsc_re_node_t* re_new_node(tsc_re_parser_t* p, tsc_re_kind_t kind) {
     tsc_re_node_t* node = (tsc_re_node_t*)TSC_GC_MALLOC(sizeof(tsc_re_node_t));
     if (p->nnodes == p->nodes_capacity) {
         p->nodes_capacity = p->nodes_capacity ? p->nodes_capacity * 2 : 64;
-        p->nodes = TSC_GC_REALLOC(p->nodes, p->nodes_capacity * sizeof(*p->nodes));
+        p->nodes = TSC_GC_REALLOC(p->nodes, tsc_alloc_size((size_t)(p->nodes_capacity), sizeof(*p->nodes)));
     }
     p->nodes[p->nnodes++] = node;
     node->kind = kind;
@@ -1704,7 +1704,7 @@ static void re_node_list_push(tsc_re_parser_t* p, tsc_re_node_t* list_node, tsc_
     (void)p;
     if (list_node->u.list.len == list_node->u.list.cap) {
         size_t next = list_node->u.list.cap ? list_node->u.list.cap * 2 : 4;
-        tsc_re_node_t** items = (tsc_re_node_t**)TSC_GC_MALLOC(sizeof(tsc_re_node_t*) * next);
+        tsc_re_node_t** items = (tsc_re_node_t**)TSC_GC_MALLOC(tsc_alloc_size((size_t)(next), sizeof(tsc_re_node_t*)));
         for (size_t i = 0; i < list_node->u.list.len; i++) items[i] = list_node->u.list.items[i];
         list_node->u.list.items = items;
         list_node->u.list.cap = next;
@@ -1716,7 +1716,7 @@ static void re_class_item_push(tsc_re_parser_t* p, tsc_re_node_t* cls, tsc_re_no
     (void)p;
     if (cls->u.cls.nitems == cls->u.cls.items_cap) {
         size_t next = cls->u.cls.items_cap ? cls->u.cls.items_cap * 2 : 4;
-        tsc_re_node_t** items = (tsc_re_node_t**)TSC_GC_MALLOC(sizeof(tsc_re_node_t*) * next);
+        tsc_re_node_t** items = (tsc_re_node_t**)TSC_GC_MALLOC(tsc_alloc_size((size_t)(next), sizeof(tsc_re_node_t*)));
         for (size_t i = 0; i < cls->u.cls.nitems; i++) items[i] = cls->u.cls.items[i];
         cls->u.cls.items = items;
         cls->u.cls.items_cap = next;
@@ -1728,7 +1728,7 @@ static void re_range_push(tsc_re_parser_t* p, tsc_re_node_t* cls, uint32_t lo, u
     (void)p;
     if (cls->u.cls.nranges == cls->u.cls.cap) {
         size_t next = cls->u.cls.cap ? cls->u.cls.cap * 2 : 4;
-        tsc_re_range_t* ranges = (tsc_re_range_t*)TSC_GC_MALLOC(sizeof(tsc_re_range_t) * next);
+        tsc_re_range_t* ranges = (tsc_re_range_t*)TSC_GC_MALLOC(tsc_alloc_size((size_t)(next), sizeof(tsc_re_range_t)));
         for (size_t i = 0; i < cls->u.cls.nranges; i++) ranges[i] = cls->u.cls.ranges[i];
         cls->u.cls.ranges = ranges;
         cls->u.cls.cap = next;
@@ -2171,7 +2171,7 @@ static bool re_register_named(tsc_re_parser_t* p, const char* name, size_t name_
     if (!entry && p->nnamed == p->named_cap) {
         size_t next = p->named_cap ? p->named_cap * 2 : 4;
         tsc_re_named_entry_t* entries =
-            (tsc_re_named_entry_t*)TSC_GC_MALLOC(sizeof(tsc_re_named_entry_t) * next);
+            (tsc_re_named_entry_t*)TSC_GC_MALLOC(tsc_alloc_size((size_t)(next), sizeof(tsc_re_named_entry_t)));
         for (size_t i = 0; i < p->nnamed; i++) entries[i] = p->named[i];
         p->named = entries;
         p->named_cap = next;
@@ -2185,8 +2185,8 @@ static bool re_register_named(tsc_re_parser_t* p, const char* name, size_t name_
     }
     if (entry->len == entry->capacity) {
         entry->capacity = entry->capacity ? entry->capacity * 2 : 4;
-        entry->indices = TSC_GC_REALLOC(entry->indices, entry->capacity * sizeof(*entry->indices));
-        entry->branches = TSC_GC_REALLOC(entry->branches, entry->capacity * sizeof(*entry->branches));
+        entry->indices = TSC_GC_REALLOC(entry->indices, tsc_alloc_size((size_t)(entry->capacity), sizeof(*entry->indices)));
+        entry->branches = TSC_GC_REALLOC(entry->branches, tsc_alloc_size((size_t)(entry->capacity), sizeof(*entry->branches)));
     }
     entry->indices[entry->len] = index;
     entry->branches[entry->len++] = p->branch;
@@ -2545,7 +2545,7 @@ static USet* re_fold_set(const USet* source, bool ignore_case, bool unicode) {
     for (int32_t i = ranges; i < uset_getItemCount(source); i++) {
         UErrorCode error = U_ZERO_ERROR; UChar32 lo, hi;
         int32_t len = uset_getItem(source, i, &lo, &hi, NULL, 0, &error);
-        uint16_t* text = TSC_GC_MALLOC((len ? len : 1) * sizeof(*text));
+        uint16_t* text = TSC_GC_MALLOC(tsc_alloc_size((size_t)((len ? len : 1)), sizeof(*text)));
         error = U_ZERO_ERROR; uset_getItem(source, i, &lo, &hi, text, len, &error);
         uint16_t* output = NULL; size_t n = 0, cap = 0;
         for (size_t pos = 0; pos < (size_t)len;) {
@@ -2649,7 +2649,7 @@ static bool re_normalize_set(tsc_re_parser_t* p, tsc_re_node_t* node, const USet
     for (int32_t i = nranges; i < uset_getItemCount(result); i++) {
         UErrorCode error = U_ZERO_ERROR; UChar32 lo, hi;
         int32_t len = uset_getItem(result, i, &lo, &hi, NULL, 0, &error);
-        uint16_t* text = TSC_GC_MALLOC((len ? len : 1) * sizeof(*text));
+        uint16_t* text = TSC_GC_MALLOC(tsc_alloc_size((size_t)((len ? len : 1)), sizeof(*text)));
         error = U_ZERO_ERROR; uset_getItem(result, i, &lo, &hi, text, len, &error);
         re_qstr_push(p, node, text, len);
     }
@@ -2667,7 +2667,7 @@ static bool re_compile_sets(tsc_re_parser_t* p) {
     USet* all = uset_open(0, re_is_unicode(p) ? 0x10ffff : 0xffff);
     USet* folded_universe = NULL;
     typedef struct { tsc_re_node_t* node; size_t index; } frame_t;
-    frame_t* frames = TSC_GC_MALLOC((p->nnodes ? p->nnodes : 1) * sizeof(*frames));
+    frame_t* frames = TSC_GC_MALLOC(tsc_alloc_size((size_t)((p->nnodes ? p->nnodes : 1)), sizeof(*frames)));
     bool ok = true;
     for (size_t i = 0; ok && i < p->nnodes; i++) {
         tsc_re_node_t* node = p->nodes[i];

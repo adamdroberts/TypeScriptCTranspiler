@@ -54,7 +54,7 @@ tsc_str_t* tsc_str_concat_parts(const tsc_array_t* parts) {
             tsc_panic("concatenated String is too large");
         total += length;
     }
-    uint16_t* units = (uint16_t*)TSC_GC_MALLOC_ATOMIC(total ? total * sizeof(uint16_t) : sizeof(uint16_t));
+    uint16_t* units = (uint16_t*)TSC_GC_MALLOC_ATOMIC(total ? tsc_alloc_size(total, sizeof(uint16_t)) : sizeof(uint16_t));
     size_t offset = 0;
     if (parts) for (size_t index = 0; index < parts->len; index++) {
         const tsc_str_t* part = TSC_ARR(tsc_str_t*, parts, index);
@@ -107,7 +107,7 @@ tsc_str_t* tsc_str_concat_n(size_t n, ...) {
     enum { INLINE_CAP = 16 };
     const tsc_str_t* inline_parts[INLINE_CAP];
     const tsc_str_t** parts = inline_parts;
-    if (n > INLINE_CAP) parts = (const tsc_str_t**)TSC_GC_MALLOC(n * sizeof(*parts));
+    if (n > INLINE_CAP) parts = (const tsc_str_t**)TSC_GC_MALLOC(tsc_alloc_size((size_t)(n), sizeof(*parts)));
     for (size_t i = 0; i < n; i++) {
         const tsc_str_t* p = va_arg(ap, const tsc_str_t*);
         parts[i] = p;
@@ -688,7 +688,7 @@ static tsc_str_t* string_from_numeric_values(
         tsc_panic("String static argument collection is too large");
     }
     uint32_t* units = (uint32_t*)TSC_GC_MALLOC_ATOMIC(
-        sizeof(uint32_t) * (count ? count : 1)
+        tsc_alloc_size((size_t)((count ? count : 1)), sizeof(uint32_t))
     );
     for (size_t index = 0; index < count; index++) {
         double numeric = tsc_value_to_number(TSC_ARR(tsc_value_t, values, index));
@@ -954,7 +954,7 @@ tsc_str_t* tsc_str_to_well_formed(const tsc_str_t* string) {
     }
     if (!changed) return (tsc_str_t*)string;
     uint16_t* repaired = (uint16_t*)TSC_GC_MALLOC_ATOMIC(
-        sizeof(uint16_t) * (sequence.len ? sequence.len : 1)
+        tsc_alloc_size((size_t)((sequence.len ? sequence.len : 1)), sizeof(uint16_t))
     );
     memcpy(repaired, sequence.data, sequence.len * sizeof(uint16_t));
     for (size_t index = 0; index < sequence.len; index++) {
@@ -1140,7 +1140,7 @@ static tsc_str_t* string_change_case(const tsc_str_t* s, bool to_upper) {
         tsc_panic("String case conversion: mapping sizing failed");
     }
     UChar* mapped =
-        (UChar*)TSC_GC_MALLOC_ATOMIC(sizeof(UChar) * ((size_t)mapped_len + 1));
+        (UChar*)TSC_GC_MALLOC_ATOMIC(tsc_alloc_size((size_t)(((size_t)mapped_len + 1)), sizeof(UChar)));
     status = U_ZERO_ERROR;
     if (to_upper) {
         mapped_len = u_strToUpper(
@@ -1202,7 +1202,7 @@ tsc_str_t* tsc_str_normalize(const tsc_str_t* s, const tsc_str_t* form) {
         tsc_panic("String.normalize: normalization sizing failed");
     }
 
-    UChar* nbuf = (UChar*)TSC_GC_MALLOC_ATOMIC(sizeof(UChar) * ((size_t)norm_len + 1));
+    UChar* nbuf = (UChar*)TSC_GC_MALLOC_ATOMIC(tsc_alloc_size((size_t)(((size_t)norm_len + 1)), sizeof(UChar)));
     status = U_ZERO_ERROR;
     norm_len = unorm2_normalize(
         normalizer, (const UChar*)sequence.data, (int32_t)sequence.len,
@@ -1260,7 +1260,7 @@ static tsc_str_t* string_fill_to_utf16_length(
 
     size_t fill_length = target_length - base.len;
     uint16_t* output = (uint16_t*)TSC_GC_MALLOC_ATOMIC(
-        sizeof(uint16_t) * (target_length ? target_length : 1)
+        tsc_alloc_size((size_t)((target_length ? target_length : 1)), sizeof(uint16_t))
     );
     size_t base_offset = placement == TSC_STRING_FILL_BEFORE ? fill_length : 0;
     size_t fill_offset = placement == TSC_STRING_FILL_BEFORE ? 0 : base.len;
@@ -1354,7 +1354,7 @@ static void utf16_builder_init(tsc_utf16_builder_t* output, size_t initial_cap) 
     if (initial_cap > SIZE_MAX / sizeof(uint16_t)) {
         tsc_panic("replacement String is too large");
     }
-    output->data = (uint16_t*)malloc(initial_cap * sizeof(uint16_t));
+    output->data = (uint16_t*)malloc(tsc_alloc_size((size_t)(initial_cap), sizeof(uint16_t)));
     if (!output->data) tsc_panic("replacement String allocation failed");
     output->len = 0;
     output->cap = initial_cap;
@@ -1373,7 +1373,7 @@ static void utf16_builder_reserve(tsc_utf16_builder_t* output, size_t needed) {
         }
         cap *= 2;
     }
-    uint16_t* data = (uint16_t*)realloc(output->data, cap * sizeof(uint16_t));
+    uint16_t* data = (uint16_t*)realloc(output->data, tsc_alloc_size((size_t)(cap), sizeof(uint16_t)));
     if (!data) tsc_panic("replacement String allocation failed");
     output->data = data;
     output->cap = cap;

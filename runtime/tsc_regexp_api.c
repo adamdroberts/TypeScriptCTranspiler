@@ -11,7 +11,7 @@ static void regexp_append(regexp_output_t* out, const uint16_t* units, size_t st
         size_t next = out->capacity ? out->capacity : 64;
         while (next < out->len + count) { if (next > SIZE_MAX / 2) abort(); next *= 2; }
         if (next > SIZE_MAX / sizeof(*out->units)) abort();
-        out->units = TSC_GC_REALLOC(out->units, next * sizeof(*out->units));
+        out->units = TSC_GC_REALLOC(out->units, tsc_alloc_size((size_t)(next), sizeof(*out->units)));
         out->capacity = next;
     }
     if (count) memcpy(out->units + out->len, units + start, count * sizeof(*units));
@@ -179,7 +179,7 @@ static double regexp_advance(const uint16_t* units, size_t len, double index, bo
     return index + 1;
 }
 static size_t* regexp_captures(const tsc_regexp_t* re) {
-    return TSC_GC_MALLOC((re->capture_count + 1) * 2 * sizeof(size_t));
+    return TSC_GC_MALLOC(tsc_alloc_size(tsc_alloc_size((size_t)re->capture_count + 1, 2), sizeof(size_t)));
 }
 static bool regexp_find(const tsc_regexp_t* re, const uint16_t* units, size_t len,
                         size_t offset, bool sticky, size_t* captures) {

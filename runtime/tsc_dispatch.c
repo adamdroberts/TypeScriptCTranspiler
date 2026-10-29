@@ -198,7 +198,7 @@ static void tsc_dispatch_inflight_add(void* task) {
     pthread_mutex_lock(&g_inflight_mutex);
     if (g_inflight_len == g_inflight_cap) {
         size_t next = g_inflight_cap ? g_inflight_cap * 2 : 8;
-        void** entries = (void**)TSC_GC_REALLOC(g_inflight, next * sizeof(void*));
+        void** entries = (void**)TSC_GC_REALLOC(g_inflight, tsc_alloc_size((size_t)(next), sizeof(void*)));
         if (!entries) tsc_panic("dispatch: out of memory");
         g_inflight = entries;
         g_inflight_cap = next;

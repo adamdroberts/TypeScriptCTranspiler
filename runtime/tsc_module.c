@@ -147,7 +147,7 @@ static void module_execution_fulfilled(tsc_module_record_t* record) {
 tsc_module_graph_t* tsc_module_graph_new(const tsc_module_definition_t* definitions, size_t count) {
     tsc_module_graph_t* graph = TSC_GC_MALLOC(sizeof(*graph));
     graph->count = count;
-    graph->records = TSC_GC_MALLOC(count * sizeof(tsc_module_record_t));
+    graph->records = TSC_GC_MALLOC(tsc_alloc_size((size_t)(count), sizeof(tsc_module_record_t)));
     for (size_t index = 0; index < count; index++) {
         tsc_module_record_t* record = &graph->records[index];
         *record = (tsc_module_record_t){ .graph = graph, .definition = &definitions[index],
@@ -178,7 +178,7 @@ tsc_value_t tsc_module_import_meta(tsc_module_graph_t* graph, size_t index) {
 /* The same request worklist validates loading in preorder and linking in
  * dependency postorder. Neither phase executes a source body. */
 static tsc_module_record_t* module_dependency_failure(tsc_module_graph_t* graph,size_t index,bool linking){
-    bool* visited=TSC_GC_MALLOC(graph->count*sizeof(bool));memset(visited,0,graph->count*sizeof(bool));
+    bool* visited=TSC_GC_MALLOC(tsc_alloc_size((size_t)(graph->count), sizeof(bool)));memset(visited,0,graph->count*sizeof(bool));
     tsc_array_t* frames=tsc_array_new(sizeof(module_frame_t),1);module_frame_t first={.record=&graph->records[index]};tsc_array_push_raw(frames,&first);
     while(frames->len){
         module_frame_t* frame=&TSC_ARR(module_frame_t,frames,frames->len-1);tsc_module_record_t* record=frame->record;

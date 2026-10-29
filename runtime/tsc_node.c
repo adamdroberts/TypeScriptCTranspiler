@@ -313,7 +313,7 @@ static crypto_realm_t* crypto_realm(void){
         crypto_define(realm->prototype[index],crypto_key("constructor"),realm->constructor[index],false);
     }
     size_t count=sizeof(crypto_members)/sizeof(crypto_members[0]);
-    realm->methods=TSC_GC_MALLOC(count*sizeof(*realm->methods));realm->method_roots=TSC_GC_MALLOC(count*sizeof(*realm->method_roots));
+    realm->methods=TSC_GC_MALLOC(tsc_alloc_size((size_t)(count), sizeof(*realm->methods)));realm->method_roots=TSC_GC_MALLOC(tsc_alloc_size((size_t)(count), sizeof(*realm->method_roots)));
     for(size_t index=0;index<count;++index){
         const crypto_member_t* member=&crypto_members[index];
         realm->methods[index]=tsc_value_function_named_kind(crypto_digest_method,crypto_digest_method,(void*)member,member->length,crypto_key(member->name),TSC_FUNCTION_IDENTITY_GENERIC);
@@ -334,8 +334,8 @@ static crypto_realm_t* crypto_realm(void){
         (void)tsc_value_object_set_prototype_of(realm->export_constructors[index],realm->constructor[index]);
     }
     size_t export_count=sizeof(crypto_exports)/sizeof(*crypto_exports);
-    realm->module_members=TSC_GC_MALLOC(export_count*sizeof(*realm->module_members));
-    realm->module_roots=TSC_GC_MALLOC(export_count*sizeof(*realm->module_roots));
+    realm->module_members=TSC_GC_MALLOC(tsc_alloc_size((size_t)(export_count), sizeof(*realm->module_members)));
+    realm->module_roots=TSC_GC_MALLOC(tsc_alloc_size((size_t)(export_count), sizeof(*realm->module_roots)));
     memset(realm->module_roots,0,export_count*sizeof(*realm->module_roots));
     for(size_t index=0;index<export_count;++index){
         const crypto_export_descriptor_t* entry=&crypto_exports[index];
@@ -3109,7 +3109,7 @@ static void tsc_url_search_params_reserve(tsc_url_search_params_t* params, size_
     if (params->cap >= need) return;
     size_t next = params->cap ? params->cap * 2 : 4;
     while (next < need) next *= 2;
-    params->items = (tsc_url_search_param_t*)TSC_GC_REALLOC(params->items, next * sizeof(tsc_url_search_param_t));
+    params->items = (tsc_url_search_param_t*)TSC_GC_REALLOC(params->items, tsc_alloc_size((size_t)(next), sizeof(tsc_url_search_param_t)));
     params->cap = next;
 }
 
@@ -3216,8 +3216,8 @@ void tsc_url_search_params_set(tsc_url_search_params_t* params, const tsc_str_t*
 
 tsc_str_t* tsc_url_search_params_to_string(const tsc_url_search_params_t* params) {
     if (!params || params->len == 0) return tsc_str_from_lit("", 0);
-    tsc_str_t** names = (tsc_str_t**)TSC_GC_MALLOC(sizeof(tsc_str_t*) * params->len);
-    tsc_str_t** values = (tsc_str_t**)TSC_GC_MALLOC(sizeof(tsc_str_t*) * params->len);
+    tsc_str_t** names = (tsc_str_t**)TSC_GC_MALLOC(tsc_alloc_size((size_t)(params->len), sizeof(tsc_str_t*)));
+    tsc_str_t** values = (tsc_str_t**)TSC_GC_MALLOC(tsc_alloc_size((size_t)(params->len), sizeof(tsc_str_t*)));
     size_t total = params->len > 0 ? params->len - 1 : 0;
     for (size_t i = 0; i < params->len; i++) {
         names[i] = url_query_encode(params->items[i].name);
@@ -6653,7 +6653,7 @@ static void tsc_http_client_root_header_value(tsc_http_client_state_t* client, t
         tag != TSC_VALUE_TAG_ARRAY && tag != TSC_VALUE_TAG_OBJECT) return;
     client->header_value_roots = (void**)TSC_GC_REALLOC(
         client->header_value_roots,
-        (client->header_value_root_len + 1) * sizeof(void*)
+        tsc_alloc_size((size_t)((client->header_value_root_len + 1)), sizeof(void*))
     );
     client->header_value_roots[client->header_value_root_len++] = value_ptr(value);
 }
@@ -7488,7 +7488,7 @@ static void tsc_http_client_copy_headers(tsc_http_client_state_t* client, tsc_va
     size_t key_len = keys ? keys->len : 0;
     size_t root_capacity = key_len + (add_auth ? 1 : 0);
     if (root_capacity > 0) {
-        client->header_value_roots = (void**)TSC_GC_MALLOC(root_capacity * sizeof(void*));
+        client->header_value_roots = (void**)TSC_GC_MALLOC(tsc_alloc_size((size_t)(root_capacity), sizeof(void*)));
     }
     for (size_t i = 0; keys && i < keys->len; i++) {
         tsc_str_t* key = ((tsc_str_t**)keys->data)[i];
@@ -9942,7 +9942,7 @@ static tsc_promise_t* tsc_fs_file_handle_vector_io_start(tsc_fs_file_handle_t* h
     task->promise = promise;
     task->buffers_value = buffers_value;
     task->buffers = buffers;
-    task->io_bufs = (tsc_uv_buf_t*)TSC_GC_MALLOC(buffers->len * sizeof(tsc_uv_buf_t));
+    task->io_bufs = (tsc_uv_buf_t*)TSC_GC_MALLOC(tsc_alloc_size((size_t)(buffers->len), sizeof(tsc_uv_buf_t)));
     task->count = (unsigned int)buffers->len;
     task->fd = handle->fd;
     task->position = position;
@@ -18842,7 +18842,7 @@ double tsc_fs_readv_sync(double fd, const tsc_array_t* buffers, double position,
     struct iovec* iov = NULL;
     struct iovec iov_stack[32];
     if (iovcnt > 32) {
-        iov = (struct iovec*)malloc(iovcnt * sizeof(struct iovec));
+        iov = (struct iovec*)malloc(tsc_alloc_size((size_t)(iovcnt), sizeof(struct iovec)));
         if (!iov) {
             tsc_throw_str(tsc_str_from_cstr("fs.readvSync: out of memory"));
             return 0.0;
@@ -18893,7 +18893,7 @@ double tsc_fs_writev_sync(double fd, const tsc_array_t* buffers, double position
     struct iovec* iov = NULL;
     struct iovec iov_stack[32];
     if (iovcnt > 32) {
-        iov = (struct iovec*)malloc(iovcnt * sizeof(struct iovec));
+        iov = (struct iovec*)malloc(tsc_alloc_size((size_t)(iovcnt), sizeof(struct iovec)));
         if (!iov) {
             tsc_throw_str(tsc_str_from_cstr("fs.writevSync: out of memory"));
             return 0.0;

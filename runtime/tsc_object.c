@@ -29,7 +29,7 @@ void tsc_shape_add_transition(tsc_shape_t* parent, tsc_shape_t* child) {
     if (!parent) return;
     if (parent->transitions_len >= parent->transitions_cap) {
         size_t next_cap = parent->transitions_cap ? parent->transitions_cap * 2 : 4;
-        tsc_shape_t** next_trans = (tsc_shape_t**)TSC_GC_MALLOC(sizeof(tsc_shape_t*) * next_cap);
+        tsc_shape_t** next_trans = (tsc_shape_t**)TSC_GC_MALLOC(tsc_alloc_size((size_t)(next_cap), sizeof(tsc_shape_t*)));
         if (parent->transitions && parent->transitions_len > 0) {
             memcpy(next_trans, parent->transitions, sizeof(tsc_shape_t*) * parent->transitions_len);
         }
@@ -103,7 +103,7 @@ static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     o->prototype = prototype;
     o->prototype_gc_root = tsc_value_gc_root(prototype);
     (void)prototype_root;
-    o->props = (tsc_object_prop_t*)TSC_GC_MALLOC(sizeof(tsc_object_prop_t) * o->cap);
+    o->props = (tsc_object_prop_t*)TSC_GC_MALLOC(tsc_alloc_size((size_t)(o->cap), sizeof(tsc_object_prop_t)));
     if (g_shape_diagnostics_enabled) {
         fprintf(stderr, "[tsc shape] Obj #%" PRIu64 " created (empty)\n", o->object_id);
     }
@@ -363,7 +363,7 @@ void object_reserve(tsc_object_t* o, size_t cap) {
     if (cap <= o->cap) return;
     size_t next = o->cap ? o->cap : 4;
     while (next < cap) next *= 2;
-    tsc_object_prop_t* props = (tsc_object_prop_t*)TSC_GC_MALLOC(sizeof(tsc_object_prop_t) * next);
+    tsc_object_prop_t* props = (tsc_object_prop_t*)TSC_GC_MALLOC(tsc_alloc_size((size_t)(next), sizeof(tsc_object_prop_t)));
     if (o->props && o->len > 0) memcpy(props, o->props, sizeof(tsc_object_prop_t) * o->len);
     o->props = props;
     o->cap = next;
@@ -1487,7 +1487,7 @@ static void validate_proxy_own_keys_result(const tsc_object_t* proxy, const tsc_
     void* volatile target_root = tsc_value_gc_root(target); (void)target_root;
     bool extensible = tsc_value_is_extensible(target);
     tsc_array_t* volatile target_keys = tsc_value_raw_own_keys(target);
-    bool* nonconfigurable = TSC_GC_MALLOC_ATOMIC(target_keys->len * sizeof(bool));
+    bool* nonconfigurable = TSC_GC_MALLOC_ATOMIC(tsc_alloc_size((size_t)(target_keys->len), sizeof(bool)));
     /* Read all actual descriptors before validating either key partition. */
     for (size_t index = 0; index < target_keys->len; ++index) {
         tsc_value_t descriptor = tsc_value_get_own_property_descriptor(target, TSC_ARR(tsc_str_t*, target_keys, index));
@@ -1527,7 +1527,7 @@ static int object_ordered_key_compare(const void* left, const void* right) {
 }
 
 void object_order_ordinary_keys(tsc_array_t* keys) {
-    object_ordered_key_t* records = TSC_GC_MALLOC(keys->len * sizeof(*records));
+    object_ordered_key_t* records = TSC_GC_MALLOC(tsc_alloc_size((size_t)(keys->len), sizeof(*records)));
     for (size_t index = 0; index < keys->len; ++index) {
         object_ordered_key_t* record = &records[index];
         record->key = TSC_ARR(tsc_str_t*, keys, index);
@@ -2341,7 +2341,7 @@ uint64_t key_hash(tsc_key_kind_t kk, const void* k) {
 }
 
 void map_rebuild_buckets(tsc_map_t* m, size_t new_bucket_cap) {
-    size_t* nb = (size_t*)TSC_GC_MALLOC_ATOMIC(new_bucket_cap * sizeof(size_t));
+    size_t* nb = (size_t*)TSC_GC_MALLOC_ATOMIC(tsc_alloc_size((size_t)(new_bucket_cap), sizeof(size_t)));
     for (size_t i = 0; i < new_bucket_cap; i++) nb[i] = TSC_BKT_EMPTY;
     size_t mask = new_bucket_cap - 1;
     for (size_t i = 0; i < m->len; i++) {
@@ -2363,18 +2363,18 @@ void map_grow_ordered(tsc_map_t* m, size_t want) {
     void* nv = m->values ? TSC_GC_REALLOC(m->values, cap * m->vs) : TSC_GC_MALLOC(cap * m->vs);
     m->keys = nk;
     m->values = nv;
-    m->order.entries = TSC_GC_REALLOC(m->order.entries, cap * sizeof(*m->order.entries));
+    m->order.entries = TSC_GC_REALLOC(m->order.entries, tsc_alloc_size((size_t)(cap), sizeof(*m->order.entries)));
     memset(m->order.entries + old_cap, 0, (cap - old_cap) * sizeof(*m->order.entries));
     if (m->ks == sizeof(tsc_value_t)) {
         m->key_roots = m->key_roots
-            ? (void**)TSC_GC_REALLOC(m->key_roots, cap * sizeof(void*))
-            : (void**)TSC_GC_MALLOC(cap * sizeof(void*));
+            ? (void**)TSC_GC_REALLOC(m->key_roots, tsc_alloc_size((size_t)(cap), sizeof(void*)))
+            : (void**)TSC_GC_MALLOC(tsc_alloc_size((size_t)(cap), sizeof(void*)));
         memset(m->key_roots + old_cap, 0, (cap - old_cap) * sizeof(void*));
     }
     if (m->vs == sizeof(tsc_value_t)) {
         m->value_roots = m->value_roots
-            ? (void**)TSC_GC_REALLOC(m->value_roots, cap * sizeof(void*))
-            : (void**)TSC_GC_MALLOC(cap * sizeof(void*));
+            ? (void**)TSC_GC_REALLOC(m->value_roots, tsc_alloc_size((size_t)(cap), sizeof(void*)))
+            : (void**)TSC_GC_MALLOC(tsc_alloc_size((size_t)(cap), sizeof(void*)));
         memset(m->value_roots + old_cap, 0, (cap - old_cap) * sizeof(void*));
     }
     m->cap = cap;

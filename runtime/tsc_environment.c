@@ -343,7 +343,7 @@ void tsc_environment_declaration_instantiation(tsc_global_declaration_t* declara
     /* Global var/function insertion retains the global object's descriptor
      * and extensibility preflight; lexical declarations stay in this record. */
     if (!variable) {
-        tsc_global_declaration_t* globals = length ? TSC_GC_MALLOC(length * sizeof(*globals)) : NULL;
+        tsc_global_declaration_t* globals = length ? TSC_GC_MALLOC(tsc_alloc_size((size_t)(length), sizeof(*globals))) : NULL;
         size_t count = 0;
         for (size_t index = 0; index < length; ++index) {
             tsc_global_declaration_t declaration = declarations[index];

@@ -913,7 +913,7 @@ tsc_value_t tsc_value_bind_function(
     const size_t bound_length = bound_args ? bound_args->len : 0;
     bound->bound_args = tsc_array_new(sizeof(tsc_value_t), bound_length ? bound_length : 1);
     bound->bound_arg_keepalives = bound_length > 0
-        ? (void**)TSC_GC_MALLOC(sizeof(void*) * bound_length)
+        ? (void**)TSC_GC_MALLOC(tsc_alloc_size((size_t)(bound_length), sizeof(void*)))
         : NULL;
     for (size_t i = 0; i < bound_length; i++) {
         tsc_value_t value = TSC_ARR(tsc_value_t, bound_args, i);
@@ -3117,8 +3117,8 @@ static tsc_value_t global_function_intrinsic_value(const tsc_global_function_des
         memset(state,0,sizeof(*state));
         tsc_realm_state_set(&global_function_intrinsics_key,state);
         size_t count=sizeof(global_function_descriptors)/sizeof(*global_function_descriptors);
-        state->values=TSC_GC_MALLOC(count*sizeof(*state->values));
-        state->roots=TSC_GC_MALLOC(count*sizeof(*state->roots));
+        state->values=TSC_GC_MALLOC(tsc_alloc_size((size_t)(count), sizeof(*state->values)));
+        state->roots=TSC_GC_MALLOC(tsc_alloc_size((size_t)(count), sizeof(*state->roots)));
         memset(state->roots,0,count*sizeof(*state->roots));
     }
     size_t index=(size_t)(descriptor-global_function_descriptors);

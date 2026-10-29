@@ -81,7 +81,7 @@ static void promise_add_callback(tsc_promise_t* p, tsc_promise_callback_t callba
     if(p->state!=TSC_PROMISE_PENDING){promise_enqueue_callback(callback);return;}
     if (p->callbacks_len == p->callbacks_cap) {
         size_t next = p->callbacks_cap ? p->callbacks_cap * 2 : 4;
-        tsc_promise_callback_t* entries = (tsc_promise_callback_t*)TSC_GC_REALLOC(p->callbacks, next * sizeof(tsc_promise_callback_t));
+        tsc_promise_callback_t* entries = (tsc_promise_callback_t*)TSC_GC_REALLOC(p->callbacks, tsc_alloc_size((size_t)(next), sizeof(tsc_promise_callback_t)));
         if (!entries) tsc_panic("tsc_promise_add_callback: out of memory");
         p->callbacks = entries;
         p->callbacks_cap = next;
@@ -1097,7 +1097,7 @@ void event_emitter_reserve(tsc_event_emitter_t* ee, size_t cap) {
     if (!ee || ee->cap >= cap) return;
     size_t next = ee->cap ? ee->cap * 2 : 4;
     if (next < cap) next = cap;
-    tsc_event_listener_t* items = (tsc_event_listener_t*)TSC_GC_MALLOC(sizeof(tsc_event_listener_t) * next);
+    tsc_event_listener_t* items = (tsc_event_listener_t*)TSC_GC_MALLOC(tsc_alloc_size((size_t)(next), sizeof(tsc_event_listener_t)));
     if (ee->listeners && ee->len > 0) {
         memcpy(items, ee->listeners, sizeof(tsc_event_listener_t) * ee->len);
     }
