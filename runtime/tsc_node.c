@@ -8319,6 +8319,24 @@ static tsc_str_t* console_inspect(tsc_value_t value,bool hidden,int depth) {
                 frame=frame->parent;continue;
             }
             tsc_object_t* owner=object&&value_tag(frame->value)==TSC_VALUE_TAG_OBJECT?value_ptr(frame->value):NULL;
+            // Primitive wrapper objects render their [[PrimitiveData]] the
+            // way util.inspect does: [Number: 5], [String: 'ab'], ...
+            if(owner&&!owner->is_proxy&&owner->has_primitive_value) {
+                static const char* const kinds[]={NULL,"Boolean","Number","String","BigInt","Symbol"};
+                tsc_value_t inner=owner->primitive_value;
+                const char* kind=owner->primitive_kind<sizeof kinds/sizeof kinds[0]?kinds[owner->primitive_kind]:NULL;
+                if(kind) {
+                    console_inspect_append(&output,"[");console_inspect_append(&output,kind);console_inspect_append(&output,": ");
+                    if(value_is_box(inner)&&value_tag(inner)==TSC_VALUE_TAG_STRING)console_inspect_quote(&output,value_ptr(inner));
+                    else {
+                        tsc_str_t* text=!value_is_box(inner)?console_number(tsc_value_to_number(inner)):tsc_value_to_explicit_string(inner);
+                        if(text)tsc_jsonbuf_append(&output,text->data,text->len);
+                        if(value_is_box(inner)&&value_tag(inner)==TSC_VALUE_TAG_BIGINT)tsc_jsonbuf_byte(&output,'n');
+                    }
+                    tsc_jsonbuf_byte(&output,']');
+                    frame=frame->parent;continue;
+                }
+            }
             tsc_error_t* error=owner&&owner->is_error?owner->class_ptr:NULL;
             frame->error=error!=NULL;
             if(error) {

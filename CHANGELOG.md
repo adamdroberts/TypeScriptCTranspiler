@@ -1,3 +1,4 @@
+- Render primitive wrapper objects in console output as util.inspect does ([Number: 5], [String: 'ab'], ...).
 - Type Object.groupBy results as Partial<Record<K, T[]>> instead of unknown, and make group_by_this_param explicitly strict.
 - Share escaping-callable reachability across opaque call sites in the source-value solver instead of rebuilding it per call site.
 - Reuse invocation-timing queries between timing changes and skip re-proving atoms a capture projection already published in the source-value solver.
