@@ -431,11 +431,17 @@ interface ObjectConstructor {
     preventExtensions<T>(o: T, ...ignored: any[]): T;
     seal<T>(o: T, ...ignored: any[]): T;
     setPrototypeOf<T>(o: T, proto: any, ...ignored: any[]): T;
-    groupBy<T>(items: T[], keyFn: (item: T, index: number) => unknown, ...ignored: any[]): unknown;
-    groupBy<T>(items: Set<T>, keyFn: (item: T, index: number) => unknown, ...ignored: any[]): unknown;
-    groupBy<MK, MV>(items: Map<MK, MV>, keyFn: (item: ObjectEntry<MV, MK>, index: number) => unknown, ...ignored: any[]): unknown;
-    groupBy(items: string, keyFn: (item: string, index: number) => unknown, ...ignored: any[]): unknown;
-    groupBy(items: any, keyFn: (item: any, index: number) => unknown, ...ignored: any[]): unknown;
+    // Keys are coerced with ToPropertyKey: a PropertyKey callback keeps its key
+    // type, and any other key value groups under its string conversion.
+    groupBy<T, K extends PropertyKey>(items: T[], keyFn: (item: T, index: number) => K, ...ignored: any[]): Partial<Record<K, T[]>>;
+    groupBy<T, K extends PropertyKey>(items: Set<T>, keyFn: (item: T, index: number) => K, ...ignored: any[]): Partial<Record<K, T[]>>;
+    groupBy<MK, MV, K extends PropertyKey>(items: Map<MK, MV>, keyFn: (item: ObjectEntry<MV, MK>, index: number) => K, ...ignored: any[]): Partial<Record<K, ObjectEntry<MV, MK>[]>>;
+    groupBy<K extends PropertyKey>(items: string, keyFn: (item: string, index: number) => K, ...ignored: any[]): Partial<Record<K, string[]>>;
+    groupBy<T>(items: T[], keyFn: (item: T, index: number) => unknown, ...ignored: any[]): Partial<Record<string, T[]>>;
+    groupBy<T>(items: Set<T>, keyFn: (item: T, index: number) => unknown, ...ignored: any[]): Partial<Record<string, T[]>>;
+    groupBy<MK, MV>(items: Map<MK, MV>, keyFn: (item: ObjectEntry<MV, MK>, index: number) => unknown, ...ignored: any[]): Partial<Record<string, ObjectEntry<MV, MK>[]>>;
+    groupBy(items: string, keyFn: (item: string, index: number) => unknown, ...ignored: any[]): Partial<Record<string, string[]>>;
+    groupBy(items: any, keyFn: (item: any, index: number) => unknown, ...ignored: any[]): Partial<Record<string, any[]>>;
 }
 declare var Object: ObjectConstructor;
 

@@ -1,3 +1,4 @@
+- Type Object.groupBy results as Partial<Record<K, T[]>> instead of unknown, and make group_by_this_param explicitly strict.
 - Share escaping-callable reachability across opaque call sites in the source-value solver instead of rebuilding it per call site.
 - Reuse invocation-timing queries between timing changes and skip re-proving atoms a capture projection already published in the source-value solver.
 - Map Object.hasOwn, Object.fromEntries and Float16Array to their pinned clauses after full targeted Test262 passes.

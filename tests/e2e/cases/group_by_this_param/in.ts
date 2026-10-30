@@ -1,3 +1,5 @@
+"use strict";
+// Strict code: callbacks invoked with an undefined receiver keep this === undefined.
 function objectKey(this: any, value: number, index: number): string {
     return String(this) + ":" + (index % 2);
 }
