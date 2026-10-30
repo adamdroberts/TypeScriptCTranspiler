@@ -284,6 +284,10 @@ function propertyName(node: ts.Node | undefined): string | null {
 class SourceValueFlow {
     private readonly enclosingActivations=new WeakMap<ts.Node,FunctionOwner|null>();
     private factRevision=0;
+    // Invocation timing grows only through recordInvocationTiming; its own
+    // revision lets parent-chain timing queries be reused between growths.
+    private timingRevision=0;
+    private readonly timingQueries=new Map<ts.Node,{revision:number;answers:Map<string,boolean>}>();
     private readonly opaqueQueries=new Map<ts.Node|undefined,Map<boolean,{revision:number;known:WeakMap<SourceFacts,boolean>}>>();
     private readonly cells = new Map<ts.Node, Cell>();
     private readonly presenceRules = new Set<Rule>();
@@ -1013,10 +1017,16 @@ class SourceValueFlow {
      * of the source position at which the protocol was requested. */
     private invocationContext(origin:ts.Node,timing:{repeated?:boolean;deferred?:boolean}={}):ts.Node {
         const context=ts.setTextRange(ts.factory.createEmptyStatement(),origin);(context as ts.Node&{parent:ts.Node}).parent=origin;
-        if(timing.repeated||timing.deferred){this.invocationTimings.set(context,{repeated:!!timing.repeated,deferred:!!timing.deferred});this.factRevision++;}
+        if(timing.repeated||timing.deferred){this.invocationTimings.set(context,{repeated:!!timing.repeated,deferred:!!timing.deferred});this.factRevision++;this.timingRevision++;}
         return context;
     }
     private hasInvocationTiming(context:ts.Node,kind?:"repeated"|"deferred"):boolean {
+        let query=this.timingQueries.get(context);
+        if(!query||query.revision!==this.timingRevision){query={revision:this.timingRevision,answers:new Map()};this.timingQueries.set(context,query);}
+        const key=kind??"any",known=query.answers.get(key);if(known!==undefined)return known;
+        const answer=this.computeInvocationTiming(context,kind);query.answers.set(key,answer);return answer;
+    }
+    private computeInvocationTiming(context:ts.Node,kind?:"repeated"|"deferred"):boolean {
         for(let node:ts.Node|undefined=context;node&&!functionNode(node);node=node.parent){
             const timing=this.invocationTimings.get(node);
             const roots=ts.isSourceFile(node)?this.scriptOrder.get(node):undefined;
@@ -1342,6 +1352,9 @@ class SourceValueFlow {
                         }
                     }
                     for(const atom of Set.prototype.values.call(source.values) as Iterable<Atom>){
+                        // Publishing is idempotent: an untransformed atom already in the
+                        // target needs no repeated visibility proof on later reruns.
+                        if(atom.tag!=="text-operation"&&Set.prototype.has.call(target.values,atom))continue;
                         if(origins&&atom.tag!=="unknown"||constraints.phases.some(phase=>!phase.activationOnly&&!this.effectVisible(atom,phase.context,phase.argumentsRead)))continue;
                         this.publish(target,atom.tag==="text-operation"?this.captureAtom(atom,constraints):atom);
                     }
