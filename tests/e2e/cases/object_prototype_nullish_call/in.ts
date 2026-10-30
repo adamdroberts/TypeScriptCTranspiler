@@ -15,31 +15,31 @@ const undefinedValue: any = undefined;
 try {
     console.log("has:", Object.prototype.hasOwnProperty.call(target("has-null", null), ignored("has-key")));
 } catch (err: any) {
-    console.log("has-error:", String(err));
+    console.log("has-error:", err instanceof TypeError ? "TypeError" : String(err));
 }
 
 try {
     console.log("enum:", Object.prototype.propertyIsEnumerable.call(target("enum-undefined", undefined), ignored("enum-key")));
 } catch (err: any) {
-    console.log("enum-error:", String(err));
+    console.log("enum-error:", err instanceof TypeError ? "TypeError" : String(err));
 }
 
 try {
     console.log("proto:", Object.prototype.isPrototypeOf.call(target("proto-null", null), objectValue, ignored("proto-extra")));
 } catch (err: any) {
-    console.log("proto-error:", String(err));
+    console.log("proto-error:", err instanceof TypeError ? "TypeError" : String(err));
 }
 
 try {
     console.log("locale:", Object.prototype.toLocaleString.call(target("locale-undefined", undefined), ignored("locale-extra")));
 } catch (err: any) {
-    console.log("locale-error:", String(err));
+    console.log("locale-error:", err instanceof TypeError ? "TypeError" : String(err));
 }
 
 try {
     console.log("value:", Object.prototype.valueOf.call(target("value-null", null), ignored("value-extra")));
 } catch (err: any) {
-    console.log("value-error:", String(err));
+    console.log("value-error:", err instanceof TypeError ? "TypeError" : String(err));
 }
 
 console.log(

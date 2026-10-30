@@ -2,7 +2,8 @@ function report(label: string, fn: () => any): void {
     try {
         console.log(label + ":", fn());
     } catch (err: any) {
-        console.log(label + ":", err);
+        // Error message text is implementation-defined; assert the error kind.
+        console.log(label + ":", err instanceof TypeError ? "TypeError" : err);
     }
 }
 
