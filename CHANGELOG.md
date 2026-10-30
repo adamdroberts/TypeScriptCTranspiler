@@ -1,3 +1,4 @@
+- Share escaping-callable reachability across opaque call sites in the source-value solver instead of rebuilding it per call site.
 - Reuse invocation-timing queries between timing changes and skip re-proving atoms a capture projection already published in the source-value solver.
 - Map Object.hasOwn, Object.fromEntries and Float16Array to their pinned clauses after full targeted Test262 passes.
 - Scope reviewed Test262 files that assert post-ES2026 clause revisions (Promise.try avoids-wrap) and map six verified ES2026 features to their pinned clauses.

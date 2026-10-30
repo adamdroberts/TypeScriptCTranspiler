@@ -70,6 +70,9 @@ type CollectionKind = "Map" | "Set";
 type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-has-own:${"static"|"prototype"}` | `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
     "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}`;
 type Primitive = SourcePrimitive;
+/** Callables and collection-iterator cells reachable from one escaping value;
+ * a sink forwards them into one escaping call. */
+type EscapeReach={readonly callables:Set<Atom>;readonly iterators:Set<Cell>;readonly parents:Set<EscapeReach>;readonly sink?:{callable(atom:Atom):void;iterator(cell:Cell):void}};
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
 const ORDINARY_PRIMITIVE_METHODS: ReadonlyMap<PrimitiveHint, readonly string[]> = new Map([
@@ -344,6 +347,7 @@ class SourceValueFlow {
     private readonly sourceObjectOwners=new WeakSet<ObjectOwner>();
     private readonly opaqueCaptureCalls=new Map<ts.Node,Set<Cell>>();
     private readonly escapedCallableCalls=new Map<ts.Node,Map<boolean,{visit:(input:Cell)=>void}>>();
+    private readonly escapeReaches=new Map<boolean,{cells:Map<Cell,EscapeReach>;atoms:Map<Atom,EscapeReach>}>();
     private readonly escapedInvocationOrigins=new WeakMap<ts.Node,ts.Node>();
     private readonly escapeContexts=new WeakMap<ts.Node,ts.Node>();
     private readonly promiseReactions = new Map<ts.Node,Map<string,Cell>>();
@@ -420,7 +424,10 @@ class SourceValueFlow {
     private readonly invocations = new Map<Rule, Map<string, { kind: DynamicFunctionKind; args: readonly Cell[] | null }>>();
     private readonly inactiveEvaluationCandidates=new Map<ts.Node,Set<boolean>>();
     private readonly evaluationInvocations = new Map<Rule, Map<string, EvaluationRecord>>();
-    private readonly primitives = new Map<string, Atom>();
+    // Interned primitive atoms per typeof. Map keys use SameValueZero, so -0
+    // keeps its own atom while NaN and BigInt values intern by value.
+    private readonly primitives = new Map<string, Map<unknown, Atom>>();
+    private negativeZeroPrimitive?: Atom;
     private readonly symbolPrimitives = new Map<symbol, Atom>();
     private readonly symbolIdentities = new Map<symbol, number>();
     private readonly freshSymbols = new Set<symbol>();
@@ -958,47 +965,82 @@ class SourceValueFlow {
      * accessors, prototypes and returned values. One call-site graph retains
      * those edges and one unknown actual List, including cyclic containers.
      * Interned values own inspection subscriptions independently of aliases. */
+    /** Callables reachable from a cell are independent of the opaque call that
+     * receives it. One shared reach record per cell and per atom (for each
+     * callback mode) accumulates them, and each new callable is pushed once
+     * along every parent edge, so escape contexts link to the same graph
+     * instead of re-traversing the heap. The collection-iterator edge depends
+     * on the escaping call, so records carry iterator cells and each context
+     * expands them through its own context. */
+    private escapeReach(mode:boolean):{cells:Map<Cell,EscapeReach>;atoms:Map<Atom,EscapeReach>} {
+        let reach=this.escapeReaches.get(mode);if(!reach){reach={cells:new Map(),atoms:new Map()};this.escapeReaches.set(mode,reach);}return reach;
+    }
+    private newEscapeReach(sink?:EscapeReach["sink"]):EscapeReach {return {callables:new Set(),iterators:new Set(),parents:new Set(),...(sink?{sink}:{})};}
+    private pushEscapeReach(record:EscapeReach,callable?:Atom,iterator?:Cell):void {
+        const pending=[record];
+        while(pending.length){
+            const current=pending.pop()!;
+            if(callable){if(current.callables.has(callable))continue;current.callables.add(callable);current.sink?.callable(callable);}
+            else if(iterator){if(current.iterators.has(iterator))continue;current.iterators.add(iterator);current.sink?.iterator(iterator);}
+            for(const parent of current.parents)pending.push(parent);
+        }
+    }
+    private linkEscapeReach(from:EscapeReach,into:EscapeReach):void {
+        if(from===into||from.parents.has(into))return;from.parents.add(into);
+        for(const callable of [...from.callables])this.pushEscapeReach(into,callable);
+        for(const iterator of [...from.iterators])this.pushEscapeReach(into,undefined,iterator);
+    }
+    private escapeCellReach(input:Cell,sourceCallbacksOnly:boolean):EscapeReach {
+        const reach=this.escapeReach(sourceCallbacksOnly);
+        let record=reach.cells.get(input);if(record)return record;
+        const current=this.newEscapeReach();reach.cells.set(input,current);
+        this.rule([input],()=>{
+            for(const[facts,kind]of input.values.sources)if(kind==="value")this.linkEscapeReach(this.escapeCellReach(this.sourceCells.get(facts)!,sourceCallbacksOnly),current);
+            for(const atom of Set.prototype.values.call(input.values) as Iterable<Atom>)this.linkEscapeReach(this.escapeAtomReach(atom,input,sourceCallbacksOnly),current);
+        });
+        return current;
+    }
+    private escapeAtomReach(atom:Atom,current:Cell,sourceCallbacksOnly:boolean):EscapeReach {
+        const reach=this.escapeReach(sourceCallbacksOnly);
+        let record=reach.atoms.get(atom);if(record)return record;
+        const result=this.newEscapeReach();reach.atoms.set(atom,result);
+        const visit=(input:Cell):void=>this.linkEscapeReach(this.escapeCellReach(input,sourceCallbacksOnly),result);
+        const owner=this.ordinaryOwner(atom);
+        if(atom.tag==="promise"){visit(atom.value);visit(atom.rejection);}
+        if(atom.tag==="generator"){visit(atom.yielded);visit(atom.returned);}
+        if(atom.tag==="function"||atom.tag==="bound"||atom.tag==="promise-resolver"||owner?.proxy||!sourceCallbacksOnly&&(atom.tag==="intrinsic"||atom.tag==="operation"||atom.tag==="builtin"&&atom.normalResult!=="not-callable"))this.pushEscapeReach(result,atom);
+        if(!owner)return result;
+        let inspect!:Rule;
+        inspect=this.rule([owner.shape],()=>{
+            for(const property of owner.own?.values()??[])for(const write of property.writes.values())visit(write.values);
+            for(const accessor of owner.accessors.values())if(this.accessorDefinitions.has(accessor.get)){visit(accessor.get);visit(accessor.set);}
+            const stored=this.unknownPropertyLocations.get(owner);if(stored)visit(stored.value);
+            if(!sourceCallbacksOnly&&atom.tag!=="function"&&!this.sourceObjectOwners.has(owner)&&!this.ownerCreations.has(owner)&&!this.ownerRealms.has(owner)&&!owner.collections&&!owner.collectionIterator)return;
+            for(const key of owner.fields.keys())visit(this.dataProperty(owner,key));
+            for(const accessor of owner.accessors.values()){visit(accessor.get);visit(accessor.set);}
+            if(owner.prototype)visit(owner.prototype);
+            if(owner.proxy){visit(owner.proxy.target);visit(owner.proxy.handler);}
+            for(const record of owner.collections?.values()??[]){
+                this.watch(inspect,record.changes);this.watch(inspect,record.shape);
+                for(const entry of record.entries.values()){visit(entry.key);visit(entry.value);}
+            }
+            if(owner.collectionIterator){
+                visit(owner.collectionIterator.elements);this.pushEscapeReach(result,undefined,current);
+                if(owner.collectionIterator.source&&owner.collectionIterator.operation!=="keys")visit(owner.collectionIterator.source);
+            }
+        });
+        return result;
+    }
     private escapeCallableArgument(argument:Cell,context:ts.Node,sourceCallbacksOnly=false):void {
         context=this.escapeContext(context);
         let modes=this.escapedCallableCalls.get(context);if(!modes){modes=new Map();this.escapedCallableCalls.set(context,modes);}
         let graph=modes.get(sourceCallbacksOnly);
         if(!graph){
-            const target=this.newCell(),actuals=this.newCell(),returned=this.newCell(),seen=new Set<Cell>(),atoms=new Set<Atom>(),pending:Cell[]=[];
+            const target=this.newCell(),actuals=this.newCell(),returned=this.newCell(),seen=new Set<Cell>();
             this.publish(actuals,this.unknown);
-            const visit=(input:Cell):void=>{
-                if(seen.has(input))return;seen.add(input);pending.push(input);
-                while(pending.length){const current=pending.pop()!;let rule!:Rule;
-                    rule=this.rule([current],()=>{
-                        for(const[facts,kind]of current.values.sources)if(kind==="value")visit(this.sourceCells.get(facts)!);
-                        for(const atom of Set.prototype.values.call(current.values) as Iterable<Atom>){
-                        if(atoms.has(atom))continue;atoms.add(atom);
-                        const owner=this.ordinaryOwner(atom);
-                        if(atom.tag==="promise"){visit(atom.value);visit(atom.rejection);}
-                        if(atom.tag==="generator"){visit(atom.yielded);visit(atom.returned);}
-                        if(atom.tag==="function"||atom.tag==="bound"||atom.tag==="promise-resolver"||owner?.proxy||!sourceCallbacksOnly&&(atom.tag==="intrinsic"||atom.tag==="operation"||atom.tag==="builtin"&&atom.normalResult!=="not-callable"))this.publish(target,atom);
-                        if(!owner)continue;
-                        let inspect!:Rule;
-                        inspect=this.rule([owner.shape],()=>{
-                        for(const property of owner.own?.values()??[])for(const write of property.writes.values())visit(write.values);
-                        for(const accessor of owner.accessors.values())if(this.accessorDefinitions.has(accessor.get)){visit(accessor.get);visit(accessor.set);}
-                        const stored=this.unknownPropertyLocations.get(owner);if(stored)visit(stored.value);
-                        if(!sourceCallbacksOnly&&atom.tag!=="function"&&!this.sourceObjectOwners.has(owner)&&!this.ownerCreations.has(owner)&&!this.ownerRealms.has(owner)&&!owner.collections&&!owner.collectionIterator)return;
-                        for(const key of owner.fields.keys())visit(this.dataProperty(owner,key));
-                        for(const accessor of owner.accessors.values()){visit(accessor.get);visit(accessor.set);}
-                        if(owner.prototype)visit(owner.prototype);
-                        if(owner.proxy){visit(owner.proxy.target);visit(owner.proxy.handler);}
-                        for(const record of owner.collections?.values()??[]){
-                            this.watch(inspect,record.changes);this.watch(inspect,record.shape);
-                            for(const entry of record.entries.values()){visit(entry.key);visit(entry.value);}
-                        }
-                        if(owner.collectionIterator){
-                            visit(owner.collectionIterator.elements);visit(this.directIteratorElements(current,context));
-                            if(owner.collectionIterator.source&&owner.collectionIterator.operation!=="keys")visit(owner.collectionIterator.source);
-                        }
-                        });
-                    }});
-                }
-            };
+            // Iterator elements are read through this escaping call's context.
+            const sink=this.newEscapeReach({callable:atom=>this.publish(target,atom),iterator:cell=>visit(this.directIteratorElements(cell,context))});
+            const visit=(input:Cell):void=>{if(seen.has(input))return;seen.add(input);this.linkEscapeReach(this.escapeCellReach(input,sourceCallbacksOnly),sink);};
             graph={visit};modes.set(sourceCallbacksOnly,graph);
             const invocation=this.invocationContext(context);
             this.escapedInvocationOrigins.set(invocation,context);
@@ -1747,9 +1789,11 @@ class SourceValueFlow {
             if (!atom) {atom = {tag: "primitive", value}; this.symbolPrimitives.set(value, atom);}
             return atom;
         }
-        const key = typeof value + ":" + (typeof value === "number" && Object.is(value,-0) ? "-0" : String(value));
-        let atom = this.primitives.get(key);
-        if (!atom) { atom = { tag: "primitive", value }; this.primitives.set(key, atom); }
+        if (Object.is(value, -0)) return this.negativeZeroPrimitive ??= { tag: "primitive", value };
+        let values = this.primitives.get(typeof value);
+        if (!values) { values = new Map(); this.primitives.set(typeof value, values); }
+        let atom = values.get(value);
+        if (!atom) { atom = { tag: "primitive", value }; values.set(value, atom); }
         return atom;
     }
     private keyIdentity(key: SourcePropertyKey | null): string {
@@ -1920,6 +1964,8 @@ class SourceValueFlow {
     private presence(owner:ObjectOwner,key:SourcePropertyKey):Cell {return this.ownPresence(owner,key).facts;}
     private markReadonly(owner:ObjectOwner,key:SourcePropertyKey):void {
         const record=this.ownPresence(owner,key);
+        // Already marked: publishing the same true fact again is a no-op.
+        if(record.readonlyWrite&&Set.prototype.has.call(record.readonlyWrite.values,this.primitive(true)))return;
         if(!record.readonlyWrite){record.readonlyWrite=this.newCell();this.publish(owner.shape,{tag:"descriptor",identity:record.readonlyWrite});}
         this.publish(record.readonlyWrite,this.primitive(true));
     }
