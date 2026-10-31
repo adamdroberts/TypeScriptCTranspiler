@@ -33338,9 +33338,8 @@ class Emitter {
             const spec = this.requireCallSpecifier(call);
             if (!spec) {
                 const specs = commonJsRequireSpecs;
-                if (specs.length > 0 && ts.isExpressionStatement(call.parent)) {
-                    return { c: "(void)0", ty: T_VOID };
-                }
+                // A discarded require() still evaluates its specifier and loads
+                // the selected module on first use, so statements dispatch too.
                 if (specs.length > 0) {
                     return this.emitFiniteCommonJsRequireDispatch(call, specs);
                 }
