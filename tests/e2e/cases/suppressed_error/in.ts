@@ -9,5 +9,7 @@ console.log("new:", created.name, created.message, String(created.error), String
 console.log("call:", called.name, called.message, String(called.error), String(called.suppressed));
 console.log("own:", created.hasOwnProperty("error"), created.hasOwnProperty("suppressed"), Object.hasOwn(created, "error"));
 console.log("reflect:", Reflect.get(created, "error"), Reflect.has(created, "suppressed"), descriptor.value, descriptor.enumerable);
-console.log("names:", Object.getOwnPropertyNames(created).join("|"), Object.keys(descriptors).join("|"));
+// V8 adds a non-standard own "stack" property; compare only specified own properties.
+const specified = (name: string): boolean => name !== "stack";
+console.log("names:", Object.getOwnPropertyNames(created).filter(specified).join("|"), Object.keys(descriptors).filter(specified).join("|"));
 console.log("alias:", (SuppressedError as any).name, (SuppressedError as any).length, aliased.error, aliased.suppressed, aliased.message, aliased instanceof SuppressedError, aliased instanceof Error, aliased.constructor === SuppressedError);

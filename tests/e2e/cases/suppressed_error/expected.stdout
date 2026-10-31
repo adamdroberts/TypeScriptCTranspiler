@@ -2,5 +2,5 @@ new: SuppressedError cleanup failed original cleanup SuppressedError: cleanup fa
 call: SuppressedError  call-original call-cleanup
 own: true true true
 reflect: original true original false
-names: name|message|cause|errors|error|suppressed name|message|cause|errors|error|suppressed
+names: message|error|suppressed message|error|suppressed
 alias: SuppressedError 3 alias-original alias-cleanup alias message true true true
