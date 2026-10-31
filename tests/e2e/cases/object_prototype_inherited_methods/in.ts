@@ -14,7 +14,7 @@ try {
     Reflect.construct(objectProto.hasOwnProperty, []);
     console.log("construct:", "ok");
 } catch (err: any) {
-    console.log("construct:", err);
+    console.log("construct:", err instanceof Error ? err.name : err);
 }
 console.log("prototype:", Object.keys(objectProto).join("|"), objectProto.propertyIsEnumerable("toString"), objectProto.isPrototypeOf(arr), objectProto.isPrototypeOf(fnAny));
 console.log("has:", "hasOwnProperty" in obj, Reflect.has(arr, "hasOwnProperty"), Reflect.has(fnAny, "valueOf"));
@@ -29,15 +29,15 @@ Object.setPrototypeOf(badFnAny, { toString: 7, toLocaleString: 8, valueOf: 9 });
 try {
     console.log(badFnAny.toString());
 } catch (e) {
-    console.log("bad function string:", e);
+    console.log("bad function string:", e instanceof Error ? e.name : e);
 }
 try {
     console.log(badFnAny.toLocaleString());
 } catch (e) {
-    console.log("bad function locale:", e);
+    console.log("bad function locale:", e instanceof Error ? e.name : e);
 }
 try {
     console.log(badFnAny.valueOf());
 } catch (e) {
-    console.log("bad function value:", e);
+    console.log("bad function value:", e instanceof Error ? e.name : e);
 }
