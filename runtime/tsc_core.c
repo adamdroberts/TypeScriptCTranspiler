@@ -65,6 +65,8 @@ struct tsc_agent {
     size_t next_tick_len,next_tick_cap,microtask_len,microtask_cap;
     size_t immediate_len,immediate_cap,timeout_len,timeout_cap;
     double next_timer_id;
+    double timer_now;
+    bool timer_now_set;
     uint64_t module_async_evaluation_count;
     bool owns_jobs,can_block,retired;
     bool held;
@@ -111,11 +113,15 @@ static struct GC_ms_entry* tsc_boxed_storage_mark(GC_word* addr, struct GC_ms_en
 int tsc_gc_boxed_storage_kind(void) { return tsc_boxed_storage_kind; }
 static pthread_once_t tsc_boxed_storage_once = PTHREAD_ONCE_INIT;
 static void tsc_boxed_storage_install(void) {
+    GC_init();
     tsc_boxed_storage_kind = (int)GC_new_kind(GC_new_free_list(), GC_MAKE_PROC(GC_new_proc(tsc_boxed_storage_mark), 0), 0, 1);
 }
-void* tsc_gc_malloc_traced(size_t size) {
+void* tsc_gc_try_malloc_traced(size_t size) {
     (void)pthread_once(&tsc_boxed_storage_once, tsc_boxed_storage_install);
-    void* value = GC_generic_malloc(size, tsc_boxed_storage_kind);
+    return GC_generic_malloc(size, tsc_boxed_storage_kind);
+}
+void* tsc_gc_malloc_traced(size_t size) {
+    void* value = tsc_gc_try_malloc_traced(size);
     if (!value) tsc_panic("out of memory allocating traced storage");
     return value;
 }
@@ -179,6 +185,8 @@ void tsc_agent_release(tsc_agent_t* agent){
 #define g_timeout_len (tsc_agent_current()->timeout_len)
 #define g_timeout_cap (tsc_agent_current()->timeout_cap)
 #define g_next_timer_id (tsc_agent_current()->next_timer_id)
+#define g_timer_now (tsc_agent_current()->timer_now)
+#define g_timer_now_set (tsc_agent_current()->timer_now_set)
 
 
 
@@ -2334,6 +2342,19 @@ static double tsc_now_ms(void) {
     return tsc_process_uptime() * 1000.0;
 }
 
+/* Timer clock, as in libuv: whole milliseconds cached at the start of each
+ * timer phase. Every timer created before the next refresh starts from the
+ * same instant, so equal deadlines fall back to creation order instead of
+ * sub-millisecond scheduling jitter. */
+static void tsc_timer_now_refresh(void) {
+    g_timer_now = floor(tsc_now_ms());
+    g_timer_now_set = true;
+}
+static double tsc_timer_now(void) {
+    if (!g_timer_now_set) tsc_timer_now_refresh();
+    return g_timer_now;
+}
+
 static double tsc_timer_delay_ms(double delay) {
     if (isnan(delay) || delay < 0.0) return 0.0;
     if (isinf(delay) || delay > 2147483647.0) return 1.0;
@@ -2367,7 +2388,7 @@ static double tsc_make_timeout(tsc_timeout_fn_t fn, void* env, double delay,bool
     }
     double id = g_next_timer_id++;
     double delay_ms = raw?delay:tsc_timer_delay_ms(delay);
-    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, false, !raw, delay_ms, tsc_now_ms() + delay_ms };
+    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, false, !raw, delay_ms, tsc_timer_now() + delay_ms };
     return id;
 }
 
@@ -2385,7 +2406,7 @@ double tsc_set_interval(tsc_timeout_fn_t fn, void* env, double delay) {
     }
     double id = g_next_timer_id++;
     double delay_ms = tsc_timer_delay_ms(delay);
-    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, true, true, delay_ms, tsc_now_ms() + delay_ms };
+    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, true, true, delay_ms, tsc_timer_now() + delay_ms };
     return id;
 }
 
@@ -2425,27 +2446,43 @@ static void tsc_append_interval(const tsc_timeout_entry_t* entry) {
     }
     g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){
         entry->fn, entry->env, entry->id, false, true, entry->refed,
-        entry->delay_ms, tsc_now_ms() + entry->delay_ms
+        entry->delay_ms, tsc_timer_now() + entry->delay_ms
     };
 }
 
 void tsc_drain_timeouts(void) {
     size_t count = g_timeout_len;
-    size_t idx = 0;
-    double now_ms = tsc_now_ms();
-    while (idx < count) {
-        tsc_timeout_entry_t entry = g_timeout_queue[idx++];
-        if (!g_timeout_queue[idx - 1].canceled && entry.fn && tsc_timeout_ready(&entry, now_ms)) {
-            entry.fn(entry.env);
-            tsc_job_checkpoint();
-            if (entry.is_interval && !g_timeout_queue[idx - 1].canceled) {
-                entry.refed = g_timeout_queue[idx - 1].refed;
-                tsc_append_interval(&entry);
-            }
-            g_timeout_queue[idx - 1].canceled = true;
+    tsc_timer_now_refresh();
+    double now_ms = g_timer_now;
+    /* Timers due at the start of this phase run by (deadline, creation id). */
+    size_t ready_len = 0;
+    size_t* ready = count ? (size_t*)TSC_GC_MALLOC_ATOMIC(tsc_alloc_size(count, sizeof(size_t))) : NULL;
+    for (size_t i = 0; i < count; i++) {
+        const tsc_timeout_entry_t* entry = &g_timeout_queue[i];
+        if (entry->canceled || !entry->fn || !tsc_timeout_ready(entry, now_ms)) continue;
+        size_t at = ready_len++;
+        while (at > 0) {
+            const tsc_timeout_entry_t* prior = &g_timeout_queue[ready[at - 1]];
+            if (prior->trigger_ms < entry->trigger_ms || (prior->trigger_ms == entry->trigger_ms && prior->id <= entry->id)) break;
+            ready[at] = ready[at - 1];
+            at--;
         }
+        ready[at] = i;
+    }
+    for (size_t r = 0; r < ready_len; r++) {
+        size_t idx = ready[r];
+        tsc_timeout_entry_t entry = g_timeout_queue[idx];
+        if (g_timeout_queue[idx].canceled || !entry.fn) continue;
+        entry.fn(entry.env);
+        tsc_job_checkpoint();
+        if (entry.is_interval && !g_timeout_queue[idx].canceled) {
+            entry.refed = g_timeout_queue[idx].refed;
+            tsc_append_interval(&entry);
+        }
+        g_timeout_queue[idx].canceled = true;
         tsc_drain_microtasks_and_next_ticks();
     }
+    tsc_drain_microtasks_and_next_ticks();
 
     /* Zero-delay intervals that were rescheduled during this phase are due
      * before immediates get a turn. One-shot timers stay deferred so nested
@@ -2455,7 +2492,7 @@ void tsc_drain_timeouts(void) {
         size_t current_idx = interval_idx++;
         tsc_timeout_entry_t entry = g_timeout_queue[current_idx];
         if (g_timeout_queue[current_idx].canceled || !entry.fn || !entry.is_interval ||
-            !tsc_timeout_ready(&entry, tsc_now_ms())) {
+            !tsc_timeout_ready(&entry, g_timer_now)) {
             continue;
         }
         entry.fn(entry.env);
@@ -2479,7 +2516,7 @@ void tsc_drain_timeouts(void) {
 }
 
 static bool tsc_has_ready_timeout(void) {
-    double now_ms = tsc_now_ms();
+    double now_ms = floor(tsc_now_ms());
     for (size_t i = 0; i < g_timeout_len; i++) {
         if (!g_timeout_queue[i].canceled && g_timeout_queue[i].fn && tsc_timeout_ready(&g_timeout_queue[i], now_ms)) {
             return true;

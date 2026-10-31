@@ -24,10 +24,16 @@ void* tsc_no_gc_malloc_uninit(size_t n);
 #    define GC_THREADS
 #  endif
 #  include <gc/gc.h>
-#  define TSC_GC_TRY_MALLOC(n)         GC_MALLOC(n)
-#  define TSC_GC_TRY_MALLOC_UNINIT(n)  GC_MALLOC((n))
+/* Scanned allocations use a collector kind whose mark procedure decodes
+ * NaN-boxed tsc_value_t words, so a value stored in any runtime or emitted
+ * structure keeps its target alive without a companion raw-pointer root.
+ * Pointer-free (atomic) allocations stay unscanned. */
+void* tsc_gc_try_malloc_traced(size_t n);
+static inline void* tsc_gc_try_realloc_traced(void* p, size_t n) { return p ? GC_REALLOC(p, n) : tsc_gc_try_malloc_traced(n); }
+#  define TSC_GC_TRY_MALLOC(n)         tsc_gc_try_malloc_traced((n))
+#  define TSC_GC_TRY_MALLOC_UNINIT(n)  tsc_gc_try_malloc_traced((n))
 #  define TSC_GC_TRY_MALLOC_ATOMIC(n)  GC_MALLOC_ATOMIC(n)
-#  define TSC_GC_TRY_REALLOC(p, n)     GC_REALLOC((p), (n))
+#  define TSC_GC_TRY_REALLOC(p, n)     tsc_gc_try_realloc_traced((p), (n))
 #  define TSC_GC_INIT()                GC_INIT()
 #endif
 
