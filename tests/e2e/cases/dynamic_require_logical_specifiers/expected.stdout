@@ -1,7 +1,6 @@
 logical or a side effect
-logical or b side effect
-logical and value side effect
-logical empty fallback side effect
 logical or: logical-or-a
+logical and value side effect
 logical and: logical-and-value
+logical empty fallback side effect
 logical fallback: logical-empty-fallback

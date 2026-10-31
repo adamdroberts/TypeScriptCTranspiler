@@ -1,4 +1,4 @@
-template a init
 template b init
 template first: template-b
+template a init
 template second: template-a

@@ -1,4 +1,4 @@
-raw a init
 raw b init
 raw first: raw-b
+raw a init
 raw second: raw-a

@@ -1,7 +1,6 @@
-nullish left side effect
 nullish fallback side effect
-nullish direct side effect
-nullish kept side effect
 nullish fallback: nullish-fallback
+nullish direct side effect
 nullish direct: nullish-direct
+nullish kept side effect
 nullish kept: nullish-kept

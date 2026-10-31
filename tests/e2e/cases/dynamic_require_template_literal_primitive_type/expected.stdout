@@ -1,6 +1,4 @@
-primitive 1 null init
-primitive 1 undefined init
-primitive 2 null init
 primitive 2 undefined init
 primitive template first: primitive-2-undefined
+primitive 1 null init
 primitive template second: primitive-1-null
