@@ -1,7 +1,7 @@
 sym-locale: Symbol(id)
 sym-value: true id
 big-locale: 255
-big-value: 256
+big-value: 256n
 own: false false
 ignored big: ff 255 true 255 bslvu
 ignored own: false false bslvuhe
