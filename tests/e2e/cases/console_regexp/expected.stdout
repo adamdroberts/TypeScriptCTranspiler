@@ -1,0 +1,5 @@
+/a\/b/gi [ /a\/b/gi ] { r: /a\/b/gi }
+/a\/b/gi { x: 1 }
+/\n/ /(?:)/
+true
+/x/y { toString: [Function (anonymous)] } changed

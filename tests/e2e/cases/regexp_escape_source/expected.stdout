@@ -5,4 +5,4 @@ class: [/]
 empty: (?:)
 roundtrip: true
 surrogate: true
-coerce: changed
+coerce: /\/\n\u2028/ { toString: [Function (anonymous)] }

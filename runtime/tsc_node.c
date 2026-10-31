@@ -8339,10 +8339,21 @@ static tsc_str_t* console_inspect(tsc_value_t value,bool hidden,int depth) {
                 }
             }
             tsc_error_t* error=owner&&owner->is_error?owner->class_ptr:NULL;
+            // A headed object prints its header, then braces only when visible
+            // own properties follow: errors and, as util.inspect does, RegExp
+            // objects rendered from [[OriginalSource]]/[[OriginalFlags]].
             frame->error=error!=NULL;
             if(error) {
                 tsc_str_t* text=tsc_error_diagnostic_string(error);
                 if(text)tsc_jsonbuf_append(&output,text->data,text->len);
+            } else if(owner&&!owner->is_proxy&&owner->is_regexp&&owner->class_ptr) {
+                const tsc_regexp_t* regexp=owner->class_ptr;
+                tsc_str_t* source=tsc_regexp_source(regexp);
+                tsc_jsonbuf_byte(&output,'/');
+                if(source)tsc_jsonbuf_append(&output,source->data,source->len);
+                tsc_jsonbuf_byte(&output,'/');
+                if(regexp->original_flags)tsc_jsonbuf_append(&output,regexp->original_flags->data,regexp->original_flags->len);
+                frame->error=true;
             }
             frame->keys=tsc_reflect_own_keys(frame->value);frame->opened=true;
             if(!frame->error&&!frame->array&&owner&&!owner->is_proxy) {

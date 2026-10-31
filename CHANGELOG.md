@@ -1,3 +1,4 @@
+- Render RegExp objects in console output as /source/flags with any own enumerable properties.
 - Evaluate discarded computed require() calls instead of dropping them.
 - Return the whitespace-preserving type erasure as Function.prototype.toString source text for TypeScript callables.
 - Stop the setPrototypeOf cycle check at proxies without invoking their getPrototypeOf trap (OrdinarySetPrototypeOf step 8).
