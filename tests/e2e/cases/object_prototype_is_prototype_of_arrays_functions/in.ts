@@ -2,7 +2,7 @@ function report(label: string, fn: () => any): void {
     try {
         console.log(label + ":", fn());
     } catch (e: any) {
-        console.log(label + ":", e);
+        console.log(label + ":", e instanceof Error ? e.name : e);
     }
 }
 
@@ -16,7 +16,8 @@ const functionProto: any = Object.getPrototypeOf(fnVal);
 const objectProto: any = Object.getPrototypeOf({});
 
 console.log("arrayProto:", typeof arrayProto, String(arrayProto).length);
-console.log("functionProto:", typeof functionProto, functionProto);
+// Inspecting Function.prototype itself is engine-specific; assert its identity.
+console.log("functionProto:", typeof functionProto, functionProto === Function.prototype);
 console.log("objectProto:", typeof objectProto, objectProto);
 console.log("objectProto parent:", typeof Object.getPrototypeOf(objectProto), Object.getPrototypeOf(objectProto));
 

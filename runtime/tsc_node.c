@@ -8303,6 +8303,7 @@ static tsc_str_t* console_inspect(tsc_value_t value,bool hidden,int depth) {
                     tsc_str_t* name=tsc_value_to_string(tsc_value_get_prop(frame->value,tsc_str_from_lit("name",4)));
                     console_inspect_append(&output,"[Function");
                     if(name&&name->len){console_inspect_append(&output,": ");tsc_jsonbuf_append(&output,name->data,name->len);}
+                    else console_inspect_append(&output," (anonymous)");
                     tsc_jsonbuf_byte(&output,']');
                 } else {
                     tsc_str_t* text=!value_is_box(frame->value)?console_number(tsc_value_to_number(frame->value)):tsc_value_to_explicit_string(frame->value);
@@ -8344,6 +8345,10 @@ static tsc_str_t* console_inspect(tsc_value_t value,bool hidden,int depth) {
                 if(text)tsc_jsonbuf_append(&output,text->data,text->len);
             }
             frame->keys=tsc_reflect_own_keys(frame->value);frame->opened=true;
+            if(!frame->error&&!frame->array&&owner&&!owner->is_proxy) {
+                tsc_value_t prototype=tsc_object_get_prototype_of(owner);
+                if(value_is_box(prototype)&&value_tag(prototype)==TSC_VALUE_TAG_NULL)console_inspect_append(&output,"[Object: null prototype] ");
+            }
             if(!frame->error)tsc_jsonbuf_byte(&output,frame->array?'[':'{');
         }
         if(frame->next>=frame->keys->len) {

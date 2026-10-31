@@ -1,3 +1,4 @@
+- Render null-prototype objects and anonymous functions in console output as util.inspect does.
 - Select the Module goal for compile roots by Node package rules (.mjs/.mts or a "type": "module" package scope).
 - Render primitive wrapper objects in console output as util.inspect does ([Number: 5], [String: 'ab'], ...).
 - Type Object.groupBy results as Partial<Record<K, T[]>> instead of unknown, and make group_by_this_param explicitly strict.

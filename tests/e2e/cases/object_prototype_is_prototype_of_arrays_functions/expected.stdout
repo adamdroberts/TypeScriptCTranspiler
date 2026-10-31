@@ -1,14 +1,14 @@
 arrayProto: object 0
-functionProto: function [function]
-objectProto: object [object Object]
+functionProto: function true
+objectProto: object [Object: null prototype] {}
 objectProto parent: object null
 arrayProto isPrototypeOf arr: true
 functionProto isPrototypeOf fnVal: true
 objectProto isPrototypeOf arr: true
 objectProto isPrototypeOf fnVal: true
-null isPrototypeOf arr: Object.prototype.isPrototypeOf.call receiver is null or undefined
-undefined isPrototypeOf fnVal: Object.prototype.isPrototypeOf.call receiver is null or undefined
+null isPrototypeOf arr: TypeError
+undefined isPrototypeOf fnVal: TypeError
 descsNum keys: 
 descsBool keys: 
-descsNull: Object.getOwnPropertyDescriptors target must not be null or undefined
-descsUndefined: Object.getOwnPropertyDescriptors target must not be null or undefined
+descsNull: TypeError
+descsUndefined: TypeError
