@@ -17,11 +17,11 @@ try {
     Object.prototype.__defineGetter__.call(1, "x", 1);
     console.log("bad getter: ok");
 } catch (e: any) {
-    console.log("bad getter:", e);
+    console.log("bad getter:", e instanceof Error ? e.name : e);
 }
 try {
     text.__defineSetter__("x", 1);
     console.log("bad setter: ok");
 } catch (e: any) {
-    console.log("bad setter:", e);
+    console.log("bad setter:", e instanceof Error ? e.name : e);
 }

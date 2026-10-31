@@ -1,5 +1,5 @@
-get null: Object.getPrototypeOf target must not be null or undefined
-get undefined: Object.getPrototypeOf target must not be null or undefined
-set null: Object.setPrototypeOf target must not be null or undefined
-set undefined: Object.setPrototypeOf target must not be null or undefined
+get null: TypeError
+get undefined: TypeError
+set null: TypeError
+set undefined: TypeError
 marks: abcd

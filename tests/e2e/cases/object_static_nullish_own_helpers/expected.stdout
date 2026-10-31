@@ -1,9 +1,9 @@
-keys: Object.keys target must not be null or undefined
-values: Object.values target must not be null or undefined
-entries: Object.entries target must not be null or undefined
-names: Object.getOwnPropertyNames target must not be null or undefined
-symbols: Object.getOwnPropertySymbols target must not be null or undefined
-descriptor: Object.getOwnPropertyDescriptor target must not be null or undefined
-descriptors: Object.getOwnPropertyDescriptors target must not be null or undefined
-hasOwn: Object.hasOwn target must not be null or undefined
+keys: TypeError
+values: TypeError
+entries: TypeError
+names: TypeError
+symbols: TypeError
+descriptor: TypeError
+descriptors: TypeError
+hasOwn: TypeError
 marks: abcdefghij

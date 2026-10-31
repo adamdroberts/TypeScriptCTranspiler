@@ -16,12 +16,12 @@ obj.valueOf = 7;
 try {
     console.log(obj.valueOf());
 } catch (e) {
-    console.log("bad object:", e);
+    console.log("bad object:", e instanceof Error ? e.name : e);
 }
 
 const bare: any = Object.create(null);
 try {
     console.log(bare.valueOf());
 } catch (e) {
-    console.log("bare object:", e);
+    console.log("bare object:", e instanceof Error ? e.name : e);
 }

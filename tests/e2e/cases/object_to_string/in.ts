@@ -19,12 +19,12 @@ obj.toString = 7;
 try {
     console.log(obj.toString());
 } catch (e) {
-    console.log("bad object:", e);
+    console.log("bad object:", e instanceof Error ? e.name : e);
 }
 
 const bare: any = Object.create(null);
 try {
     console.log(bare.toString());
 } catch (e) {
-    console.log("bare object:", e);
+    console.log("bare object:", e instanceof Error ? e.name : e);
 }

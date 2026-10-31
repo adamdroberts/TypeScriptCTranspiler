@@ -2,8 +2,8 @@ null: 0 undefined undefined undefined
 undefined: 0 undefined undefined undefined
 pairs: 3 2 nan zero2
 entries: 3 x 2 NaN nan 0 zero2
-bad: Map constructor source is not iterable
-bad entry: Map constructor entry must be an array pair
-short entry: Map constructor entry must be an array pair
-string entry: Map constructor entry must be an array pair
+bad: TypeError
+bad entry: TypeError
+short entry: 1 undefined undefined undefined
+string entry: TypeError
 marks: ab
