@@ -1,3 +1,4 @@
+- Let the WeakMap/WeakSet ephemeron pass scan program storage instead of aborting on its traced allocation kind.
 - Trace NaN-boxed values in program storage with a decoding GC mark procedure, so a global stays live even when an emission path omits its companion root.
 - Type require() destructuring of runtime-owned CommonJS exports dynamically in every goal, copy rest bindings from the actual exports, and root destructured module globals across collections.
 - Add `--allow-net` to compile a fail-closed network allowlist into binaries, enforced at one poisoned DNS/connect/bind chokepoint.

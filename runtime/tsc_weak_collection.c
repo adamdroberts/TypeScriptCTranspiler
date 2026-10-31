@@ -146,12 +146,14 @@ static void weak_collection_event(GC_EventType stage) {
         void* pointer=work.pointers[--work.length];void* base=GC_base(pointer);
         if(!base||GC_is_marked(base))continue;
         size_t bytes;int kind=GC_get_kind_and_size(base,&bytes);
-        if(kind!=normal_allocation_kind&&kind!=atomic_allocation_kind)weak_collector_failure();
+        bool boxed=kind==tsc_gc_boxed_storage_kind();
+        if(kind!=normal_allocation_kind&&kind!=atomic_allocation_kind&&!boxed)weak_collector_failure();
         GC_set_mark_bit(base);
         weak_index_slot_t* slot=weak_index_slot(&index,base);
         for(weak_dependency_t* edge=slot->dependencies;edge;edge=edge->next)
             if(GC_is_marked(edge->collection)&&weak_key_live(edge->entry->key))weak_mark_push(&work,tsc_value_gc_root(edge->entry->value));
         if(kind==normal_allocation_kind)for(size_t offset=0;offset<bytes/sizeof(void*);++offset)weak_mark_push(&work,((void**)base)[offset]);
+        if(boxed)for(size_t offset=0;offset<bytes/sizeof(tsc_value_t);++offset){tsc_value_t word=((tsc_value_t*)base)[offset];weak_mark_push(&work,value_is_box(word)?tsc_value_gc_root(word):(void*)(uintptr_t)word);}
     }
     if(work.pointers)munmap(work.pointers,work.capacity*sizeof(void*));munmap(index.memory,index.bytes);
     weak_registry_cleanup();

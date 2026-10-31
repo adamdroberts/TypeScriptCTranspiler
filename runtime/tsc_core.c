@@ -100,6 +100,7 @@ static struct GC_ms_entry* tsc_boxed_storage_mark(GC_word* addr, struct GC_ms_en
     }
     return top;
 }
+int tsc_gc_boxed_storage_kind(void) { return tsc_boxed_storage_kind; }
 static void* tsc_boxed_storage_alloc(size_t size) {
     if (tsc_boxed_storage_kind < 0) {
         tsc_boxed_storage_kind = (int)GC_new_kind(GC_new_free_list(), GC_MAKE_PROC(GC_new_proc(tsc_boxed_storage_mark), 0), 0, 1);
@@ -109,6 +110,7 @@ static void* tsc_boxed_storage_alloc(size_t size) {
     return value;
 }
 #else
+int tsc_gc_boxed_storage_kind(void) { return -1; }
 static void* tsc_boxed_storage_alloc(size_t size) { return TSC_GC_MALLOC(size); }
 #endif
 
