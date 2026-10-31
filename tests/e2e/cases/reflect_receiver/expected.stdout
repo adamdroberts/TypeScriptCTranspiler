@@ -8,14 +8,22 @@ set accessor receiver: true via
 bound get default: base
 bound get receiver: receiver
 bound set receiver: true base via-this
-bound getter identity: function [function] true true
-bound setter identity: function [function] true true
+bound getter identity: function function readMarker(         )      {
+    return this.marker;
+} true true
+bound setter identity: function function writeMarker(           value     )       {
+    this.marker = value;
+} true true
 bound getter apply: via-this
 bound setter apply: undefined base via-apply
 closure get default: c:base
 closure get receiver: c:receiver
 closure set receiver: true base c:next
-closure getter identity: function [function] true true
-closure setter identity: function [function] true true
+closure getter identity: function function(         )      {
+        return prefix + ":" + this.marker;
+    } true true
+closure setter identity: function function(           value     )       {
+        this.marker = prefix + ":" + value;
+    } true true
 closure getter apply: c:c:next
 closure setter apply: undefined base c:apply

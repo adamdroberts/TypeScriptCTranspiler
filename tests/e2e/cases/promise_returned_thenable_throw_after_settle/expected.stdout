@@ -1,3 +1,3 @@
 events:
-try reject kept: try kept reason
 callback resolve kept: callback kept
+try reject kept: try kept reason

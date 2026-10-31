@@ -1,6 +1,6 @@
 pending: [object Promise] false
 catch omitted: bad
-finally callback: side 1
 fulfilled: ok
 undefined handlers: again
 after catch: recovered
+finally callback: side 1
