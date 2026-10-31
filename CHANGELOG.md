@@ -1,3 +1,4 @@
+- Stop the setPrototypeOf cycle check at proxies without invoking their getPrototypeOf trap (OrdinarySetPrototypeOf step 8).
 - Render null-prototype objects and anonymous functions in console output as util.inspect does.
 - Select the Module goal for compile roots by Node package rules (.mjs/.mts or a "type": "module" package scope).
 - Render primitive wrapper objects in console output as util.inspect does ([Number: 5], [String: 'ab'], ...).

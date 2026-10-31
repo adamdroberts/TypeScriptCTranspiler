@@ -1,8 +1,8 @@
-null target: Object.setPrototypeOf target must not be null or undefined
-bad proto primitive: Object.setPrototypeOf prototype must be an object or null
+null target: TypeError
+bad proto primitive: TypeError
 primitive target: 1
-locked change: Object.setPrototypeOf failed
+locked change: TypeError
 locked same: true
-proxy bad proto: Object.setPrototypeOf prototype must be an object or null no
-proxy false: Object.setPrototypeOf failed
+proxy bad proto: TypeError no
+proxy false: TypeError
 reflect false: false

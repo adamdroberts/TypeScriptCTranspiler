@@ -1076,7 +1076,7 @@ bool tsc_object_set_prototype_of(tsc_object_t* o, tsc_value_t prototype) {
     if (!o || !value_is_valid_prototype(prototype)) return false;
     if (o->prototype == prototype) return true;
     if (!o->extensible) return false;
-    if (object_chain_contains(prototype, o)) return false;
+    if (tsc_value_ordinary_chain_contains(prototype, tsc_value_object(o))) return false;
     o->prototype = prototype;
     o->prototype_gc_root = tsc_value_gc_root(prototype);
     object_shape_changed(o, "prototype", NULL);

@@ -1,10 +1,10 @@
 array reflect cycle: false
-array object cycle: Object.setPrototypeOf failed
+array object cycle: TypeError
 function reflect cycle: false
-function object cycle: Object.setPrototypeOf failed
-proxy virtual cycle: false 1
-proxy virtual cycle object: Object.setPrototypeOf failed
-proxy virtual cycle reads: 2
+function object cycle: TypeError
+proxy virtual cycle: true 0
+proxy virtual cycle object: true
+proxy virtual cycle reads: 0
 array self cycle: false
 function self cycle: false
 array non-cycle: true ok

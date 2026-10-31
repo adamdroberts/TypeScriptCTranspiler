@@ -5355,7 +5355,7 @@ bool tsc_value_is_prototype_of(tsc_value_t prototype, tsc_value_t object) {
     return false;
 }
 
-bool tsc_value_chain_contains(tsc_value_t prototype, tsc_value_t needle) {
+static bool value_chain_contains(tsc_value_t prototype, tsc_value_t needle, bool ordinary_only) {
     if (!value_is_box(needle)) return false;
     tsc_value_tag_t needle_tag = value_tag(needle);
     if (
@@ -5369,6 +5369,9 @@ bool tsc_value_chain_contains(tsc_value_t prototype, tsc_value_t needle) {
     while (value_is_box(prototype)) {
         tsc_value_tag_t tag = value_tag(prototype);
         if (tag == needle_tag && value_ptr(prototype) == needle_ptr) return true;
+        /* OrdinarySetPrototypeOf stops at a non-ordinary [[GetPrototypeOf]]
+         * (a Proxy) without invoking its trap. */
+        if (ordinary_only && tag == TSC_VALUE_TAG_OBJECT && ((const tsc_object_t*)value_ptr(prototype))->is_proxy) return false;
         if (
             tag == TSC_VALUE_TAG_OBJECT ||
             tag == TSC_VALUE_TAG_ARRAY ||
@@ -5380,6 +5383,15 @@ bool tsc_value_chain_contains(tsc_value_t prototype, tsc_value_t needle) {
         break;
     }
     return false;
+}
+
+bool tsc_value_chain_contains(tsc_value_t prototype, tsc_value_t needle) {
+    return value_chain_contains(prototype, needle, false);
+}
+
+/* Cycle check of OrdinarySetPrototypeOf step 8: walks ordinary objects only. */
+bool tsc_value_ordinary_chain_contains(tsc_value_t prototype, tsc_value_t needle) {
+    return value_chain_contains(prototype, needle, true);
 }
 
 tsc_value_t tsc_value_get_prototype_of(tsc_value_t v) {
@@ -5430,7 +5442,7 @@ bool tsc_value_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
         if (!value_is_valid_prototype(prototype)) return false;
         if (a->prototype == prototype) return true;
         if (!a->extensible) return false;
-        if (tsc_value_chain_contains(prototype, v)) return false;
+        if (tsc_value_ordinary_chain_contains(prototype, v)) return false;
         a->prototype = prototype;
         return true;
     }
@@ -5439,7 +5451,7 @@ bool tsc_value_set_prototype_of(tsc_value_t v, tsc_value_t prototype) {
         if (!value_is_valid_prototype(prototype)) return false;
         if (fn->prototype == prototype) return true;
         if (!fn->extensible) return false;
-        if (tsc_value_chain_contains(prototype, v)) return false;
+        if (tsc_value_ordinary_chain_contains(prototype, v)) return false;
         tsc_function_identity_set_prototype(fn, prototype);
         return true;
     }
