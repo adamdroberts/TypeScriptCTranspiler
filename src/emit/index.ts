@@ -12324,11 +12324,10 @@ class Emitter {
 
     private commonJsImportedValue(imported: { info: ModuleInfo; name: string | null }): { c: string; ty: CType } {
         const owner = this.commonJsModuleValue(imported.info, false);
-        if (imported.name === null) return owner;
-        if (imported.name === "default" && !this.hasCommonJsEsModuleMarker(imported.info.sf)) {
-            const value = this.freshTemp("_cjs_import_owner");
-            return { c: `({ tsc_value_t ${value} = ${owner.c}; tsc_value_has_own_prop(${value}, ${this.stringLit("default")}) ? tsc_value_get_prop(${value}, ${this.stringLit("default")}) : ${value}; })`, ty: T_VALUE };
-        }
+        if (imported.name === null) return { c: `tsc_commonjs_namespace(${owner.c})`, ty: T_VALUE };
+        // As in Bun, an ES module's default import of CommonJS is module.exports
+        // unless it carries a truthy __esModule data property and a default.
+        if (imported.name === "default") return { c: `tsc_commonjs_default(${owner.c})`, ty: T_VALUE };
         return { c: `tsc_value_get_prop(${owner.c}, ${this.stringLit(imported.name)})`, ty: T_VALUE };
     }
 
@@ -18679,16 +18678,8 @@ class Emitter {
             );
         }
         if (!info) return null;
+        if (name === "default" && this.isCommonJsSourceFile(info.sf) && !this.hasCommonJsEsModuleMarker(info.sf)) return info.sf;
         const commonJsDecl = info ? this.commonJsExportedMemberDeclaration(info.sf, name) : null;
-        if (
-            name === "default" &&
-            commonJsDecl &&
-            this.isJavaScriptSourceFile(info.sf) &&
-            !this.hasCommonJsEsModuleMarker(info.sf) &&
-            this.isDirectCommonJsDefaultExportAccess(commonJsDecl)
-        ) {
-            return info.sf;
-        }
         if (commonJsDecl) return commonJsDecl;
         const esmDecl = this.esmExportedMemberDeclaration(info.sf, name);
         if (esmDecl) return esmDecl;
@@ -40940,8 +40931,6 @@ class Emitter {
         ) {
             const targetFile = target.getSourceFile();
             if (!this.hasCommonJsEsModuleMarker(targetFile)) {
-                const defaultMember = this.commonJsExportedMemberDeclaration(targetFile, "default");
-                if (defaultMember) return defaultMember;
                 if (!this.commonJsModuleExportsValueDeclaration(targetFile) &&
                     this.commonJsExportedMemberDeclarations(targetFile).length > 0) {
                     return targetFile;
@@ -40975,6 +40964,7 @@ class Emitter {
             // below; typed ESM defaults can retain their direct representation.
             return this.isJavaScriptSourceFile(sf) ? null : esmDefault;
         }
+        if (this.isCommonJsSourceFile(sf) && !this.hasCommonJsEsModuleMarker(sf)) return sf;
         if (!this.hasCommonJsEsModuleMarker(sf)) {
             const defaultMember = this.commonJsExportedMemberDeclaration(sf, "default");
             if (defaultMember && !this.isDirectCommonJsDefaultExportAccess(defaultMember)) {
@@ -41038,6 +41028,7 @@ class Emitter {
         const sf = info?.sf;
         if (!sf) return null;
         const exportName = importSpec.propertyName?.text ?? importSpec.name.text;
+        if (exportName === "default" && this.isCommonJsSourceFile(sf) && !this.hasCommonJsEsModuleMarker(sf)) return { name: "default", decl: sf, specifier: specifier.text };
         const decl = this.commonJsExportedMemberDeclaration(sf, exportName);
         if (decl) return { name: exportName, decl, specifier: specifier.text };
         const starDecl = this.commonJsExportStarMemberDeclaration(sf, exportName);

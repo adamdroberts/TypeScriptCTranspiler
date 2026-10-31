@@ -1,3 +1,4 @@
+- Follow Bun's CommonJS interop: an ES module's default import of CommonJS is module.exports unless it has a truthy __esModule data property and a default, and CommonJS namespaces hide __esModule.
 - Render RegExp objects in console output as /source/flags with any own enumerable properties.
 - Evaluate discarded computed require() calls instead of dropping them.
 - Return the whitespace-preserving type erasure as Function.prototype.toString source text for TypeScript callables.

@@ -1592,6 +1592,8 @@ void tsc_native_object_owner_attach(tsc_native_object_owner_t* owner, void* ptr,
 tsc_object_t* tsc_module_namespace_new(void);
 bool tsc_module_namespace_define(tsc_object_t* object, tsc_str_t* key, tsc_accessor_getter_t getter);
 void tsc_module_namespace_finalize(tsc_object_t* object);
+tsc_value_t tsc_commonjs_default(tsc_value_t exports);
+tsc_value_t tsc_commonjs_namespace(tsc_value_t exports);
 bool tsc_object_set(tsc_object_t* o, tsc_str_t* key, tsc_value_t value);
 bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, tsc_value_t receiver);
 bool tsc_object_define(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, bool writable, bool enumerable, bool configurable);

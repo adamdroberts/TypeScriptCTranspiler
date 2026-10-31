@@ -278,6 +278,77 @@ bool tsc_module_namespace_define(
     );
 }
 
+/* The ES module view of a CommonJS module, as Bun defines it: the default
+ * binding is exports.default when module.exports has a truthy own __esModule
+ * data property and a default, and module.exports otherwise. The namespace's
+ * other names are the exporter's own enumerable string keys except
+ * __esModule, snapshotted when the namespace is first created and listed in
+ * code-unit order. One namespace is retained per exports value so every
+ * importer observes the same identity. */
+typedef struct { tsc_value_t value; void* root; } commonjs_namespace_binding_t;
+typedef struct commonjs_namespace_entry {
+    tsc_value_t exports; void* exports_root; tsc_object_t* namespace_object;
+    struct commonjs_namespace_entry* next;
+} commonjs_namespace_entry_t;
+static commonjs_namespace_entry_t* commonjs_namespaces;
+static tsc_value_t commonjs_namespace_binding(void* env, tsc_value_t receiver) {
+    (void)receiver;
+    return ((const commonjs_namespace_binding_t*)env)->value;
+}
+tsc_value_t tsc_commonjs_default(tsc_value_t exports) {
+    if (!tsc_value_is_object(exports)) return exports;
+    void* volatile exports_root = tsc_value_gc_root(exports);
+    tsc_str_t* marker = tsc_str_from_lit("__esModule", 10), *name = tsc_str_from_lit("default", 7);
+    tsc_value_t descriptor = tsc_value_get_own_property_computed_descriptor(exports, tsc_value_string(marker));
+    void* volatile descriptor_root = tsc_value_gc_root(descriptor);
+    bool esmodule = tsc_value_is_object(descriptor) && tsc_value_has_own_prop(descriptor, tsc_str_from_lit("value", 5)) &&
+        tsc_value_is_truthy(tsc_value_get_prop(descriptor, tsc_str_from_lit("value", 5)));
+    tsc_value_t result = esmodule && tsc_value_has_prop(exports, name) ? tsc_value_get_prop(exports, name) : exports;
+    (void)exports_root; (void)descriptor_root;
+    return result;
+}
+tsc_value_t tsc_commonjs_namespace(tsc_value_t exports) {
+    for (commonjs_namespace_entry_t* entry = commonjs_namespaces; entry; entry = entry->next)
+        if (entry->exports == exports) return tsc_value_object(entry->namespace_object);
+    void* volatile exports_root = tsc_value_gc_root(exports);
+    tsc_array_t* volatile names = tsc_array_new(sizeof(tsc_str_t*), 8);
+    tsc_str_t* fixed[] = { tsc_str_from_lit("default", 7), tsc_str_from_lit("__esModule", 10) };
+    tsc_array_push_raw(names, &fixed[0]);
+    if (tsc_value_is_object(exports)) {
+        tsc_array_t* keys = tsc_value_own_keys(exports);
+        for (size_t index = 0; keys && index < keys->len; index++) {
+            tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, index);
+            if (!key || key->symbol_key || tsc_str_eq(key, fixed[1]) || !tsc_value_property_is_enumerable(exports, key)) continue;
+            bool seen = false;
+            for (size_t prior = 0; prior < names->len && !seen; prior++) seen = tsc_str_eq(TSC_ARR(tsc_str_t*, names, prior), key);
+            if (!seen) tsc_array_push_raw(names, &key);
+        }
+    }
+    for (size_t index = 1; index < names->len; index++) {
+        tsc_str_t* current = TSC_ARR(tsc_str_t*, names, index);
+        size_t slot = index;
+        while (slot > 0 && tsc_str_cmp(TSC_ARR(tsc_str_t*, names, slot - 1), current) > 0) {
+            TSC_ARR(tsc_str_t*, names, slot) = TSC_ARR(tsc_str_t*, names, slot - 1); slot--;
+        }
+        TSC_ARR(tsc_str_t*, names, slot) = current;
+    }
+    tsc_object_t* volatile namespace_object = tsc_module_namespace_new();
+    for (size_t index = 0; index < names->len; index++) {
+        tsc_str_t* name = TSC_ARR(tsc_str_t*, names, index);
+        commonjs_namespace_binding_t* binding = TSC_GC_MALLOC(sizeof(*binding));
+        binding->value = tsc_str_eq(name, fixed[0]) ? tsc_commonjs_default(exports) : tsc_value_get_prop(exports, name);
+        binding->root = tsc_value_gc_root(binding->value);
+        if (!tsc_object_define_accessor(namespace_object, name, commonjs_namespace_binding, binding, true, NULL, NULL, false, true, true, false, true))
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("CommonJS module namespace binding definition failed"));
+    }
+    tsc_module_namespace_finalize(namespace_object);
+    commonjs_namespace_entry_t* entry = TSC_GC_MALLOC(sizeof(*entry));
+    entry->exports = exports; entry->exports_root = tsc_value_gc_root(exports);
+    entry->namespace_object = namespace_object; entry->next = commonjs_namespaces; commonjs_namespaces = entry;
+    (void)exports_root;
+    return tsc_value_object(namespace_object);
+}
+
 void tsc_module_namespace_finalize(tsc_object_t* object) {
     if (!object || !object->is_module_namespace || !object->extensible) return;
     if (!tsc_value_define_symbol_property_desc(
