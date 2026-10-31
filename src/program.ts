@@ -126,6 +126,31 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
     // distinct from an ECMAScript Module, even though TypeScript resolves both
     // through the same import edge. Explicit ECMAScript roots keep their goal.
     const packageTypes = new Map<string, string | undefined>();
+    // Node's package scope: the nearest package.json "type" governs .js/.ts
+    // files that have no explicit .mjs/.mts/.cjs/.cts format extension.
+    const packageType = (source: string): string | undefined => {
+        let directory = path.dirname(source), type: string | undefined;
+        const visited: string[] = [];
+        for (;;) {
+            if (packageTypes.has(directory)) { type = packageTypes.get(directory); break; }
+            visited.push(directory);
+            const metadata = ts.sys.readFile(path.join(directory,"package.json"));
+            if (metadata !== undefined) {
+                try { type = JSON.parse(metadata).type; } catch { /* no declared format */ }
+                break;
+            }
+            const parent = path.dirname(directory); if (parent === directory) break;
+            directory = parent;
+        }
+        for (const directory of visited) packageTypes.set(directory,type);
+        return type;
+    };
+    // Compile roots follow the same Node module detection as imported files:
+    // .mjs/.mts, or a "type": "module" package scope, selects the Module goal.
+    for (const source of new Set([...sourceRoots, ...discoveredRoots])) {
+        if (explicitModuleTargets.has(source) || isolatedScriptRoots.has(source) || moduleTargets.has(source)) continue;
+        if (/\.m[jt]s$/i.test(source) || /\.[jt]sx?$/i.test(source) && packageType(source) === "module") moduleTargets.add(source);
+    }
     const commonJsTargets = new Set<string>();
     for (const source of moduleTargets) {
         if (explicitModuleTargets.has(source) || isolatedScriptRoots.has(source)) continue;
@@ -134,20 +159,7 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
         const parsed = createEcmaSourceFile(source,text,compilerOptions.target!,true,scriptKindForFile(source));
         let commonJs = /\.cjs$/i.test(source);
         if (!/\.[cm]js$/i.test(source)) {
-            let directory = path.dirname(source), type: string | undefined;
-            const visited: string[] = [];
-            for (;;) {
-                if (packageTypes.has(directory)) { type = packageTypes.get(directory); break; }
-                visited.push(directory);
-                const metadata = ts.sys.readFile(path.join(directory,"package.json"));
-                if (metadata !== undefined) {
-                    try { type = JSON.parse(metadata).type; } catch { /* no declared format */ }
-                    break;
-                }
-                const parent = path.dirname(directory); if (parent === directory) break;
-                directory = parent;
-            }
-            for (const directory of visited) packageTypes.set(directory,type);
+            const type = packageType(source);
             commonJs = type === "commonjs" || type !== "module" && !ts.isExternalModule(parsed);
         }
         if (commonJs) { commonJsTargets.add(source); moduleTargets.delete(source); }
