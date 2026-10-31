@@ -2,9 +2,16 @@
 #include <pthread.h>
 #include <sched.h>
 
+/* The function identity registry maps (code, environment, ...) to the one
+ * function object for that pair. It lives in pointer-free memory and each
+ * identity slot is a disappearing link, so the registry never keeps a
+ * function or its environment alive: an unreachable identity is
+ * unobservable and is simply re-created on the next request. `occupied`
+ * keeps probe chains intact over slots the collector has cleared. */
 typedef struct {
     tsc_function_identity_key_t key;
     tsc_function_identity_t* identity;
+    bool occupied;
 } tsc_function_identity_entry_t;
 
 typedef struct {
@@ -42,6 +49,7 @@ struct tsc_agent {
     tsc_agent_storage_entry_t* storage;
     tsc_realm_t* realm;
     tsc_function_identity_entry_t* function_identity_entries;
+    tsc_function_identity_t** function_identity_strong;
     size_t function_identity_count,function_identity_capacity;
     struct tsc_agent* identity_owner;
     tsc_parse_unit_t* parse_unit;
@@ -101,17 +109,19 @@ static struct GC_ms_entry* tsc_boxed_storage_mark(GC_word* addr, struct GC_ms_en
     return top;
 }
 int tsc_gc_boxed_storage_kind(void) { return tsc_boxed_storage_kind; }
-static void* tsc_boxed_storage_alloc(size_t size) {
-    if (tsc_boxed_storage_kind < 0) {
-        tsc_boxed_storage_kind = (int)GC_new_kind(GC_new_free_list(), GC_MAKE_PROC(GC_new_proc(tsc_boxed_storage_mark), 0), 0, 1);
-    }
+static pthread_once_t tsc_boxed_storage_once = PTHREAD_ONCE_INIT;
+static void tsc_boxed_storage_install(void) {
+    tsc_boxed_storage_kind = (int)GC_new_kind(GC_new_free_list(), GC_MAKE_PROC(GC_new_proc(tsc_boxed_storage_mark), 0), 0, 1);
+}
+void* tsc_gc_malloc_traced(size_t size) {
+    (void)pthread_once(&tsc_boxed_storage_once, tsc_boxed_storage_install);
     void* value = GC_generic_malloc(size, tsc_boxed_storage_kind);
-    if (!value) tsc_panic("out of memory allocating program storage");
+    if (!value) tsc_panic("out of memory allocating traced storage");
     return value;
 }
 #else
 int tsc_gc_boxed_storage_kind(void) { return -1; }
-static void* tsc_boxed_storage_alloc(size_t size) { return TSC_GC_MALLOC(size); }
+void* tsc_gc_malloc_traced(size_t size) { return TSC_GC_MALLOC(size); }
 #endif
 
 void* tsc_agent_storage(const void* key,size_t size) {
@@ -124,7 +134,7 @@ void* tsc_agent_storage(const void* key,size_t size) {
         void* value=entry->value;pthread_mutex_unlock(&g_agent_mutex);return value;
     }
     tsc_agent_storage_entry_t* entry=TSC_GC_MALLOC(sizeof(*entry));
-    void* value=tsc_boxed_storage_alloc(size);memset(value,0,size);
+    void* value=tsc_gc_malloc_traced(size);memset(value,0,size);
     *entry=(tsc_agent_storage_entry_t){.key=key,.size=size,.value=value,.next=owner->storage};
     owner->storage=entry;pthread_mutex_unlock(&g_agent_mutex);return value;
 }
@@ -146,6 +156,9 @@ void tsc_agent_release(tsc_agent_t* agent){
     pthread_mutex_lock(&g_agent_mutex);tsc_agent_t** link=&g_agents;
     while(*link&&*link!=agent)link=&(*link)->next;
     if(*link)*link=agent->next;
+    /* A retired agent's program storage is unreachable by contract; clearing
+     * it releases its globals even if a stale word still reaches the block. */
+    for(tsc_agent_storage_entry_t* entry=agent->storage;entry;entry=entry->next)if(entry->value)memset(entry->value,0,entry->size);
     memset(agent,0,sizeof(*agent));agent->retired=true;pthread_mutex_unlock(&g_agent_mutex);
 }
 #define g_current_realm (tsc_agent_current()->realm)
@@ -174,6 +187,7 @@ void tsc_agent_release(tsc_agent_t* agent){
 #define g_function_identity_entries (tsc_agent_current()->identity_owner->function_identity_entries)
 #define g_function_identity_count (tsc_agent_current()->identity_owner->function_identity_count)
 #define g_function_identity_capacity (tsc_agent_current()->identity_owner->function_identity_capacity)
+#define g_function_identity_strong (tsc_agent_current()->identity_owner->function_identity_strong)
 
 static uint64_t function_identity_hash(const tsc_function_identity_key_t* key) {
     const uint64_t words[] = { (uint64_t)key->kind, (uintptr_t)key->realm,
@@ -203,31 +217,64 @@ static bool function_identity_key_equal(const tsc_function_identity_key_t* left,
 static size_t function_identity_slot(tsc_function_identity_entry_t* entries,
     size_t capacity, const tsc_function_identity_key_t* key) {
     size_t index = (size_t)function_identity_hash(key) & (capacity - 1);
-    while (entries[index].identity && !function_identity_key_equal(&entries[index].key, key)) {
+    while (entries[index].occupied && !function_identity_key_equal(&entries[index].key, key)) {
         index = (index + 1) & (capacity - 1);
     }
     return index;
 }
 
-static void function_identity_grow(void) {
-    if (g_function_identity_capacity > SIZE_MAX / 2)
-        tsc_panic("function identity registry capacity overflow");
-    size_t capacity = g_function_identity_capacity ? g_function_identity_capacity * 2 : 16;
-    if (capacity > SIZE_MAX / sizeof(tsc_function_identity_entry_t))
-        tsc_panic("function identity registry capacity overflow");
-    tsc_function_identity_entry_t* entries = TSC_GC_MALLOC(tsc_alloc_size((size_t)(capacity), sizeof(*entries)));
-    if (!entries) tsc_panic("function identity registry allocation failed");
+/* Environment-free identities (built-ins, top-level functions) are bounded by
+ * code x realm and stay strongly held, because runtime caches may reference
+ * them only through NaN-boxed words. Closure identities carry an environment
+ * and are unbounded, so they are held weakly. */
+static void function_identity_link(tsc_function_identity_entry_t* entry, tsc_function_identity_t** strong, tsc_function_identity_t* identity) {
+    entry->identity = identity;
+#ifndef TSC_NO_GC
+    if (!entry->key.env) { *strong = identity; return; }
+    if (GC_general_register_disappearing_link((void**)&entry->identity, identity) == GC_NO_MEMORY)
+        tsc_panic("function identity registry allocation failed");
+#endif
+}
+
+/* Rebuilds the table from its live entries, sized for `extra` more. Dead
+ * entries (identity cleared by the collector) are dropped here. */
+static void function_identity_rebuild(size_t extra) {
+    size_t live = 0;
+    for (size_t index = 0; index < g_function_identity_capacity; ++index)
+        if (g_function_identity_entries[index].identity) ++live;
+    if (live > SIZE_MAX / 4 - extra) tsc_panic("function identity registry capacity overflow");
+    size_t capacity = 16;
+    while (capacity < (live + extra) * 4) {
+        if (capacity > SIZE_MAX / 2 / sizeof(tsc_function_identity_entry_t))
+            tsc_panic("function identity registry capacity overflow");
+        capacity *= 2;
+    }
+    tsc_function_identity_entry_t* entries = TSC_GC_MALLOC_ATOMIC(tsc_alloc_size((size_t)(capacity), sizeof(*entries)));
     memset(entries, 0, capacity * sizeof(*entries));
+    tsc_function_identity_t** strong = TSC_GC_MALLOC(tsc_alloc_size((size_t)(capacity), sizeof(*strong)));
+    memset(strong, 0, capacity * sizeof(*strong));
+    size_t count = 0;
     for (size_t index = 0; index < g_function_identity_capacity; ++index) {
         tsc_function_identity_entry_t* old = &g_function_identity_entries[index];
-        if (!old->identity) continue;
-        entries[function_identity_slot(entries, capacity, &old->key)] = *old;
+        tsc_function_identity_t* volatile identity = old->identity;
+        if (!identity) continue;
+#ifndef TSC_NO_GC
+        (void)GC_unregister_disappearing_link((void**)&old->identity);
+#endif
+        size_t at = function_identity_slot(entries, capacity, &old->key);
+        entries[at].key = old->key;
+        entries[at].occupied = true;
+        function_identity_link(&entries[at], &strong[at], identity);
+        ++count;
     }
 #ifdef TSC_NO_GC
     free(g_function_identity_entries);
+    free(g_function_identity_strong);
 #endif
     g_function_identity_entries = entries;
+    g_function_identity_strong = strong;
     g_function_identity_capacity = capacity;
+    g_function_identity_count = count;
 }
 
 tsc_function_identity_t* tsc_function_identity_lookup(const tsc_function_identity_key_t* key) {
@@ -259,13 +306,17 @@ tsc_function_identity_t* tsc_function_identity_register(tsc_function_identity_t*
     }
     tsc_runtime_lock();
     if (!g_function_identity_capacity || g_function_identity_count >= g_function_identity_capacity / 2)
-        function_identity_grow();
-    size_t index = function_identity_slot(g_function_identity_entries, g_function_identity_capacity, &key);
-    if (!g_function_identity_entries[index].identity) {
-        g_function_identity_entries[index] = (tsc_function_identity_entry_t){ key, identity };
+        function_identity_rebuild(1);
+    size_t at = function_identity_slot(g_function_identity_entries, g_function_identity_capacity, &key);
+    tsc_function_identity_entry_t* entry = &g_function_identity_entries[at];
+    if (!entry->occupied) {
+        entry->key = key;
+        entry->occupied = true;
         ++g_function_identity_count;
     }
-    identity = g_function_identity_entries[index].identity;
+    tsc_function_identity_t* volatile existing = entry->identity;
+    if (existing) identity = existing;
+    else function_identity_link(entry, &g_function_identity_strong[at], identity);
     tsc_runtime_unlock();
     return identity;
 }

@@ -51,6 +51,10 @@ static inline void* tsc_gc_malloc_uninit(size_t n) { return tsc_alloc_checked(TS
 static inline void* tsc_gc_malloc_atomic(size_t n) { return tsc_alloc_checked(TSC_GC_TRY_MALLOC_ATOMIC(n), n); }
 static inline void* tsc_gc_realloc(void* p, size_t n) { return tsc_alloc_checked(TSC_GC_TRY_REALLOC(p, n), n); }
 #define TSC_GC_MALLOC(n)         tsc_gc_malloc((size_t)(n))
+/* Zeroed GC allocation whose NaN-boxed tsc_value_t words are traced as
+ * pointers, for emitted environments, states and cells. */
+void* tsc_gc_malloc_traced(size_t size);
+#define TSC_GC_MALLOC_TRACED(n)  tsc_gc_malloc_traced((size_t)(n))
 #define TSC_GC_MALLOC_UNINIT(n)  tsc_gc_malloc_uninit((size_t)(n))
 #define TSC_GC_MALLOC_ATOMIC(n)  tsc_gc_malloc_atomic((size_t)(n))
 #define TSC_GC_REALLOC(p, n)     tsc_gc_realloc((p), (size_t)(n))

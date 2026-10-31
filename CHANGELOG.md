@@ -1,3 +1,6 @@
+- Hold closure function identities weakly in the identity registry, so short-lived closures and their environments are reclaimed (4M closures: 14 GB to 53 MB RSS).
+- Allocate emitted closure environments, async/generator states and capture cells from the traced GC kind, and clear a retired agent's program storage on release.
+- Run function_binding_identity as a Script, which its sloppy-mode block functions require.
 - Let the WeakMap/WeakSet ephemeron pass scan program storage instead of aborting on its traced allocation kind.
 - Trace NaN-boxed values in program storage with a decoding GC mark procedure, so a global stays live even when an emission path omits its companion root.
 - Type require() destructuring of runtime-owned CommonJS exports dynamically in every goal, copy rest bindings from the actual exports, and root destructured module globals across collections.

@@ -25161,7 +25161,7 @@ class Emitter {
         initialized = true,
     ): void {
         const qualifier = cell.type.kind === "value" ? "volatile " : "";
-        buf.line(`${qualifier}${cell.type.c}* ${cell.cellName} = (${qualifier}${cell.type.c}*)TSC_GC_MALLOC(sizeof(${cell.type.c}));`);
+        buf.line(`${qualifier}${cell.type.c}* ${cell.cellName} = (${qualifier}${cell.type.c}*)TSC_GC_MALLOC_TRACED(sizeof(${cell.type.c}));`);
         buf.line(`*${cell.cellName} = ${value};`);
         if (cell.rootCellName) {
             // Keep the companion root allocation reachable even after its
@@ -25953,7 +25953,7 @@ class Emitter {
         ): void => {
             if (!field.cell) return;
             const valueCell = this.freshTemp("_async_cfg_cell");
-            target.line(`${field.type.c}* const ${valueCell} = (${field.type.c}*)TSC_GC_MALLOC(sizeof(${field.type.c}));`);
+            target.line(`${field.type.c}* const ${valueCell} = (${field.type.c}*)TSC_GC_MALLOC_TRACED(sizeof(${field.type.c}));`);
             target.line(`*${valueCell} = ${initialValue ?? this.zeroValue(field.type)};`);
             let rootCell = "NULL";
             if (field.type.kind === "value") {
@@ -27174,7 +27174,7 @@ class Emitter {
         const env = this.freshTemp("_async_cfg_env");
         if (owner) this.emitSourceBodyEnvironment(buf, owner);
         if (!generator) buf.line(`tsc_promise_t* const ${result} = tsc_promise_pending();`);
-        buf.line(`${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}));`);
+        buf.line(`${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC_TRACED(sizeof(${envType}));`);
         buf.line(`${env}->receiver = NULL;`);
         if (generator) {
             buf.line(`${env}->generator = tsc_generator_new(${name}, ${env}, ${asyncGenerator ? "true" : "false"});`);
@@ -33606,7 +33606,7 @@ class Emitter {
                     `if (setjmp(${frame}.jb) == 0) { ` +
                     `tsc_str_t* ${specifierString} = tsc_value_to_string(${specifierValue}); ` +
                     `tsc_dynamic_import_attribute_type_t ${attributes} = tsc_dynamic_import_collect_attributes(${optionsValue}); ` +
-                    `${stateType}* ${state} = (${stateType}*)TSC_GC_MALLOC(sizeof(${stateType})); ` +
+                    `${stateType}* ${state} = (${stateType}*)TSC_GC_MALLOC_TRACED(sizeof(${stateType})); ` +
                     `${state}->promise = ${promise}; ${state}->specifier = ${specifierString}; ` +
                     `${state}->attributes = ${attributes}; tsc_queue_microtask(${adapter}, ${state}); ` +
                     `tsc_try_pop(); } else { tsc_value_t ${reason} = tsc_current_error_value(); ` +
@@ -34327,7 +34327,7 @@ class Emitter {
 
         const tmp = this.freshTemp("_fn");
         const pieces = [
-            `${type.c} ${tmp} = (${type.c})TSC_GC_MALLOC(sizeof(${type.closureName}))`,
+            `${type.c} ${tmp} = (${type.c})TSC_GC_MALLOC_TRACED(sizeof(${type.closureName}))`,
             `${tmp}->fn = ${implName}`,
         ];
         if (this.sourceEnvironmentEnabled(fn.getSourceFile())) {
@@ -34352,7 +34352,7 @@ class Emitter {
         pieces.push(`tsc_callable_owner_capture(&${tmp}->callable)`);
         if (envType) {
             const env = this.freshTemp("_env");
-            pieces.push(`${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`);
+            pieces.push(`${envType}* ${env} = (${envType}*)TSC_GC_MALLOC_TRACED(sizeof(${envType}))`);
             for (const cap of captures) {
                 let sourceCell: string | null = null;
                 if (cap.sourceReference && !this.closureEnvBindingForSymbol(cap.symbol)?.sourceSnapshot) {
@@ -34384,7 +34384,7 @@ class Emitter {
                     const storage = this.freshTemp("_dispatch_capture");
                     const boxed = this.coerce({ c: `*${ptr}`, ty: cap.type }, T_VALUE, fn);
                     const cloned = this.coerce({ c: `tsc_dispatch_capture(${boxed})`, ty: T_VALUE }, cap.type, fn);
-                    pieces.push(`${cap.type.c}* ${storage} = (${cap.type.c}*)TSC_GC_MALLOC(sizeof(${cap.type.c}))`);
+                    pieces.push(`${cap.type.c}* ${storage} = (${cap.type.c}*)TSC_GC_MALLOC_TRACED(sizeof(${cap.type.c}))`);
                     pieces.push(
                         `*${storage} = ${clonedInitializationPtr
                             ? `(*${clonedInitializationPtr} ? ${cloned} : ${this.zeroValue(cap.type)})`
@@ -34403,7 +34403,7 @@ class Emitter {
                         ? `(*${clonedInitializationPtr} ? *${ptr} : ${this.zeroValue(cap.type)})`
                         : `*${ptr}`;
                     pieces.push(
-                        `${cap.type.c}* ${storage} = (${cap.type.c}*)TSC_GC_MALLOC(sizeof(${cap.type.c}))`,
+                        `${cap.type.c}* ${storage} = (${cap.type.c}*)TSC_GC_MALLOC_TRACED(sizeof(${cap.type.c}))`,
                     );
                     pieces.push(`*${storage} = ${copied}`);
                     pieces.push(`${env}->${cap.field} = ${storage}`);
@@ -37866,7 +37866,7 @@ class Emitter {
         const envType = `${adapter}_env_t`;
         const env = this.freshTemp("_queued_callback_env");
         return `({ if (!tsc_value_is_callable(${callback})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("callback is not callable")); ` +
-            `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ` +
+            `${envType}* ${env} = (${envType}*)TSC_GC_MALLOC_TRACED(sizeof(${envType})); ` +
             `${env}->callback = ${callback}; ${env}->callback_gc_root = tsc_value_gc_root(${callback}); ` +
             `${env}->arguments = ${argumentsList}; ${runtime}(${adapter}, ${env}${delay ? `, ${delay}` : ""}); })`;
     }
@@ -37965,7 +37965,7 @@ class Emitter {
                     : isBarrier
                         ? `tsc_dispatch_barrier(${q}, ${adapter}, ${env})`
                         : `tsc_dispatch_async(${q}, ${adapter}, ${env})`;
-                return `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->fn = ${fn}; ${schedule}; })`;
+                return `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC_TRACED(sizeof(${envType})); ${env}->fn = ${fn}; ${schedule}; })`;
             });
         }
         const retTy = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
@@ -37974,7 +37974,7 @@ class Emitter {
                 const q = values[0]!;
                 const fn = values[1]!;
                 const env = this.freshTemp("_dispatch_env");
-                return `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->fn = ${fn}; (void)tsc_dispatch_sync(${q}, ${adapter}, ${env}); })`;
+                return `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC_TRACED(sizeof(${envType})); ${env}->fn = ${fn}; (void)tsc_dispatch_sync(${q}, ${adapter}, ${env}); })`;
             });
         }
         return this.emitSequencedExpr(retTy, specs, (values) => {
@@ -37983,7 +37983,7 @@ class Emitter {
             const env = this.freshTemp("_dispatch_env");
             const result = this.freshTemp("_dispatch_result");
             const converted = this.coerce({ c: result, ty: T_VALUE }, retTy, call);
-            return `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->fn = ${fn}; tsc_value_t ${result} = tsc_dispatch_sync(${q}, ${adapter}, ${env}); ${converted}; })`;
+            return `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC_TRACED(sizeof(${envType})); ${env}->fn = ${fn}; tsc_value_t ${result} = tsc_dispatch_sync(${q}, ${adapter}, ${env}); ${converted}; })`;
         });
     }
 
@@ -38046,7 +38046,7 @@ class Emitter {
                 const envType = `${adapter}_env_t`;
                 const env = this.freshTemp("_dispatch_group_env");
                 const fn = values[i + 1]!;
-                pieces.push(`${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`);
+                pieces.push(`${envType}* ${env} = (${envType}*)TSC_GC_MALLOC_TRACED(sizeof(${envType}))`);
                 pieces.push(`${env}->fn = ${fn}`);
                 pieces.push(`tsc_array_push_value(${promises}, tsc_value_promise(tsc_dispatch_async(${q}, ${adapter}, ${env})))`);
             });
@@ -40817,7 +40817,7 @@ class Emitter {
         const key = this.typeKey(type);
         const existing = this.valueFunctionAdapters.get(key);
         if (existing) {
-            return `({ ${existing}_env_t* _env = (${existing}_env_t*)TSC_GC_MALLOC(sizeof(${existing}_env_t)); ${type.c} _fn = (${type.c})TSC_GC_MALLOC(sizeof(*_fn)); _env->value = ${r.c}; _env->value_gc_root = tsc_value_gc_root(_env->value); _fn->fn = ${existing}; _fn->env = _env; tsc_callable_owner_set(&_fn->callable, _env->value); _fn; })`;
+            return `({ ${existing}_env_t* _env = (${existing}_env_t*)TSC_GC_MALLOC_TRACED(sizeof(${existing}_env_t)); ${type.c} _fn = (${type.c})TSC_GC_MALLOC(sizeof(*_fn)); _env->value = ${r.c}; _env->value_gc_root = tsc_value_gc_root(_env->value); _fn->fn = ${existing}; _fn->env = _env; tsc_callable_owner_set(&_fn->callable, _env->value); _fn; })`;
         }
         const adapter = `tsc_value_function_adapter_${this.valueFunctionAdapters.size}`;
         this.valueFunctionAdapters.set(key, adapter);
@@ -40866,7 +40866,7 @@ class Emitter {
         buf.close();
         buf.line();
         this.closureDefs.write(buf.toString());
-        return `({ ${envType}* _env = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${type.c} _fn = (${type.c})TSC_GC_MALLOC(sizeof(*_fn)); _env->value = ${r.c}; _env->value_gc_root = tsc_value_gc_root(_env->value); _fn->fn = ${adapter}; _fn->env = _env; tsc_callable_owner_set(&_fn->callable, _env->value); _fn; })`;
+        return `({ ${envType}* _env = (${envType}*)TSC_GC_MALLOC_TRACED(sizeof(${envType})); ${type.c} _fn = (${type.c})TSC_GC_MALLOC(sizeof(*_fn)); _env->value = ${r.c}; _env->value_gc_root = tsc_value_gc_root(_env->value); _fn->fn = ${adapter}; _fn->env = _env; tsc_callable_owner_set(&_fn->callable, _env->value); _fn; })`;
     }
 
 
