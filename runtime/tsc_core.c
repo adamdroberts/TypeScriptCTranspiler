@@ -81,6 +81,37 @@ tsc_agent_t* tsc_agent_swap(tsc_agent_t* agent){
     tsc_agent_t* previous=g_current_agent;g_current_agent=agent;return previous;
 }
 bool tsc_agent_owns_jobs(void){return tsc_agent_current()->owns_jobs;}
+/* Program storage holds emitted globals, most of them NaN-boxed tsc_value_t.
+ * A conservative scan does not recognise a boxed word as a pointer, so this
+ * block is allocated from an object kind whose mark procedure decodes every
+ * boxed word (and still treats raw words as candidate pointers). A global is
+ * then traced no matter which emission path stored it; the per-store
+ * companion roots remain as a second line. */
+#ifndef TSC_NO_GC
+#include <gc/gc_mark.h>
+static int tsc_boxed_storage_kind = -1;
+static struct GC_ms_entry* tsc_boxed_storage_mark(GC_word* addr, struct GC_ms_entry* top, struct GC_ms_entry* limit, GC_word env) {
+    (void)env;
+    size_t words = GC_size(addr) / sizeof(GC_word);
+    for (size_t i = 0; i < words; i++) {
+        tsc_value_t word = (tsc_value_t)addr[i];
+        void* candidate = value_is_box(word) ? tsc_value_gc_root(word) : (void*)addr[i];
+        top = GC_MARK_AND_PUSH(candidate, top, limit, (void**)(addr + i));
+    }
+    return top;
+}
+static void* tsc_boxed_storage_alloc(size_t size) {
+    if (tsc_boxed_storage_kind < 0) {
+        tsc_boxed_storage_kind = (int)GC_new_kind(GC_new_free_list(), GC_MAKE_PROC(GC_new_proc(tsc_boxed_storage_mark), 0), 0, 1);
+    }
+    void* value = GC_generic_malloc(size, tsc_boxed_storage_kind);
+    if (!value) tsc_panic("out of memory allocating program storage");
+    return value;
+}
+#else
+static void* tsc_boxed_storage_alloc(size_t size) { return TSC_GC_MALLOC(size); }
+#endif
+
 void* tsc_agent_storage(const void* key,size_t size) {
     if (!key || !size) tsc_panic("agent storage requires a canonical declaration");
     tsc_agent_t* owner = tsc_agent_current()->identity_owner;
@@ -91,7 +122,7 @@ void* tsc_agent_storage(const void* key,size_t size) {
         void* value=entry->value;pthread_mutex_unlock(&g_agent_mutex);return value;
     }
     tsc_agent_storage_entry_t* entry=TSC_GC_MALLOC(sizeof(*entry));
-    void* value=TSC_GC_MALLOC(size);memset(value,0,size);
+    void* value=tsc_boxed_storage_alloc(size);memset(value,0,size);
     *entry=(tsc_agent_storage_entry_t){.key=key,.size=size,.value=value,.next=owner->storage};
     owner->storage=entry;pthread_mutex_unlock(&g_agent_mutex);return value;
 }
