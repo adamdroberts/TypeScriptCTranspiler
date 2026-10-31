@@ -510,6 +510,10 @@ static inline tsc_value_t value_box(tsc_value_tag_t tag, uintptr_t payload) {
 
 /* Boehm kind of program storage, whose words may be NaN-boxed (-1 before first use or without GC). */
 int tsc_gc_boxed_storage_kind(void);
+/* Set once the WeakMap/WeakSet ephemeron collector owns the mark-end event;
+ * it then calls tsc_function_identity_mark_end after its own pass. */
+extern bool tsc_weak_collector_installed;
+void tsc_function_identity_mark_end(void);
 
 static inline bool value_is_box(tsc_value_t v) {
     return (v & TSC_VALUE_BOX_MASK) == TSC_VALUE_BOX_MASK;

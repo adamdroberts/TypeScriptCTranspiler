@@ -46,6 +46,7 @@ static const weak_member_t members[]={
 typedef struct weak_registry { struct weak_registry* next; uintptr_t hidden_collection; } weak_registry_t;
 static weak_registry_t* registry;
 static GC_on_collection_event_proc previous_collection_event;
+bool tsc_weak_collector_installed;
 static int normal_allocation_kind, atomic_allocation_kind;
 #ifdef TSC_THREADS
 static pthread_once_t collector_once=PTHREAD_ONCE_INIT;
@@ -123,7 +124,7 @@ static void weak_collection_event(GC_EventType stage) {
         for(weak_entry_t* entry=collection->entries;entry;entry=entry->next)
             if(tsc_value_gc_root(entry->key)){if(entries==SIZE_MAX)weak_collector_failure();++entries;}
     }
-    if(!entries){weak_registry_cleanup();return;}
+    if(!entries){weak_registry_cleanup();tsc_function_identity_mark_end();return;}
     size_t capacity=16;
     if(entries>SIZE_MAX/4)weak_collector_failure();
     while(capacity<entries*4){if(capacity>SIZE_MAX/2)weak_collector_failure();capacity*=2;}
@@ -157,6 +158,7 @@ static void weak_collection_event(GC_EventType stage) {
     }
     if(work.pointers)munmap(work.pointers,work.capacity*sizeof(void*));munmap(index.memory,index.bytes);
     weak_registry_cleanup();
+    tsc_function_identity_mark_end();
 }
 static void* weak_register_locked(void* data) {
     weak_registry_t* node=data;node->next=registry;registry=node;return NULL;
@@ -165,6 +167,7 @@ static void weak_collector_install(void) {
     void* normal=GC_MALLOC(sizeof(void*));normal_allocation_kind=GC_get_kind_and_size(normal,NULL);
     void* atomic=GC_MALLOC_ATOMIC(sizeof(void*));atomic_allocation_kind=GC_get_kind_and_size(atomic,NULL);
     previous_collection_event=GC_get_on_collection_event();GC_set_on_collection_event(weak_collection_event);
+    tsc_weak_collector_installed=true;
 }
 static void weak_register(weak_collection_t* collection) {
 #ifdef TSC_THREADS

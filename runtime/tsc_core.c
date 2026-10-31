@@ -226,22 +226,94 @@ static size_t function_identity_slot(tsc_function_identity_entry_t* entries,
 /* Environment-free identities (built-ins, top-level functions) are bounded by
  * code x realm and stay strongly held, because runtime caches may reference
  * them only through NaN-boxed words. Closure identities carry an environment
- * and are unbounded, so they are held weakly. */
+ * and are unbounded, so the table holds them weakly: it lives in pointer-free
+ * memory and, at the end of each mark phase, entries whose identity was not
+ * marked are cleared before the sweep can free it. */
 static void function_identity_link(tsc_function_identity_entry_t* entry, tsc_function_identity_t** strong, tsc_function_identity_t* identity) {
     entry->identity = identity;
-#ifndef TSC_NO_GC
-    if (!entry->key.env) { *strong = identity; return; }
-    if (GC_general_register_disappearing_link((void**)&entry->identity, identity) == GC_NO_MEMORY)
-        tsc_panic("function identity registry allocation failed");
+    if (!entry->key.env) *strong = identity;
+#ifdef TSC_NO_GC
+    else *strong = identity;
 #endif
 }
 
+#ifndef TSC_NO_GC
+typedef struct function_identity_table { tsc_agent_t* owner; struct function_identity_table* next; } function_identity_table_t;
+static function_identity_table_t* function_identity_tables;
+static GC_on_collection_event_proc function_identity_previous_event;
+static pthread_once_t function_identity_event_once = PTHREAD_ONCE_INIT;
+
+/* Runs at GC_EVENT_MARK_END with the world stopped: from the weak collector
+ * after its ephemeron pass, or from the handler below when that collector is
+ * not installed, so every reachable identity is already marked. */
+void tsc_function_identity_mark_end(void) {
+    for (function_identity_table_t* table = function_identity_tables; table; table = table->next) {
+        tsc_agent_t* owner = table->owner;
+        tsc_function_identity_entry_t* entries = owner->function_identity_entries;
+        for (size_t index = 0; entries && index < owner->function_identity_capacity; ++index) {
+            tsc_function_identity_entry_t* entry = &entries[index];
+            if (!entry->identity || !entry->key.env) continue;
+            void* base = GC_base(entry->identity);
+            if (!base || !GC_is_marked(base)) entry->identity = NULL;
+        }
+    }
+}
+static void function_identity_event(GC_EventType stage) {
+    if (function_identity_previous_event) function_identity_previous_event(stage);
+    if (stage == GC_EVENT_MARK_END && !tsc_weak_collector_installed) tsc_function_identity_mark_end();
+}
+static void function_identity_event_install(void) {
+    function_identity_previous_event = GC_get_on_collection_event();
+    GC_set_on_collection_event(function_identity_event);
+}
+static void* function_identity_table_add_locked(void* data) {
+    function_identity_table_t* table = data;
+    table->next = function_identity_tables;
+    function_identity_tables = table;
+    return NULL;
+}
+#endif
+
+typedef struct {
+    tsc_agent_t* owner;
+    tsc_function_identity_entry_t* entries;
+    tsc_function_identity_t** strong;
+    size_t capacity;
+} function_identity_rebuild_t;
+
+/* Copies live entries and installs the new table without allocating, under
+ * the allocation lock, so no collection observes a half-built table. */
+static void* function_identity_rebuild_locked(void* data) {
+    function_identity_rebuild_t* plan = data;
+    tsc_agent_t* owner = plan->owner;
+    size_t count = 0;
+    for (size_t index = 0; index < owner->function_identity_capacity; ++index) {
+        tsc_function_identity_entry_t* old = &owner->function_identity_entries[index];
+        if (!old->identity) continue;
+        size_t at = function_identity_slot(plan->entries, plan->capacity, &old->key);
+        plan->entries[at].key = old->key;
+        plan->entries[at].occupied = true;
+        function_identity_link(&plan->entries[at], &plan->strong[at], old->identity);
+        ++count;
+    }
+#ifdef TSC_NO_GC
+    free(owner->function_identity_entries);
+    free(owner->function_identity_strong);
+#endif
+    owner->function_identity_entries = plan->entries;
+    owner->function_identity_strong = plan->strong;
+    owner->function_identity_capacity = plan->capacity;
+    owner->function_identity_count = count;
+    return NULL;
+}
+
 /* Rebuilds the table from its live entries, sized for `extra` more. Dead
- * entries (identity cleared by the collector) are dropped here. */
+ * entries (identity cleared at mark end) are dropped here. */
 static void function_identity_rebuild(size_t extra) {
+    tsc_agent_t* owner = tsc_agent_current()->identity_owner;
     size_t live = 0;
-    for (size_t index = 0; index < g_function_identity_capacity; ++index)
-        if (g_function_identity_entries[index].identity) ++live;
+    for (size_t index = 0; index < owner->function_identity_capacity; ++index)
+        if (owner->function_identity_entries[index].identity) ++live;
     if (live > SIZE_MAX / 4 - extra) tsc_panic("function identity registry capacity overflow");
     size_t capacity = 16;
     while (capacity < (live + extra) * 4) {
@@ -249,32 +321,24 @@ static void function_identity_rebuild(size_t extra) {
             tsc_panic("function identity registry capacity overflow");
         capacity *= 2;
     }
-    tsc_function_identity_entry_t* entries = TSC_GC_MALLOC_ATOMIC(tsc_alloc_size((size_t)(capacity), sizeof(*entries)));
-    memset(entries, 0, capacity * sizeof(*entries));
-    tsc_function_identity_t** strong = TSC_GC_MALLOC(tsc_alloc_size((size_t)(capacity), sizeof(*strong)));
-    memset(strong, 0, capacity * sizeof(*strong));
-    size_t count = 0;
-    for (size_t index = 0; index < g_function_identity_capacity; ++index) {
-        tsc_function_identity_entry_t* old = &g_function_identity_entries[index];
-        tsc_function_identity_t* volatile identity = old->identity;
-        if (!identity) continue;
 #ifndef TSC_NO_GC
-        (void)GC_unregister_disappearing_link((void**)&old->identity);
-#endif
-        size_t at = function_identity_slot(entries, capacity, &old->key);
-        entries[at].key = old->key;
-        entries[at].occupied = true;
-        function_identity_link(&entries[at], &strong[at], identity);
-        ++count;
+    if (!owner->function_identity_entries) {
+        (void)pthread_once(&function_identity_event_once, function_identity_event_install);
+        function_identity_table_t* table = TSC_GC_MALLOC(sizeof(*table));
+        table->owner = owner;
+        (void)GC_call_with_alloc_lock(function_identity_table_add_locked, table);
     }
-#ifdef TSC_NO_GC
-    free(g_function_identity_entries);
-    free(g_function_identity_strong);
 #endif
-    g_function_identity_entries = entries;
-    g_function_identity_strong = strong;
-    g_function_identity_capacity = capacity;
-    g_function_identity_count = count;
+    function_identity_rebuild_t plan = { owner, NULL, NULL, capacity };
+    plan.entries = TSC_GC_MALLOC_ATOMIC(tsc_alloc_size((size_t)(capacity), sizeof(*plan.entries)));
+    memset(plan.entries, 0, capacity * sizeof(*plan.entries));
+    plan.strong = TSC_GC_MALLOC(tsc_alloc_size((size_t)(capacity), sizeof(*plan.strong)));
+    memset(plan.strong, 0, capacity * sizeof(*plan.strong));
+#ifndef TSC_NO_GC
+    (void)GC_call_with_alloc_lock(function_identity_rebuild_locked, &plan);
+#else
+    (void)function_identity_rebuild_locked(&plan);
+#endif
 }
 
 tsc_function_identity_t* tsc_function_identity_lookup(const tsc_function_identity_key_t* key) {
