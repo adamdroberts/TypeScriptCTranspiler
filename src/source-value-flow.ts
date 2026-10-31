@@ -4489,10 +4489,15 @@ class SourceValueFlow {
             else if(atom.tag!=="pending-source"&&atom.tag!=="abrupt")reject();
         }});
         const species=this.property(constructors,this.wellKnownSymbols.get("species")!,context),cells=new Map<Atom,Cell>();
+        // Every unknown species value validates identically (both outcomes plus
+        // an opaque effect), so unknown atoms share one checked cell instead of
+        // one cell and validity rule per provenance.
+        let unknownSpecies:Atom|undefined;
         let rule!:Rule;rule=this.rule([species],()=>{for(const atom of species.values){
             if(atom===this.primitive(undefined)||atom===this.primitive(null)){this.publish(normal,this.primitive(true));continue;}
             if(atom.tag==="abrupt"||atom.tag==="pending-source")continue;
-            let cell=cells.get(atom);if(!cell){cell=this.newCell();cells.set(atom,cell);this.publish(cell,atom)}
+            const key=atom.tag==="unknown"?(unknownSpecies??=atom):atom;
+            let cell=cells.get(key);if(!cell){cell=this.newCell();cells.set(key,cell);this.publish(cell,key)}
             const valid=this.constructorValidity(cell,context);this.watch(rule,valid);
             if(valid.values.has(this.primitive(false)))reject();
             if(valid.values.has(this.primitive(true))){
@@ -4541,6 +4546,8 @@ class SourceValueFlow {
         // Get(then) is immediate; Call(then) runs in the resolve-thenable job.
         const job=this.invocationContext(context,{deferred:true});this.exceptionHandlers.set(job,rejection);
         const seen=new Set<Atom>(),cells=new Map<Atom,Cell>(),cell=(atom:Atom)=>{let value=cells.get(atom);if(!value){value=this.newCell();cells.set(atom,value);this.publish(value,atom)}return value;};
+        // Unknown then-methods all classify alike; one canonical cell serves them.
+        let unknownMethod:Atom|undefined;
         this.rule([returned],()=>{for(const atom of returned.values){
             if(atom.tag==="pending-source"){this.publish(value,atom);continue;}
             if(atom.tag==="abrupt")continue;
@@ -4568,7 +4575,7 @@ class SourceValueFlow {
                     if(!intrinsicThen){intrinsicThen=true;const ready=this.promiseSpeciesReady(input,callback);
                         this.rule([ready],()=>{if(ready.values.has(this.primitive(true))){this.copy(atom.value,value);this.copy(atom.rejection,rejection);}});}continue;
                 }
-                const kinds=this.primitiveKinds(cell(method));
+                const kinds=this.primitiveKinds(cell(method.tag==="unknown"?(unknownMethod??=method):method));
                 if(kinds&~KIND_FUNCTION)this.publish(value,atom);
                 if(kinds&KIND_FUNCTION)this.publish(target,method);
             }});

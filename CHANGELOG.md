@@ -1,3 +1,4 @@
+- Share one canonical cell for unknown values in Promise species validation and thenable classification, cutting source-analysis memory on promise-heavy programs (async_await_while_condition 120-call prefix: 3.3 GB to 1.3 GB).
 - Bound source-value analysis of async callees invoked by opaque code with one shared resolution record per callee; resumed_class_definition compiles in 15 s / 473 MB instead of exceeding 21 GB.
 - Drop the obsolete static-construction assertion from 46 external CommonJS class import cases, which now construct through the runtime-owned exports and print the expected output.
 - Give every identifier occurrence in generated eval code its own connected reference record, fixing a compiler crash on repeated writes to an eval-injected var.
