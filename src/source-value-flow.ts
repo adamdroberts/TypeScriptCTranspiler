@@ -349,6 +349,10 @@ class SourceValueFlow {
     private readonly escapedCallableCalls=new Map<ts.Node,Map<boolean,{visit:(input:Cell)=>void}>>();
     private readonly escapeReaches=new Map<boolean,{cells:Map<Cell,EscapeReach>;atoms:Map<Atom,EscapeReach>}>();
     private readonly escapedInvocationOrigins=new WeakMap<ts.Node,ts.Node>();
+    /** Opaque code invokes an async callee with unknown actuals, so all such
+     * invocations share one resolution record per callee: a fresh record per
+     * synthetic site would let each resolution job escape the callee again. */
+    private readonly opaqueAsyncResolutions=new WeakMap<object,{returned:Cell;resolved:SourcePromiseDestination}>();
     private readonly escapeContexts=new WeakMap<ts.Node,ts.Node>();
     private readonly promiseReactions = new Map<ts.Node,Map<string,Cell>>();
     private readonly sourceCells = new WeakMap<SourceFacts,Cell>();
@@ -6587,8 +6591,13 @@ class SourceValueFlow {
                         else if (atom.owner.kind === "async") {
                             // Async return resolution runs in the callee activation, which
                             // can resume after the caller's initial source phase.
-                            const returned=this.projectReturn(atom.owner.returns,actualFormals),context=this.invocationContext(atom.owner.node?.body??atom.owner.definition);
-                            const resolved=this.promiseAssimilation(returned,context);
+                            const returned=this.projectReturn(atom.owner.returns,actualFormals);
+                            let resolved:SourcePromiseDestination;
+                            if(this.escapeContext(node)!==node){
+                                let shared=this.opaqueAsyncResolutions.get(atom.owner);
+                                if(!shared){const into=this.newCell();shared={returned:into,resolved:this.promiseAssimilation(into,this.invocationContext(atom.owner.node?.body??atom.owner.definition))};this.opaqueAsyncResolutions.set(atom.owner,shared);}
+                                this.copy(returned,shared.returned);resolved=shared.resolved;
+                            }else resolved=this.promiseAssimilation(returned,this.invocationContext(atom.owner.node?.body??atom.owner.definition));
                             this.copy(atom.owner.throws,resolved.rejection);this.publish(result!,{tag:"promise",value:resolved.value,rejection:resolved.rejection});
                         }
                         else {
