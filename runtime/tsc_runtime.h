@@ -1856,6 +1856,19 @@ tsc_value_t tsc_timers_promises_export_value(tsc_str_t* name);
 bool tsc_fs_libuv_pending(void);
 void tsc_fs_libuv_run_once(bool block);
 
+/* Network allowlist compiled from --allow-net (generated tsc_net_policy.c).
+ * `enabled` false leaves networking unrestricted; `port` -1 means any port. */
+typedef struct {
+    const char* host;
+    int32_t port;
+} tsc_net_rule_t;
+typedef struct {
+    bool enabled;
+    const tsc_net_rule_t* rules;
+    size_t count;
+} tsc_net_policy_t;
+extern const tsc_net_policy_t tsc_net_policy;
+
 /* ---------------- optional dispatch concurrency (TSC_THREADS) ----------------
  * Implemented in tsc_dispatch.c, which is compiled into the program only when
  * the emitter saw a dispatch API use. The lock/cross-post hooks below live in

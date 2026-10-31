@@ -5,9 +5,8 @@ import { compile } from "./compile";
 
 const program = new Command();
 
-function collectOption(value: string, previous: string[]): string[] {
-    previous.push(value);
-    return previous;
+function collectOption(value: string, previous: string[] | undefined): string[] {
+    return [...(previous ?? []), value];
 }
 
 program
@@ -49,6 +48,11 @@ program
         "dispatch backend: threaded (default) or serial",
         "threaded",
     )
+    .option(
+        "--allow-net <hosts>",
+        "restrict networking to host[:port] entries (comma-separated, repeatable; empty denies all)",
+        collectOption,
+    )
     .option("--verbose", "print compile steps")
     .action(async (entry: string, opts: Record<string, unknown>) => {
         const result = await compile({
@@ -73,6 +77,7 @@ program
                 : undefined,
             customConditions: opts.customCondition as string[] | undefined,
             dispatch: opts.dispatch as "threaded" | "serial",
+            allowNet: opts.allowNet as string[] | undefined,
         });
         process.exit(result.exitCode);
     });

@@ -23,6 +23,7 @@ import {
     type Test262NativeObservationPlan,
 } from "./emit/index";
 import { invokeCc } from "./link/cc";
+import { emitNetPolicyC, NetPolicyError, parseNetPolicy, type NetPolicy } from "./link/net-policy";
 import { commonJsRequireSpecifierArgument, staticStringExpressionText, staticStringExpressionTexts } from "./module-specifiers";
 import { evaluationSourceRequests, evalSourceIsValid, evalSourceKey, evalSourceRequest, type EvalSourceRequest, type SourceEvalPlan } from "./eval-source";
 import { sourceConstructorInvocations, sourceEvaluationInvocations } from "./source-value-flow";
@@ -102,6 +103,8 @@ export interface CompileOptions {
     customConditions?: string[];
     /** Dispatch backend: threaded libdispatch (default) or single-threaded fallback. */
     dispatch?: "threaded" | "serial";
+    /** --allow-net values; when present the binary may reach only the listed hosts. */
+    allowNet?: string[];
 }
 
 export interface CompileResult {
@@ -723,6 +726,14 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         writeDiagnostic(`tsc2c: unsupported dispatch mode: ${dispatchMode}\n`);
         return { exitCode: 3, buildDir: opts.buildDir ?? "", mainC: "" };
     }
+    let netPolicy: NetPolicy | null;
+    try {
+        netPolicy = parseNetPolicy(opts.allowNet);
+    } catch (error) {
+        if (!(error instanceof NetPolicyError)) throw error;
+        writeDiagnostic(`tsc2c: ${error.message}\n`);
+        return { exitCode: 2, buildDir: opts.buildDir ?? "", mainC: "" };
+    }
     const pkg = resolvePackageRoot();
     const buildDir =
         opts.buildDir ?? (await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-")));
@@ -910,6 +921,12 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         for (const d of diagnostics) writeDiagnostic(d + "\n");
         return { exitCode: 3, buildDir, mainC: "" };
     }
+    if (netPolicy && usesNodeEmbed) {
+        // The embedded Node bridge opens sockets through libnode, outside the
+        // runtime's policy chokepoint, so the combination cannot be enforced.
+        writeDiagnostic("tsc2c: --allow-net cannot be combined with the embedded Node bridge (--unsafe-eval or native addons)\n");
+        return { exitCode: 3, buildDir, mainC };
+    }
     const libuv = usesLibuv ? findLibuvLinkOptions() : null;
     if (usesLibuv && !libuv) {
         writeDiagnostic(
@@ -921,6 +938,8 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     }
     const mainPath = path.join(buildDir, "main.c");
     await fs.writeFile(mainPath, mainC, "utf8");
+    const netPolicyPath = path.join(buildDir, "tsc_net_policy.c");
+    await fs.writeFile(netPolicyPath, emitNetPolicyC(netPolicy), "utf8");
     if (opts.verbose) console.error(`[tsc2c] wrote ${mainPath}`);
 
     const runtimeSrc = path.join(pkg, "runtime");
@@ -966,7 +985,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         : ["gc", "m", "resolv", "ssl", "crypto", "icui18n", "icuuc", "icudata", "gmp"];
     const libs = baseLibs;
     const cc = await invokeCc({
-        sources: [mainPath, ...runtimeSources.map((f) => path.join(buildDir, f))],
+        sources: [mainPath, netPolicyPath, ...runtimeSources.map((f) => path.join(buildDir, f))],
         output: opts.output,
         includeDirs: nodeEmbed ? [buildDir, nodeEmbed.includeDir] : [buildDir],
         libs,

@@ -1,0 +1,8 @@
+dns.lookup example.com: ERR_ACCESS_DENIED
+dns.resolve4 example.com: ERR_ACCESS_DENIED
+dns.reverse 8.8.8.8: ERR_ACCESS_DENIED
+connect 127.1: ERR_ACCESS_DENIED
+connect localhost:80: ERR_ACCESS_DENIED
+listen 0.0.0.0: ERR_ACCESS_DENIED
+loopback data: ok
+server close

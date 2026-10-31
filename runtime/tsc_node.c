@@ -17,6 +17,208 @@ struct tsc_fs_dirent {
 #include <sys/statvfs.h>
 #include <float.h>
 
+/* ---------------- network allowlist (--allow-net) ----------------
+ * Every socket address, resolver query, and reverse lookup in the runtime goes
+ * through the tsc_net_* wrappers below; the raw libc entry points are poisoned
+ * after them so a new call site cannot bypass the policy. With the policy
+ * enabled, a host name may be resolved only when a rule names it, and a socket
+ * may connect to or bind an address only when an IP rule names it or a
+ * permitted resolution produced it, with the rule's port (or any port when the
+ * rule has none). Denials throw ERR_ACCESS_DENIED before the operation runs. */
+typedef struct {
+    uint8_t address[16]; /* IPv4 stored as an IPv4-mapped IPv6 address */
+    size_t rule;
+} tsc_net_resolved_t;
+enum { TSC_NET_RESOLVED_MAX = 4096 };
+static tsc_net_resolved_t* tsc_net_resolved;
+static size_t tsc_net_resolved_len;
+
+static bool tsc_net_address_bytes(const struct sockaddr* address, socklen_t length, uint8_t out[16], int* port) {
+    if (!address) return false;
+    if (address->sa_family == AF_INET && length >= (socklen_t)sizeof(struct sockaddr_in)) {
+        const struct sockaddr_in* in4 = (const struct sockaddr_in*)address;
+        memset(out, 0, 10);
+        out[10] = 0xff;
+        out[11] = 0xff;
+        memcpy(out + 12, &in4->sin_addr, 4);
+        if (port) *port = ntohs(in4->sin_port);
+        return true;
+    }
+    if (address->sa_family == AF_INET6 && length >= (socklen_t)sizeof(struct sockaddr_in6)) {
+        const struct sockaddr_in6* in6 = (const struct sockaddr_in6*)address;
+        memcpy(out, &in6->sin6_addr, 16);
+        if (port) *port = ntohs(in6->sin6_port);
+        return true;
+    }
+    return false;
+}
+
+static bool tsc_net_literal_bytes(const char* text, uint8_t out[16]) {
+    struct in_addr in4;
+    struct in6_addr in6;
+    if (inet_pton(AF_INET, text, &in4) == 1) {
+        memset(out, 0, 10);
+        out[10] = 0xff;
+        out[11] = 0xff;
+        memcpy(out + 12, &in4, 4);
+        return true;
+    }
+    if (inet_pton(AF_INET6, text, &in6) == 1) {
+        memcpy(out, &in6, 16);
+        return true;
+    }
+    return false;
+}
+
+/* Host names compare ASCII case-insensitively, ignoring one trailing dot;
+ * IP literals compare by address so every spelling of one address matches. */
+static bool tsc_net_rule_names(const tsc_net_rule_t* rule, const char* name) {
+    uint8_t want[16], have[16];
+    bool rule_literal = tsc_net_literal_bytes(rule->host, want);
+    bool name_literal = tsc_net_literal_bytes(name, have);
+    if (rule_literal || name_literal) return rule_literal && name_literal && memcmp(want, have, 16) == 0;
+    size_t rule_len = strlen(rule->host), name_len = strlen(name);
+    if (name_len > 0 && name[name_len - 1] == '.') name_len--;
+    if (rule_len != name_len) return false;
+    for (size_t i = 0; i < name_len; i++) {
+        if (tolower((unsigned char)rule->host[i]) != tolower((unsigned char)name[i])) return false;
+    }
+    return true;
+}
+
+static bool tsc_net_rule_port(const tsc_net_rule_t* rule, int port, bool any_port) {
+    return rule->port < 0 || (!any_port && rule->port == port);
+}
+
+__attribute__((noreturn)) static void tsc_net_deny(const char* resource) {
+    tsc_error_t* error = tsc_error_new_named(tsc_str_from_lit("Error", 5),
+        tsc_str_from_cstr("Access to this API has been restricted. Use --allow-net to manage permissions."));
+    tsc_error_set_value_field(error, TSC_ERROR_VALUE_FIELD_code, tsc_value_string(tsc_str_from_lit("ERR_ACCESS_DENIED", 17)));
+    tsc_value_set_prop(tsc_value_error(error), tsc_str_from_lit("permission", 10), tsc_value_string(tsc_str_from_lit("Net", 3)));
+    tsc_value_set_prop(tsc_value_error(error), tsc_str_from_lit("resource", 8), tsc_value_string(tsc_str_from_cstr(resource)));
+    tsc_throw_value(tsc_value_error(error));
+}
+
+static bool tsc_net_address_permitted(const uint8_t address[16], int port, bool any_port) {
+    for (size_t i = 0; i < tsc_net_policy.count; i++) {
+        const tsc_net_rule_t* rule = &tsc_net_policy.rules[i];
+        uint8_t want[16];
+        if (tsc_net_literal_bytes(rule->host, want) && memcmp(want, address, 16) == 0 && tsc_net_rule_port(rule, port, any_port)) return true;
+    }
+    bool permitted = false;
+    tsc_runtime_lock();
+    for (size_t i = 0; i < tsc_net_resolved_len && !permitted; i++) {
+        permitted = memcmp(tsc_net_resolved[i].address, address, 16) == 0 &&
+            tsc_net_rule_port(&tsc_net_policy.rules[tsc_net_resolved[i].rule], port, any_port);
+    }
+    tsc_runtime_unlock();
+    return permitted;
+}
+
+static void tsc_net_permit_name(const char* name) {
+    if (!tsc_net_policy.enabled) return;
+    const char* subject = name ? name : "";
+    for (size_t i = 0; i < tsc_net_policy.count; i++) {
+        if (tsc_net_rule_names(&tsc_net_policy.rules[i], subject)) return;
+    }
+    uint8_t address[16];
+    if (tsc_net_literal_bytes(subject, address) && tsc_net_address_permitted(address, 0, true)) return;
+    tsc_net_deny(subject);
+}
+
+/* Remembers which rules a permitted resolution of `name` speaks for, so the
+ * addresses it produced can be connected to on those rules' ports. A full
+ * table records nothing more, which only ever denies. */
+static void tsc_net_record(const char* name, const struct addrinfo* result) {
+    if (!tsc_net_policy.enabled || !name) return;
+    tsc_runtime_lock();
+    for (size_t r = 0; r < tsc_net_policy.count; r++) {
+        if (!tsc_net_rule_names(&tsc_net_policy.rules[r], name)) continue;
+        for (const struct addrinfo* cur = result; cur; cur = cur->ai_next) {
+            uint8_t address[16];
+            if (!tsc_net_address_bytes(cur->ai_addr, cur->ai_addrlen, address, NULL)) continue;
+            bool known = false;
+            for (size_t i = 0; i < tsc_net_resolved_len && !known; i++) {
+                known = tsc_net_resolved[i].rule == r && memcmp(tsc_net_resolved[i].address, address, 16) == 0;
+            }
+            if (known || tsc_net_resolved_len >= TSC_NET_RESOLVED_MAX) continue;
+            if (!tsc_net_resolved) tsc_net_resolved = (tsc_net_resolved_t*)malloc(sizeof(tsc_net_resolved_t) * TSC_NET_RESOLVED_MAX);
+            if (!tsc_net_resolved) break;
+            memcpy(tsc_net_resolved[tsc_net_resolved_len].address, address, 16);
+            tsc_net_resolved[tsc_net_resolved_len].rule = r;
+            tsc_net_resolved_len++;
+        }
+    }
+    tsc_runtime_unlock();
+}
+
+static void tsc_net_permit_endpoint(const struct sockaddr* address, socklen_t length, bool any_port) {
+    if (!tsc_net_policy.enabled) return;
+    uint8_t bytes[16];
+    int port = 0;
+    char text[INET6_ADDRSTRLEN + 8] = "";
+    if (tsc_net_address_bytes(address, length, bytes, &port)) {
+        if (tsc_net_address_permitted(bytes, port, any_port)) return;
+        char host[INET6_ADDRSTRLEN] = "";
+        const void* raw = address->sa_family == AF_INET
+            ? (const void*)&((const struct sockaddr_in*)address)->sin_addr
+            : (const void*)&((const struct sockaddr_in6*)address)->sin6_addr;
+        if (inet_ntop(address->sa_family, raw, host, sizeof(host))) {
+            if (any_port) snprintf(text, sizeof(text), "%s", host);
+            else if (address->sa_family == AF_INET6) snprintf(text, sizeof(text), "[%s]:%d", host, port);
+            else snprintf(text, sizeof(text), "%s:%d", host, port);
+        }
+    }
+    tsc_net_deny(text);
+}
+
+static int tsc_net_guarded_getaddrinfo(const char* name, const char* service, const struct addrinfo* hints, struct addrinfo** result) {
+    tsc_net_permit_name(name);
+    int rc = getaddrinfo(name, service, hints, result);
+    if (rc == 0 && result && *result) tsc_net_record(name, *result);
+    return rc;
+}
+
+static int tsc_net_guarded_getnameinfo(const struct sockaddr* address, socklen_t length, char* host, socklen_t host_len, char* serv, socklen_t serv_len, int flags) {
+    tsc_net_permit_endpoint(address, length, serv == NULL);
+    return getnameinfo(address, length, host, host_len, serv, serv_len, flags);
+}
+
+static int tsc_net_guarded_res_query(const char* name, int class_, int type, unsigned char* answer, int answer_len) {
+    tsc_net_permit_name(name);
+    return res_query(name, class_, type, answer, answer_len);
+}
+
+/* A denied connect or bind closes `fd` before throwing so the denial does not
+ * leak the descriptor the caller would otherwise close on failure. */
+static int tsc_net_guarded_connect(int fd, const struct sockaddr* address, socklen_t length) {
+    if (tsc_net_policy.enabled) {
+        uint8_t bytes[16];
+        int port = 0;
+        if (!tsc_net_address_bytes(address, length, bytes, &port) || !tsc_net_address_permitted(bytes, port, false)) {
+            close(fd);
+            tsc_net_permit_endpoint(address, length, false);
+            tsc_net_deny("");
+        }
+    }
+    return connect(fd, address, length);
+}
+
+static int tsc_net_guarded_bind(int fd, const struct sockaddr* address, socklen_t length) {
+    if (tsc_net_policy.enabled) {
+        uint8_t bytes[16];
+        int port = 0;
+        if (!tsc_net_address_bytes(address, length, bytes, &port) || !tsc_net_address_permitted(bytes, port, false)) {
+            close(fd);
+            tsc_net_permit_endpoint(address, length, false);
+            tsc_net_deny("");
+        }
+    }
+    return bind(fd, address, length);
+}
+
+#pragma GCC poison getaddrinfo getnameinfo res_query res_search res_nquery res_nsearch res_send gethostbyname gethostbyname2 gethostbyaddr getaddrinfo_a connect bind sendto sendmsg
+
 /* Async-signal-safe errno report from a forked child to its parent. A
  * failed or interrupted write must not be mistaken for a successful exec. */
 /* Conversion inside a forked child: a NUL that escaped parent validation
@@ -3388,7 +3590,7 @@ tsc_dns_lookup_result_t tsc_dns_lookup(tsc_str_t* hostname, double family, doubl
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = tsc_dns_lookup_ai_flags(hints_value);
     struct addrinfo* result = NULL;
-    int rc = getaddrinfo(host, NULL, &hints, &result);
+    int rc = tsc_net_guarded_getaddrinfo(host, NULL, &hints, &result);
     free(host);
     if (rc != 0) {
         out.error = tsc_str_from_cstr(gai_strerror(rc));
@@ -3444,7 +3646,7 @@ tsc_dns_lookup_all_result_t tsc_dns_lookup_all(tsc_str_t* hostname, double famil
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = tsc_dns_lookup_ai_flags(hints_value);
     struct addrinfo* result = NULL;
-    int rc = getaddrinfo(host, NULL, &hints, &result);
+    int rc = tsc_net_guarded_getaddrinfo(host, NULL, &hints, &result);
     free(host);
     if (rc != 0) {
         out.error = tsc_str_from_cstr(gai_strerror(rc));
@@ -3501,7 +3703,7 @@ tsc_dns_lookup_all_result_t tsc_dns_resolve_any(tsc_str_t* hostname) {
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = 0;
     struct addrinfo* result = NULL;
-    int rc = getaddrinfo(host, NULL, &hints, &result);
+    int rc = tsc_net_guarded_getaddrinfo(host, NULL, &hints, &result);
     free(host);
     if (rc != 0) {
         out.error = tsc_str_from_cstr(gai_strerror(rc));
@@ -3545,7 +3747,7 @@ static bool tsc_dns_resolve_ttl_query(
     char* host = cstr_dup(hostname);
     unsigned char answer[65536];
     int rrtype = wanted_family == AF_INET ? ns_t_a : ns_t_aaaa;
-    int answer_len = res_query(host, ns_c_in, rrtype, answer, sizeof(answer));
+    int answer_len = tsc_net_guarded_res_query(host, ns_c_in, rrtype, answer, sizeof(answer));
     free(host);
     if (answer_len < 0) return false;
 
@@ -3590,7 +3792,7 @@ static tsc_dns_resolve_ttl_result_t tsc_dns_resolve_with_ttl(
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = 0;
     struct addrinfo* result = NULL;
-    int rc = getaddrinfo(host, NULL, &hints, &result);
+    int rc = tsc_net_guarded_getaddrinfo(host, NULL, &hints, &result);
     free(host);
     if (rc != 0) {
         out.error = tsc_str_from_cstr(gai_strerror(rc));
@@ -3651,7 +3853,7 @@ tsc_dns_resolve4_result_t tsc_dns_resolve4(tsc_str_t* hostname) {
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = 0;
     struct addrinfo* result = NULL;
-    int rc = getaddrinfo(host, NULL, &hints, &result);
+    int rc = tsc_net_guarded_getaddrinfo(host, NULL, &hints, &result);
     free(host);
     if (rc != 0) {
         out.error = tsc_str_from_cstr(gai_strerror(rc));
@@ -3692,7 +3894,7 @@ tsc_dns_resolve6_result_t tsc_dns_resolve6(tsc_str_t* hostname) {
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = 0;
     struct addrinfo* result = NULL;
-    int rc = getaddrinfo(host, NULL, &hints, &result);
+    int rc = tsc_net_guarded_getaddrinfo(host, NULL, &hints, &result);
     free(host);
     if (rc != 0) {
         out.error = tsc_str_from_cstr(gai_strerror(rc));
@@ -3756,7 +3958,7 @@ tsc_dns_resolve_ptr_result_t tsc_dns_resolve_ptr(tsc_str_t* address) {
     }
 
     char host[NI_MAXHOST];
-    int rc = getnameinfo(sa_ptr, sa_len, host, sizeof(host), NULL, 0, NI_NAMEREQD);
+    int rc = tsc_net_guarded_getnameinfo(sa_ptr, sa_len, host, sizeof(host), NULL, 0, NI_NAMEREQD);
     free(ip_str);
     if (rc != 0) {
         out.error = tsc_str_from_cstr(gai_strerror(rc));
@@ -3786,7 +3988,7 @@ tsc_dns_resolve_cname_result_t tsc_dns_resolve_cname(tsc_str_t* hostname) {
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_CANONNAME;
     struct addrinfo* result = NULL;
-    int rc = getaddrinfo(host, NULL, &hints, &result);
+    int rc = tsc_net_guarded_getaddrinfo(host, NULL, &hints, &result);
     free(host);
     if (rc != 0) {
         out.error = tsc_str_from_cstr(gai_strerror(rc));
@@ -3858,7 +4060,7 @@ tsc_dns_lookup_service_result_t tsc_dns_lookup_service(tsc_str_t* address, doubl
 
     char host[NI_MAXHOST];
     char serv[NI_MAXSERV];
-    int rc = getnameinfo(sa_ptr, sa_len, host, sizeof(host), serv, sizeof(serv), 0);
+    int rc = tsc_net_guarded_getnameinfo(sa_ptr, sa_len, host, sizeof(host), serv, sizeof(serv), 0);
     free(ip_str);
 
     if (rc != 0) {
@@ -4224,7 +4426,7 @@ static bool tsc_net_resolve_ipv4(const tsc_str_t* host, struct in_addr* out) {
         hints.ai_family = AF_INET;
         hints.ai_socktype = SOCK_STREAM;
         struct addrinfo* result = NULL;
-        if (getaddrinfo(cstr, NULL, &hints, &result) == 0 && result) {
+        if (tsc_net_guarded_getaddrinfo(cstr, NULL, &hints, &result) == 0 && result) {
             *out = ((struct sockaddr_in*)result->ai_addr)->sin_addr;
             ok = true;
             freeaddrinfo(result);
@@ -4244,7 +4446,7 @@ static bool tsc_net_resolve_endpoint(const tsc_str_t* host, int family, struct s
     hints.ai_socktype = SOCK_STREAM;
     struct addrinfo* result = NULL;
     bool ok = false;
-    if (getaddrinfo(cstr, NULL, &hints, &result) == 0 && result && result->ai_addrlen <= sizeof(*out)) {
+    if (tsc_net_guarded_getaddrinfo(cstr, NULL, &hints, &result) == 0 && result && result->ai_addrlen <= sizeof(*out)) {
         memset(out, 0, sizeof(*out));
         memcpy(out, result->ai_addr, result->ai_addrlen);
         *out_len = (socklen_t)result->ai_addrlen;
@@ -5209,7 +5411,7 @@ static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_ar
     } else if (endpoint.ss_family == AF_INET6) {
         ((struct sockaddr_in6*)&endpoint)->sin6_port = htons((uint16_t)port);
     }
-    if (bind(fd, (struct sockaddr*)&endpoint, endpoint_len) != 0 || listen(fd, backlog) != 0) {
+    if (tsc_net_guarded_bind(fd, (struct sockaddr*)&endpoint, endpoint_len) != 0 || listen(fd, backlog) != 0) {
         int error = errno;
         close(fd);
         tsc_throw_str(tsc_str_from_cstr(strerror(error)));
@@ -5388,7 +5590,7 @@ static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, int ad
         snprintf(message, sizeof(message), "net.connect socket initialization failed: %s", strerror(error));
         tsc_throw_str(tsc_str_from_cstr(message));
     }
-    if (local_bind && bind(fd, (struct sockaddr*)&local_endpoint, local_endpoint_len) != 0) {
+    if (local_bind && tsc_net_guarded_bind(fd, (struct sockaddr*)&local_endpoint, local_endpoint_len) != 0) {
         int error = errno;
         close(fd);
         char message[128];
@@ -5425,7 +5627,7 @@ static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, int ad
     } else if (endpoint.ss_family == AF_INET6) {
         ((struct sockaddr_in6*)&endpoint)->sin6_port = htons((uint16_t)port);
     }
-    int result = connect(fd, (struct sockaddr*)&endpoint, endpoint_len);
+    int result = tsc_net_guarded_connect(fd, (struct sockaddr*)&endpoint, endpoint_len);
     bool connecting = result != 0;
     if (result != 0 && errno != EINPROGRESS) {
         int error = errno;
@@ -5568,7 +5770,7 @@ static tsc_value_t tsc_net_tls_connect_internal(double port, tsc_str_t* host, bo
     endpoint.sin_family = AF_INET;
     endpoint.sin_addr = address;
     endpoint.sin_port = htons((uint16_t)port);
-    int result = connect(fd, (struct sockaddr*)&endpoint, sizeof(endpoint));
+    int result = tsc_net_guarded_connect(fd, (struct sockaddr*)&endpoint, sizeof(endpoint));
     bool connecting = result != 0;
     if (result != 0 && errno != EINPROGRESS) {
         int error = errno;

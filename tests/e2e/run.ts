@@ -29,6 +29,7 @@ interface Case {
     unsafeEval?: boolean;
     release?: boolean;
     customConditions?: string[];
+    allowNet?: string[];
     runEnv?: Record<string, string>;
     /** compile.dispatch sidecar: case links libdispatch; skipped when absent. */
     dispatch?: boolean;
@@ -75,6 +76,8 @@ async function discoverCases(): Promise<Case[]> {
         const dynamicRequireManifestPath = path.join(casesDir, d, "dynamic-require-manifest.json");
         const runtimeCodeManifestPath = path.join(casesDir, d, "runtime-code-manifest.json");
         const customConditionsPath = path.join(casesDir, d, "compile.custom_conditions");
+        // compile.allow_net: one --allow-net entry per line; an empty file denies all networking.
+        const allowNetPath = path.join(casesDir, d, "compile.allow_net");
         const releasePath = path.join(casesDir, d, "compile.release");
         const runEnvPath = path.join(casesDir, d, "run.env");
         const release = await exists(releasePath);
@@ -92,6 +95,9 @@ async function discoverCases(): Promise<Case[]> {
             ? runtimeCodeManifestPath
             : undefined;
         const unsafeEval = manifest.unsafeEval;
+        const allowNet = await exists(allowNetPath)
+            ? (await fs.readFile(allowNetPath, "utf8")).split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0 && !line.startsWith("#"))
+            : undefined;
         const customConditions = await exists(customConditionsPath)
             ? parseCustomConditions(await fs.readFile(customConditionsPath, "utf8"), customConditionsPath)
             : undefined;
@@ -124,6 +130,7 @@ async function discoverCases(): Promise<Case[]> {
                 unsafeEval,
                 release,
                 customConditions,
+                allowNet,
                 runEnv,
                 dispatch,
                 dispatchSerial,
@@ -155,6 +162,7 @@ async function discoverCases(): Promise<Case[]> {
             unsafeEval,
             release,
             customConditions,
+            allowNet,
             runEnv,
             dispatch,
             dispatchSerial,
@@ -277,6 +285,7 @@ async function main(): Promise<void> {
                     runtimeCodeManifest: c.runtimeCodeManifest,
                     unsafeEval: c.unsafeEval,
                     customConditions: c.customConditions,
+                    allowNet: c.allowNet === undefined ? undefined : [c.allowNet.join(",")],
                 });
             } finally {
                 process.stderr.write = originalStderrWrite;

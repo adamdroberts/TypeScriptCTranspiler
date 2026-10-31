@@ -23,6 +23,7 @@ Exactly one positional argument: the entry `.ts` file. All imports reachable fro
 | `--runtime-code-manifest <path>` | — | JSON allow list for non-constant runtime code strings that should still compile AOT. Shape: `{ "eval": ["1 + 2"], "functions": ["return 42;"] }` or named maps like `{ "eval": { "sum": "1 + 2" } }`. |
 | `--dynamic-require-manifest <path>` | — | JSON allow list for non-finite `require(variable)` sites. Shape: `{ "requires": ["./specifier"] }`, `{ "requires": { "name": "./specifier" } }`, or caller-scoped maps such as `{ "requires": { "src/loader.ts": ["./specifier"] } }`; caller-scoped keys resolve relative to the manifest and match exact normalized absolute source-file paths. |
 | `--native-addon-manifest <path>` | — | JSON allow list mapping native addon specifiers to concrete `.node` files for the embedded Node bridge. |
+| `--allow-net <hosts>` | unrestricted | Compile a network allowlist into the binary. Entries are comma-separated and the flag may repeat: `host`, `host:port`, `[ipv6]`, `[ipv6]:port`, or a bare IPv6 address; no port means any port. Hosts are LDH DNS names (no wildcards; names libc would parse as numeric addresses such as `127.1` are rejected) or IP literals. `--allow-net=` with no entries denies all networking. See [Network allowlist](#network-allowlist). Cannot be combined with the embedded Node bridge. |
 | `--verbose` | `false` | Print the build dir, each output file, and the full gcc command line. |
 | `-h, --help` | — | Standard commander help. |
 | `-V, --version` | — | Print `0.0.1`. |
@@ -37,6 +38,17 @@ Exactly one positional argument: the entry `.ts` file. All imports reachable fro
 | `3` | Emitter rejected the program because it uses an unsupported TS feature. A `file:line:col: unsupported: <reason>` line is printed before exit. |
 
 The three failure codes are distinct so CI / test harnesses can categorize failures.
+
+## Network allowlist
+
+With `--allow-net`, every DNS query, reverse lookup, `connect`, and `bind`/`listen` in the produced binary passes one runtime chokepoint (`tsc_net_guarded_*` in `runtime/tsc_node.c`; the raw libc entry points are `#pragma GCC poison`ed after it so no call site can bypass it). The rules:
+
+- A host name may be resolved only when an entry names it (ASCII case-insensitive, one trailing dot ignored). IP literals compare by address, so `::ffff:127.0.0.1` matches `127.0.0.1`.
+- A socket may connect to or bind an address only when an IP entry names it, or a permitted resolution of an entry's host produced it, and the port matches that entry (or the entry has no port). Allowing `example.com:443` therefore permits its resolved addresses on port 443 only.
+- Wildcard bind addresses are ordinary addresses: listening without a host or on `0.0.0.0`/`::` needs an entry for that address.
+- A denial throws an `Error` with `code: "ERR_ACCESS_DENIED"`, `permission: "Net"`, `resource: "<host or address[:port]>"` and Node's permission-model message, before any packet or query leaves the process.
+
+Child processes are separate programs and are not covered; restrict them with OS sandboxing if needed. Without `--allow-net` networking is unrestricted, as in Bun.
 
 ## Environment variables
 

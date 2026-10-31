@@ -92,6 +92,7 @@
     "src/json-syntax.ts",
     "src/link/cc.ts",
     "src/link/hardening.ts",
+    "src/link/net-policy.ts",
     "src/module-request.ts",
     "src/module-export-resolution.ts",
     "src/module-source-record.ts",
