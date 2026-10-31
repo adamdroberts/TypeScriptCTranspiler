@@ -10,7 +10,7 @@ function report(label: string, fn: () => Set<any>): void {
         const set = fn();
         console.log(label + ":", set.size, Array.from(set).join("|"));
     } catch (err: any) {
-        console.log(label + ":", err);
+        console.log(label + ":", err instanceof Error ? err.name : err);
     }
 }
 

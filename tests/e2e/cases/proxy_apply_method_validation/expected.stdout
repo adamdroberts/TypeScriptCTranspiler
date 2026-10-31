@@ -1,5 +1,5 @@
-bad number: TypeError: Reflect.apply argumentsList must be an array or array-like object
-bad string: TypeError: Reflect.apply argumentsList must be an array or array-like object
-bad boolean: TypeError: Reflect.apply argumentsList must be an array or array-like object
+bad number: TypeError
+bad string: TypeError
+bad boolean: TypeError
 valid: ok:x:trap
 events: ignored:n|ignored:s|ignored:b|ignored:v|trap:1:x

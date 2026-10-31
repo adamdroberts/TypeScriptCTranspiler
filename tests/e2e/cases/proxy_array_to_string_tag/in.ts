@@ -36,5 +36,5 @@ revocable.revoke();
 try {
     console.log("revocable after:", Object.prototype.toString.call(revocable.proxy));
 } catch (err: any) {
-    console.log("revocable after:", String(err));
+    console.log("revocable after:", err instanceof Error ? err.name : err);
 }

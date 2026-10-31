@@ -7,7 +7,7 @@ function typedNormalize(form: any): string {
     try {
         return decomposed.normalize(form);
     } catch (err) {
-        return String(err);
+        return err instanceof Error ? err.name : String(err);
     }
 }
 
@@ -15,7 +15,7 @@ function dynamicNormalize(form: any): string {
     try {
         return String(dynamicText.normalize(form));
     } catch (err) {
-        return String(err);
+        return err instanceof Error ? err.name : String(err);
     }
 }
 
