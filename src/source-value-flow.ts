@@ -1453,6 +1453,16 @@ class SourceValueFlow {
         // fallback separately; object-record candidates remain graph edges.
         return sourceBindingTarget(this.checker, declarativeSourceBindingSymbol(this.checker, node)).symbol;
     }
+    /** One reference record per identifier occurrence inside generated code,
+     * connected to every caller environment; reads and writes share it. */
+    private evaluationNodeReference(environment:EvaluationEnvironment,node:ts.Identifier):{value:Cell;writes:Cell} {
+        let reference=environment.references.get(node);
+        if(!reference){
+            reference={value:this.newCell(),writes:this.newCell()};environment.references.set(node,reference);
+            for(const[caller,realms]of environment.callers)for(const realm of realms)this.connectEvaluationReference(environment,node,reference,caller,realm);
+        }
+        return reference;
+    }
     private evaluationReferenceEnvironment(node:ts.Identifier):EvaluationEnvironment|undefined {
         const environment=this.evaluationEnvironments.get(this.sourceFile(node));
         if(!environment)return undefined;
@@ -1518,19 +1528,11 @@ class SourceValueFlow {
         if(environment&&activation&&!declared){
             let names=this.evaluationVarBindings.get(activation);if(!names){names=new Map();this.evaluationVarBindings.set(activation,names);}
             let binding=names.get(node.text);if(!binding){binding=this.newCell();names.set(node.text,binding);
-                let reference=environment.references.get(node);if(!reference){reference={value:this.newCell(),writes:this.newCell()};environment.references.set(node,reference);for(const[caller,realms]of environment.callers)for(const realm of realms)this.connectEvaluationReference(environment,node,reference,caller,realm);}
-                this.evaluationDeclarationBindings.set(binding,{origins:new Set(),fallback:reference.value});
+                this.evaluationDeclarationBindings.set(binding,{origins:new Set(),fallback:this.evaluationNodeReference(environment,node).value});
             }
             return binding;
         }
-        if(environment) {
-            let reference=environment.references.get(node);
-            if(!reference){
-                reference={value:this.newCell(),writes:this.newCell()};environment.references.set(node,reference);
-                for(const[caller,realms]of environment.callers)for(const realm of realms)this.connectEvaluationReference(environment,node,reference,caller,realm);
-            }
-            return reference.value;
-        }
+        if(environment)return this.evaluationNodeReference(environment,node).value;
         for(const declaration of origin?.declarations??[]){
             let current:ts.Node|undefined=declaration;
             while(current&&!ts.isImportDeclaration(current)&&!ts.isSourceFile(current))current=current.parent;
@@ -1753,7 +1755,7 @@ class SourceValueFlow {
     private writeBinding(node: ts.Identifier, value: Cell, context?:ts.Node): void {
         const environment=this.evaluationGlobalTargets.has(node)?undefined:this.evaluationReferenceEnvironment(node);
         if(environment) {
-            this.binding(node);this.copyWrite(value,environment.references.get(node)!.writes,context,true,node);return;
+            this.binding(node);this.copyWrite(value,this.evaluationNodeReference(environment,node).writes,context,true,node);return;
         }
         this.copyWrite(value,this.binding(node),context,true,node);
         if(this.isAmbientIdentifier(node)){

@@ -1,3 +1,5 @@
+- Give every identifier occurrence in generated eval code its own connected reference record, fixing a compiler crash on repeated writes to an eval-injected var.
+- Run four more sloppy-mode cases as Scripts (dynamic_property_assignment, dynamic_property_ops, node_modules_commonjs_module_require, reference_resolution), as Bun requires.
 - Clear dead closure identities from the registry at mark end instead of through disappearing links, which made Boehm force a collection every few thousand closures.
 - Format base-10 numbers without exact rational arithmetic: integers up to 2^53 directly, other values by the shortest correctly rounded round-trip precision (identical to Bun on 250k random doubles).
 - Hold closure function identities weakly in the identity registry, so short-lived closures and their environments are reclaimed (4M closures: 14 GB to 53 MB RSS).
