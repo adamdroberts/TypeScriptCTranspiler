@@ -1,4 +1,4 @@
-default: /tmp/a/../b /
+default: /tmp/b /
 named: file b/c
 alias: alias ../c/d
 namespace: /tmp/a .txt :
