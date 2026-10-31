@@ -256,6 +256,7 @@ const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
     ts.SyntaxKind.InKeyword, ts.SyntaxKind.InstanceOfKeyword,
 ]);
 const PROPERTY_MUTATIONS = new Set<Operation>(["define-property", "define-properties", "set-property", "delete-property"]);
+const RETURN_PROJECTION_BUDGET = 8;
 
 function conversionOperands(node: ts.Node): readonly ts.Expression[] | null {
     if (ts.isComputedPropertyName(node)) return [node.expression];
@@ -360,6 +361,12 @@ class SourceValueFlow {
     private readonly propertyReads = new Map<Cell,Map<SourcePropertyKey,Map<ts.Node|undefined,Map<string,Cell>>>>();
     private readonly computedReads = new Map<Cell,Map<Cell,Map<ts.Node,Map<Cell,Cell>>>>();
     private readonly returnProjections = new Map<string,Cell>();
+    /** Distinct per-invocation projections of each return root. Past a fixed
+     * budget, further invocations share one merged projection whose formal
+     * inputs accumulate every actual: a bounded, sound widening that keeps
+     * helper-heavy call graphs from cloning return slices per call site. */
+    private readonly returnProjectionCounts = new Map<Cell,number>();
+    private readonly mergedReturnProjections = new Map<Cell,{formals:ReadonlyMap<Cell,Cell>;result:Cell}>();
     private readonly returnProjectionPhases = new Map<string,SourceProjectionPhase>();
     private readonly projectedCellPhases = new WeakMap<Cell,ReadonlySet<SourceProjectionPhase>>();
     private readonly projectedAtomPhases = new WeakMap<Atom,ReadonlySet<SourceProjectionPhase>>();
@@ -723,9 +730,23 @@ class SourceValueFlow {
     /** Return copy graphs retain actual formal inputs independently of other
      * invocations. Local writes and derived facts stay conservative; the
      * ordinary invocation graph still owns all effects and exceptions. */
-    private projectReturn(root:Cell,inputs:ReadonlyMap<Cell,Cell>):Cell {
+    private projectReturn(root:Cell,inputs:ReadonlyMap<Cell,Cell>,merging=false):Cell {
         if(!inputs.size)return root;
         const key=root.id+":"+[...inputs].map(([formal,input])=>formal.id+"="+input.id).join(","),prior=this.returnProjections.get(key);if(prior)return prior;
+        const projections=this.returnProjectionCounts.get(root)??0;
+        if(!merging&&projections>=RETURN_PROJECTION_BUDGET){
+            let merged=this.mergedReturnProjections.get(root);
+            if(!merged){
+                const formals=new Map<Cell,Cell>();for(const formal of inputs.keys())formals.set(formal,this.newCell());
+                merged={formals,result:this.newCell()};this.mergedReturnProjections.set(root,merged);
+                this.copy(this.projectReturn(root,formals,true),merged.result);
+            }
+            if([...inputs.keys()].every(formal=>merged!.formals.has(formal))){
+                for(const[formal,input]of inputs)this.copy(input,merged.formals.get(formal)!);
+                this.returnProjections.set(key,merged.result);return merged.result;
+            }
+        }
+        this.returnProjectionCounts.set(root,projections+1);
         let phase=this.returnProjectionPhases.get(key);if(!phase){phase={kind:"return"};this.returnProjectionPhases.set(key,phase);}
         const projected=new Map<Cell,Cell>(),atoms=new Map<Atom,Atom>(),pending:Cell[]=[];
         // A projection may flow back into the source through a captured
