@@ -1,3 +1,4 @@
+- Format base-10 numbers without exact rational arithmetic: integers up to 2^53 directly, other values by the shortest correctly rounded round-trip precision (identical to Bun on 250k random doubles).
 - Hold closure function identities weakly in the identity registry, so short-lived closures and their environments are reclaimed (4M closures: 14 GB to 53 MB RSS).
 - Allocate emitted closure environments, async/generator states and capture cells from the traced GC kind, and clear a retired agent's program storage on release.
 - Run function_binding_identity as a Script, which its sloppy-mode block functions require.

@@ -281,12 +281,38 @@ static tsc_str_t* number_render_digits(number_digit_record_t record, bool negati
     return result;
 }
 
+/* Base-10 shortest digits (Number::toString step 5): the first precision k
+ * whose correctly rounded k-digit decimal converts back to the same double is
+ * the smallest k, and correct rounding makes it the closest such s. strtod's
+ * round-half-even matches ToNumber, so this equals the exact rational search. */
+static bool number_shortest_decimal(double magnitude, number_digit_record_t* out) {
+    char text[40];
+    for (int precision = 1; precision <= 17; precision++) {
+        int length = snprintf(text, sizeof(text), "%.*e", precision - 1, magnitude);
+        if (length <= 0 || (size_t)length >= sizeof(text) || strtod(text, NULL) != magnitude) continue;
+        char* exponent = strchr(text, 'e');
+        if (!exponent) return false;
+        char* digits = (char*)TSC_GC_MALLOC_ATOMIC((size_t)precision + 1);
+        size_t count = 0;
+        for (const char* at = text; at < exponent; at++) if (*at >= '0' && *at <= '9') digits[count++] = *at;
+        while (count > 1 && digits[count - 1] == '0') count--;
+        digits[count] = '\0';
+        *out = (number_digit_record_t){ digits, count, (int)strtol(exponent + 1, NULL, 10) + 1 };
+        return true;
+    }
+    return false;
+}
+
 static tsc_str_t* number_shortest_string(double value, unsigned base) {
     if (isnan(value)) return tsc_str_from_lit("NaN", 3);
     if (value == 0.0) return tsc_str_from_lit("0", 1);
     const bool negative = value < 0.0;
     if (isinf(value)) return negative ? tsc_str_from_lit("-Infinity", 9) : tsc_str_from_lit("Infinity", 8);
-    number_digit_record_t record = number_shortest_digits(fabs(value), base);
+    /* Integers up to 2^53 are their own shortest digits; beyond that the
+     * shortest form pads with zeros, so they take the general path. */
+    if (base == 10 && fabs(value) <= 9007199254740992.0 && trunc(value) == value) return tsc_str_from_int((int64_t)value);
+    number_digit_record_t record;
+    if (base != 10 || !number_shortest_decimal(fabs(value), &record)) record = number_shortest_digits(fabs(value), base);
     return number_render_digits(record, negative, base != 10 || (record.point >= -5 && record.point <= 21));
 }
 
