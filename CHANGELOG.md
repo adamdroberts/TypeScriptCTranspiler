@@ -1,3 +1,4 @@
+- Drop the obsolete static-construction assertion from 46 external CommonJS class import cases, which now construct through the runtime-owned exports and print the expected output.
 - Give every identifier occurrence in generated eval code its own connected reference record, fixing a compiler crash on repeated writes to an eval-injected var.
 - Run four more sloppy-mode cases as Scripts (dynamic_property_assignment, dynamic_property_ops, node_modules_commonjs_module_require, reference_resolution), as Bun requires.
 - Clear dead closure identities from the registry at mark end instead of through disappearing links, which made Boehm force a collection every few thousand closures.
