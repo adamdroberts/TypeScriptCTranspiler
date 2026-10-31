@@ -1,3 +1,4 @@
+- Type require() destructuring of runtime-owned CommonJS exports dynamically in every goal, copy rest bindings from the actual exports, and root destructured module globals across collections.
 - Add `--allow-net` to compile a fail-closed network allowlist into binaries, enforced at one poisoned DNS/connect/bind chokepoint.
 - Follow Bun's CommonJS interop: an ES module's default import of CommonJS is module.exports unless it has a truthy __esModule data property and a default, and CommonJS namespaces hide __esModule.
 - Render RegExp objects in console output as /source/flags with any own enumerable properties.

@@ -17416,6 +17416,18 @@ class Emitter {
         info: ModuleInfo,
         excluded: Set<string>,
     ): EmitResult {
+        if (this.isCommonJsSourceFile(info.sf)) {
+            // Runtime-owned module.exports: the rest object is CopyDataProperties
+            // of the actual exports value, excluding the destructured keys.
+            const spec = this.requireCallSpecifier((node.parent as ts.ObjectBindingPattern).parent.initializer!);
+            if (!spec) unsupported(node, "require rest binding needs a static require specifier");
+            const source = this.emitCommonJsRequireModuleValue(node, spec, "require");
+            const keys = this.freshTemp("_reqrest_excluded");
+            const pieces = [`tsc_array_t* ${keys} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(excluded.size, 1)})`];
+            for (const name of excluded) pieces.push(`tsc_array_push_value(${keys}, tsc_value_string(tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)})))`);
+            pieces.push(`tsc_value_copy_data_properties(${this.coerce(source, T_VALUE, node)}, ${keys})`);
+            return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
+        }
         const obj = this.freshTemp("_reqrest");
         const pieces = [`tsc_object_t* ${obj} = tsc_object_new()`];
         for (const exported of this.commonJsExportedMemberDeclarations(info.sf)) {
@@ -17466,6 +17478,16 @@ class Emitter {
         };
     }
 
+    /** Top-level destructured bindings live in program storage, which the
+     * collector scans only for raw pointers. A NaN-boxed dynamic value is
+     * therefore re-rooted through the symbol's one global root on every store. */
+    private emitTopLevelBindingStore(initBuf: CBuf, name: ts.Identifier, localName: string, ty: CType, value: string): void {
+        this.agentStorage.declare(ty.c, localName);
+        initBuf.line(`${localName} = ${value};`);
+        const symbol = this.symbolForIdentifier(name);
+        if (ty.kind === "value" && symbol) initBuf.line(`${this.ensureGlobalDynamicRoot(symbol, localName)} = tsc_value_gc_root(${localName});`);
+    }
+
     private emitTopLevelRequireDestructuring(
         initBuf: CBuf,
         d: ts.VariableDeclaration,
@@ -17482,8 +17504,7 @@ class Emitter {
                 if (rest) {
                     const localName = this.declaredName(rest);
                     const value = this.emitDynamicRequireRestObject(nativeAddon, excluded, element);
-                    this.agentStorage.declare("tsc_value_t",localName);
-                    initBuf.line(`${localName} = ${value.c};`);
+                    this.emitTopLevelBindingStore(initBuf, rest, localName, T_VALUE, value.c);
                     const sym = this.symbolForIdentifier(rest);
                     if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
                     continue;
@@ -17494,8 +17515,7 @@ class Emitter {
                 }
                 const localName = this.declaredName(element.name);
                 const value = this.emitOwnerRequireDestructureValue(nativeAddon, exportName, element);
-                this.agentStorage.declare("tsc_value_t",localName);
-                initBuf.line(`${localName} = ${value.c};`);
+                this.emitTopLevelBindingStore(initBuf, element.name, localName, T_VALUE, value.c);
                 const sym = this.symbolForIdentifier(element.name);
                 if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
             }
@@ -17511,8 +17531,7 @@ class Emitter {
             if (rest) {
                 const localName = this.declaredName(rest);
                 const value = this.emitCommonJsRequireRestObject(element, info, excluded);
-                this.agentStorage.declare("tsc_value_t",localName);
-                initBuf.line(`${localName} = ${value.c};`);
+                this.emitTopLevelBindingStore(initBuf, rest, localName, T_VALUE, value.c);
                 const sym = this.symbolForIdentifier(rest);
                 if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
                 continue;
@@ -17527,14 +17546,13 @@ class Emitter {
                 if (value) {
                     const localName = this.declaredName(element.name);
                     const sym = this.symbolForIdentifier(element.name);
-                    this.agentStorage.declare("tsc_value_t",localName);
-                    if (!element.initializer) {
-                        initBuf.line(`${localName} = ${value.c};`);
-                    } else {
+                    let initializer = value.c;
+                    if (element.initializer) {
                         const fallback = this.emitExpr(element.initializer);
                         const tmp = this.freshTemp("_reqprop");
-                        initBuf.line(`{ tsc_value_t ${tmp} = ${value.c}; ${localName} = tsc_value_is_undefined(${tmp}) ? ${this.coerce(fallback, T_VALUE, element.initializer)} : ${tmp}; }`);
+                        initializer = `({ tsc_value_t ${tmp} = ${value.c}; tsc_value_is_undefined(${tmp}) ? ${this.coerce(fallback, T_VALUE, element.initializer)} : ${tmp}; })`;
                     }
+                    this.emitTopLevelBindingStore(initBuf, element.name, localName, T_VALUE, initializer);
                     if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
                     continue;
                 }
@@ -17543,8 +17561,7 @@ class Emitter {
                 }
                 const fallback = this.emitExpr(element.initializer);
                 const localName = this.declaredName(element.name);
-                this.agentStorage.declare(`${fallback.ty.c}`,localName);
-                initBuf.line(`${localName} = ${fallback.c};`);
+                this.emitTopLevelBindingStore(initBuf, element.name, localName, fallback.ty, fallback.c);
                 const sym = this.symbolForIdentifier(element.name);
                 if (sym) this.requireDestructureTypes.set(sym, fallback.ty);
                 continue;
@@ -17555,8 +17572,7 @@ class Emitter {
             }
             const ty = this.commonJsExportedCType(decl);
             const localName = this.declaredName(element.name);
-            this.agentStorage.declare(`${ty.c}`,localName);
-            initBuf.line(`${localName} = ${cName};`);
+            this.emitTopLevelBindingStore(initBuf, element.name, localName, ty, cName);
             const sym = this.symbolForIdentifier(element.name);
             if (sym) this.requireDestructureTypes.set(sym, ty);
         }
@@ -17579,8 +17595,7 @@ class Emitter {
             const value = this.commonJsModuleMetadataValue(exportName, d.getSourceFile());
             if (!value) unsupported(element, `unsupported CommonJS module destructuring property "${exportName}"`);
             const localName = this.declaredName(element.name);
-            this.agentStorage.declare(`${value.ty.c}`,localName);
-            initBuf.line(`${localName} = ${value.c};`);
+            this.emitTopLevelBindingStore(initBuf, element.name, localName, value.ty, value.c);
             const sym = this.symbolForIdentifier(element.name);
             if (sym) this.requireDestructureTypes.set(sym, value.ty);
         }
@@ -17626,7 +17641,10 @@ class Emitter {
         const exportName = this.requireDestructureExportName(element);
         const exportDecl = this.commonJsExportedMemberDeclaration(info.sf, exportName);
         if (!exportDecl) {
-            if (this.commonJsModuleExportsValueDeclaration(info.sf)) {
+            // CommonJS exports are read from the retained module owner at run
+            // time, so the binding is a dynamic value regardless of whether a
+            // reference is emitted before or after the destructuring itself.
+            if (this.commonJsModuleExportsValueDeclaration(info.sf) || this.isCommonJsSourceFile(info.sf)) {
                 if (sym) this.requireDestructureTypes.set(sym, T_VALUE);
                 return T_VALUE;
             }
