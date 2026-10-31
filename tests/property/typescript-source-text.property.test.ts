@@ -44,7 +44,7 @@ test('TypeScript callable source text equals Node strip-only erasure of the defi
    if(node.end<=erasableEnd){
     let start=node.getStart(file);
     for(const modifier of ts.canHaveModifiers(node)?ts.getModifiers(node)??[]:[])
-     if(modifier.kind===ts.SyntaxKind.StaticKeyword)start=ts.skipTrivia(file.text,modifier.end);
+     if(modifier.kind===ts.SyntaxKind.StaticKeyword){const scanner=ts.createScanner(ts.ScriptTarget.ESNext,true,ts.LanguageVariant.Standard,file.text,undefined,modifier.end);scanner.scan();start=scanner.getTokenPos();}
     expect({span:file.text.slice(node.getStart(file),node.end),text}).toEqual({span:file.text.slice(node.getStart(file),node.end),text:stripped.slice(start,node.end)});
     checked.push(file.text.slice(node.getStart(file),node.getStart(file)+20));
    }else if(ts.isFunctionLike(node)&&node.parent&&(ts.isSourceFile(node.parent)||ts.isClassLike(node.parent))){
