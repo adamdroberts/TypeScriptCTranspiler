@@ -56,6 +56,8 @@ Child processes are separate programs and are not covered; restrict them with OS
 |----------|---------|--------|
 | `TSC2C_CC` | compiler driver | C compiler command for generated C and C runtime sources. Defaults to `gcc`; CI also exercises `clang`. |
 | `TSC2C_CXX` | compiler driver | C++ compiler/linker command when embedded-Node bridge sources are present. Defaults to `g++`; CI also exercises `clang++`. |
+| `TSC2C_SOURCE_ANALYSIS_BUDGET` | compiler | Maximum source-value analysis steps per solve (default 20000000, a deterministic backstop; ordinary programs need well under 50000 and the memory-growth limit usually triggers first). When exceeded, the analysis stops with a warning and every dynamic-code (`eval`/`Function`) source it would have proven stays unproven, so such sites need `--runtime-code-manifest` or `--unsafe-eval`. Programs without dynamic code compile identically. |
+| `TSC2C_SOURCE_ANALYSIS_MEMORY_MB` | compiler | Resident-memory growth (MB) one analysis solve may use before stopping the same fail-closed way. Machine-dependent, but it can only leave sources unproven, never change generated behaviour. Default 3072. |
 | `TSC2C_NO_GC` | `tests/e2e/run.ts` | If `=1`, the harness passes `--no-gc` to every compile. Lets you run the suite without `libgc-dev` installed. |
 | `TMPDIR` | runtime (inside produced binaries) | Used by `os.tmpdir()`. Falls back to `/tmp`. |
 | `HOME` | runtime | Used by `os.homedir()`. Falls back to `/`. |

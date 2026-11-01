@@ -257,6 +257,29 @@ const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
 ]);
 const PROPERTY_MUTATIONS = new Set<Operation>(["define-property", "define-properties", "set-property", "delete-property"]);
 const RETURN_PROJECTION_BUDGET = 8;
+/** Solver steps (rule evaluations, initializations, primitive flushes) one
+ * source-value solve may perform: a deterministic backstop well above legitimate
+ * analyses (ordinary programs use under 50k, the largest property suites
+ * a few million); the memory-growth limit bounds runaway ones first.
+ * TSC2C_SOURCE_ANALYSIS_BUDGET overrides it. */
+const DEFAULT_SOURCE_ANALYSIS_RULE_BUDGET = 20_000_000;
+/** Resident-memory growth during one solve above which it stops (checked
+ * every 4096 steps).
+ * This only ever leaves more dynamic-code sources unproven, which fails
+ * closed. TSC2C_SOURCE_ANALYSIS_MEMORY_MB overrides it. */
+const DEFAULT_SOURCE_ANALYSIS_MEMORY_MB = 3072;
+function sourceAnalysisMemoryLimit(): number {
+    const raw = process.env.TSC2C_SOURCE_ANALYSIS_MEMORY_MB;
+    if (raw === undefined || raw === "") return DEFAULT_SOURCE_ANALYSIS_MEMORY_MB * 1048576;
+    if (!/^[1-9][0-9]{0,9}$/.test(raw)) throw new Error(`TSC2C_SOURCE_ANALYSIS_MEMORY_MB must be a positive integer, got ${JSON.stringify(raw)}`);
+    return Number(raw) * 1048576;
+}
+function sourceAnalysisRuleBudget(): number {
+    const raw = process.env.TSC2C_SOURCE_ANALYSIS_BUDGET;
+    if (raw === undefined || raw === "") return DEFAULT_SOURCE_ANALYSIS_RULE_BUDGET;
+    if (!/^[1-9][0-9]{0,15}$/.test(raw)) throw new Error(`TSC2C_SOURCE_ANALYSIS_BUDGET must be a positive integer, got ${JSON.stringify(raw)}`);
+    return Number(raw);
+}
 
 function conversionOperands(node: ts.Node): readonly ts.Expression[] | null {
     if (ts.isComputedPropertyName(node)) return [node.expression];
@@ -7186,8 +7209,14 @@ class SourceValueFlow {
         this.publish(cell,this.normalResults.get(cell)??(ts.isNewExpression(node)?this.opaqueObject:this.unknown));return true;
     }
     solve(): { constructors: ConstructorSourceFacts[]; evaluations: EvaluationInvocation[] } {
-        for (;;) {
+        // A deterministic budget of rule evaluations keeps compile time and
+        // memory bounded. Exhausting it ends the analysis without sealing:
+        // every discovered dynamic-code site is reported unproven, which the
+        // compiler admits only through a manifest or --unsafe-eval.
+        const budget=sourceAnalysisRuleBudget(),memoryLimit=sourceAnalysisMemoryLimit(),memoryBase=process.memoryUsage().rss;let runs=0,exhausted=false;
+        solving: for (;;) {
             while (this.moduleNamespacePending.length || this.initializers.length || this.queueCursor < this.queue.length || this.primitiveChanges.size) {
+                if (++runs > budget || (runs & 4095) === 0 && process.memoryUsage().rss - memoryBase > memoryLimit) { exhausted = true; break solving; }
                 if (this.moduleNamespacePending.length) { const namespace = this.moduleNamespacePending.pop()!; this.initializeModuleNamespace(namespace.source,namespace.symbol,namespace.owner); }
                 else if (this.initializers.length) { const initializer = this.initializers.pop()!; this.initialize(initializer.node, initializer.result); }
                 else if (this.primitiveChanges.size) this.flushPrimitiveChanges();
@@ -7231,6 +7260,18 @@ class SourceValueFlow {
             if(changed)continue;
             for(const [node,cell]of this.cells)changed=this.sealSourceValue(node,cell)||changed;
             if (!changed) break;
+        }
+        if (exhausted) {
+            process.stderr.write(`tsc2c: warning: source-value analysis stopped after ${runs} steps (limits: ${budget} steps, ${Math.round(memoryLimit / 1048576)} MB); dynamic code sources stay unproven (raise TSC2C_SOURCE_ANALYSIS_BUDGET or TSC2C_SOURCE_ANALYSIS_MEMORY_MB to analyze further)\n`);
+            const result = {
+                constructors: [...this.invocations.values()].flatMap(records => [...records.values()]).map(invocation =>
+                    ({kind:invocation.kind,arguments:null,complete:false,...(this.domain?{domain:this.domain}:{})})),
+                evaluations: [...this.evaluationInvocations.values()].flatMap(records => [...records.values()]).map(invocation =>
+                    ({node:invocation.node,operation:invocation.operation,direct:invocation.direct,choices:null,...(this.domain?{domain:this.domain}:{})})),
+            };
+            // The abandoned graph is garbage; reclaim it before the next solve.
+            (globalThis as {Bun?:{gc(force:boolean):void}}).Bun?.gc(true);
+            return result;
         }
         // A guarded call may never initialize its callee/invocation rule.
         // Retain the empty source result from the same closed guard graph so
