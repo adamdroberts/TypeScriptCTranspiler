@@ -3210,6 +3210,11 @@ class SourceValueFlow {
                 if(!known||owner.proxy){
                     uncertain();const caught=this.exceptionHandlers.get(context);if(caught)this.publish(caught,this.unknown);
                     if(owner?.proxy)this.proxyReadEffects(owner,null,"getOwnPropertyDescriptor",context);
+                    // Only a Proxy runs code during [[GetOwnProperty]]; other
+                    // represented objects with an unmodeled property algorithm
+                    // (built-in prototypes, exotic objects) answer uncertainly
+                    // and may throw, without an opaque effect or escape.
+                    if(owner&&!owner.proxy)continue;
                     this.onActive(context,()=>{this.opaqueEffect(context);this.escapeCallableArgument(objects,context);});continue;
                 }
                 if(unknownKey){uncertain();continue;}
