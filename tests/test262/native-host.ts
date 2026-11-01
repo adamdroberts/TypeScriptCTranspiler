@@ -17,6 +17,7 @@ import {
     staticModuleRequestResolutionError,
 } from "../../src/module-request";
 import { evaluationSourceRequests, sourceFileIsStrict, evalSourceIsValid, evalSourceKey, type EvalSourceRequest } from "../../src/eval-source";
+import { setSourceAnalysisWarningWriter } from "../../src/source-value-flow";
 import {
     earlyModuleStaticSemanticsFailure,
 } from "../../src/module-static-semantics";
@@ -108,9 +109,17 @@ export function finiteEvalScriptSourceGraph(
         const program = ts.createProgram([...byPath].filter(([,record])=>record.root).map(([filename])=>filename),options,host);
         const before = records.length;
         let unresolved: string | null = null;
-        const projected = evaluationSourceRequests(program, {roots:roots.map(root=>path.resolve(root.path)), evaluations: records.filter(record => record.evaluation)
-            .map(record => ({source:record.source,entry:path.resolve(record.path),kind:record.kind,domain:record.domain})) },
-            new Map(records.filter(record => record.strictContext !== undefined).map(record => [path.resolve(record.path), record.strictContext!])));
+        // The host owns stdout/stderr for its JSON protocol. An exhausted
+        // analysis already reports its sites as unresolved below.
+        setSourceAnalysisWarningWriter(() => {});
+        let projected: ReturnType<typeof evaluationSourceRequests>;
+        try {
+            projected = evaluationSourceRequests(program, {roots:roots.map(root=>path.resolve(root.path)), evaluations: records.filter(record => record.evaluation)
+                .map(record => ({source:record.source,entry:path.resolve(record.path),kind:record.kind,domain:record.domain})) },
+                new Map(records.filter(record => record.strictContext !== undefined).map(record => [path.resolve(record.path), record.strictContext!])));
+        } finally {
+            setSourceAnalysisWarningWriter(undefined);
+        }
         for (const invocation of projected.unresolved) {
             if (invocation.operation === "eval" && !invocation.direct) continue;
             const file = invocation.node.getSourceFile(), record = byPath.get(path.resolve(file.fileName))!;

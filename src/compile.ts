@@ -26,7 +26,7 @@ import { invokeCc } from "./link/cc";
 import { emitNetPolicyC, NetPolicyError, parseNetPolicy, type NetPolicy } from "./link/net-policy";
 import { commonJsRequireSpecifierArgument, staticStringExpressionText, staticStringExpressionTexts } from "./module-specifiers";
 import { evaluationSourceRequests, evalSourceIsValid, evalSourceKey, evalSourceRequest, type EvalSourceRequest, type SourceEvalPlan } from "./eval-source";
-import { sourceConstructorInvocations, sourceEvaluationInvocations } from "./source-value-flow";
+import { setSourceAnalysisWarningWriter, sourceConstructorInvocations, sourceEvaluationInvocations } from "./source-value-flow";
 import { declarativeSourceBindingSymbol, sourceDeclarationIntroducesBinding } from "./source-bindings";
 import {
     type NativeAddonManifest,
@@ -721,6 +721,15 @@ function containsNativeAddonPackageReference(value: unknown, packageRoot: string
 
 export async function compile(opts: CompileOptions): Promise<CompileResult> {
     const writeDiagnostic = opts.diagnosticWriter ?? ((message: string) => process.stderr.write(message));
+    setSourceAnalysisWarningWriter(writeDiagnostic);
+    try {
+        return await compileWithDiagnostics(opts, writeDiagnostic);
+    } finally {
+        setSourceAnalysisWarningWriter(undefined);
+    }
+}
+
+async function compileWithDiagnostics(opts: CompileOptions, writeDiagnostic: (message: string) => void): Promise<CompileResult> {
     const dispatchMode = opts.dispatch ?? "threaded";
     if (dispatchMode !== "threaded" && dispatchMode !== "serial") {
         writeDiagnostic(`tsc2c: unsupported dispatch mode: ${dispatchMode}\n`);

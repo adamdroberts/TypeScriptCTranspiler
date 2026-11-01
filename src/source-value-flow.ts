@@ -274,6 +274,17 @@ function sourceAnalysisMemoryLimit(): number {
     if (!/^[1-9][0-9]{0,9}$/.test(raw)) throw new Error(`TSC2C_SOURCE_ANALYSIS_MEMORY_MB must be a positive integer, got ${JSON.stringify(raw)}`);
     return Number(raw) * 1048576;
 }
+/** Exhaustion warnings go to the active compile's diagnostic writer (once per
+ * compile), so hosts that own stdout/stderr keep their protocol intact. */
+let sourceAnalysisWarningWriter:((message:string)=>void)|undefined;
+let sourceAnalysisWarned=false;
+export function setSourceAnalysisWarningWriter(writer:((message:string)=>void)|undefined):void {
+    sourceAnalysisWarningWriter=writer;sourceAnalysisWarned=false;
+}
+function reportSourceAnalysisExhaustion(message:string):void {
+    if(sourceAnalysisWarned)return;sourceAnalysisWarned=true;
+    (sourceAnalysisWarningWriter??(text=>process.stderr.write(text)))(message);
+}
 function sourceAnalysisRuleBudget(): number {
     const raw = process.env.TSC2C_SOURCE_ANALYSIS_BUDGET;
     if (raw === undefined || raw === "") return DEFAULT_SOURCE_ANALYSIS_RULE_BUDGET;
@@ -7262,7 +7273,7 @@ class SourceValueFlow {
             if (!changed) break;
         }
         if (exhausted) {
-            process.stderr.write(`tsc2c: warning: source-value analysis stopped after ${runs} steps (limits: ${budget} steps, ${Math.round(memoryLimit / 1048576)} MB); dynamic code sources stay unproven (raise TSC2C_SOURCE_ANALYSIS_BUDGET or TSC2C_SOURCE_ANALYSIS_MEMORY_MB to analyze further)\n`);
+            reportSourceAnalysisExhaustion(`tsc2c: warning: source-value analysis stopped after ${runs} steps (limits: ${budget} steps, ${Math.round(memoryLimit / 1048576)} MB); dynamic code sources stay unproven (raise TSC2C_SOURCE_ANALYSIS_BUDGET or TSC2C_SOURCE_ANALYSIS_MEMORY_MB to analyze further)\n`);
             const result = {
                 constructors: [...this.invocations.values()].flatMap(records => [...records.values()]).map(invocation =>
                     ({kind:invocation.kind,arguments:null,complete:false,...(this.domain?{domain:this.domain}:{})})),
