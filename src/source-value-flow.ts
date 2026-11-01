@@ -5784,6 +5784,67 @@ class SourceValueFlow {
         }
         return result;
     }
+    /** Inside the taken branch of `x === L` (L a primitive literal), a read of
+     * x yields exactly L when x cannot change between the test and the read:
+     * a non-ambient local binding with no write sites (or a const), in a
+     * function without direct eval, `with`, or sloppy `arguments` aliasing of
+     * a parameter. `x === 0` also admits -0. */
+    private strictEqualityRefinement(node:ts.Identifier):readonly Atom[]|null {
+        const symbol=this.bindingSymbol(node),declaration=symbol?.valueDeclaration;
+        if(!symbol||!declaration||declaration.getSourceFile()!==node.getSourceFile())return null;
+        const isConst=ts.isVariableDeclaration(declaration)&&ts.isVariableDeclarationList(declaration.parent)&&(declaration.parent.flags&ts.NodeFlags.Const)!==0;
+        if(!isConst&&(this.bindingWriteSites.get(symbol)?.size??0)>0)return null;
+        if(!ts.isParameter(declaration)&&!ts.isVariableDeclaration(declaration))return null;
+        const literal=(expression:ts.Expression):readonly Atom[]|null=>{
+            const value=unwrap(expression);
+            if(ts.isNumericLiteral(value)){const number=Number(value.text);return number===0?[this.primitive(0),this.primitive(-0)]:[this.primitive(number)];}
+            if(ts.isPrefixUnaryExpression(value)&&value.operator===ts.SyntaxKind.MinusToken&&ts.isNumericLiteral(value.operand)){const number=-Number(value.operand.text);return number===0?[this.primitive(0),this.primitive(-0)]:[this.primitive(number)];}
+            if(ts.isStringLiteral(value)||ts.isNoSubstitutionTemplateLiteral(value))return [this.primitive(value.text)];
+            if(value.kind===ts.SyntaxKind.TrueKeyword)return [this.primitive(true)];
+            if(value.kind===ts.SyntaxKind.FalseKeyword)return [this.primitive(false)];
+            if(value.kind===ts.SyntaxKind.NullKeyword)return [this.primitive(null)];
+            return null;
+        };
+        const sameBinding=(expression:ts.Expression):boolean=>{const value=unwrap(expression);return ts.isIdentifier(value)&&this.bindingSymbol(value)===symbol;};
+        const proven=(condition:ts.Expression):readonly Atom[]|null=>{
+            const value=unwrap(condition);
+            if(ts.isBinaryExpression(value)&&value.operatorToken.kind===ts.SyntaxKind.AmpersandAmpersandToken)return proven(value.left)??proven(value.right);
+            if(ts.isBinaryExpression(value)&&value.operatorToken.kind===ts.SyntaxKind.EqualsEqualsEqualsToken){
+                if(sameBinding(value.left))return literal(value.right);
+                if(sameBinding(value.right))return literal(value.left);
+            }
+            return null;
+        };
+        for(let child:ts.Node=node,parent=node.parent;parent;child=parent,parent=parent.parent){
+            if(functionNode(parent))break;
+            let refined:readonly Atom[]|null=null;
+            if(ts.isIfStatement(parent)&&child===parent.thenStatement)refined=proven(parent.expression);
+            else if(ts.isConditionalExpression(parent)&&child===parent.whenTrue)refined=proven(parent.condition);
+            else if(ts.isBinaryExpression(parent)&&parent.operatorToken.kind===ts.SyntaxKind.AmpersandAmpersandToken&&child===parent.right)refined=proven(parent.left);
+            if(refined)return this.refinementBlocked(declaration)?null:refined;
+        }
+        return null;
+    }
+    /** Writes the analysis cannot see: a direct eval or `with` anywhere in the
+     * declaring scope (nested functions included), or sloppy `arguments`
+     * aliasing a parameter. */
+    private readonly refinementBlockers=new WeakMap<ts.Node,{evaluation:boolean;argumentsAlias:boolean}>();
+    private refinementBlocked(declaration:ts.Declaration):boolean {
+        let scope:ts.Node|undefined=declaration.parent;while(scope&&!functionNode(scope)&&!ts.isSourceFile(scope))scope=scope.parent;
+        if(!scope)return true;
+        let facts=this.refinementBlockers.get(scope);
+        if(!facts){
+            const found={evaluation:false,argumentsAlias:false};const sloppy=!isStrictCodeContext(scope);
+            const visit=(current:ts.Node):void=>{
+                if(ts.isWithStatement(current))found.evaluation=true;
+                else if(ts.isCallExpression(current)){const callee=unwrap(current.expression);if(ts.isIdentifier(callee)&&callee.text==="eval")found.evaluation=true;}
+                else if(sloppy&&ts.isIdentifier(current)&&current.text==="arguments")found.argumentsAlias=true;
+                ts.forEachChild(current,visit);
+            };
+            visit(scope);facts=found;this.refinementBlockers.set(scope,facts);
+        }
+        return facts.evaluation||ts.isParameter(declaration)&&facts.argumentsAlias;
+    }
     private initialize(node: ts.Node, result: Cell): void {
         const guards=this.guards(node);
         if(guards.length&&ts.isCallExpression(node)){
@@ -5872,6 +5933,8 @@ class SourceValueFlow {
                 if(handler)this.publish(handler,this.nativeException(node));return;
             }
             const ambient=this.isAmbientIdentifier(node);
+            const refined=ambient?null:this.strictEqualityRefinement(node);
+            if(refined){for(const atom of refined)this.publish(result,atom);return;}
             const binding=this.binding(node);
             if(ambient){let absence!:Rule;absence=this.rule([binding],()=>{
                 if(!this.presenceClosed){this.presenceRules.add(absence);return;}
