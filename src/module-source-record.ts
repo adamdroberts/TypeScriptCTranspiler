@@ -3,6 +3,7 @@ import ts from 'typescript';
 import {ecmaParseGoal} from './ecmascript-source';
 import {earlyControlFlowStaticSemanticsFailure} from './control-static-semantics';
 import {earlyFunctionStaticSemanticsFailure} from './function-static-semantics';
+import {earlyRegExpLiteralFailure} from './regexp-static-semantics';
 import {earlyPrivateStaticSemanticsFailure} from './emit/private-names';
 import {earlyModuleStaticSemanticsFailure,moduleVarDeclaredNames} from './module-static-semantics';
 import {validateJsonSyntax} from './json-syntax';
@@ -36,7 +37,7 @@ export function retainModuleParseFailure(source:ts.SourceFile):ts.SourceFile {
     const diagnostics=(source as ts.SourceFile&{parseDiagnostics?:readonly ts.DiagnosticWithLocation[]}).parseDiagnostics??[];
     const semantic=!json&&!diagnostics.length
         ? earlyControlFlowStaticSemanticsFailure(source)??earlyFunctionStaticSemanticsFailure(source)??
-            earlyPrivateStaticSemanticsFailure(source)??earlyModuleStaticSemanticsFailure(source):null;
+            earlyPrivateStaticSemanticsFailure(source)??earlyModuleStaticSemanticsFailure(source)??earlyRegExpLiteralFailure(source):null;
     const message=syntax?.message??(diagnostics[0]?ts.flattenDiagnosticMessageText(diagnostics[0].messageText,'\n'):semantic?.message);
     if(!message)return source;
     const inert=inertModuleSource(source);

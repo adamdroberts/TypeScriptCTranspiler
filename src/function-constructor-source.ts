@@ -3,6 +3,7 @@ import ts from "typescript";
 import { createEcmaSourceFile } from "./ecmascript-source";
 import { earlyControlFlowStaticSemanticsFailure } from "./control-static-semantics";
 import { earlyFunctionStaticSemanticsFailure } from "./function-static-semantics";
+import { earlyRegExpLiteralFailure } from "./regexp-static-semantics";
 import { sourceConstructorFacts, type SourceValueGraphEntries } from "./source-value-flow";
 import {sourceChoiceTuples} from "./source-choice-tuples";
 
@@ -72,7 +73,8 @@ export function functionConstructorSourceIsValid(source: FunctionConstructorSour
         !parseFunctionExpression({ kind: source.kind, parameters: "", body: source.body })) return false;
     const file = parseFunctionExpression(source);
     return !!file && !earlyControlFlowStaticSemanticsFailure(file) &&
-        !earlyFunctionStaticSemanticsFailure(file) && !earlyPrivateStaticSemanticsFailure(file);
+        !earlyFunctionStaticSemanticsFailure(file) && !earlyPrivateStaticSemanticsFailure(file) &&
+        !earlyRegExpLiteralFailure(file);
 }
 
 export function finiteFunctionConstructorSources(

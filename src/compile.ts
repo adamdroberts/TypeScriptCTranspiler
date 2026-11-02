@@ -8,6 +8,7 @@ import {
     earlyFunctionStaticSemanticsFailure,
     type FunctionStaticSemanticsFailure,
 } from "./function-static-semantics";
+import { earlyRegExpLiteralFailure, RegExpValidatorUnavailableError } from "./regexp-static-semantics";
 import { execFile } from "node:child_process";
 import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
@@ -200,6 +201,18 @@ function functionStaticSemanticsDiagnostics(
     for (const sourceFile of program.getSourceFiles()) {
         if (sourceFile.isDeclarationFile || /\.json$/i.test(sourceFile.fileName)) continue;
         const failure = earlyFunctionStaticSemanticsFailure(sourceFile);
+        if (failure) failures.push(failure);
+    }
+    return failures;
+}
+
+function regExpStaticSemanticsDiagnostics(
+    program: ts.Program,
+): FunctionStaticSemanticsFailure[] {
+    const failures: FunctionStaticSemanticsFailure[] = [];
+    for (const sourceFile of program.getSourceFiles()) {
+        if (sourceFile.isDeclarationFile || /\.json$/i.test(sourceFile.fileName)) continue;
+        const failure = earlyRegExpLiteralFailure(sourceFile);
         if (failure) failures.push(failure);
     }
     return failures;
@@ -724,6 +737,12 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     setSourceAnalysisWarningWriter(writeDiagnostic);
     try {
         return await compileWithDiagnostics(opts, writeDiagnostic);
+    } catch (error) {
+        // RegExp literals cannot be admitted without the validator: fail
+        // closed with an environment diagnostic rather than a SyntaxError.
+        if (!(error instanceof RegExpValidatorUnavailableError)) throw error;
+        writeDiagnostic(`tsc2c: ${error.message}\n`);
+        return { exitCode: 3, buildDir: opts.buildDir ?? "", mainC: "" };
     } finally {
         setSourceAnalysisWarningWriter(undefined);
     }
@@ -857,6 +876,7 @@ async function compileWithDiagnostics(opts: CompileOptions, writeDiagnostic: (me
                 const failure = earlyPrivateStaticSemanticsFailure(file, !!directEval); return failure ? [failure] : []; }),
         ...controlStaticSemanticsDiagnostics(program),
         ...functionStaticSemanticsDiagnostics(program),
+        ...regExpStaticSemanticsDiagnostics(program),
         ...moduleStaticSemanticsDiagnostics(program, opts.moduleRoots),
     ];
     if (staticSemanticsFailures.length > 0) {
