@@ -29,6 +29,9 @@ export class SourceReachingWrites {
     private readonly points:Point[]=[];
     private readonly entries=new Map<ts.Node,number>();
     private readonly solutions=new Map<ts.Symbol,ReadonlyMap<number,ReadonlySet<SourceLexicalWrite|null>>>();
+    // Points at which each symbol is read. A solution is consulted only at
+    // these points, so it retains nothing else (O(reads), not O(points)).
+    private symbolReads:Map<ts.Symbol,number[]>|undefined;
     private readonly entry=this.point();
     private readonly exit=this.point();
     constructor(root:ts.Node,
@@ -175,6 +178,16 @@ export class SourceReachingWrites {
         // syntax retain their complete optional event graph, including throws.
         this.opaque([node],entry,exit);
     }
+    private readsOf(symbol:ts.Symbol):readonly number[] {
+        if(!this.symbolReads){
+            this.symbolReads=new Map();
+            for(const [node,index]of this.entries)if(ts.isIdentifier(node)){
+                const read=this.symbolFor(node);if(!read)continue;
+                let indices=this.symbolReads.get(read);if(!indices){indices=[];this.symbolReads.set(read,indices);}indices.push(index);
+            }
+        }
+        return this.symbolReads.get(symbol)??[];
+    }
     reaching(reference:ts.Identifier):ReadonlySet<SourceLexicalWrite>|null {
         const at=this.entries.get(reference),symbol=this.symbolFor(reference);if(at===undefined||!symbol)return null;
         let solution=this.solutions.get(symbol);
@@ -203,7 +216,9 @@ export class SourceReachingWrites {
                     for(const next of point.successors)add(next,delta);
                 }
             }
-            solution=facts;this.solutions.set(symbol,solution);
+            const retained=new Map<number,ReadonlySet<SourceLexicalWrite|null>>();
+            for(const index of this.readsOf(symbol)){const definitions=facts.get(index);if(definitions)retained.set(index,definitions);}
+            solution=retained;this.solutions.set(symbol,solution);
         }
         const definitions=solution.get(at);return !definitions||definitions.has(null)?null:definitions as ReadonlySet<SourceLexicalWrite>;
     }
