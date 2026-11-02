@@ -162,18 +162,33 @@ type Atom =
     | { readonly tag: "promise-resolver"; readonly destination: SourcePromiseDestination; readonly reject: boolean; readonly fields:ObjectOwner }
     | { readonly tag: "generator"; readonly owner: FunctionOwner; readonly fields:ObjectOwner;readonly yielded:Cell;readonly returned:Cell }
     | { readonly tag: "global";readonly realm:SourceRealmRecord } | { readonly tag: "host" } | { readonly tag: "agent" } | { readonly tag: "realm-record";readonly realm:SourceRealmRecord };
+// Any growth of any fact set or copy edge advances this epoch. A flattened
+// reachable value list is reused only while the epoch is unchanged, so a
+// cached list can never omit a value or edge added after it was computed.
+let sourceFactsEpoch=0;
+class SourceFactEdges extends Map<SourceFacts,"value"|"origin"> {
+    override set(key:SourceFacts,kind:"value"|"origin"):this{sourceFactsEpoch++;return super.set(key,kind);}
+}
 class SourceFacts extends Set<Atom> {
     // One monotone dependency collection distinguishes complete value flow
     // from origin-only effects without copying every origin into each field.
-    readonly sources = new Map<SourceFacts,"value"|"origin">();
+    readonly sources:Map<SourceFacts,"value"|"origin"> = new SourceFactEdges();
     private readonly memberships = new Set<Atom>();
     private knownNonempty=false;
+    private flattened:readonly Atom[]|undefined;
+    private flattenedEpoch=-1;
+    override add(atom:Atom):this{sourceFactsEpoch++;return super.add(atom);}
     override *[Symbol.iterator](): SetIterator<Atom> {
+        if(this.flattenedEpoch===sourceFactsEpoch&&this.flattened){yield* this.flattened;return undefined;}
+        const epoch=sourceFactsEpoch,collected:Atom[]=[];
         const pending:{facts:SourceFacts;origins:boolean}[]=[{facts:this,origins:false}],visited=new Map<SourceFacts,number>(),values=new Set<Atom>();
         while(pending.length){const {facts,origins}=pending.pop()!,bit=origins?1:2,prior=visited.get(facts)??0;if(prior&bit)continue;visited.set(facts,prior|bit);
-            for(const value of Set.prototype.values.call(facts) as SetIterator<Atom>)if((!origins||value.tag==="unknown")&&!values.has(value)){values.add(value);yield value;}
+            for(const value of Set.prototype.values.call(facts) as SetIterator<Atom>)if((!origins||value.tag==="unknown")&&!values.has(value)){values.add(value);collected.push(value);yield value;}
             for(const [source,kind]of facts.sources)pending.push({facts:source,origins:origins||kind==="origin"});
         }
+        // Store only a complete traversal during which nothing grew.
+        if(epoch===sourceFactsEpoch){this.flattened=collected;this.flattenedEpoch=epoch;}
+        return undefined;
     }
     override has(atom: Atom): boolean {
         if (Set.prototype.has.call(this, atom) || this.memberships.has(atom)) return true;
