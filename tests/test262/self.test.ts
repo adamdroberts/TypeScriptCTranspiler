@@ -100,6 +100,12 @@ describe("Test262 metadata and scenarios", () => {
             "compareArray.js",
         ]);
         expect(harnessIncludeNames(["raw"], ["compareArray.js"])).toEqual([]);
+        expect(harnessIncludeNames([], ["testTypedArray.js", "compareArray.js", "testTypedArray.js", "assert.js"])).toEqual([
+            "assert.js",
+            "sta.js",
+            "testTypedArray.js",
+            "compareArray.js",
+        ]);
         expect(parseTest262Metadata("/*---\nincludes: [assert.js, assert.js]\n---*/", "ordered.js").includes).toEqual([
             "assert.js",
             "assert.js",

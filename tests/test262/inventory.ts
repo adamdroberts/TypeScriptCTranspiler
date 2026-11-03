@@ -387,7 +387,11 @@ function normalizeMappings(
 
 export function harnessIncludeNames(flags: readonly string[], includes: readonly string[]): string[] {
     if (flags.includes("raw")) return [];
-    return ["assert.js", "sta.js", ...(flags.includes("async") ? ["doneprintHandle.js"] : []), ...includes];
+    // A file named twice (upstream lists testTypedArray.js twice in some
+    // tests) is evaluated once, at its first position: harness files define
+    // only var/function bindings, so a repeat would rebind the same names,
+    // and the host keeps rejecting duplicate request paths.
+    return [...new Set(["assert.js", "sta.js", ...(flags.includes("async") ? ["doneprintHandle.js"] : []), ...includes])];
 }
 
 export function resourceDirectoriesForTests(
