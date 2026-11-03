@@ -66,6 +66,9 @@ typedef struct tsc_re_node {
     tsc_re_flags_t flags; /* immutable lexical RegExp Record at this node */
     USet* compile_set; /* temporary, closed before compiled representation escapes */
     bool may_strings;
+    /* Compiled class whose ranges are closed under simple case folding and
+     * are matched against the raw input code point (v-mode ignoreCase). */
+    bool raw_match;
     union {
         struct {
             uint16_t unit;
@@ -1386,7 +1389,7 @@ static bool re_match_leaf(re_ctx_t* ctx, const tsc_re_node_t* node) {
         }
         bool scalar_hit = re_read_direction(ctx, pos, &cp, &next);
         if (scalar_hit) {
-            cp = re_canon(cp, ctx->ignore_case, ctx->unicode);
+            if (!node->raw_match) cp = re_canon(cp, ctx->ignore_case, ctx->unicode);
             scalar_hit = false;
             for (size_t i = 0; i < node->u.cls.nranges; i++) {
                 tsc_re_range_t range = node->u.cls.ranges[i];
@@ -2556,6 +2559,40 @@ static USet* re_fold_set(const USet* source, bool ignore_case, bool unicode) {
     }
     return folded;
 }
+/* Code points whose simple case folding differs from themselves, computed once
+ * per process and published with one atomic store (a racing builder frees
+ * its own copy). */
+typedef struct { size_t count; UChar32 points[]; } re_fold_variants_t;
+static re_fold_variants_t* re_fold_variants_cache;
+static const re_fold_variants_t* re_fold_variants(void) {
+    re_fold_variants_t* cached = __atomic_load_n(&re_fold_variants_cache, __ATOMIC_ACQUIRE);
+    if (cached) return cached;
+    size_t count = 0;
+    for (UChar32 cp = 0; cp <= 0x10ffff; cp++)
+        if ((cp < 0xd800 || cp > 0xdfff) && u_foldCase(cp, U_FOLD_CASE_DEFAULT) != cp) count++;
+    re_fold_variants_t* built = malloc(sizeof(*built) + tsc_alloc_size(count, sizeof(UChar32)));
+    if (!built) tsc_alloc_failure(count);
+    built->count = 0;
+    for (UChar32 cp = 0; cp <= 0x10ffff; cp++)
+        if ((cp < 0xd800 || cp > 0xdfff) && u_foldCase(cp, U_FOLD_CASE_DEFAULT) != cp) built->points[built->count++] = cp;
+    re_fold_variants_t* expected = NULL;
+    if (__atomic_compare_exchange_n(&re_fold_variants_cache, &expected, built, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
+        return built;
+    free(built);
+    return expected;
+}
+/* Every code point whose simple case folding lies in the folded source,
+ * with strings folded. Raw membership in the result equals folded membership
+ * of the canonicalized input in the source. */
+static USet* re_case_closure(const USet* source) {
+    USet* result = re_fold_set(source, true, true);
+    const re_fold_variants_t* variants = re_fold_variants();
+    for (size_t i = 0; i < variants->count; i++) {
+        UChar32 cp = variants->points[i];
+        if (uset_contains(result, u_foldCase(cp, U_FOLD_CASE_DEFAULT))) uset_add(result, cp);
+    }
+    return result;
+}
 static void re_complement_set(USet* set, bool unicode_sets, const USet* universe) {
     if (unicode_sets) {
         USet* complement = uset_clone(universe); uset_removeAll(complement, set);
@@ -2594,8 +2631,16 @@ static USet* re_escape_set(tsc_re_class_escape_t escape) {
     }
     return set;
 }
+/* UnicodeSets-mode ignoreCase follows Node.js (V8) rather than folding both
+ * sides: each operand is closed under simple case folding and matched against
+ * the raw input, except that \p{ASCII}/\P{ASCII} contribute the raw ASCII set
+ * and a one-code-point \q{c} contributes only scf(c), neither closed. So
+ * /\p{ASCII}/iv and /[\q{k}]/iv do not match U+212A KELVIN SIGN, while
+ * /[a-z]/iv and /\p{L}/iv do. Every other operand gives the specification's
+ * result, because raw membership in a closed set equals folded membership. */
 static bool re_normalize_set(tsc_re_parser_t* p, tsc_re_node_t* node, const USet* universe) {
     bool v = node->flags.unicode_sets, unicode = re_is_unicode(p);
+    bool closed = v && node->flags.ignore_case;
     USet* raw = uset_openEmpty();
     USet* result;
     bool negate_after = false;
@@ -2604,22 +2649,27 @@ static bool re_normalize_set(tsc_re_parser_t* p, tsc_re_node_t* node, const USet
         node->may_strings = node->u.prop.property >= UCHAR_BASIC_EMOJI &&
             node->u.prop.property <= UCHAR_RGI_EMOJI;
         negate_after = v && node->u.prop.negated;
-        result = re_fold_set(raw, node->flags.ignore_case, unicode);
+        if (closed) result = (int32_t)node->u.prop.property == -2 ? uset_clone(raw) : re_case_closure(raw);
+        else result = re_fold_set(raw, node->flags.ignore_case, unicode);
     } else if (node->kind == RE_N_CLASS_ESCAPE) {
         uset_close(raw); raw = re_escape_set(node->u.class_escape.escape);
         negate_after = node->u.class_escape.escape == RE_CE_DIGIT_NEG ||
             node->u.class_escape.escape == RE_CE_SPACE_NEG || node->u.class_escape.escape == RE_CE_WORD_NEG;
-        result = re_fold_set(raw, node->flags.ignore_case, unicode);
+        result = closed ? re_case_closure(raw) : re_fold_set(raw, node->flags.ignore_case, unicode);
     } else {
         for (size_t i = 0; i < node->u.cls.nranges; i++)
             uset_addRange(raw, node->u.cls.ranges[i].lo, node->u.cls.ranges[i].hi);
+        USet* single = closed ? uset_openEmpty() : NULL;
         for (size_t i = 0; i < node->u.cls.nstrs; i++) {
-            tsc_re_qstr_t text = node->u.cls.strs[i]; uset_addString(raw, text.units, (int32_t)text.len);
-            size_t cps = 0;
-            for (size_t at = 0; at < text.len;) { size_t w; re_read_cp(text.units, text.len, at, true, &w); at += w; cps++; }
+            tsc_re_qstr_t text = node->u.cls.strs[i];
+            size_t cps = 0; uint32_t only = 0;
+            for (size_t at = 0; at < text.len;) { size_t w; only = re_read_cp(text.units, text.len, at, true, &w); at += w; cps++; }
             if (cps != 1) node->may_strings = true;
+            if (single && cps == 1) uset_add(single, (UChar32)re_canon(only, true, true));
+            else uset_addString(raw, text.units, (int32_t)text.len);
         }
-        result = re_fold_set(raw, node->flags.ignore_case, unicode);
+        result = closed ? re_case_closure(raw) : re_fold_set(raw, node->flags.ignore_case, unicode);
+        if (single) { uset_addAll(result, single); uset_close(single); }
         for (size_t i = 0; i < node->u.cls.nitems; i++) {
             tsc_re_node_t* child = node->u.cls.items[i];
             if (node->u.cls.op == RE_CLS_UNION) {
@@ -2639,6 +2689,7 @@ static bool re_normalize_set(tsc_re_parser_t* p, tsc_re_node_t* node, const USet
     uset_close(raw);
     node->kind = RE_N_CLASS;
     memset(&node->u, 0, sizeof(node->u));
+    node->raw_match = closed;
     node->compile_set = result;
     int32_t nranges = uset_getRangeCount(result);
     for (int32_t i = 0; i < nranges; i++) {
@@ -2680,9 +2731,12 @@ static bool re_compile_sets(tsc_re_parser_t* p) {
                 tsc_re_node_t* child = node->u.cls.items[frame->index++];
                 if (!child->compile_set) frames[depth++] = (frame_t){child, 0};
             } else {
-                if (node->flags.ignore_case && !folded_universe)
+                if (node->flags.ignore_case && !node->flags.unicode_sets && !folded_universe)
                     folded_universe = re_fold_set(all, true, re_is_unicode(p));
-                ok = re_normalize_set(p, node, node->flags.ignore_case ? folded_universe : all); depth--;
+                /* Closed (raw-matched) sets complement within every code
+                 * point; folded sets within the folded universe. */
+                bool folded = node->flags.ignore_case && !node->flags.unicode_sets;
+                ok = re_normalize_set(p, node, folded ? folded_universe : all); depth--;
             }
         }
     }

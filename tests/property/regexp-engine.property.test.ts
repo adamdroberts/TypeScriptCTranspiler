@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { nodeReferenceSync } from "./node-reference";
 
 const root = path.resolve(import.meta.dir, "../..");
 type Probe = { pattern: string; flags: string; subject: string; start?: number };
@@ -96,6 +97,8 @@ const driver = String.raw`
 #define _POSIX_C_SOURCE 200809L
 #include "tsc_internal.h"
 #include <sys/types.h>
+/* tsc_runtime.h's checked allocators fail closed through this hook. */
+_Noreturn void tsc_alloc_failure(size_t n) { (void)n; abort(); }
 static uint16_t* read_units(size_t* len) {
     char* line = NULL; size_t capacity = 0;
     if (getline(&line, &capacity, stdin) < 0) { free(line); return NULL; }
@@ -164,18 +167,27 @@ test("RegExp continuation graph preserves branches, captures, assertions and UTF
         expect(compiler.stderr.toString()).toBe("");
         expect(compiler.exitCode).toBe(0);
         const cases = probes();
-        const expected = cases.map(({ pattern, flags, subject, start = 0 }) => {
-            try {
-                new RegExp(pattern, flags);
-                const re = new RegExp(pattern, flags.replace(/[dy]/g, "") + "dy");
-                re.lastIndex = start;
-                const hit = re.exec(subject);
-                return hit ? hit.indices!.flatMap((span) => span ?? ["x", "x"]).join(",") : "null";
-            } catch (error) {
-                if (!(error instanceof SyntaxError)) throw error;
-                return "syntax";
-            }
-        });
+        // Node.js is the oracle: where JavaScriptCore deviates (for example
+        // /[A-Z]/iu against U+212A KELVIN SIGN), the engine follows Node.
+        const casesFile = path.join(temporary, "cases.json");
+        await fs.writeFile(casesFile, JSON.stringify(cases));
+        const reference = nodeReferenceSync(["node", "-e", `
+            const cases = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
+            const results = cases.map(({ pattern, flags, subject, start = 0 }) => {
+                try {
+                    new RegExp(pattern, flags);
+                    const re = new RegExp(pattern, flags.replace(/[dy]/g, "") + "dy");
+                    re.lastIndex = start;
+                    const hit = re.exec(subject);
+                    return hit ? hit.indices.flatMap((span) => span ?? ["x", "x"]).join(",") : "null";
+                } catch (error) {
+                    if (!(error instanceof SyntaxError)) throw error;
+                    return "syntax";
+                }
+            });
+            process.stdout.write(JSON.stringify(results));`, casesFile], { stdout: "pipe", stderr: "pipe" });
+        expect({ exitCode: reference.exitCode, stderr: reference.stderr.toString() }).toEqual({ exitCode: 0, stderr: "" });
+        const expected = JSON.parse(reference.stdout.toString()) as string[];
         const native = Bun.spawnSync([executable], { stdin: Buffer.from(input(cases)), stdout: "pipe", stderr: "pipe" });
         expect(native.stderr.toString()).toBe("");
         expect(native.exitCode).toBe(0);
