@@ -2,6 +2,7 @@ import ts from "typescript";
 import { earlyControlFlowStaticSemanticsFailure } from "./control-static-semantics";
 import { earlyFunctionStaticSemanticsFailure } from "./function-static-semantics";
 import { earlyRegExpLiteralFailure } from "./regexp-static-semantics";
+import { earlyShortCircuitMixFailure } from "./function-static-semantics";
 import { earlyPrivateStaticSemanticsFailure } from "./emit/private-names";
 import { createEcmaSourceFile, ecmaDirectivePrologueHasUseStrict, ecmaParseGoal } from "./ecmascript-source";
 import { sourceEvaluationInvocations } from "./source-value-flow";
@@ -72,5 +73,6 @@ export function evalSourceIsValid(request: EvalSourceRequest): boolean {
     const file = createEcmaSourceFile("eval-source.js", text, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS, "script");
     return !(file as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics?.length &&
         !earlyControlFlowStaticSemanticsFailure(file) && !earlyFunctionStaticSemanticsFailure(file) &&
-        !earlyPrivateStaticSemanticsFailure(file, request.kind === "direct") && !earlyRegExpLiteralFailure(file);
+        !earlyPrivateStaticSemanticsFailure(file, request.kind === "direct") && !earlyRegExpLiteralFailure(file) &&
+        !earlyShortCircuitMixFailure(file);
 }

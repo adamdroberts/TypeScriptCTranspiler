@@ -9,6 +9,7 @@ import { compile } from "../../src/compile";
 import { earlyControlFlowFailure } from "../../src/control-static-semantics";
 import { earlyFunctionStaticSemanticsFailure } from "../../src/function-static-semantics";
 import { earlyRegExpLiteralFailure } from "../../src/regexp-static-semantics";
+import { earlyShortCircuitMixFailure } from "../../src/function-static-semantics";
 import { createEcmaSourceFile, ecmaParseGoal, ecmaDirectivePrologueHasUseStrict, type EcmaParseGoal } from "../../src/ecmascript-source";
 import { jsonSyntaxLineAndColumn, validateJsonSyntax } from "../../src/json-syntax";
 import {
@@ -224,7 +225,7 @@ function parseFailure(
         : null;
     const functionFailure = diagnostics.length === 0 && !goalMismatch && !controlFailure
         ? earlyFunctionStaticSemanticsFailure(sourceFile) ?? earlyPrivateStaticSemanticsFailure(sourceFile, allowExternalPrivateNames) ??
-            earlyRegExpLiteralFailure(sourceFile)
+            earlyRegExpLiteralFailure(sourceFile) ?? earlyShortCircuitMixFailure(sourceFile)
         : null;
     const moduleFailure = diagnostics.length === 0 && !goalMismatch && !controlFailure && !functionFailure && goal === "module"
         ? earlyModuleStaticSemanticsFailure(sourceFile)

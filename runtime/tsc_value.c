@@ -3044,6 +3044,9 @@ tsc_value_t tsc_object_constructor_value(void) {
                 (tsc_function_identity_t*)value_ptr(intrinsic->constructor);
             tsc_value_t prototype = tsc_value_object_prototype();
             tsc_function_identity_set_own_prototype(identity, prototype);
+            /* Object.prototype is { [[Writable]]: false, [[Enumerable]]: false,
+             * [[Configurable]]: false } (sec-object.prototype). */
+            identity->func_prototype_writable = false;
             (void)tsc_value_define_property_desc(
                 prototype,
                 tsc_str_from_lit("constructor", 11),

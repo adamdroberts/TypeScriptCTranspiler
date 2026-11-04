@@ -32248,7 +32248,13 @@ class Emitter {
             if (work.exit) {
                 if (!ts.isBinaryExpression(expression)) throw new Error("logical worklist node is not a binary expression");
                 const left = results.get(expression.left)!;
-                results.set(work.expression, work.skipRight ? left : this.emitLogicalValue(
+                // A statically selected left operand is the expression's
+                // value: the `null` literal emits as a typed NULL pointer
+                // elsewhere, so it must become the null value here rather
+                // than read as void (undefined).
+                const selectedLeft = work.skipRight && unwrapTransparentExpression(expression.left).kind === ts.SyntaxKind.NullKeyword
+                    ? { c: "tsc_value_null()", ty: T_VALUE } : left;
+                results.set(work.expression, work.skipRight ? selectedLeft : this.emitLogicalValue(
                     expression, left, results.get(expression.right)!,
                 ));
                 continue;
@@ -32366,10 +32372,9 @@ class Emitter {
             ? this.classDeclForConstructorIdentifier(bin.right)
             : null;
         if (!classDeclaration || this.isCanonicalClassDeclaration(classDeclaration)) {
+            // Any right operand reaches InstanceofOperator; the runtime throws
+            // the TypeError for a non-object or non-callable right side.
             const right = this.emitExpr(bin.right);
-            if (right.ty.kind !== "function" && right.ty.kind !== "value") {
-                unsupported(bin.right, "instanceof right side must be a callable dynamic constructor");
-            }
             return this.emitSequencedCall("tsc_value_instanceof", T_BOOLEAN, [
                 { value: left, target: T_VALUE, node: bin.left },
                 { value: right, target: T_VALUE, node: bin.right },

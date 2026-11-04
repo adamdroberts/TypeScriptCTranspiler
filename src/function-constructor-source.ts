@@ -4,6 +4,7 @@ import { createEcmaSourceFile } from "./ecmascript-source";
 import { earlyControlFlowStaticSemanticsFailure } from "./control-static-semantics";
 import { earlyFunctionStaticSemanticsFailure } from "./function-static-semantics";
 import { earlyRegExpLiteralFailure } from "./regexp-static-semantics";
+import { earlyShortCircuitMixFailure } from "./function-static-semantics";
 import { sourceConstructorFacts, type SourceValueGraphEntries } from "./source-value-flow";
 import {sourceChoiceTuples} from "./source-choice-tuples";
 
@@ -74,7 +75,7 @@ export function functionConstructorSourceIsValid(source: FunctionConstructorSour
     const file = parseFunctionExpression(source);
     return !!file && !earlyControlFlowStaticSemanticsFailure(file) &&
         !earlyFunctionStaticSemanticsFailure(file) && !earlyPrivateStaticSemanticsFailure(file) &&
-        !earlyRegExpLiteralFailure(file);
+        !earlyRegExpLiteralFailure(file) && !earlyShortCircuitMixFailure(file);
 }
 
 export function finiteFunctionConstructorSources(

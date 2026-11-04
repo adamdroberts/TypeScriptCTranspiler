@@ -627,3 +627,26 @@ export function isContextualGrammarIdentifier(node: ts.Identifier): boolean {
     }
     return true;
 }
+
+/** CoalesceExpression early error: `??` cannot share an operand position with
+ * `||` or `&&` unless parentheses separate them (sec-binary-logical-operators;
+ * the TypeScript parser accepts the mix and reports it only from the checker).
+ * The first offending operator in source order fails. */
+export function earlyShortCircuitMixFailure(sourceFile: ts.SourceFile): FunctionStaticSemanticsFailure | null {
+    const logical = (node: ts.Node): boolean => ts.isBinaryExpression(node) &&
+        (node.operatorToken.kind === ts.SyntaxKind.BarBarToken || node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken);
+    const coalesce = (node: ts.Node): boolean => ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken;
+    const worklist: ts.Node[] = [sourceFile];
+    let failure: FunctionStaticSemanticsFailure | null = null;
+    while (worklist.length) {
+        const node = worklist.pop()!;
+        if (ts.isBinaryExpression(node)) {
+            const mixed = coalesce(node) ? [node.left, node.right].find(logical) : logical(node) ? [node.left, node.right].find(coalesce) : undefined;
+            if (mixed && (!failure || mixed.getStart() < failure.node.getStart())) {
+                failure = { node: node.operatorToken, message: "Cannot mix '??' with '||' or '&&' without parentheses" };
+            }
+        }
+        pushChildren(worklist, node);
+    }
+    return failure;
+}
