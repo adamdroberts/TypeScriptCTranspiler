@@ -5344,6 +5344,49 @@ static bool apply_property_descriptor(tsc_value_t v, tsc_str_t* key, const tsc_p
     );
 }
 
+/* Internal definitions apply a descriptor record directly: no ordinary
+ * descriptor object is built, so user properties on Object.prototype (a
+ * `value` or `get` added there) never reach ToPropertyDescriptor. */
+bool tsc_value_define_property_record(tsc_value_t v, tsc_str_t* key, const tsc_descriptor_record_t* record) {
+    if (!tsc_value_is_object(v)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty target must be an object"));
+    }
+    void* volatile target_gc_root = tsc_value_gc_root(v);
+    (void)target_gc_root;
+    tsc_parsed_property_descriptor_t out;
+    memset(&out, 0, sizeof(out));
+    out.value = tsc_value_undefined();
+    const uint32_t present = record->present;
+    if (present & TSC_DESCRIPTOR_BIT(ENUMERABLE)) { out.has_enumerable = true; out.enumerable = tsc_value_is_truthy(record->values[TSC_DESCRIPTOR_ENUMERABLE]); }
+    if (present & TSC_DESCRIPTOR_BIT(CONFIGURABLE)) { out.has_configurable = true; out.configurable = tsc_value_is_truthy(record->values[TSC_DESCRIPTOR_CONFIGURABLE]); }
+    if (present & TSC_DESCRIPTOR_BIT(VALUE)) { out.has_value = true; out.value = record->values[TSC_DESCRIPTOR_VALUE]; }
+    out.value_gc_root = tsc_value_gc_root(out.value);
+    void* volatile value_gc_root = out.value_gc_root;
+    (void)value_gc_root;
+    if (present & TSC_DESCRIPTOR_BIT(WRITABLE)) { out.has_writable = true; out.writable = tsc_value_is_truthy(record->values[TSC_DESCRIPTOR_WRITABLE]); }
+    if (present & TSC_DESCRIPTOR_BIT(GET)) {
+        out.has_getter = true;
+        tsc_value_t field = record->values[TSC_DESCRIPTOR_GET];
+        if (!tsc_value_is_undefined(field)) {
+            if (!value_is_callable_function(field)) tsc_panic("internal property definition getter must be callable");
+            out.getter = tsc_value_dynamic_accessor_getter;
+            out.getter_env = dynamic_accessor_env(field);
+        }
+    }
+    if (present & TSC_DESCRIPTOR_BIT(SET)) {
+        out.has_setter = true;
+        tsc_value_t field = record->values[TSC_DESCRIPTOR_SET];
+        if (!tsc_value_is_undefined(field)) {
+            if (!value_is_callable_function(field)) tsc_panic("internal property definition setter must be callable");
+            out.setter = tsc_value_dynamic_accessor_setter;
+            out.setter_env = dynamic_accessor_env(field);
+        }
+    }
+    out.accessor = out.has_getter || out.has_setter;
+    if (out.accessor && (out.has_value || out.has_writable)) tsc_panic("internal property definition mixes data and accessor fields");
+    return apply_property_descriptor(v, key, &out);
+}
+
 bool tsc_value_define_property_descriptor(tsc_value_t v, tsc_str_t* key, tsc_value_t desc) {
     if (!tsc_value_is_object(v)) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.defineProperty target must be an object"));

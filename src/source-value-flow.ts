@@ -73,6 +73,15 @@ type Primitive = SourcePrimitive;
 /** Callables and collection-iterator cells reachable from one escaping value;
  * a sink forwards them into one escaping call. */
 type EscapeReach={readonly callables:Set<Atom>;readonly iterators:Set<Cell>;readonly parents:Set<EscapeReach>;readonly sink?:{callable(atom:Atom):void;iterator(cell:Cell):void}};
+/** direct: the value and everything reachable from it may be invoked.
+ * argument: a native's non-callback argument, never invoked itself; what it
+ * stores or inherits is reached as method. method: conversion methods,
+ * getters and stored functions a native may invoke on such a value; the
+ * transparent Function.prototype call/apply/bind operations, a function's
+ * own `prototype` and a `constructor` property are not consulted, since a
+ * native never calls those on a value it was not given as a callback. */
+type EscapeReachKind="direct"|"argument"|"method";
+const TRANSPARENT_CALL_OPERATIONS:ReadonlySet<string>=new Set(["call","apply","bind"]);
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
 const ORDINARY_PRIMITIVE_METHODS: ReadonlyMap<PrimitiveHint, readonly string[]> = new Map([
@@ -90,6 +99,12 @@ const NUMERIC_CONVERSIONS: ReadonlyMap<string, (value: Primitive) => Primitive> 
     }],
 ]);
 const SOURCE_OBJECT_PROTOTYPE_OPERATIONS:ReadonlyMap<string,Operation>=new Map([["toString","object-text"],["hasOwnProperty","object-has-own:prototype"]]);
+/** Argument positions an opaque Array.prototype native invokes as functions
+ * (callbacks and comparators). Every other argument of a listed native is
+ * only read: its conversion methods and getters may run, it never is called
+ * itself. Natives outside this table keep every position callable. */
+const NATIVE_DIRECT_CALLEE_POSITIONS:ReadonlyMap<string,ReadonlySet<number>>=new Map([...runtimeArrayPrototypeMethods.keys()].map(name=>
+    [`native-array:${name}`,new Set(["forEach","map","flatMap","filter","some","every","find","findIndex","findLast","findLastIndex","reduce","reduceRight","sort","toSorted"].includes(name)?[0]:[])]));
 // Initial intrinsic member identities, installed on their canonical owners.
 // Source lookups and later writes use the ordinary field graph.
 const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operation>> = new Map<string, ReadonlyMap<string, Operation>>([
@@ -355,6 +370,10 @@ function legacyCallerReceiver(owner: FunctionOwner): boolean {
     const definition=owner.definition;
     return (ts.isFunctionDeclaration(definition)||ts.isFunctionExpression(definition))&&owner.kind==="ordinary"&&!isStrictCodeContext(definition);
 }
+/** Any non-strict source function: a value Function.prototype.caller may report. */
+function legacyCallerValue(owner: FunctionOwner): boolean {
+    return functionNode(owner.definition)&&!isStrictCodeContext(owner.definition);
+}
 function propertyName(node: ts.Node | undefined): string | null {
     if (!node) return null;
     if (ts.isIdentifier(node) || ts.isStringLiteralLike(node) || ts.isNumericLiteral(node)) return node.text;
@@ -430,8 +449,8 @@ class SourceValueFlow {
     private readonly asyncIteratorPrototypes=new WeakMap<SourceRealmRecord,Cell>();
     private readonly sourceObjectOwners=new WeakSet<ObjectOwner>();
     private readonly opaqueCaptureCalls=new Map<ts.Node,Set<Cell>>();
-    private readonly escapedCallableCalls=new Map<ts.Node,Map<boolean,{visit:(input:Cell)=>void}>>();
-    private readonly escapeReaches=new Map<boolean,{cells:Map<Cell,EscapeReach>;atoms:Map<Atom,EscapeReach>}>();
+    private readonly escapedCallableCalls=new Map<ts.Node,Map<boolean,{visit:(input:Cell,direct?:boolean)=>void}>>();
+    private readonly escapeReaches=new Map<string,{cells:Map<Cell,EscapeReach>;atoms:Map<Atom,EscapeReach>}>();
     private readonly escapedInvocationOrigins=new WeakMap<ts.Node,ts.Node>();
     /** Opaque code invokes an async callee with unknown actuals, so all such
      * invocations share one resolution record per callee: a fresh record per
@@ -496,11 +515,40 @@ class SourceValueFlow {
     private undefinedCallReceiver?:Cell;
     private readonly functionThisBindings=new Map<FunctionOwner,Map<Cell,Cell>>();
     private readonly functions = new Map<CallableDefinition, FunctionOwner>();
-    /** Every non-strict source function: the values Function.prototype.caller
-     * may report. Grows as owners are created, so later-parsed dynamic
-     * functions reach every caller read through the copy edge. */
-    private legacyCallers: Cell | null = null;
-    private legacyCallerCell(): Cell { return this.legacyCallers ??= this.newCell(); }
+    /** Non-strict functions that may sit below a function on the call stack:
+     * the enclosing functions of its recorded call sites, transitively, since
+     * a direct C call leaves no frame and the runtime then reports an older
+     * frame. Function.prototype.caller reads from this set or null. */
+    private readonly legacyCallerSets=new Map<FunctionOwner,Cell>();
+    private readonly stackCallerSets=new Map<ts.Node,Cell>();
+    private legacyCallersOf(owner:FunctionOwner):Cell {
+        let cell=this.legacyCallerSets.get(owner);if(cell)return cell;
+        const set=this.newCell();this.legacyCallerSets.set(owner,set);
+        const seen=new Set<SourceCallArguments>();
+        this.rule([owner.actualChanges],()=>{
+            for(const record of owner.actuals.values()){
+                if(seen.has(record))continue;seen.add(record);
+                const enclosing=this.enclosingFunctionOwner(record.context);
+                if(!enclosing)continue;
+                if(legacyCallerValue(enclosing))this.publish(set,{tag:"function",owner:enclosing});
+                this.copy(this.legacyCallersOf(enclosing),set);
+            }
+        });
+        return set;
+    }
+    /** Functions that may be executing when `node` runs: its enclosing
+     * function and everything below that on the stack. */
+    private stackCallers(node:ts.Node):Cell {
+        let cell=this.stackCallerSets.get(node);if(cell)return cell;
+        cell=this.newCell();this.stackCallerSets.set(node,cell);
+        const enclosing=this.enclosingFunctionOwner(node);
+        if(enclosing){if(legacyCallerValue(enclosing))this.publish(cell,{tag:"function",owner:enclosing});this.copy(this.legacyCallersOf(enclosing),cell);}
+        return cell;
+    }
+    private enclosingFunctionOwner(node:ts.Node):FunctionOwner|null {
+        const fn=ts.findAncestor(node.parent??node,functionNode);
+        return fn?this.function(fn):null;
+    }
     private readonly activationCalls=new Map<SourceActivation,{targets:Set<SourceActivation>;callers:Set<SourceActivation>}>();
     private readonly cyclicActivationTiming=new Map<SourceActivation,Cell>();
     private readonly reachingWriteGraphs=new Map<SourceActivation,SourceReachingWrites>();
@@ -1115,8 +1163,13 @@ class SourceValueFlow {
      * instead of re-traversing the heap. The collection-iterator edge depends
      * on the escaping call, so records carry iterator cells and each context
      * expands them through its own context. */
-    private escapeReach(mode:boolean):{cells:Map<Cell,EscapeReach>;atoms:Map<Atom,EscapeReach>} {
-        let reach=this.escapeReaches.get(mode);if(!reach){reach={cells:new Map(),atoms:new Map()};this.escapeReaches.set(mode,reach);}return reach;
+    /** includeSelf false reaches only the callables stored on or inherited by
+     * the value (conversion methods, getters, stored functions), never the
+     * value itself: a native that is not given a callback never invokes the
+     * argument as a function. */
+    private escapeReach(mode:boolean,kind:EscapeReachKind="direct"):{cells:Map<Cell,EscapeReach>;atoms:Map<Atom,EscapeReach>} {
+        const key=`${mode}:${kind}`;
+        let reach=this.escapeReaches.get(key);if(!reach){reach={cells:new Map(),atoms:new Map()};this.escapeReaches.set(key,reach);}return reach;
     }
     private newEscapeReach(sink?:EscapeReach["sink"]):EscapeReach {return {callables:new Set(),iterators:new Set(),parents:new Set(),...(sink?{sink}:{})};}
     private pushEscapeReach(record:EscapeReach,callable?:Atom,iterator?:Cell):void {
@@ -1133,33 +1186,36 @@ class SourceValueFlow {
         for(const callable of [...from.callables])this.pushEscapeReach(into,callable);
         for(const iterator of [...from.iterators])this.pushEscapeReach(into,undefined,iterator);
     }
-    private escapeCellReach(input:Cell,sourceCallbacksOnly:boolean):EscapeReach {
-        const reach=this.escapeReach(sourceCallbacksOnly);
+    private escapeCellReach(input:Cell,sourceCallbacksOnly:boolean,kind:EscapeReachKind="direct"):EscapeReach {
+        const reach=this.escapeReach(sourceCallbacksOnly,kind);
         let record=reach.cells.get(input);if(record)return record;
         const current=this.newEscapeReach();reach.cells.set(input,current);
         this.rule([input],()=>{
-            for(const[facts,kind]of input.values.sources)if(kind==="value")this.linkEscapeReach(this.escapeCellReach(this.sourceCells.get(facts)!,sourceCallbacksOnly),current);
-            for(const atom of Set.prototype.values.call(input.values) as Iterable<Atom>)this.linkEscapeReach(this.escapeAtomReach(atom,input,sourceCallbacksOnly),current);
+            for(const[facts,sourceKind]of input.values.sources)if(sourceKind==="value")this.linkEscapeReach(this.escapeCellReach(this.sourceCells.get(facts)!,sourceCallbacksOnly,kind),current);
+            for(const atom of Set.prototype.values.call(input.values) as Iterable<Atom>)this.linkEscapeReach(this.escapeAtomReach(atom,input,sourceCallbacksOnly,kind),current);
         });
         return current;
     }
-    private escapeAtomReach(atom:Atom,current:Cell,sourceCallbacksOnly:boolean):EscapeReach {
-        const reach=this.escapeReach(sourceCallbacksOnly);
+    private escapeAtomReach(atom:Atom,current:Cell,sourceCallbacksOnly:boolean,kind:EscapeReachKind="direct"):EscapeReach {
+        const reach=this.escapeReach(sourceCallbacksOnly,kind);
         let record=reach.atoms.get(atom);if(record)return record;
         const result=this.newEscapeReach();reach.atoms.set(atom,result);
-        const visit=(input:Cell):void=>this.linkEscapeReach(this.escapeCellReach(input,sourceCallbacksOnly),result);
+        const nested:EscapeReachKind=kind==="direct"?"direct":"method";
+        const visit=(input:Cell):void=>this.linkEscapeReach(this.escapeCellReach(input,sourceCallbacksOnly,nested),result);
         const owner=this.ordinaryOwner(atom);
         if(atom.tag==="promise"){visit(atom.value);visit(atom.rejection);}
         if(atom.tag==="generator"){visit(atom.yielded);visit(atom.returned);}
-        if(atom.tag==="function"||atom.tag==="bound"||atom.tag==="promise-resolver"||owner?.proxy||!sourceCallbacksOnly&&(atom.tag==="intrinsic"||atom.tag==="operation"||atom.tag==="builtin"&&atom.normalResult!=="not-callable"))this.pushEscapeReach(result,atom);
+        const transparent=kind==="method"&&atom.tag==="operation"&&TRANSPARENT_CALL_OPERATIONS.has(atom.operation);
+        if(kind!=="argument"&&!transparent&&(atom.tag==="function"||atom.tag==="bound"||atom.tag==="promise-resolver"||owner?.proxy||!sourceCallbacksOnly&&(atom.tag==="intrinsic"||atom.tag==="operation"||atom.tag==="builtin"&&atom.normalResult!=="not-callable")))this.pushEscapeReach(result,atom);
         if(!owner)return result;
+        const skipped=(key:SourcePropertyKey):boolean=>kind!=="direct"&&(key==="constructor"||key==="prototype"&&atom.tag==="function");
         let inspect!:Rule;
         inspect=this.rule([owner.shape],()=>{
-            for(const property of owner.own?.values()??[])for(const write of property.writes.values())visit(write.values);
+            for(const [key,property] of owner.own?.entries()??[])if(!skipped(key))for(const write of property.writes.values())visit(write.values);
             for(const accessor of owner.accessors.values())if(this.accessorDefinitions.has(accessor.get)){visit(accessor.get);visit(accessor.set);}
             const stored=this.unknownPropertyLocations.get(owner);if(stored)visit(stored.value);
             if(!sourceCallbacksOnly&&atom.tag!=="function"&&!this.sourceObjectOwners.has(owner)&&!this.ownerCreations.has(owner)&&!this.ownerRealms.has(owner)&&!owner.collections&&!owner.collectionIterator)return;
-            for(const key of owner.fields.keys())visit(this.dataProperty(owner,key));
+            for(const key of owner.fields.keys())if(!skipped(key))visit(this.dataProperty(owner,key));
             for(const accessor of owner.accessors.values()){visit(accessor.get);visit(accessor.set);}
             if(owner.prototype)visit(owner.prototype);
             if(owner.proxy){visit(owner.proxy.target);visit(owner.proxy.handler);}
@@ -1174,16 +1230,16 @@ class SourceValueFlow {
         });
         return result;
     }
-    private escapeCallableArgument(argument:Cell,context:ts.Node,sourceCallbacksOnly=false):void {
+    private escapeCallableArgument(argument:Cell,context:ts.Node,sourceCallbacksOnly=false,directCallee=true):void {
         context=this.escapeContext(context);
         let modes=this.escapedCallableCalls.get(context);if(!modes){modes=new Map();this.escapedCallableCalls.set(context,modes);}
         let graph=modes.get(sourceCallbacksOnly);
         if(!graph){
-            const target=this.newCell(),actuals=this.newCell(),returned=this.newCell(),seen=new Set<Cell>();
+            const target=this.newCell(),actuals=this.newCell(),returned=this.newCell(),seen=new Set<string>();
             this.publish(actuals,this.unknown);
             // Iterator elements are read through this escaping call's context.
             const sink=this.newEscapeReach({callable:atom=>this.publish(target,atom),iterator:cell=>visit(this.directIteratorElements(cell,context))});
-            const visit=(input:Cell):void=>{if(seen.has(input))return;seen.add(input);this.linkEscapeReach(this.escapeCellReach(input,sourceCallbacksOnly),sink);};
+            const visit=(input:Cell,direct=true):void=>{const key=input.id+":"+direct;if(seen.has(key))return;seen.add(key);this.linkEscapeReach(this.escapeCellReach(input,sourceCallbacksOnly,direct?"direct":"argument"),sink);};
             graph={visit};modes.set(sourceCallbacksOnly,graph);
             const invocation=this.invocationContext(context);
             this.escapedInvocationOrigins.set(invocation,context);
@@ -1196,7 +1252,7 @@ class SourceValueFlow {
             this.invoke(invocation,target,actuals,parts,returned);
             this.invoke(invocation,target,constructed,parts,returned,true);
         }
-        graph.visit(argument);
+        graph.visit(argument,directCallee);
     }
     /** Synthetic protocol calls retain their scheduling boundary independently
      * of the source position at which the protocol was requested. */
@@ -5293,7 +5349,6 @@ class SourceValueFlow {
             yields:this.newCell(),yieldReceives:this.newCell(),yieldThrows:this.exceptionCell(), returns: constructor?.returns ?? this.newCell(), throws: constructor?.throws ?? this.exceptionCell(),
             receiver: constructor?.receiver ?? this.newCell(), active: constructor?.active ?? this.newCell(), sourceText: (functionNode(node) ? this.dynamicSourceTexts.get(node) : null) ?? callableSourceText(node) ?? "function () { [native code] }" };
         this.functions.set(node, owner);
-        if (functionNode(node) && !isStrictCodeContext(node)) this.publish(this.legacyCallerCell(), { tag: "function", owner });
         const length=this.newCell();this.publish(length,this.primitive(activation?expectedArgumentCount(activation):0));this.defineField(owner.fields,"length",length);
         const name = this.newCell(), input = callableNameInput(node);
         this.defineField(owner.fields, "name", name);
@@ -6560,8 +6615,14 @@ class SourceValueFlow {
                         // Provenance distinguishes captured reads. After an
                         // opaque callee is selected its invocation effects
                         // share one signature, independent of origin count.
+                        // A native in the direct-callee table writes only its receiver and
+                        // arguments and runs user code only through the callables it reaches,
+                        // each modelled by its own invocation; it never rewrites a global
+                        // binding or an unrelated object, so the global opaque effect is
+                        // reserved for unknown code.
+                        const directCallees=atom.tag==="operation"?NATIVE_DIRECT_CALLEE_POSITIONS.get(atom.operation):undefined;
                         if (!handled(this.unknown,signature)) this.onActive(node,()=>{
-                            this.opaqueEffect(node);
+                            if(!directCallees)this.opaqueEffect(node);
                             if(atom.tag==="unknown"||atom.tag==="opaque-object"||proxy){
                                 this.publish(this.globalReceiver,this.global);
                                 this.escapeCallableArgument(this.globalReceiver,node,true);
@@ -6570,9 +6631,9 @@ class SourceValueFlow {
                             this.writeProperty(invocation.receiver,null,this.empty,false,"set",node);
                             this.escapeCallableArgument(invocation.receiver,node);
                             const argumentsEscaping = invocation.args ?? (invocation.sequence ? [this.allArgumentValues(invocation.sequence)] : []);
-                            for (const argument of argumentsEscaping) {
+                            for (const [index,argument] of argumentsEscaping.entries()) {
                                 this.writeProperty(argument,null,this.empty,false,"set",node);
-                                this.escapeCallableArgument(argument,node);
+                                this.escapeCallableArgument(argument,node,false,!directCallees||directCallees.has(index));
                             }
                         });
                         continue;
@@ -6772,7 +6833,7 @@ class SourceValueFlow {
                         for(const target of invocation.receiver.values){
                             if(target.tag==="pending-source"||target.tag==="abrupt")continue;
                             const legacy=target.tag==="function"?legacyCallerReceiver(target.owner):target.tag==="unknown"||target.tag==="opaque-object"?null:false;
-                            if(legacy!==false){if(mode!=="get")this.publish(result,this.primitive(undefined));else{this.publish(result,this.primitive(null));if(caller)this.copy(this.legacyCallerCell(),result);else this.publish(result,this.unknown);}}
+                            if(legacy!==false){if(mode!=="get")this.publish(result,this.primitive(undefined));else{this.publish(result,this.primitive(null));if(!caller)this.publish(result,this.unknown);else this.copy(target.tag==="function"?this.legacyCallersOf(target.owner):this.stackCallers(node),result);}}
                             if(legacy!==true){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.nativeException(node,"TypeError",atom.realm));}
                         }
                         continue;

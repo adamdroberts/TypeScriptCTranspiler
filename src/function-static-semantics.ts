@@ -582,6 +582,10 @@ export function earlyFunctionStaticSemanticsFailure(
             return { node, message: "AwaitExpression is not permitted in this grammar context" };
         if (ts.isYieldExpression(node) && !allowYield)
             return { node, message: "YieldExpression is not permitted in this grammar context" };
+        // AssignmentTargetType of an IdentifierReference named eval or
+        // arguments is invalid in strict code (sec-identifiers-static-semantics-assignmenttargettype).
+        if (ts.isIdentifier(node) && strictModeBindingIdentifierNames.has(node.text) && isAssignmentTargetIdentifier(node) && isStrictCodeContext(node))
+            return { node, message: `assignment to '${node.text}' is not permitted in strict mode` };
         if (isFunctionDefinition(node) && node.body) {
             const failure = functionLikeFailure(node);
             if (failure) return failure;
@@ -604,6 +608,31 @@ export function earlyFunctionStaticSemanticsFailure(
                 allowYield: ts.isClassStaticBlockDeclaration(node) ? false : allowYield });
     }
     return null;
+}
+
+/** An IdentifierReference in a position whose AssignmentTargetType must be
+ * simple: the left side of an assignment (plain or compound), an update
+ * operand, a for-in/of head, or a destructuring assignment target reached
+ * through array elements, spread, property values and shorthand members. A
+ * pattern element's default value and a plain literal value are not targets. */
+function isAssignmentTargetIdentifier(node: ts.Identifier): boolean {
+    let current: ts.Node = node;
+    for (;;) {
+        const parent: ts.Node | undefined = current.parent;
+        if (!parent) return false;
+        if (ts.isParenthesizedExpression(parent)) { current = parent; continue; }
+        if (ts.isBinaryExpression(parent))
+            return parent.left === current && parent.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+                parent.operatorToken.kind <= ts.SyntaxKind.LastAssignment;
+        if (ts.isPrefixUnaryExpression(parent) || ts.isPostfixUnaryExpression(parent))
+            return current === node && (parent.operator === ts.SyntaxKind.PlusPlusToken || parent.operator === ts.SyntaxKind.MinusMinusToken);
+        if (ts.isForInStatement(parent) || ts.isForOfStatement(parent)) return parent.initializer === current;
+        if (ts.isArrayLiteralExpression(parent) || ts.isSpreadElement(parent)) { current = parent; continue; }
+        if (ts.isPropertyAssignment(parent)) { if (parent.initializer !== current) return false; current = parent.parent; continue; }
+        if (ts.isShorthandPropertyAssignment(parent)) { if (parent.name !== current) return false; current = parent.parent; continue; }
+        if (ts.isSpreadAssignment(parent)) { current = parent.parent; continue; }
+        return false;
+    }
 }
 
 /** IdentifierName property positions do not consume the contextual

@@ -31848,6 +31848,8 @@ class Emitter {
         const finishPropertyDelete = (receiver: ts.Expression, result: EmitResult): EmitResult =>
             this.finishPropertyDelete(receiver, result, del);
         if (ts.isIdentifier(expr)) {
+            // The implicit `arguments` binding is created non-deletable.
+            if (this.isImplicitArgumentsIdentifier(expr)) return { c: "false", ty: T_BOOLEAN };
             const reference = this.sourceReferencePlan(expr);
             if (reference) return { c: reference.remove, ty: T_BOOLEAN };
             // Static declarative References are non-deletable. Delete does

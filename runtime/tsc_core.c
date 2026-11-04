@@ -764,7 +764,7 @@ static void define_legacy_accessor(tsc_value_t target, const char* name, size_t 
         tsc_str_concat(tsc_str_from_lit("set ", 4), key));
     descriptor.values[TSC_DESCRIPTOR_ENUMERABLE] = tsc_value_bool(false);
     descriptor.values[TSC_DESCRIPTOR_CONFIGURABLE] = tsc_value_bool(true);
-    if (!tsc_value_define_property_descriptor(target, key, tsc_descriptor_record_object(&descriptor)))
+    if (!tsc_value_define_property_record(target, key, &descriptor))
         tsc_panic("legacy function accessor definition failed");
 }
 
@@ -777,7 +777,7 @@ static void define_restricted_accessor(tsc_value_t target, tsc_str_t* name,
     descriptor.values[TSC_DESCRIPTOR_SET] = thrower;
     descriptor.values[TSC_DESCRIPTOR_ENUMERABLE] = tsc_value_bool(false);
     descriptor.values[TSC_DESCRIPTOR_CONFIGURABLE] = tsc_value_bool(configurable);
-    if (!tsc_value_define_property_descriptor(target, name, tsc_descriptor_record_object(&descriptor)))
+    if (!tsc_value_define_property_record(target, name, &descriptor))
         tsc_panic("restricted accessor definition failed");
 }
 

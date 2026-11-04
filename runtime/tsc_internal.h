@@ -727,6 +727,8 @@ typedef struct {
     uint32_t present;
     tsc_value_t values[TSC_DESCRIPTOR_FIELD_COUNT];
 } tsc_descriptor_record_t;
+/* Applies a descriptor record directly (no ToPropertyDescriptor on an ordinary object). */
+bool tsc_value_define_property_record(tsc_value_t v, tsc_str_t* key, const tsc_descriptor_record_t* record);
 tsc_value_t tsc_descriptor_record_object(const tsc_descriptor_record_t* record);
 bool tsc_descriptor_own_field(tsc_value_t descriptor, tsc_descriptor_field_t field, tsc_value_t* value);
 tsc_value_t value_descriptor_from_prop(const tsc_object_prop_t* prop);
