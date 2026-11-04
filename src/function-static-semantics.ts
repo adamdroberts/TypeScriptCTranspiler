@@ -584,8 +584,21 @@ export function earlyFunctionStaticSemanticsFailure(
             return { node, message: "YieldExpression is not permitted in this grammar context" };
         // AssignmentTargetType of an IdentifierReference named eval or
         // arguments is invalid in strict code (sec-identifiers-static-semantics-assignmenttargettype).
-        if (ts.isIdentifier(node) && strictModeBindingIdentifierNames.has(node.text) && isAssignmentTargetIdentifier(node) && isStrictCodeContext(node))
+        if (ts.isIdentifier(node) && strictModeBindingIdentifierNames.has(node.text) && isAssignmentTargetPosition(node) && isStrictCodeContext(node))
             return { node, message: `assignment to '${node.text}' is not permitted in strict mode` };
+        // A parenthesized ObjectLiteral or ArrayLiteral is not an AssignmentPattern:
+        // its AssignmentTargetType is invalid (sec-assignment-operators-static-semantics-early-errors,
+        // sec-destructuring-assignment-static-semantics-early-errors).
+        if ((ts.isObjectLiteralExpression(node) || ts.isArrayLiteralExpression(node)) && ts.isParenthesizedExpression(node.parent) &&
+            isAssignmentTargetPosition(node.parent))
+            return { node, message: "a parenthesized object or array literal is not a valid assignment target" };
+        // AssignmentRestProperty: the DestructuringAssignmentTarget must not be an ArrayLiteral or ObjectLiteral.
+        if (ts.isSpreadAssignment(node) && isAssignmentTargetPosition(node.parent)) {
+            let target: ts.Expression = node.expression;
+            while (ts.isParenthesizedExpression(target)) target = target.expression;
+            if (ts.isObjectLiteralExpression(target) || ts.isArrayLiteralExpression(target))
+                return { node, message: "a rest property target must be a simple assignment target" };
+        }
         if (isFunctionDefinition(node) && node.body) {
             const failure = functionLikeFailure(node);
             if (failure) return failure;
@@ -610,12 +623,12 @@ export function earlyFunctionStaticSemanticsFailure(
     return null;
 }
 
-/** An IdentifierReference in a position whose AssignmentTargetType must be
- * simple: the left side of an assignment (plain or compound), an update
- * operand, a for-in/of head, or a destructuring assignment target reached
- * through array elements, spread, property values and shorthand members. A
- * pattern element's default value and a plain literal value are not targets. */
-function isAssignmentTargetIdentifier(node: ts.Identifier): boolean {
+/** Whether `node` sits in an assignment-target position: the left side of
+ * an assignment (plain or compound), an update operand, a for-in/of head, or
+ * a destructuring assignment target reached through array elements, spread,
+ * property values and shorthand members. A pattern element's default value
+ * and a plain literal value are not targets. */
+function isAssignmentTargetPosition(node: ts.Node): boolean {
     let current: ts.Node = node;
     for (;;) {
         const parent: ts.Node | undefined = current.parent;

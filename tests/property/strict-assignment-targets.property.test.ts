@@ -12,7 +12,8 @@ import {nodeReferenceSync} from './node-reference';
  * invalid AssignmentTargetType: plain and compound assignment, update
  * operators, for-in/of heads and every destructuring target position are
  * early SyntaxErrors, while reads, member targets, pattern defaults and
- * property names are not. Generated programs compare our verdict with
+ * property names are not. The same target positions reject a parenthesized
+ * object or array literal and an object rest target that is a pattern. Generated programs compare our verdict with
  * Node's parser; one deep pattern checks the target ascent. The sloppy
  * `delete arguments` runtime value (false: the binding is non-deletable) is
  * compared with Node as well. */
@@ -30,10 +31,8 @@ function target(random:()=>number,depth:number):string{
   case 1:return `[${target(random,depth-1)} = ${name}]`;
   case 2:return `{a: ${target(random,depth-1)}}`;
   case 3:return `[...${target(random,depth-1)}]`;
-  // An object rest target and a parenthesized target must be simple (their
-  // pattern forms are separate early errors, outside this test's scope).
-  case 4:return `{...${name}}`;
-  default:return `(${name})`;
+  case 4:return `{...${target(random,depth-1)}}`;
+  default:return `(${target(random,depth-1)})`;
  }
 }
 function statement(random:()=>number):string{
