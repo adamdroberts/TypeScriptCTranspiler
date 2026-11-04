@@ -823,6 +823,19 @@ static tsc_value_t promise_invoke_then(tsc_value_t receiver, tsc_value_t fulfill
     (void)receiver_root; (void)fulfilled_root; (void)rejected_root; (void)then_root;
     return result;
 }
+/* thenFinally/catchFinally invoke `then` with exactly one argument
+ * (sec-promise.prototype.finally: Invoke(promise, "then", « valueThunk »)). */
+static tsc_value_t promise_invoke_then_one(tsc_value_t receiver, tsc_value_t handler) {
+    void* volatile receiver_root = tsc_value_gc_root(receiver);
+    void* volatile handler_root = tsc_value_gc_root(handler);
+    tsc_value_t then = tsc_value_get_prop(receiver, tsc_str_from_lit("then", 4));
+    void* volatile then_root = tsc_value_gc_root(then);
+    tsc_array_t* arguments = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_array_push_value(arguments, handler);
+    tsc_value_t result = tsc_value_apply_function(then, receiver, tsc_value_array(arguments));
+    (void)receiver_root; (void)handler_root; (void)then_root;
+    return result;
+}
 static tsc_value_t promise_prototype_catch(void* env, tsc_value_t receiver, tsc_array_t* args) {
     (void)env;
     return promise_invoke_then(receiver, tsc_value_undefined(), promise_argument(args, 0));
@@ -853,7 +866,7 @@ static tsc_value_t promise_finally_handler(void* env, tsc_value_t receiver, tsc_
     tsc_value_t promise = promise_resolve_constructor(record->constructor, result);
     void* volatile promise_root = tsc_value_gc_root(promise);
     tsc_value_t handler = tsc_value_function_builtin_named(promise_finally_value, record, 0, tsc_str_from_lit("", 0));
-    tsc_value_t output = promise_invoke_then(promise, handler, tsc_value_undefined());
+    tsc_value_t output = promise_invoke_then_one(promise, handler);
     (void)promise_root;
     return output;
 }

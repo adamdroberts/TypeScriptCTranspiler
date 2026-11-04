@@ -39363,6 +39363,12 @@ class Emitter {
             if (ctor.ty.kind === "value") {
                 return this.emitDynamicValueConstruct(n, ctor);
             }
+            // Any other callee (a function expression, a typed callable)
+            // constructs through the runtime, which throws the TypeError for
+            // a non-constructor.
+            if (ctor.ty.kind === "function") {
+                return this.emitDynamicValueConstruct(n, { c: this.coerce(ctor, T_VALUE, n.expression), ty: T_VALUE });
+            }
             unsupported(n, "new expression must use a class identifier or dynamic constructor value");
         }
         const localConstructor = this.localLexicalReferenceForIdentifier(ctorExpr);

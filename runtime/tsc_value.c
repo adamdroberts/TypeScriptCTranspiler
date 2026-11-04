@@ -922,7 +922,12 @@ tsc_value_t tsc_value_bind_function(
     }
 
     double length = 0.0;
-    tsc_value_t target_length = tsc_value_get_prop(target, tsc_str_from_lit("length", 6));
+    /* Only an own "length" that is a Number contributes
+     * (sec-function.prototype.bind steps 4-5); inherited, deleted or
+     * non-Number lengths leave L = 0. Unboxed values are Numbers. */
+    tsc_value_t target_length = tsc_value_has_own_prop(target, tsc_str_from_lit("length", 6))
+        ? tsc_value_get_prop(target, tsc_str_from_lit("length", 6))
+        : tsc_value_undefined();
     if (!value_is_box(target_length)) {
         double numeric_length = tsc_value_as_num(target_length);
         if (isinf(numeric_length) && numeric_length > 0.0) {
@@ -2589,10 +2594,23 @@ static tsc_value_t symbol_key_for_apply(void* env, tsc_value_t this_arg, tsc_arr
     return key ? tsc_value_string(key) : tsc_value_undefined();
 }
 
+/* Symbol and BigInt are constructors ([[Construct]] is present, so
+ * IsConstructor is true and they may be a newTarget or an extends value),
+ * but constructing them throws: "If NewTarget is not undefined, throw a
+ * TypeError exception" (sec-symbol-constructor, sec-bigint-constructor). */
+static tsc_value_t primitive_nonconstructable_construct(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg; (void)args;
+    const tsc_primitive_descriptor_t* descriptor = env;
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_concat(tsc_str_from_lit(descriptor->name, descriptor->name_len), tsc_str_from_lit(" is not a constructor", 21)));
+}
+
 static void primitive_link_nonconstructable_constructor(
     tsc_primitive_descriptor_t* descriptor,
     tsc_value_t constructor
 ) {
+    tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(constructor);
+    identity->construct = primitive_nonconstructable_construct;
+    identity->env = descriptor;
     tsc_value_t prototype = primitive_prototype(descriptor);
     (void)tsc_value_define_property_desc(
         constructor,
