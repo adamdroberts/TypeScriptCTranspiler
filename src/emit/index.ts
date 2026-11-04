@@ -40191,8 +40191,20 @@ class Emitter {
                 const value = ts.isMethodDeclaration(expr)
                     ? this.emitHomeObjectClosure(expr, `tsc_value_object(${obj})`)
                     : ordinary ? this.emitOrdinaryObjectExpression(expr) : this.emitExpr(expr);
+                const key = `tsc_str_from_lit("${escapeCString(fieldName)}", ${utf8ByteLen(fieldName)})`;
+                // PropertyDefinitionEvaluation is CreateDataPropertyOrThrow: an
+                // inherited setter or accessor never intercepts a literal
+                // property. The non-computed, non-shorthand `__proto__: value`
+                // form sets [[Prototype]] for an Object or null value (B.3.1).
+                if (fieldName === "__proto__" && ts.isPropertyAssignment(prop) && !ts.isComputedPropertyName(prop.name)) {
+                    const proto = this.freshTemp("_obj_proto");
+                    pieces.push(
+                        `({ tsc_value_t ${proto} = ${this.coerce(value, T_VALUE, expr)}; if (tsc_value_is_object(${proto}) || (tsc_value_is_nullish(${proto}) && !tsc_value_is_undefined(${proto}))) (void)tsc_object_set_prototype_of(${obj}, ${proto}); })`,
+                    );
+                    continue;
+                }
                 pieces.push(
-                    `tsc_object_set(${obj}, tsc_str_from_lit("${escapeCString(fieldName)}", ${utf8ByteLen(fieldName)}), ${this.coerce(value, T_VALUE, expr)})`,
+                    `if (!tsc_object_define(${obj}, ${key}, ${this.coerce(value, T_VALUE, expr)}, true, true, true)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("object literal property definition failed"))`,
                 );
             }
             pieces.push(`tsc_value_object(${obj})`);

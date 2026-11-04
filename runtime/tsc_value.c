@@ -4896,8 +4896,10 @@ bool tsc_value_set_index(tsc_value_t v, double index, tsc_value_t value) {
     if (a->es != sizeof(tsc_value_t) && !a->unbox_element) return false;
     size_t idx = (size_t)index;
     tsc_str_t* key = tsc_str_from_int((int64_t)idx);
+    /* An own sparse or accessor element lives in props: OrdinarySet runs
+     * its setter or rejects a non-writable value there. */
+    if (a->props && tsc_object_has_own(a->props, key)) return tsc_object_set_receiver(a->props, key, value, v);
     bool has_own = idx < a->len && tsc_array_index_present(a, idx);
-    if (!has_own && a->props && tsc_object_has_own(a->props, key)) has_own = true;
     if (!has_own && tsc_value_has_prop(a->prototype, key)) {
         return tsc_value_set_prop_receiver(a->prototype, key, value, v);
     }
@@ -8470,6 +8472,9 @@ tsc_value_t tsc_value_method_unshift_items(tsc_value_t recv, tsc_array_t* items)
 }
 
 static bool value_is_concat_spreadable(tsc_value_t value) {
+    /* IsConcatSpreadable: a primitive is never spreadable, whatever its
+     * wrapper prototype carries. */
+    if (!tsc_value_is_object(value)) return false;
     tsc_value_t spreadable = tsc_value_get_symbol_prop(value, tsc_symbol_is_concat_spreadable());
     if (!tsc_value_is_undefined(spreadable)) return tsc_value_is_truthy(spreadable);
     return tsc_value_is_array(value);

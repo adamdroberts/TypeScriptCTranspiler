@@ -1813,8 +1813,10 @@ tsc_array_t* tsc_array_own_indices(const tsc_array_t* a) {
 
 void tsc_array_mark_hole(tsc_array_t* a, size_t index) {
     if (!a || index >= a->dense_len) return;
-    if (!a->holes) a->holes = tsc_object_new();
-    (void)tsc_object_set(a->holes, tsc_str_from_int((int64_t)index), tsc_value_bool(true));
+    /* Internal bookkeeping: a null prototype and a define keep user code on
+     * Object.prototype (accessors, non-writable keys) out of hole marking. */
+    if (!a->holes) a->holes = tsc_object_new_with_prototype(tsc_value_null());
+    (void)tsc_object_define(a->holes, tsc_str_from_int((int64_t)index), tsc_value_bool(true), true, true, true);
     if (a->value_roots) a->value_roots[index] = NULL;
 }
 
@@ -1881,16 +1883,16 @@ void tsc_array_push_raw(tsc_array_t* a, const void* elem) {
 void tsc_array_unshift_raw(tsc_array_t* a, const void* elem) {
     tsc_object_t* shifted_holes = NULL;
     if (a->holes && a->es == sizeof(tsc_value_t)) {
-        shifted_holes = tsc_object_new();
+        shifted_holes = tsc_object_new_with_prototype(tsc_value_null());
         tsc_array_t* keys = tsc_object_own_keys_dyn(a->holes);
         for (size_t i = 0; i < keys->len; i++) {
             tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
             size_t index = 0;
             if (tsc_str_array_index(key, &index) && index < a->len) {
-                (void)tsc_object_set(
+                (void)tsc_object_define(
                     shifted_holes,
                     tsc_str_from_int((int64_t)(index + 1)),
-                    tsc_value_bool(true)
+                    tsc_value_bool(true), true, true, true
                 );
             }
         }
