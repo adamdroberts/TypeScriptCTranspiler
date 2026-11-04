@@ -68,7 +68,7 @@ type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpressio
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
 type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-has-own:${"static"|"prototype"}` | `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}`;
+    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}`;
 type Primitive = SourcePrimitive;
 /** Callables and collection-iterator cells reachable from one escaping value;
  * a sink forwards them into one escaping call. */
@@ -94,6 +94,7 @@ const SOURCE_OBJECT_PROTOTYPE_OPERATIONS:ReadonlyMap<string,Operation>=new Map([
 // Source lookups and later writes use the ordinary field graph.
 const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operation>> = new Map<string, ReadonlyMap<string, Operation>>([
     ["Error", new Map([["isError", "error-brand"]])],
+    ["Array", new Map([["isArray", "array-brand"]])],
     ["JSON", new Map([...jsonMethods.values()].map(descriptor=>[descriptor.name,descriptor.operation]))],
     ["console", new Map([...consoleOperations].map(name=>[name,"host-print" as const]))],
     ["Object", new Map([["is","object-is"],["hasOwn","object-has-own:static"],["getPrototypeOf", "object-get-prototype"], ["setPrototypeOf", "set-prototype:object"], ["create", "create-object"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
@@ -901,11 +902,41 @@ class SourceValueFlow {
         }
         this.executionGuards.set(node,guards);return guards;
     }
+    private guardSatisfiedByKnownValue(guard: {condition: Cell; truthy: boolean}): boolean {
+        for (const atom of guard.condition.values) {
+            if (atom.tag === "primitive") { if (!!atom.value === guard.truthy) return true; }
+            else if (guard.truthy && (atom.tag === "object" || atom.tag === "function")) return true;
+            else if (atom.tag === "text-operation") {
+                // Part choices combine independently, so a tuple of already
+                // known part values is one of the operation's final results.
+                const known = atom.parts.map(part => [...part.values].flatMap(value => value.tag === "primitive" ? [value.value] : []));
+                if (!known.length || known.some(values => !values.length)) continue;
+                let tuples: Primitive[][] = [[]];
+                for (const values of known) {
+                    tuples = tuples.flatMap(tuple => values.map(value => [...tuple, value]));
+                    if (tuples.length > 64) break;
+                }
+                for (const tuple of tuples) {
+                    if (tuple.length !== known.length) continue;
+                    const outcome = this.evaluatePrimitiveTuple(atom, tuple);
+                    if (outcome.kind === "normal" && !!outcome.value === guard.truthy) return true;
+                }
+            }
+        }
+        return false;
+    }
     private guardsAllow(guards: readonly {condition: Cell; truthy: boolean}[], rule: Rule): boolean {
         for (const guard of guards) {
             this.watchText(rule,guard.condition);
             const state = this.primitiveState(guard.condition,rule);
-            if (state.pending) return false;
+            // Facts only grow, so one known value that satisfies the guard
+            // makes the branch reachable for good. Waiting for the pending
+            // rest would deadlock a branch whose result feeds its own guard
+            // (a field read as the condition and written by the branch).
+            if (state.pending) {
+                if (this.guardSatisfiedByKnownValue(guard)) continue;
+                return false;
+            }
             if (state.proof.primitiveComplete && !state.proof.values.some(value => !!value === guard.truthy)) return false;
         }
         return true;
@@ -4869,12 +4900,12 @@ class SourceValueFlow {
                 const name=this.newCell(),length=this.newCell(),operation=atom.operation.slice("set-composition:".length);this.publish(name,this.primitive([...runtimeSetCompositionMethods].find(([,value])=>value===operation)![0]));this.publish(length,this.primitive(1));this.defineField(owner,"name",name);this.defineField(owner,"length",length);
             }return owner;
         }
-        if(atom.tag==="operation"&&(jsonOperations.has(atom.operation as JSONSourceOperation)||atom.operation==="util-format"||atom.operation==="error-brand")) {
+        if(atom.tag==="operation"&&(jsonOperations.has(atom.operation as JSONSourceOperation)||atom.operation==="util-format"||atom.operation==="error-brand"||atom.operation==="array-brand")) {
             let owner=this.intrinsicOwners.get(atom);
             if(!owner) {
                 owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);
                 this.copy(this.opaqueMutation,owner.shape);
-                const descriptor=atom.operation==="util-format"?{name:"format",length:1}:atom.operation==="error-brand"?{name:"isError",length:1}:jsonOperations.get(atom.operation as JSONSourceOperation)!,name=this.newCell(),length=this.newCell();
+                const descriptor=atom.operation==="util-format"?{name:"format",length:1}:atom.operation==="error-brand"?{name:"isError",length:1}:atom.operation==="array-brand"?{name:"isArray",length:1}:jsonOperations.get(atom.operation as JSONSourceOperation)!,name=this.newCell(),length=this.newCell();
                 this.publish(name,this.primitive(descriptor.name));this.publish(length,this.primitive(descriptor.length));
                 this.defineField(owner,"name",name);this.defineField(owner,"length",length);
             }
@@ -5015,7 +5046,11 @@ class SourceValueFlow {
             // The native builtin's unrepresented own members are opaque.
             // A closed prototype chain must not turn them into known absence.
             const closedIndex=owner.closedIndices&&typeof key==="string"&&Number.isSafeInteger(Number(key))&&Number(key)>=0&&String(Number(key))===key;
-            const representedAbsence=current.tag==="builtin"&&(current.name==="Object"&&key===this.wellKnownSymbols.get("species")&&!runtimeObjectConstructorOwnKeys.has(key)||runtimeErrorKinds.has(current.name)&&key===this.wellKnownSymbols.get("hasInstance"));
+            // ECMA-262 gives only Date.prototype and Symbol.prototype an own
+            // @@toPrimitive; no global constructor or namespace object has
+            // one, so ToPrimitive on them reaches toString/valueOf.
+            const representedAbsence=current.tag==="builtin"&&(current.name==="Object"&&key===this.wellKnownSymbols.get("species")&&!runtimeObjectConstructorOwnKeys.has(key)||runtimeErrorKinds.has(current.name)&&key===this.wellKnownSymbols.get("hasInstance")||
+                key===this.wellKnownSymbols.get("toPrimitive")&&runtimeGlobalBindings.has(current.name));
             if (current.tag === "builtin" && !owner.closedOwn && !representedAbsence && !closedIndex && !presence?.values.has(this.primitive(true)) &&
                 !(typeof key === "string" && (runtimeObjectPrototypeMethods.has(key) || key === "constructor" ||
                     current.normalResult !== "not-callable" && (runtimeFunctionPrototypeMethods.has(key) || runtimeFunctionRestrictedProperties.includes(key))))) {
@@ -6399,6 +6434,30 @@ class SourceValueFlow {
                         this.publish(result,this.primitive(false));
                         const input=argument(0);
                         if(input){this.watch(rule,input);if(this.primitiveKinds(input)&KIND_OBJECT)this.publish(result,this.primitive(true));}
+                        continue;
+                    }
+                    if(atom.tag==="operation"&&atom.operation==="array-brand") {
+                        // IsArray reads only internal slots: it runs no user
+                        // code, so the argument does not escape. A Proxy is
+                        // followed to its target, and a revoked Proxy throws
+                        // a TypeError; owners that may be a Proxy keep that
+                        // alternative.
+                        const input=argument(0);
+                        if(!input){this.publish(result,this.primitive(false));continue;}
+                        this.watch(rule,input);
+                        const kinds=this.primitiveKinds(input);
+                        if(kinds&~(KIND_OBJECT|KIND_FUNCTION))this.publish(result,this.primitive(false));
+                        if(kinds&(KIND_OBJECT|KIND_FUNCTION)){
+                            this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));
+                            let proxy=false;
+                            for(const value of input.values){
+                                if(value.tag==="abrupt"||value.tag==="pending-source"||value.tag==="primitive"||value.tag==="non-string"||value.tag==="unknown-string"||value.tag==="text-operation")continue;
+                                if(value.tag==="global")continue;
+                                const owner=this.ordinaryOwner(value);
+                                if(!owner||owner.proxy){proxy=true;break;}
+                            }
+                            if(proxy){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node,"TypeError"));}
+                        }
                         continue;
                     }
                     if(atom.tag==="operation"&&atom.operation==="util-format") {
