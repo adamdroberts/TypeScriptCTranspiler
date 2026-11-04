@@ -2119,26 +2119,29 @@ tsc_value_t tsc_iterator_result(tsc_value_t value, bool done) {
     return tsc_value_object(result);
 }
 
+/* [[IteratedString]] and the position are internal slots: they live in
+ * native iterator state, never in observable properties, so only an object
+ * created by String.prototype[@@iterator] (not one inheriting from it)
+ * satisfies %StringIteratorPrototype%.next (sec-%stringiteratorprototype%.next). */
+typedef struct {
+    tsc_array_t* chars;
+    size_t index;
+} string_iterator_state_t;
+
 static tsc_value_t string_iterator_next_apply(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)args;
-    if (!value_is_box(this_arg) || value_tag(this_arg) != TSC_VALUE_TAG_OBJECT) {
+    if (!value_is_box(this_arg) || value_tag(this_arg) != TSC_VALUE_TAG_OBJECT ||
+        !((tsc_object_t*)value_ptr(this_arg))->is_string_iterator) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("String iterator next called on incompatible receiver"));
     }
-    tsc_object_t* iterator = (tsc_object_t*)value_ptr(this_arg);
-    tsc_value_t chars = tsc_object_get(iterator, tsc_str_from_lit("chars", 5));
-    tsc_value_t position = tsc_object_get(iterator, tsc_str_from_lit("index", 5));
-    if (!value_is_box(chars) || value_tag(chars) != TSC_VALUE_TAG_ARRAY || value_is_box(position)) {
-        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("String iterator next called on incompatible receiver"));
-    }
-    double current = value_as_num(position);
-    tsc_array_t* sequence = (tsc_array_t*)value_ptr(chars);
-    if (!(current >= 0.0) || current >= (double)sequence->len) {
+    string_iterator_state_t* state = ((tsc_object_t*)value_ptr(this_arg))->class_ptr;
+    if (!state->chars || state->index >= state->chars->len) {
+        state->chars = NULL;
         return tsc_iterator_result(tsc_value_undefined(), true);
     }
-    size_t next = (size_t)(current + 1.0);
-    tsc_value_t value = TSC_ARR(tsc_value_t, sequence, (size_t)current);
-    tsc_object_set(iterator, tsc_str_from_lit("index", 5), tsc_value_num((double)next));
+    tsc_value_t value = TSC_ARR(tsc_value_t, state->chars, state->index);
+    state->index++;
     return tsc_iterator_result(value, false);
 }
 
@@ -2148,11 +2151,14 @@ static tsc_value_t string_iterator_apply(void* env, tsc_value_t this_arg, tsc_ar
     const string_iterator_method_env_t* method_env = (const string_iterator_method_env_t*)env;
     string_require_object_coercible(this_arg, "String.prototype [Symbol.iterator]");
     const tsc_str_t* string = tsc_value_to_string(this_arg);
-    tsc_array_t* chars = value_string_iterator_values(string);
-    tsc_object_t* iterator = tsc_object_new();
+    tsc_array_t* volatile chars = value_string_iterator_values(string);
+    tsc_object_t* volatile iterator = tsc_object_new();
     tsc_object_set_prototype_of(iterator, method_env->iterator_prototype);
-    tsc_object_define(iterator, tsc_str_from_lit("chars", 5), tsc_value_array(chars), true, false, true);
-    tsc_object_define(iterator, tsc_str_from_lit("index", 5), tsc_value_num(0.0), true, false, true);
+    string_iterator_state_t* state = (string_iterator_state_t*)TSC_GC_MALLOC(sizeof(*state));
+    state->chars = chars;
+    state->index = 0;
+    iterator->class_ptr = state;
+    iterator->is_string_iterator = true;
     return tsc_value_object(iterator);
 }
 
@@ -2212,6 +2218,14 @@ static void string_prototype_install_intrinsics(tsc_value_t prototype) {
             string_iterator_next_apply, NULL, 0.0, tsc_str_from_lit("next", 4)
         ),
         true,
+        false,
+        true
+    );
+    tsc_object_define(
+        iterator_prototype,
+        tsc_symbol_property_key(tsc_symbol_to_string_tag()),
+        tsc_value_string(tsc_str_from_lit("String Iterator", 15)),
+        false,
         false,
         true
     );

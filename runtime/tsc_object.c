@@ -228,6 +228,7 @@ tsc_value_t tsc_value_object_prototype(void) {
     );
     if (!prototype) {
         prototype = tsc_object_alloc(tsc_value_null());
+        prototype->immutable_prototype = true;
         tsc_realm_state_set(&object_prototype_realm_state_key, prototype);
         #define TSC_OBJECT_PROTOTYPE_METHOD(name, arity, fn, env, result) \
             object_prototype_define_method(prototype, #name, sizeof(#name) - 1, arity, fn, env);
@@ -1188,6 +1189,7 @@ bool tsc_object_set_prototype_of(tsc_object_t* o, tsc_value_t prototype) {
     }
     if (!o || !value_is_valid_prototype(prototype)) return false;
     if (o->prototype == prototype) return true;
+    if (o->immutable_prototype) return false;
     if (!o->extensible) return false;
     if (tsc_value_ordinary_chain_contains(prototype, tsc_value_object(o))) return false;
     o->prototype = prototype;

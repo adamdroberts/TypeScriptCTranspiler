@@ -344,7 +344,12 @@ struct tsc_object {
     bool is_array_iterator;
     bool is_collection_iterator;
     bool is_regexp_string_iterator;
+    bool is_string_iterator;
     bool is_module_namespace;
+    /* %Object.prototype% is an immutable prototype exotic object
+     * (sec-immutable-prototype-exotic-objects): [[SetPrototypeOf]] succeeds
+     * only for its current prototype. */
+    bool immutable_prototype;
     bool is_typed_array;
     bool is_buffer;
     bool is_url;
