@@ -707,6 +707,67 @@ static tsc_value_t throw_type_error_body(void* env, tsc_value_t receiver, tsc_ar
     return tsc_value_undefined();
 }
 
+static tsc_object_t* arguments_object_new(tsc_array_t* arguments, tsc_array_t* parameter_cells,
+        tsc_value_t callee, bool restricted_callee);
+
+/* Function.prototype.caller and Function.prototype.arguments. Node (V8)
+ * exposes both as accessors that read only on non-strict normal functions
+ * and throw a TypeError for every other callable, which
+ * sec-forbidden-extensions permits for non-strict functions and requires for
+ * the rest. caller is the non-strict normal function whose value-call frame
+ * sits directly below the receiver's most recent frame (call, apply,
+ * Reflect.apply and bound functions are transparent; a built-in or strict
+ * caller reads as null); a call that did not pass through a value-call
+ * frame also reads as null, a permitted implementation-defined value.
+ * arguments is a fresh unmapped snapshot of the receiver's most recent
+ * active argument list, or null when the receiver is not executing. */
+static void legacy_accessor_require(tsc_value_t receiver) {
+    if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_FUNCTION &&
+        ((const tsc_function_identity_t*)value_ptr(receiver))->legacy_caller_receiver) return;
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr(
+        "'caller', 'callee', and 'arguments' properties may not be accessed on strict mode functions or the arguments objects for calls to them"));
+}
+static tsc_value_t function_caller_getter(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)args;
+    legacy_accessor_require(receiver);
+    return tsc_function_legacy_caller(receiver);
+}
+static tsc_value_t function_caller_setter(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)args;
+    legacy_accessor_require(receiver);
+    return tsc_value_undefined();
+}
+static tsc_value_t function_arguments_getter(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)args;
+    legacy_accessor_require(receiver);
+    const void* identity = value_ptr(receiver);
+    for (tsc_call_activation_t* activation = g_call_activation_top; activation; activation = activation->prev) {
+        if (!value_is_box(activation->callee) || value_tag(activation->callee) != TSC_VALUE_TAG_FUNCTION ||
+            value_ptr(activation->callee) != identity) continue;
+        return tsc_value_object(arguments_object_new(activation->arguments, NULL, activation->callee, false));
+    }
+    return tsc_value_null();
+}
+static tsc_value_t function_arguments_setter(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    (void)env; (void)args;
+    legacy_accessor_require(receiver);
+    return tsc_value_undefined();
+}
+static void define_legacy_accessor(tsc_value_t target, const char* name, size_t name_length,
+        tsc_generic_function_t getter, tsc_generic_function_t setter) {
+    tsc_str_t* key = tsc_str_from_lit(name, name_length);
+    tsc_descriptor_record_t descriptor = { .present = TSC_DESCRIPTOR_BIT(GET) |
+        TSC_DESCRIPTOR_BIT(SET) | TSC_DESCRIPTOR_BIT(ENUMERABLE) | TSC_DESCRIPTOR_BIT(CONFIGURABLE) };
+    descriptor.values[TSC_DESCRIPTOR_GET] = tsc_value_function_builtin_named(getter, NULL, 0.0,
+        tsc_str_concat(tsc_str_from_lit("get ", 4), key));
+    descriptor.values[TSC_DESCRIPTOR_SET] = tsc_value_function_builtin_named(setter, NULL, 1.0,
+        tsc_str_concat(tsc_str_from_lit("set ", 4), key));
+    descriptor.values[TSC_DESCRIPTOR_ENUMERABLE] = tsc_value_bool(false);
+    descriptor.values[TSC_DESCRIPTOR_CONFIGURABLE] = tsc_value_bool(true);
+    if (!tsc_value_define_property_descriptor(target, key, tsc_descriptor_record_object(&descriptor)))
+        tsc_panic("legacy function accessor definition failed");
+}
+
 /* Every restricted accessor retains the same actual Realm intrinsic. */
 static void define_restricted_accessor(tsc_value_t target, tsc_str_t* name,
         tsc_value_t thrower, bool configurable) {
@@ -836,8 +897,9 @@ static tsc_function_intrinsics_t* ensure_function_intrinsics(void) {
         tsc_object_prevent_extensions(thrower_identity->props);
         thrower_identity->extensible = false;
         tsc_value_t thrower = value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)thrower_identity);
+        (void)thrower;
 #define TSC_FUNCTION_RESTRICTED_PROPERTY(name) \
-        define_restricted_accessor(prototype, tsc_str_from_lit(#name, sizeof(#name) - 1), thrower, true);
+        define_legacy_accessor(prototype, #name, sizeof(#name) - 1, function_##name##_getter, function_##name##_setter);
 #include "tsc_function_restricted_properties.def"
 #undef TSC_FUNCTION_RESTRICTED_PROPERTY
 
@@ -2724,14 +2786,21 @@ tsc_value_t tsc_call_arguments(void) {
         tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_cstr("arguments is not defined"));
     }
     if (activation->arguments_object_initialized) return activation->arguments_object;
-
-    tsc_object_t* object = tsc_object_new();
+    tsc_array_t* parameter_cells = activation->strict ? NULL : activation->parameter_cells;
+    tsc_object_t* object = arguments_object_new(activation->arguments, parameter_cells, activation->callee, !parameter_cells);
     activation->arguments_object_gc_root = object;
+    activation->arguments_object = tsc_value_object(object);
+    activation->arguments_object_initialized = true;
+    return activation->arguments_object;
+}
+
+/* One arguments exotic object: mapped when parameter_cells is given,
+ * otherwise unmapped; callee is the restricted accessor or the callee. */
+static tsc_object_t* arguments_object_new(tsc_array_t* arguments, tsc_array_t* parameter_cells,
+        tsc_value_t callee, bool restricted_callee) {
+    tsc_object_t* volatile object = tsc_object_new();
     object->is_arguments = true;
-    object->arguments_parameter_cells = activation->strict
-        ? NULL
-        : activation->parameter_cells;
-    tsc_array_t* arguments = activation->arguments;
+    object->arguments_parameter_cells = parameter_cells;
     if (object->arguments_parameter_cells) {
         for (size_t index = arguments->len; index < object->arguments_parameter_cells->len; index++) {
             TSC_ARR(volatile tsc_value_t*, object->arguments_parameter_cells, index) = NULL;
@@ -2755,7 +2824,7 @@ tsc_value_t tsc_call_arguments(void) {
         false,
         true
     );
-    if (!object->arguments_parameter_cells) {
+    if (restricted_callee) {
         tsc_function_identity_t* thrower = ensure_function_intrinsics()->throw_type_error_identity;
         define_restricted_accessor(tsc_value_object(object), tsc_str_from_lit("callee", 6),
             value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)thrower), false);
@@ -2763,15 +2832,14 @@ tsc_value_t tsc_call_arguments(void) {
         tsc_object_define(
             object,
             tsc_str_from_lit("callee", 6),
-            activation->callee,
+            callee,
             true,
             false,
             true
         );
     }
-    activation->arguments_object = tsc_value_object(object);
     tsc_value_define_symbol_property_desc(
-        activation->arguments_object,
+        tsc_value_object(object),
         tsc_symbol_iterator(),
         tsc_array_prototype_symbol_value(tsc_symbol_iterator()),
         true,
@@ -2782,8 +2850,7 @@ tsc_value_t tsc_call_arguments(void) {
         true,
         true
     );
-    activation->arguments_object_initialized = true;
-    return activation->arguments_object;
+    return object;
 }
 
 void tsc_try_push(tsc_try_frame_t* f) {

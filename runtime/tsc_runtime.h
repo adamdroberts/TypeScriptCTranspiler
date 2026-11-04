@@ -841,8 +841,9 @@ typedef struct {
 } tsc_callable_owner_t;
 void tsc_callable_owner_capture(tsc_callable_owner_t* owner);
 void tsc_callable_owner_bind_name(tsc_callable_owner_t* owner, tsc_str_t* name);
+/* strict is the function's own strictness (see legacy_caller_receiver). */
 tsc_value_t tsc_callable_owner_get(tsc_callable_owner_t* owner, tsc_generic_function_t apply,
-    void* env, double length, tsc_str_t* name, bool constructable, tsc_str_t* source);
+    void* env, double length, tsc_str_t* name, bool constructable, bool strict, tsc_str_t* source);
 void tsc_callable_owner_set(tsc_callable_owner_t* owner, tsc_value_t value);
 tsc_value_t tsc_value_function_with_source(tsc_value_t function, tsc_str_t* source);
 typedef void (*tsc_event_listener_fn_t)(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args);

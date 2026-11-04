@@ -67,7 +67,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
-type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-has-own:${"static"|"prototype"}` | `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
+type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-has-own:${"static"|"prototype"}` | `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `legacy-function-accessor:${"caller"|"arguments"}:${"get"|"set"}` | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
     "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
 type Primitive = SourcePrimitive;
 /** Callables and collection-iterator cells reachable from one escaping value;
@@ -147,6 +147,8 @@ const SOURCE_NATIVE_METHODS:ReadonlyMap<Operation,{name:string;length:number;own
     }
     for(const[operation,name,length]of [["throw-type-error","",0],["ordinary-has-instance","[Symbol.hasInstance]",1],["eval","eval",1]] as const)
         methods.set(operation,{name,length,owner:null,opaque:false});
+    for(const name of runtimeFunctionRestrictedProperties as readonly ("caller"|"arguments")[])for(const mode of ["get","set"] as const)
+        methods.set(`legacy-function-accessor:${name}:${mode}`,{name:`${mode} ${name}`,length:mode==="get"?0:1,owner:null,opaque:false});
     return methods;
 })();
 type PrimitiveOutcome={kind:"normal";value:Primitive}|{kind:"unknown"}|{kind:"abrupt"};
@@ -347,6 +349,12 @@ function functionNode(node: ts.Node): node is FunctionNode {
 function callableDefinition(node: ts.Node): node is CallableDefinition {
     return functionNode(node) || ts.isClassDeclaration(node) || ts.isClassExpression(node);
 }
+/** Non-strict normal functions: the only receivers on which
+ * Function.prototype.caller/arguments read instead of throwing. */
+function legacyCallerReceiver(owner: FunctionOwner): boolean {
+    const definition=owner.definition;
+    return (ts.isFunctionDeclaration(definition)||ts.isFunctionExpression(definition))&&owner.kind==="ordinary"&&!isStrictCodeContext(definition);
+}
 function propertyName(node: ts.Node | undefined): string | null {
     if (!node) return null;
     if (ts.isIdentifier(node) || ts.isStringLiteralLike(node) || ts.isNumericLiteral(node)) return node.text;
@@ -488,6 +496,11 @@ class SourceValueFlow {
     private undefinedCallReceiver?:Cell;
     private readonly functionThisBindings=new Map<FunctionOwner,Map<Cell,Cell>>();
     private readonly functions = new Map<CallableDefinition, FunctionOwner>();
+    /** Every non-strict source function: the values Function.prototype.caller
+     * may report. Grows as owners are created, so later-parsed dynamic
+     * functions reach every caller read through the copy edge. */
+    private legacyCallers: Cell | null = null;
+    private legacyCallerCell(): Cell { return this.legacyCallers ??= this.newCell(); }
     private readonly activationCalls=new Map<SourceActivation,{targets:Set<SourceActivation>;callers:Set<SourceActivation>}>();
     private readonly cyclicActivationTiming=new Map<SourceActivation,Cell>();
     private readonly reachingWriteGraphs=new Map<SourceActivation,SourceReachingWrites>();
@@ -5083,9 +5096,8 @@ class SourceValueFlow {
                     }
                     const constructor=this.newCell();this.publish(constructor,this.intrinsic("constructor","ordinary",atom.realm));this.defineField(owner,"constructor",constructor,false);
                     const method=this.newCell();this.publish(method,this.realmOperation(atom.realm??this.currentRealm,"ordinary-has-instance"));this.defineField(owner,this.wellKnownSymbols.get("hasInstance")!,method,false);this.markReadonly(owner,this.wellKnownSymbols.get("hasInstance")!);
-                    const thrower=this.newCell();this.publish(thrower,this.realmOperation(atom.realm??this.currentRealm,"throw-type-error"));
                     for(const name of runtimeFunctionRestrictedProperties){
-                        this.defineAccessor(owner,name,"get",thrower);this.defineAccessor(owner,name,"set",thrower);
+                        for(const mode of ["get","set"] as const){const accessor=this.newCell();this.publish(accessor,this.realmOperation(atom.realm??this.currentRealm,`legacy-function-accessor:${name as "caller"|"arguments"}:${mode}`));this.defineAccessor(owner,name,mode,accessor);}
                         const presence=this.ownPresence(owner,name);presence.initial=true;this.publish(presence.enumerable,this.primitive(false));
                     }
                 }
@@ -5281,6 +5293,7 @@ class SourceValueFlow {
             yields:this.newCell(),yieldReceives:this.newCell(),yieldThrows:this.exceptionCell(), returns: constructor?.returns ?? this.newCell(), throws: constructor?.throws ?? this.exceptionCell(),
             receiver: constructor?.receiver ?? this.newCell(), active: constructor?.active ?? this.newCell(), sourceText: (functionNode(node) ? this.dynamicSourceTexts.get(node) : null) ?? callableSourceText(node) ?? "function () { [native code] }" };
         this.functions.set(node, owner);
+        if (functionNode(node) && !isStrictCodeContext(node)) this.publish(this.legacyCallerCell(), { tag: "function", owner });
         const length=this.newCell();this.publish(length,this.primitive(activation?expectedArgumentCount(activation):0));this.defineField(owner.fields,"length",length);
         const name = this.newCell(), input = callableNameInput(node);
         this.defineField(owner.fields, "name", name);
@@ -6747,6 +6760,22 @@ class SourceValueFlow {
                     }
                     if(atom.tag==="operation"&&atom.operation==="throw-type-error"){
                         this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node,"TypeError",atom.realm));continue;
+                    }
+                    if(atom.tag==="operation"&&atom.operation.startsWith("legacy-function-accessor:")){
+                        // Function.prototype.caller/arguments read on non-strict normal
+                        // functions (caller: null or any non-strict function; arguments: an
+                        // arguments object or null) and throw TypeError on every other
+                        // receiver; neither runs user code.
+                        const mode=atom.operation.slice(atom.operation.lastIndexOf(":")+1),caller=atom.operation.includes(":caller:"),handler=this.exceptionHandlers.get(node);
+                        if(invocation.construct){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.nativeException(node));continue;}
+                        this.watch(rule,invocation.receiver);
+                        for(const target of invocation.receiver.values){
+                            if(target.tag==="pending-source"||target.tag==="abrupt")continue;
+                            const legacy=target.tag==="function"?legacyCallerReceiver(target.owner):target.tag==="unknown"||target.tag==="opaque-object"?null:false;
+                            if(legacy!==false){if(mode!=="get")this.publish(result,this.primitive(undefined));else{this.publish(result,this.primitive(null));if(caller)this.copy(this.legacyCallerCell(),result);else this.publish(result,this.unknown);}}
+                            if(legacy!==true){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.nativeException(node,"TypeError",atom.realm));}
+                        }
+                        continue;
                     }
                     if(atom.tag==="operation"&&atom.operation==="ordinary-has-instance"){
                         this.copy(this.ordinaryInstanceSource(argument(0)??omittedArgument,invocation.receiver,node),result);continue;

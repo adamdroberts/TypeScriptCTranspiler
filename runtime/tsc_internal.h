@@ -248,6 +248,14 @@ typedef struct tsc_function_identity {
     bool has_prototype_property;
     bool construct_allocates_receiver;
     bool derived_class_constructor;
+    /* Non-strict ordinary (normal) function declarations and expressions,
+     * including those the Function constructor creates: the only callables
+     * whose Function.prototype.caller/arguments accessors read instead of
+     * throwing (sec-forbidden-extensions; Node/V8 behaviour). */
+    bool legacy_caller_receiver;
+    /* Any non-strict source function (arrow, method, generator, ... included):
+     * the callables Function.prototype.caller may report as a caller. */
+    bool legacy_caller_value;
     bool func_prototype_writable;
     bool func_prototype_initialized;
     double length;
@@ -292,6 +300,12 @@ typedef struct tsc_function_identity {
 } tsc_function_identity_t;
 
 bool tsc_value_is_html_dda(tsc_value_t value);
+/* The non-strict normal function whose value-call frame sits directly below
+ * the function's own most recent frame (bound-function frames are
+ * transparent); null when the function has no frame, when its caller is a
+ * built-in, strict or otherwise restricted callable, or when the call did
+ * not go through a value-call frame. */
+tsc_value_t tsc_function_legacy_caller(tsc_value_t function);
 void tsc_value_mark_html_dda(tsc_value_t value);
 tsc_object_t* tsc_object_new_with_prototype(tsc_value_t prototype);
 

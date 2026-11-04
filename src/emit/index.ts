@@ -40638,7 +40638,7 @@ class Emitter {
                     ? expectedArgumentCount(sourceFunction)
                     : (r.ty.params ?? []).length;
                 const owner = this.freshTemp("_callable_owner");
-                const value = `({ ${r.ty.c} volatile ${owner} = ${r.c}; ${owner} ? tsc_callable_owner_get(&${owner}->callable, ${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${owner}, ${length}.0, ${this.functionValueNameLiteral(node)}, ${this.functionValueIsConstructable(node) ? "true" : "false"}, ${this.callableSourceTextLiteral(node)}) : tsc_value_undefined(); })`;
+                const value = `({ ${r.ty.c} volatile ${owner} = ${r.c}; ${owner} ? tsc_callable_owner_get(&${owner}->callable, ${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${owner}, ${length}.0, ${this.functionValueNameLiteral(node)}, ${this.functionValueIsConstructable(node) ? "true" : "false"}, ${!sourceFunction || this.functionHasStrictThisBinding(sourceFunction) ? "true" : "false"}, ${this.callableSourceTextLiteral(node)}) : tsc_value_undefined(); })`;
                 return sourceFunction ? `tsc_dynamic_function_value(${value}, ${functionConstructorRuntimeKind(functionKindForDeclaration(sourceFunction))})` : value;
             }
             case "class":

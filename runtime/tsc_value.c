@@ -623,7 +623,7 @@ void tsc_callable_owner_bind_name(tsc_callable_owner_t* owner, tsc_str_t* name) 
 }
 
 tsc_value_t tsc_callable_owner_get(tsc_callable_owner_t* owner, tsc_generic_function_t apply,
-    void* env, double length, tsc_str_t* name, bool constructable, tsc_str_t* source) {
+    void* env, double length, tsc_str_t* name, bool constructable, bool strict, tsc_str_t* source) {
     if (!env) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("native callable has no value owner"));
     tsc_runtime_lock();
     if (!owner->initialized) {
@@ -634,6 +634,11 @@ tsc_value_t tsc_callable_owner_get(tsc_callable_owner_t* owner, tsc_generic_func
         tsc_value_t value = tsc_value_function_named_kind(apply, NULL, env, length, name,
             constructable ? TSC_FUNCTION_IDENTITY_GENERIC : TSC_FUNCTION_IDENTITY_CLOSURE);
         (void)tsc_value_function_with_source(value, source);
+        if (!strict) {
+            tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(value);
+            identity->legacy_caller_value = true;
+            identity->legacy_caller_receiver = constructable;
+        }
         tsc_callable_owner_set(owner, value);
         (void)tsc_parse_unit_swap(previous_unit);
         (void)tsc_environment_swap(previous_environment);
@@ -3986,7 +3991,17 @@ typedef struct tsc_callee_frame {
     bool tail_call;
     tsc_value_t tail_callee, tail_receiver, tail_arguments;
     void* volatile tail_roots[3];
+    /* A proper tail call from strict source code replaces that function's
+     * frame; the callee's legacy caller reads as null, as it does in hosts
+     * without tail calls, instead of the frame below the strict function. */
+    bool caller_hidden;
+    bool tail_hides_caller;
 } tsc_callee_frame_t;
+
+static const tsc_function_identity_t* frame_function_identity(const tsc_callee_frame_t* frame) {
+    if (!frame || !value_is_box(frame->value) || value_tag(frame->value) != TSC_VALUE_TAG_FUNCTION) return NULL;
+    return (const tsc_function_identity_t*)value_ptr(frame->value);
+}
 
 #define value_current_callee (*tsc_agent_callee_slot())
 
@@ -4005,6 +4020,10 @@ tsc_value_t tsc_value_tail_call(tsc_value_t callee, tsc_value_t receiver, tsc_va
     frame->tail_roots[1] = tsc_value_gc_root(receiver);
     frame->tail_roots[2] = list;
     frame->tail_call = true;
+    const tsc_function_identity_t* current = frame_function_identity(frame);
+    frame->tail_hides_caller = frame->caller_hidden || (current &&
+        current->kind != TSC_FUNCTION_IDENTITY_BUILTIN && current->kind != TSC_FUNCTION_IDENTITY_BOUND &&
+        !current->legacy_caller_value);
     return tsc_value_undefined();
 }
 
@@ -4012,6 +4031,20 @@ tsc_value_t tsc_value_current_callee(void) {
     return value_current_callee
         ? value_current_callee->value
         : tsc_value_undefined();
+}
+
+tsc_value_t tsc_function_legacy_caller(tsc_value_t function) {
+    if (!value_is_box(function) || value_tag(function) != TSC_VALUE_TAG_FUNCTION) return tsc_value_null();
+    const tsc_function_identity_t* identity = (const tsc_function_identity_t*)value_ptr(function);
+    const tsc_callee_frame_t* frame = value_current_callee;
+    while (frame && frame_function_identity(frame) != identity) frame = frame->prev;
+    if (!frame || frame->caller_hidden) return tsc_value_null();
+    for (frame = frame->prev; frame; frame = frame->prev) {
+        const tsc_function_identity_t* caller = frame_function_identity(frame);
+        if (caller && caller->kind == TSC_FUNCTION_IDENTITY_BOUND) continue;
+        return caller && caller->legacy_caller_value ? frame->value : tsc_value_null();
+    }
+    return tsc_value_null();
 }
 
 tsc_environment_t* tsc_value_current_constructor_environment(void) {
@@ -4230,6 +4263,7 @@ static tsc_value_t tsc_value_apply_with_activation(
     tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args,
     tsc_value_t callee, tsc_value_t new_target, tsc_environment_t* constructor_environment
 ) {
+    bool tail_hides_caller = false;
     for (;;) {
         // The canonical invocation owns its encoded operands across argument-list
         // materialization and arbitrary user callbacks, including native callers.
@@ -4310,6 +4344,7 @@ static tsc_value_t tsc_value_apply_with_activation(
                 .value = callee,
                 .new_target = new_target,
                 .constructor_environment = constructor_environment,
+                .caller_hidden = tail_hides_caller,
             };
             value_current_callee = &frame;
             tsc_value_t result = ident->code.generic(ident->env, this_arg, list);
@@ -4324,6 +4359,7 @@ static tsc_value_t tsc_value_apply_with_activation(
                 callee = fn;
                 new_target = tsc_value_undefined();
                 constructor_environment = NULL;
+                tail_hides_caller = frame.tail_hides_caller;
                 continue;
             }
             return result;
