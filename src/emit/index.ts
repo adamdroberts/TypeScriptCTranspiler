@@ -1112,7 +1112,13 @@ class Emitter {
         for (const declaration of this.moduleFunctionDeclarations.keys()) markTopLevelFunction(declaration);
         for (const modId of emitOrder) {
             const info = this.graph.modules.get(modId);
-            if (info) visit(info.sf);
+            if (!info) continue;
+            // A Script's top-level function declarations are published to the
+            // global object and instantiated regardless of symbol references
+            // (other Scripts reach them through that object), so their bodies
+            // are reachability roots too.
+            for (const declaration of this.test262ScriptGlobalDeclarations(info.sf).functions) markTopLevelFunction(declaration);
+            visit(info.sf);
         }
         for (let cursor = 0; cursor < worklist.length; cursor++) {
             visit(worklist[cursor]!);
