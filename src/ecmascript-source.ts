@@ -93,6 +93,72 @@ export function ecmaImportAttributesParserShadow(source: string): string {
     return shadow.join("");
 }
 
+/** Literal intervals fence a token worklist: text inside regular expression,
+ * string and template literal tokens is never lexed as tokens, while template
+ * interpolation expressions remain visible. Keyed by literal start offset. */
+function ecmaLiteralIntervals(sourceFile: ts.SourceFile): Map<number, number> {
+    const literals = new Map<number, number>(), worklist: ts.Node[] = [sourceFile];
+    while (worklist.length) {
+        const node = worklist.pop()!;
+        if (ts.isLiteralExpression(node) || ts.isTemplateLiteralToken(node)) literals.set(node.getStart(sourceFile), node.end);
+        ts.forEachChild(node, child => {worklist.push(child);});
+    }
+    return literals;
+}
+
+const LINE_TERMINATOR = /[\r\n\u2028\u2029]/u;
+
+/**
+ * Annex B B.1.1 HTML-like comments, which are part of the Script goal only:
+ * `<!--` opens a SingleLineHTMLOpenComment wherever a token may start, and
+ * `-->` opens an HTMLCloseComment when only WhiteSpace and delimited comments
+ * precede it on its line, where the start of the input and a MultiLineComment
+ * containing a LineTerminator also begin a line. TypeScript lexes both as
+ * operator sequences. Each pass blanks exactly the first such comment (an
+ * equal-width space run, so offsets and the line map are unchanged) and
+ * reparses: every token before the first HTML-like comment is lexed by the
+ * parser exactly as ECMA-262 specifies, so the literal intervals fencing the
+ * token worklist are exact up to that comment, while a later line, whose
+ * lexing could depend on the recovered parse of the comment line, is only
+ * consulted after the comment is gone. One source token is visited per pass;
+ * the loop has no comment-count or nesting bound.
+ */
+function ecmaHtmlCommentParserShadow(
+    filename: string,
+    shadow: string,
+    parserOptions: ts.ScriptTarget | ts.CreateSourceFileOptions,
+    setParentNodes: boolean,
+    scriptKind: ts.ScriptKind,
+    sourceFile: ts.SourceFile,
+): { shadow: string; sourceFile: ts.SourceFile } {
+    for (;;) {
+        const literals = ecmaLiteralIntervals(sourceFile);
+        const scanner = ts.createScanner(ts.ScriptTarget.ESNext, false, ts.LanguageVariant.Standard, shadow);
+        let lineStart = true, comment = -1;
+        for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
+            const start = scanner.getTokenPos(), end = scanner.getTextPos(), literalEnd = literals.get(start);
+            // A recovered parse may hold a zero-width missing literal; only a
+            // forward interval fences the worklist.
+            if (literalEnd !== undefined && literalEnd > start) { scanner.setTextPos(literalEnd); lineStart = false; continue; }
+            if (token >= ts.SyntaxKind.FirstTriviaToken && token <= ts.SyntaxKind.LastTriviaToken) {
+                if (token === ts.SyntaxKind.NewLineTrivia ||
+                    token === ts.SyntaxKind.MultiLineCommentTrivia && LINE_TERMINATOR.test(shadow.slice(start, end))) lineStart = true;
+                continue;
+            }
+            // U+2028 and U+2029 are consumed without a NewLineTrivia token; the
+            // following token carries the line break instead.
+            if (scanner.hasPrecedingLineBreak()) lineStart = true;
+            if (shadow.startsWith("<!--", start) || lineStart && shadow.startsWith("-->", start)) { comment = start; break; }
+            lineStart = false;
+        }
+        if (comment < 0) return { shadow, sourceFile };
+        let end = comment;
+        while (end < shadow.length && !LINE_TERMINATOR.test(shadow[end]!)) end++;
+        shadow = shadow.slice(0, comment) + " ".repeat(end - comment) + shadow.slice(end);
+        sourceFile = ts.createSourceFile(filename, shadow, parserOptions, setParentNodes, scriptKind);
+    }
+}
+
 /** Statement children exclude StatementListItem positions, where lexical
  * declarations are legal. Keep that grammar distinction in one predicate. */
 export function isStatementBody(parent: ts.Node, child: ts.Node): boolean {
@@ -118,23 +184,27 @@ export function createEcmaSourceFile(
         : languageVersion;
     let shadow = ecmaImportAttributesParserShadow(source);
     let sourceFile = ts.createSourceFile(filename, shadow, parserOptions, setParentNodes, scriptKind);
+    // HTML-like comments exist only in JavaScript parsed with the Script goal.
+    // A known Script goal applies them before any other token worklist; an
+    // inferred goal applies them once the goal is settled.
+    let htmlComments = false;
+    const applyHtmlComments = (): void => {
+        htmlComments = true;
+        ({ shadow, sourceFile } = ecmaHtmlCommentParserShadow(filename, shadow, parserOptions, setParentNodes, scriptKind, sourceFile));
+    };
+    if (goal === "script" && scriptKind === ts.ScriptKind.JS) applyHtmlComments();
     // TypeScript rejects ImportMeta as an unparenthesized `new` callee. Parse
     // every ImportMeta through the same length-preserving identifier shadow,
     // then restore the original MetaProperty nodes before binding. Literal
     // intervals keep text in regular expressions and templates out of the
     // token worklist, while their interpolation expressions remain visible.
-    const literals = new Map<number,number>(), literalWorklist: ts.Node[] = [sourceFile];
-    while (literalWorklist.length) {
-        const node = literalWorklist.pop()!;
-        if (ts.isLiteralExpression(node) || ts.isTemplateLiteralToken(node)) literals.set(node.getStart(sourceFile),node.end);
-        ts.forEachChild(node, child => {literalWorklist.push(child);});
-    }
+    const literals = ecmaLiteralIntervals(sourceFile);
     const importMetaTokens = new Set<number>();
     const metaScanner = ts.createScanner(ts.ScriptTarget.ESNext,true,ts.LanguageVariant.Standard,shadow);
     for (;;) {
         const token = metaScanner.scan(); if (token === ts.SyntaxKind.EndOfFileToken) break;
         const start = metaScanner.getTokenPos(), end = metaScanner.getTextPos(), literalEnd = literals.get(start);
-        if (literalEnd !== undefined) {metaScanner.setTextPos(literalEnd);continue;}
+        if (literalEnd !== undefined && literalEnd > start) {metaScanner.setTextPos(literalEnd);continue;}
         if (token !== ts.SyntaxKind.ImportKeyword || metaScanner.hasUnicodeEscape()) continue;
         if (metaScanner.scan() === ts.SyntaxKind.DotToken && metaScanner.scan() === ts.SyntaxKind.Identifier && metaScanner.getTokenValue() === "meta") importMetaTokens.add(start);
         metaScanner.setTextPos(end);
@@ -146,6 +216,7 @@ export function createEcmaSourceFile(
         sourceFile = ts.createSourceFile(filename,shadow,parserOptions,setParentNodes,scriptKind);
     }
     goal ??= ts.isExternalModule(sourceFile) || importMetaTokens.size > 0 || /\.m[jt]s$/iu.test(filename) ? "module" : "script";
+    if (goal === "script" && scriptKind === ts.ScriptKind.JS && !htmlComments) applyHtmlComments();
     // Contextual identifier tokens share one offset-preserving parser shadow.
     // Reparse to a fixed point because correcting one Statement body can
     // expose another body in the recovered tree. Each source token is added
