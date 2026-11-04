@@ -5,6 +5,7 @@
  * Annex B extensions in non-Unicode mode; the matcher is an iterative
  * backtracker reporting code-unit offsets. Unicode property escapes consult
  * ICU; all AST storage is GC-managed. */
+#include "tsc_unicode_data.h"
 #include "tsc_internal.h"
 
 #include <unicode/uchar.h>
@@ -98,10 +99,10 @@ typedef struct tsc_re_node {
             tsc_re_class_escape_t escape;
         } class_escape;
         struct {
-            int32_t property;
-            int32_t value;
+            int32_t set;      /* index into tsc_ucd_sets */
+            int32_t strings;  /* index into tsc_ucd_string_properties, or -1 */
             bool negated;
-            bool has_value;
+            bool ascii;
         } prop;
         struct {
             struct tsc_re_node** items;
@@ -406,7 +407,12 @@ static tsc_re_node_t* re_parse_legacy_class(tsc_re_parser_t* p, bool negated) {
         if (first.is_set && !re_at_end(p) &&
             p->units[p->pos] == '-' && p->pos + 1 < p->len && p->units[p->pos + 1] != ']') {
             /* A set on the left still permits Annex B union ranges such
-             * as [\d-z]: the dash side re-parses as the range tail. */
+             * as [\d-z]: the dash side re-parses as the range tail. In
+             * Unicode mode a class escape cannot start a range. */
+            if (re_is_unicode(p)) {
+                re_fail(p, p->pos);
+                return NULL;
+            }
             p->pos++;
             re_catom_t second;
             if (!re_parse_legacy_atom(p, &second)) {
@@ -1775,6 +1781,13 @@ static bool re_is_word_unit(uint16_t u) {
         (u >= '0' && u <= '9') || u == '_';
 }
 
+/* ClassSetReservedPunctuator: escapable only inside v-mode classes. */
+static bool re_is_v_reserved_punctuator(uint16_t u) {
+    return u == '&' || u == '-' || u == '!' || u == '#' || u == '%' || u == ',' ||
+        u == ':' || u == ';' || u == '<' || u == '=' || u == '>' || u == '@' ||
+        u == '`' || u == '~';
+}
+
 /* Identity escapes allowed in Unicode mode after a backslash: the
  * SyntaxCharacters plus '/' so literals can escape the delimiter. */
 static bool re_is_unicode_identity(uint16_t u) {
@@ -1893,148 +1906,55 @@ static uint32_t re_peek_unicode_brace(const tsc_re_parser_t* p) {
     return value;
 }
 
+static bool re_ucd_contains(int32_t set, uint32_t cp);
+static int32_t re_ucd_lookup(const tsc_ucd_name_t* names, size_t count, const char* text);
+#define RE_UCD_LOOKUP(table, text) re_ucd_lookup(table, sizeof(table) / sizeof(*(table)), text)
 static bool re_is_name_start_cp(uint32_t cp) {
     if (cp == '$' || cp == '_') return true;
     if (cp < 0x80) return (cp >= 'a' && cp <= 'z') || (cp >= 'A' && cp <= 'Z');
-    return u_hasBinaryProperty((UChar32)cp, UCHAR_ID_START);
+    return re_ucd_contains(RE_UCD_LOOKUP(tsc_ucd_binary_names, "ID_Start"), cp);
 }
 
 static bool re_is_name_part_cp(uint32_t cp) {
     if (cp == '$' || cp == '_') return true;
     if (cp < 0x80) return (cp >= 'a' && cp <= 'z') || (cp >= 'A' && cp <= 'Z') || (cp >= '0' && cp <= '9');
-    return u_hasBinaryProperty((UChar32)cp, UCHAR_ID_CONTINUE) || cp == 0x200c || cp == 0x200d;
+    return re_ucd_contains(RE_UCD_LOOKUP(tsc_ucd_binary_names, "ID_Continue"), cp) || cp == 0x200c || cp == 0x200d;
 }
 
 /* Parses GroupName at p->pos into out (UTF-8). Expects '<' or caller context;
  * consumes through the closing '>'. Returns false with an error recorded. */
 /* Parses PropertyName after "\p{". pos is after the '{'. Builds a PROP node
  * (or records a failure). Handles LoneProperty and Name=Value forms. */
-/* Exact property spellings from the pinned ECMA-262 property tables. ICU
- * performs value lookup only after ECMAScript's case-sensitive admission. */
-static const char* const re_binary_names[] = {
-    "AHex",
-    "ASCII",
-    "ASCII_Hex_Digit",
-    "Alpha",
-    "Alphabetic",
-    "Any",
-    "Assigned",
-    "Bidi_C",
-    "Bidi_Control",
-    "Bidi_M",
-    "Bidi_Mirrored",
-    "CI",
-    "CWCF",
-    "CWCM",
-    "CWKCF",
-    "CWL",
-    "CWT",
-    "CWU",
-    "Case_Ignorable",
-    "Cased",
-    "Changes_When_Casefolded",
-    "Changes_When_Casemapped",
-    "Changes_When_Lowercased",
-    "Changes_When_NFKC_Casefolded",
-    "Changes_When_Titlecased",
-    "Changes_When_Uppercased",
-    "DI",
-    "Dash",
-    "Default_Ignorable_Code_Point",
-    "Dep",
-    "Deprecated",
-    "Dia",
-    "Diacritic",
-    "EBase",
-    "EComp",
-    "EMod",
-    "EPres",
-    "Emoji",
-    "Emoji_Component",
-    "Emoji_Modifier",
-    "Emoji_Modifier_Base",
-    "Emoji_Presentation",
-    "Ext",
-    "ExtPict",
-    "Extended_Pictographic",
-    "Extender",
-    "Gr_Base",
-    "Gr_Ext",
-    "Grapheme_Base",
-    "Grapheme_Extend",
-    "Hex",
-    "Hex_Digit",
-    "IDC",
-    "IDS",
-    "IDSB",
-    "IDST",
-    "IDS_Binary_Operator",
-    "IDS_Trinary_Operator",
-    "ID_Continue",
-    "ID_Start",
-    "Ideo",
-    "Ideographic",
-    "Join_C",
-    "Join_Control",
-    "LOE",
-    "Logical_Order_Exception",
-    "Lower",
-    "Lowercase",
-    "Math",
-    "NChar",
-    "Noncharacter_Code_Point",
-    "Pat_Syn",
-    "Pat_WS",
-    "Pattern_Syntax",
-    "Pattern_White_Space",
-    "QMark",
-    "Quotation_Mark",
-    "RI",
-    "Radical",
-    "Regional_Indicator",
-    "SD",
-    "STerm",
-    "Sentence_Terminal",
-    "Soft_Dotted",
-    "Term",
-    "Terminal_Punctuation",
-    "UIdeo",
-    "Unified_Ideograph",
-    "Upper",
-    "Uppercase",
-    "VS",
-    "Variation_Selector",
-    "White_Space",
-    "XIDC",
-    "XIDS",
-    "XID_Continue",
-    "XID_Start",
-    "space",
-};
-static const char* const re_string_property_names[] = {
-    "Basic_Emoji",
-    "Emoji_Keycap_Sequence",
-    "RGI_Emoji",
-    "RGI_Emoji_Flag_Sequence",
-    "RGI_Emoji_Modifier_Sequence",
-    "RGI_Emoji_Tag_Sequence",
-    "RGI_Emoji_ZWJ_Sequence",
-};
-static bool re_name_in(const char* name, const char* const* names, size_t len) {
-    for (size_t i = 0; i < len; i++) if (strcmp(name, names[i]) == 0) return true;
+/* Property names are matched exactly against the generated Unicode tables, so
+ * \p{...} admission and membership never depend on the host ICU version. */
+static int32_t re_ucd_lookup(const tsc_ucd_name_t* names, size_t count, const char* text) {
+    for (size_t i = 0; i < count; i++) if (strcmp(names[i].name, text) == 0) return (int32_t)names[i].set;
+    return -1;
+}
+static int32_t re_ucd_string_lookup(const char* text) {
+    size_t count = sizeof(tsc_ucd_string_properties) / sizeof(*tsc_ucd_string_properties);
+    for (size_t i = 0; i < count; i++) if (strcmp(tsc_ucd_string_properties[i].name, text) == 0) return (int32_t)i;
+    return -1;
+}
+static bool re_ucd_contains(int32_t set, uint32_t cp) {
+    if (set < 0) return false;
+    const tsc_ucd_set_t* entry = &tsc_ucd_sets[set];
+    const tsc_ucd_range_t* ranges = tsc_ucd_ranges + entry->offset;
+    size_t lo = 0, hi = entry->count;
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        if (cp < ranges[mid].lo) hi = mid;
+        else if (cp > ranges[mid].hi) lo = mid + 1;
+        else return true;
+    }
     return false;
 }
-static bool re_exact_value(UProperty property, int32_t value, const char* text) {
-    if (value == UCHAR_INVALID_CODE) return false;
-    for (int choice = U_SHORT_PROPERTY_NAME; choice <= U_LONG_PROPERTY_NAME; choice++) {
-        const char* name = u_getPropertyValueName(property, value, (UPropertyNameChoice)choice);
-        if (name && strcmp(text, name) == 0) return true;
+static void re_ucd_add_set(USet* result, int32_t set) {
+    const tsc_ucd_set_t* entry = &tsc_ucd_sets[set];
+    for (uint32_t i = 0; i < entry->count; i++) {
+        const tsc_ucd_range_t range = tsc_ucd_ranges[entry->offset + i];
+        uset_addRange(result, (UChar32)range.lo, (UChar32)range.hi);
     }
-    /* Stable UCD value aliases beyond the short/long canonical forms. */
-    return (property == UCHAR_SCRIPT && value == USCRIPT_INHERITED && strcmp(text, "Qaai") == 0) ||
-        (property == UCHAR_GENERAL_CATEGORY_MASK && value == U_GC_CC_MASK && strcmp(text, "cntrl") == 0) ||
-        (property == UCHAR_GENERAL_CATEGORY_MASK && value == U_GC_ND_MASK && strcmp(text, "digit") == 0) ||
-        (property == UCHAR_GENERAL_CATEGORY_MASK && value == U_GC_P_MASK && strcmp(text, "punct") == 0);
 }
 static tsc_re_node_t* re_parse_property(tsc_re_parser_t* p, bool negated) {
     size_t start = p->pos;
@@ -2053,38 +1973,34 @@ static tsc_re_node_t* re_parse_property(tsc_re_parser_t* p, bool negated) {
     text[len] = 0;
     tsc_re_node_t* node = re_new_node(p, RE_N_PROP);
     node->u.prop.negated = negated;
+    node->u.prop.strings = -1;
+    node->u.prop.ascii = false;
     char* eq = strchr(text, '=');
-    UProperty property = UCHAR_INVALID_CODE;
-    int32_t value = UCHAR_INVALID_CODE;
+    int32_t set = -1;
     if (eq) {
+        /* UnicodePropertyName = UnicodePropertyValue: only the three
+         * non-binary properties ECMA-262 admits. */
         *eq = 0;
-        if (!strcmp(text, "General_Category") || !strcmp(text, "gc")) property = UCHAR_GENERAL_CATEGORY_MASK;
-        else if (!strcmp(text, "Script") || !strcmp(text, "sc")) property = UCHAR_SCRIPT;
-        else if (!strcmp(text, "Script_Extensions") || !strcmp(text, "scx")) property = UCHAR_SCRIPT_EXTENSIONS;
-        if (property != UCHAR_INVALID_CODE) {
-            UProperty lookup = property == UCHAR_SCRIPT_EXTENSIONS ? UCHAR_SCRIPT : property;
-            value = u_getPropertyValueEnum(lookup, eq + 1);
-            if (!re_exact_value(lookup, value, eq + 1)) property = UCHAR_INVALID_CODE;
-        }
-        node->u.prop.has_value = true;
+        const char* value = eq + 1;
+        if (!strcmp(text, "General_Category") || !strcmp(text, "gc")) set = RE_UCD_LOOKUP(tsc_ucd_general_category_names, value);
+        else if (!strcmp(text, "Script") || !strcmp(text, "sc")) set = RE_UCD_LOOKUP(tsc_ucd_script_names, value);
+        else if (!strcmp(text, "Script_Extensions") || !strcmp(text, "scx")) set = RE_UCD_LOOKUP(tsc_ucd_script_extension_names, value);
     } else {
-        value = u_getPropertyValueEnum(UCHAR_GENERAL_CATEGORY_MASK, text);
-        if (re_exact_value(UCHAR_GENERAL_CATEGORY_MASK, value, text)) {
-            property = UCHAR_GENERAL_CATEGORY_MASK;
-            node->u.prop.has_value = true;
-        } else if (!strcmp(text, "ASCII")) property = (UProperty)-2;
-        else if (!strcmp(text, "Any")) property = (UProperty)-3;
-        else if (!strcmp(text, "Assigned")) property = (UProperty)-4;
-        else if (re_name_in(text, re_binary_names, sizeof(re_binary_names) / sizeof(*re_binary_names))) {
-            property = u_getPropertyEnum(text);
-        } else if (p->flags.unicode_sets && !negated && re_name_in(text, re_string_property_names,
-                   sizeof(re_string_property_names) / sizeof(*re_string_property_names))) {
-            property = u_getPropertyEnum(text);
+        /* LoneUnicodePropertyNameOrValue: a General_Category value, a binary
+         * property, or (v mode, not negated) a property of strings. */
+        set = RE_UCD_LOOKUP(tsc_ucd_general_category_names, text);
+        if (set < 0) set = RE_UCD_LOOKUP(tsc_ucd_binary_names, text);
+        if (set < 0 && p->flags.unicode_sets && !negated) {
+            int32_t strings = re_ucd_string_lookup(text);
+            if (strings >= 0) {
+                set = tsc_ucd_string_properties[strings].set;
+                node->u.prop.strings = strings;
+            }
         }
+        node->u.prop.ascii = !strcmp(text, "ASCII");
     }
-    if (property == UCHAR_INVALID_CODE) { re_fail(p, start); return NULL; }
-    node->u.prop.property = property;
-    node->u.prop.value = value;
+    if (set < 0) { re_fail(p, start); return NULL; }
+    node->u.prop.set = set;
     return node;
 }
 
@@ -2254,28 +2170,27 @@ static bool re_parse_char_escape(tsc_re_parser_t* p, bool in_class, tsc_re_char_
         out->value = 0x0b;
         return true;
     case 'c': {
-        if (re_at_end(p)) {
-            if (unicode) {
-                re_fail(p, esc_at);
-                return false;
+        if (!re_at_end(p)) {
+            uint16_t next = p->units[p->pos];
+            uint32_t control = 0;
+            /* Annex B ClassControlLetter :: DecimalDigit | `_` (value % 32). */
+            bool class_control = in_class && !unicode && ((next >= '0' && next <= '9') || next == '_');
+            if (re_control_value(next, &control) || (class_control && (control = (uint32_t)next % 32, true))) {
+                p->pos++;
+                out->kind = RE_CH_UNIT;
+                out->value = control;
+                return true;
             }
-            out->kind = RE_CH_UNIT;
-            out->value = 'c';
-            return true;
-        }
-        uint32_t control = 0;
-        if (re_control_value(p->units[p->pos], &control)) {
-            p->pos++;
-            out->kind = RE_CH_UNIT;
-            out->value = control;
-            return true;
         }
         if (unicode) {
             re_fail(p, esc_at);
             return false;
         }
+        /* Annex B: `\` [lookahead = c] is the single character `\`; the `c`
+         * is then parsed as an ordinary pattern or class character. */
+        p->pos = esc_at + 1;
         out->kind = RE_CH_UNIT;
-        out->value = 'c';
+        out->value = '\\';
         return true;
     }
     case 'x': {
@@ -2447,7 +2362,10 @@ static bool re_parse_char_escape(tsc_re_parser_t* p, bool in_class, tsc_re_char_
         out->escape = RE_CE_WORD_NEG;
         return true;
     default:
-        if (unicode && !re_is_unicode_identity(c)) {
+        /* ClassEscape[+U] :: `-` and the v-mode ClassSetReservedPunctuators
+         * are only valid inside a class. */
+        if (unicode && !re_is_unicode_identity(c) &&
+            !(in_class && (c == '-' || (p->flags.unicode_sets && re_is_v_reserved_punctuator(c))))) {
             re_fail(p, esc_at);
             return false;
         }
@@ -2600,21 +2518,26 @@ static void re_complement_set(USet* set, bool unicode_sets, const USet* universe
     } else uset_complement(set);
 }
 static USet* re_property_set(const tsc_re_node_t* node, bool unicode_sets) {
-    UProperty property = (UProperty)node->u.prop.property;
     USet* result = uset_openEmpty();
-    UErrorCode error = U_ZERO_ERROR;
-    if ((int32_t)property == -2) uset_addRange(result, 0, 0x7f);
-    else if ((int32_t)property == -3) uset_addRange(result, 0, 0x10ffff);
-    else if ((int32_t)property == -4) {
-        uset_applyIntPropertyValue(result, UCHAR_GENERAL_CATEGORY_MASK, U_GC_CN_MASK, &error);
-        uset_complement(result);
-    } else if (node->u.prop.has_value) {
-        uset_applyIntPropertyValue(result, property, node->u.prop.value, &error);
-    } else {
-        const USet* data = u_getBinaryPropertySet(property, &error);
-        if (data) uset_addAll(result, data);
+    re_ucd_add_set(result, node->u.prop.set);
+    if (node->u.prop.strings >= 0) {
+        const tsc_ucd_string_property_t* property = &tsc_ucd_string_properties[node->u.prop.strings];
+        const uint32_t* run = tsc_ucd_strings + property->strings;
+        for (uint32_t i = 0; i < property->nstrings; i++) {
+            uint32_t length = *run++;
+            UChar units[2 * TSC_UCD_MAX_SEQUENCE];
+            int32_t n = 0;
+            for (uint32_t k = 0; k < length; k++) {
+                uint32_t cp = run[k];
+                if (cp >= 0x10000) {
+                    units[n++] = (UChar)(0xd800 + ((cp - 0x10000) >> 10));
+                    units[n++] = (UChar)(0xdc00 + ((cp - 0x10000) & 0x3ff));
+                } else units[n++] = (UChar)cp;
+            }
+            uset_addString(result, units, n);
+            run += length;
+        }
     }
-    if (U_FAILURE(error)) abort();
     if (node->u.prop.negated && !unicode_sets) uset_complement(result);
     return result;
 }
@@ -2646,10 +2569,9 @@ static bool re_normalize_set(tsc_re_parser_t* p, tsc_re_node_t* node, const USet
     bool negate_after = false;
     if (node->kind == RE_N_PROP) {
         uset_close(raw); raw = re_property_set(node, v);
-        node->may_strings = node->u.prop.property >= UCHAR_BASIC_EMOJI &&
-            node->u.prop.property <= UCHAR_RGI_EMOJI;
+        node->may_strings = node->u.prop.strings >= 0;
         negate_after = v && node->u.prop.negated;
-        if (closed) result = (int32_t)node->u.prop.property == -2 ? uset_clone(raw) : re_case_closure(raw);
+        if (closed) result = node->u.prop.ascii ? uset_clone(raw) : re_case_closure(raw);
         else result = re_fold_set(raw, node->flags.ignore_case, unicode);
     } else if (node->kind == RE_N_CLASS_ESCAPE) {
         uset_close(raw); raw = re_escape_set(node->u.class_escape.escape);
