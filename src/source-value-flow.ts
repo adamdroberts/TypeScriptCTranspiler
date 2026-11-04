@@ -3266,6 +3266,10 @@ class SourceValueFlow {
         const result=this.newCell(),keyInput=this.newCell(),objectInput=this.newCell();calls.set(signature,result);
         this.returnTransforms.set(result,{kind:"projection",inputs:[input,key],evaluate:inputs=>this.ownPropertyQuery(inputs[0]!,inputs[1]!,context,mode)});
         const converted=this.primitiveConversion(keyInput,context),objects=this.toObject(objectInput,context);
+        // Only an unrepresented receiver (a possible Proxy) runs code during
+        // [[GetOwnProperty]]; represented receivers sharing the cell do not
+        // escape with it.
+        const opaqueReceivers=this.newCell();
         if(mode==="static")this.copy(input,objectInput);else this.copy(key,keyInput);
         const normal=(cell:Cell):boolean=>[...cell.values].some(atom=>atom.tag!=="abrupt"&&atom.tag!=="pending-source");
         this.rule([objects],()=>{for(const atom of objects.values)if(atom.tag==="abrupt"||atom.tag==="pending-source")this.publish(result,atom);if(mode==="static"&&normal(objects))this.copy(key,keyInput);});
@@ -3295,7 +3299,8 @@ class SourceValueFlow {
                     // (built-in prototypes, exotic objects) answer uncertainly
                     // and may throw, without an opaque effect or escape.
                     if(owner&&!owner.proxy)continue;
-                    this.onActive(context,()=>{this.opaqueEffect(context);this.escapeCallableArgument(objects,context);});continue;
+                    this.publish(opaqueReceivers,atom);
+                    this.onActive(context,()=>{this.opaqueEffect(context);this.escapeCallableArgument(opaqueReceivers,context);});continue;
                 }
                 if(unknownKey){uncertain();continue;}
                 for(const name of names){
@@ -3332,23 +3337,51 @@ class SourceValueFlow {
         if(!key)this.publish(result,{tag:"object",owner:collection});
         const handler=this.exceptionHandlers.get(context);
         let escaping=false;
-        const incomplete=()=>{
+        // [[GetOwnProperty]] runs code only on a Proxy or an unrepresented
+        // object; an unknown key or attribute on a represented owner leaves
+        // the result unknown without escaping the owner's callables.
+        const opaqueBases=this.newCell();
+        const incomplete=(atom?:Atom)=>{
             this.publish(result,this.unknown);if(handler)this.publish(handler,this.unknown);
-            if(!escaping){escaping=true;this.onActive(context,()=>this.escapeCallableArgument(base,context));}
+            if(!atom)return;this.publish(opaqueBases,atom);
+            if(!escaping){escaping=true;this.onActive(context,()=>this.escapeCallableArgument(opaqueBases,context));}
         };
+        const escapeOpaqueBases=()=>{for(const atom of base.values){const owner=this.ordinaryOwner(atom);if(atom.tag==="unknown"||atom.tag==="opaque-object"||owner?.proxy)incomplete(atom);}};
         let rule!:Rule;
         rule=this.rule(key?[base,key]:[base],()=>{
             const keys=key?this.propertyKeys(key,rule,context):undefined;
             if(key && keys===undefined)return;
-            if(key && keys===null){incomplete();return;}
+            if(key && keys===null){escapeOpaqueBases();incomplete();return;}
             for(const atom of base.values){
                 if(atom.tag==="pending-source"||atom.tag==="abrupt"){this.publish(result,atom);continue;}
                 if(atom.tag==="primitive"&&(atom.value===null||atom.value===undefined)){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.nativeException(context!));continue;}
+                if(atom.tag==="primitive"||atom.tag==="non-string"||atom.tag==="unknown-string"||atom.tag==="text-operation"){
+                    // ToObject boxes the primitive (sec-object.getownpropertydescriptor);
+                    // the wrapper owns nothing but a String's `length` and index keys.
+                    if(!key){incomplete();continue;}
+                    const text=atom.tag==="primitive"&&typeof atom.value==="string"?atom.value:null;
+                    const stringLike=text!==null||atom.tag==="unknown-string"||atom.tag==="text-operation"||atom.tag==="non-string"&&!!((atom.kinds??(KIND_PRIMITIVE&~KIND_STRING))&KIND_STRING);
+                    const virtual=(name:SourcePropertyKey)=>typeof name==="string"&&(name==="length"||/^(0|[1-9][0-9]*)$/.test(name));
+                    if(keys!.some(name=>name===null)){incomplete();continue;}
+                    for(const name of keys!){
+                        if(name===null||!stringLike||!virtual(name)){this.publish(result,this.primitive(undefined));continue;}
+                        // A String wrapper's `length` and in-range index keys are
+                        // frozen data properties (sec-string-exotic-objects).
+                        const value=this.newCell();
+                        if(name==="length"){if(text!==null)this.publish(value,this.primitive(text.length));else this.publish(value,{tag:"non-string",kinds:KIND_NUMBER});}
+                        else if(text!==null){const index=Number(name);if(index<text.length)this.publish(value,this.primitive(text[index]!));else{this.publish(result,this.primitive(undefined));continue;}}
+                        else{this.publish(value,this.unknownString);this.publish(result,this.primitive(undefined));}
+                        const descriptor=this.descriptorOwner(context);this.defineField(descriptor,"value",value);
+                        for(const [attribute,flag] of [["writable",false],["enumerable",name!=="length"],["configurable",false]] as const){const cell=this.newCell();this.publish(cell,this.primitive(flag));this.defineField(descriptor,attribute,cell);}
+                        const object=this.newCell();this.publish(object,{tag:"object",owner:descriptor});this.copy(object,result);
+                    }
+                    continue;
+                }
                 const owner=this.ordinaryOwner(atom);
-                if(!owner){incomplete();if(atom.tag==="unknown"||atom.tag==="opaque-object")this.activateOpaqueEffect(context);continue;}
+                if(!owner){incomplete(atom);if(atom.tag==="unknown"||atom.tag==="opaque-object")this.activateOpaqueEffect(context);continue;}
                 this.watch(rule,owner.shape);
                 if(!this.definitionsReady(owner,rule))continue;
-                if(this.opaqueShape(owner,context)||this.hasUnknownPropertyDefinitions(owner)){incomplete();continue;}
+                if(this.opaqueShape(owner,context)||this.hasUnknownPropertyDefinitions(owner)){if(owner.proxy)incomplete(atom);incomplete();continue;}
                 const names=key?keys!:this.ownerKeys(owner,rule);if(names===undefined)continue;if(names===null){incomplete();continue;}
                 // Intrinsic/function metadata and exotic own-key collections
                 // stay incomplete until represented by the shared owner graph.
@@ -3577,6 +3610,15 @@ class SourceValueFlow {
                 for (const [name, operation] of INITIAL_SOURCE_OPERATIONS.get(key) ?? []) {
                     const value = this.newCell();this.publish(value,this.operation(operation));this.defineField(fields,name,value);
                 }
+                if(descriptor.kind==="function"){
+                    // A global function (sec-function-properties-of-the-global-object)
+                    // is an ordinary built-in function object whose own keys are
+                    // exactly `length` and `name`; it inherits from %Function.prototype%.
+                    const name=this.newCell(),length=this.newCell();
+                    this.publish(name,this.primitive(key));this.publish(length,this.primitive(descriptor.length??0));
+                    this.defineField(fields,"length",length,false);this.defineField(fields,"name",name,false);
+                    fields.prototype=this.callablePrototype("ordinary");fields.closedOwn=true;fields.ordinary=true;
+                }
                 if(key==="String"||key==="Object"||key==="Reflect")for(const[operation,method]of SOURCE_NATIVE_METHODS)if(method.owner===key&&!INITIAL_SOURCE_OPERATIONS.get(key)?.has(method.name)){
                     const value=this.newCell();this.publish(value,this.operation(operation));this.defineField(fields,method.name,value,false);
                 }
@@ -3597,7 +3639,7 @@ class SourceValueFlow {
                     this.publish(value,this.primitive("JSON"));this.defineField(fields,tag,value);
                 }
                 if (descriptor.normalResult !== "not-callable") fields.prototype = this.callablePrototype("ordinary");
-                if(runtimeErrorKinds.has(key)){this.defineField(fields,"prototype",this.errorPrototype(key));if(key!=="Error")fields.prototype=this.globalBinding("Error");}
+                if(runtimeErrorKinds.has(key)){this.defineField(fields,"prototype",this.errorPrototype(key));if(key!=="Error")fields.prototype=this.intrinsicErrorConstructor();}
                 if(key==="Object")this.defineField(fields,"prototype",this.objectPrototype());
                 if(key==="Array")this.defineField(fields,"prototype",this.arrayPrototype());
                 if(key==="Map"||key==="Set")this.defineField(fields,"prototype",this.collectionPrototype(key));
@@ -3877,6 +3919,35 @@ class SourceValueFlow {
         }});
         this.copy(this.objectValue(objects,conversion),result);return result;
     }
+    /** The one known string value of a represented field, or undefined. */
+    private singleStringField(owner:ObjectOwner|null|undefined,key:string,rule:Rule):string|undefined {
+        const field=owner?.fields.get(key);if(!field)return undefined;this.watch(rule,field);
+        const values=[...field.values];
+        return values.length===1&&values[0]!.tag==="primitive"&&typeof values[0]!.value==="string"?values[0]!.value:undefined;
+    }
+    private logicalLeftSelects(atom: Atom, operator: ts.SyntaxKind): boolean {
+        const and = operator === ts.SyntaxKind.AmpersandAmpersandToken, or = operator === ts.SyntaxKind.BarBarToken;
+        switch (atom.tag) {
+            case "abrupt": case "pending-source": case "unknown": case "text-operation": return true;
+            case "primitive": { const value = atom.value; return and ? !value : or ? !!value : value === null || value === undefined; }
+            case "non-string": { const kinds = atom.kinds ?? (KIND_PRIMITIVE & ~KIND_STRING); return and ? !!(kinds & KIND_PRIMITIVE) : or ? !!(kinds & ~(KIND_UNDEFINED | KIND_NULL)) : !!(kinds & (KIND_UNDEFINED | KIND_NULL)); }
+            case "unknown-string": return and || or;
+            default: return or;
+        }
+    }
+    /** %Error% itself: the [[Prototype]] of every NativeError constructor is
+     * the intrinsic object (sec-properties-of-the-nativeerror-constructors),
+     * not the mutable global `Error` binding, which a script may overwrite. */
+    private intrinsicErrorConstructor():Cell {
+        const realm=this.currentRealm;let cell=this.intrinsicErrorConstructors.get(realm);
+        if(!cell){
+            cell=this.newCell();this.intrinsicErrorConstructors.set(realm,cell);
+            const binding=this.globalBinding("Error"),atom=[...binding.values].find(value=>value.tag==="builtin"&&value.name==="Error");
+            if(atom)this.publish(cell,atom);else this.copy(binding,cell);
+        }
+        return cell;
+    }
+    private readonly intrinsicErrorConstructors=new Map<SourceRealmRecord,Cell>();
     private callablePrototype(kind: DynamicFunctionKind): Cell {
         let cell = this.callablePrototypes.get(kind);
         if (!cell) {
@@ -3987,9 +4058,15 @@ class SourceValueFlow {
                 // reads retain their own effects above.
                 if(!state.proof.primitiveComplete){
                     // A primitive box remains an Object even when its
-                    // payload has no finite proof. Callable input uncertainty
-                    // keeps its existing conservative representation.
-                    this.publish(result,this.primitiveKinds(cell(atom))&KIND_FUNCTION?this.unknown:this.opaqueObject);
+                    // payload has no finite proof: a value of known primitive
+                    // kinds boxes to those wrappers with the unproven payload
+                    // (a computed String still has only `length` and index
+                    // own keys). Callable or object uncertainty keeps its
+                    // existing conservative representation.
+                    const kinds=this.primitiveKinds(cell(atom));
+                    if(kinds&(KIND_FUNCTION|KIND_OBJECT)||!(kinds&KIND_PRIMITIVE))this.publish(result,kinds&KIND_FUNCTION?this.unknown:this.opaqueObject);
+                    else for(const [mask,kind] of [[KIND_STRING,"string"],[KIND_NUMBER,"number"],[KIND_BOOLEAN,"boolean"],[KIND_BIGINT,"bigint"],[KIND_SYMBOL,"symbol"]] as const)
+                        if(kinds&mask)this.copy(this.boxedPrimitive(cell(atom),kind,context),result);
                 }
             }
         });
@@ -5049,8 +5126,14 @@ class SourceValueFlow {
             // ECMA-262 gives only Date.prototype and Symbol.prototype an own
             // @@toPrimitive; no global constructor or namespace object has
             // one, so ToPrimitive on them reaches toString/valueOf.
+            // A built-in function that is not a constructor (the Realm's
+            // global functions, Object.prototype's methods) owns exactly
+            // `length` and `name` (sec-ecmascript-standard-built-in-objects),
+            // so every other key is a known absence on it.
+            const plainFunction=current.tag==="builtin"&&(runtimeGlobalBindings.get(current.name)?.kind==="function"||runtimeObjectPrototypeDescriptors.has(current.name)&&current.normalResult!=="not-callable");
             const representedAbsence=current.tag==="builtin"&&(current.name==="Object"&&key===this.wellKnownSymbols.get("species")&&!runtimeObjectConstructorOwnKeys.has(key)||runtimeErrorKinds.has(current.name)&&key===this.wellKnownSymbols.get("hasInstance")||
-                key===this.wellKnownSymbols.get("toPrimitive")&&runtimeGlobalBindings.has(current.name));
+                key===this.wellKnownSymbols.get("toPrimitive")&&runtimeGlobalBindings.has(current.name)||
+                plainFunction&&!(typeof key==="string"&&(key==="name"||key==="length")));
             if (current.tag === "builtin" && !owner.closedOwn && !representedAbsence && !closedIndex && !presence?.values.has(this.primitive(true)) &&
                 !(typeof key === "string" && (runtimeObjectPrototypeMethods.has(key) || key === "constructor" ||
                     current.normalResult !== "not-callable" && (runtimeFunctionPrototypeMethods.has(key) || runtimeFunctionRestrictedProperties.includes(key))))) {
@@ -6145,8 +6228,15 @@ class SourceValueFlow {
             });
         } else if (ts.isBinaryExpression(node)) {
             if ([ts.SyntaxKind.CommaToken, ts.SyntaxKind.EqualsToken].includes(node.operatorToken.kind)) this.copy(this.cell(node.right), result);
-            else if (NAME_EVALUATING_ASSIGNMENTS.has(node.operatorToken.kind) || [ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.QuestionQuestionToken].includes(node.operatorToken.kind)) {
+            else if (NAME_EVALUATING_ASSIGNMENTS.has(node.operatorToken.kind)) {
                 this.copy(this.cell(node.left), result); this.copy(this.cell(node.right), result);
+            } else if ([ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.QuestionQuestionToken].includes(node.operatorToken.kind)) {
+                // The left operand is the result only when its value selects
+                // it: falsy for &&, truthy for ||, nullish for ??. Objects
+                // and callables are always truthy, so they never pass &&.
+                const left = this.cell(node.left), operator = node.operatorToken.kind;
+                this.copy(this.cell(node.right), result);
+                this.rule([left], () => { for (const atom of left.values) if (this.logicalLeftSelects(atom, operator)) this.publish(result, atom); });
             }
         } else if (ts.isTemplateExpression(node)) {
             const parts: Cell[] = [];
@@ -7022,9 +7112,15 @@ class SourceValueFlow {
                                     this.publish(result!, this.text("function () { [native code] }"));
                                 else if (receiver.tag === "builtin" && receiver.normalResult !== "not-callable")
                                     this.publish(result!, this.text(`function ${receiver.name}() { [native code] }`));
-                                else if(receiver.tag==="operation"){
-                                    const descriptor=SOURCE_NATIVE_METHODS.get(receiver.operation)??jsonOperations.get(receiver.operation as JSONSourceOperation);
-                                    this.publish(result!,descriptor?this.text(`function ${descriptor.name}() { [native code] }`):this.unknown);
+                                else if(receiver.tag==="operation"||receiver.tag==="intrinsic"){
+                                    // Every native callable prints as native code; the
+                                    // owner's `name` field gives the exact text when it
+                                    // is one known string, otherwise the text is an
+                                    // unknown String (never a plain unknown, which would
+                                    // read as an opaque effect).
+                                    const descriptor=receiver.tag==="operation"?SOURCE_NATIVE_METHODS.get(receiver.operation)??jsonOperations.get(receiver.operation as JSONSourceOperation):undefined;
+                                    const name=descriptor?.name??this.singleStringField(this.ordinaryOwner(receiver),"name",rule);
+                                    this.publish(result!,name!==undefined?this.text(`function ${name}() { [native code] }`):this.unknownString);
                                 }
                                 else this.publish(result!, this.unknown);
                             }

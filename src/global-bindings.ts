@@ -60,6 +60,8 @@ if(!runtimePathPosixOperations.size)throw new Error("missing native POSIX path o
  * Ambient declarations describe types, not the current value of a binding. */
 export interface RuntimeGlobalBinding {
     kind: "intrinsic" | "function" | "value";
+    /** Function kind only: the native `length` own property. */
+    length?: number;
     writable: boolean;
     configurable: boolean;
     enumerable: boolean;
@@ -233,8 +235,11 @@ export const runtimeGlobalBindings: ReadonlyMap<string, RuntimeGlobalBinding> = 
             if (kind !== "VALUE" && !result) throw new Error("invalid canonical Realm call result category");
             if (kind === "VALUE" && !attributes) throw new Error("invalid canonical Realm binding attributes");
             if (kind === "FUNCTION" && !functionAttributes) throw new Error("invalid canonical Realm function attributes");
+            const length = kind === "FUNCTION" ? Number(operands!.split(",")[0]) : undefined;
+            if (kind === "FUNCTION" && !Number.isInteger(length)) throw new Error("invalid canonical Realm function length");
             return [name!, {
                 kind: kind!.toLowerCase() as RuntimeGlobalBinding["kind"],
+                ...(length === undefined ? {} : {length}),
                 writable: kind !== "VALUE" || attributes![1] === "true",
                 configurable: kind !== "VALUE" || attributes![2] === "true",
                 enumerable: functionAttributes?.[2] === "true",
