@@ -103,6 +103,19 @@ const TEST262_HOST_GLOBAL_NAMES = new Set(["$262", "print"]);
  * typed and dynamic receivers. Keep call selection on this one method set;
  * the runtime descriptor collection owns the corresponding implementations. */
 const ORDINARY_STRING_PROTOTYPE_METHODS = new Set([
+    "anchor",
+    "big",
+    "blink",
+    "bold",
+    "fixed",
+    "fontcolor",
+    "fontsize",
+    "italics",
+    "link",
+    "small",
+    "strike",
+    "sub",
+    "sup",
     "at",
     "charAt",
     "charCodeAt",

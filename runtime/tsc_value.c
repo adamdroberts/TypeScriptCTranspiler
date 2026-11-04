@@ -1087,14 +1087,19 @@ static void error_intrinsics_initialize(void) {
                 true
             );
         }
-        tsc_object_define(
-            error_intrinsics[TSC_ERROR_ERROR].prototype,
-            tsc_str_from_lit("message", 7),
-            tsc_value_string(tsc_str_from_lit("", 0)),
-            true,
-            false,
-            true
-        );
+        /* Error.prototype and every NativeError/AggregateError prototype
+         * own `message` = "" (sec-error.prototype.message,
+         * sec-nativeerror.prototype.message, sec-aggregate-error.prototype.message). */
+        for (size_t i = 0; i < TSC_ERROR_KIND_COUNT; i++) {
+            tsc_object_define(
+                error_intrinsics[i].prototype,
+                tsc_str_from_lit("message", 7),
+                tsc_value_string(tsc_str_from_lit("", 0)),
+                true,
+                false,
+                true
+            );
+        }
         tsc_object_define(
             error_intrinsics[TSC_ERROR_ERROR].prototype,
             tsc_str_from_lit("toString", 8),
@@ -1128,6 +1133,7 @@ static void error_intrinsics_initialize(void) {
                 identity,
                 tsc_value_object(intrinsic->prototype)
             );
+            identity->func_prototype_writable = false;
             tsc_object_define(
                 intrinsic->prototype,
                 tsc_str_from_lit("constructor", 11),
@@ -1786,6 +1792,19 @@ typedef enum {
     TSC_STRING_PROTOTYPE_TO_WELL_FORMED,
     TSC_STRING_PROTOTYPE_TO_STRING,
     TSC_STRING_PROTOTYPE_VALUE_OF,
+    TSC_STRING_PROTOTYPE_HTML_ANCHOR,
+    TSC_STRING_PROTOTYPE_HTML_BIG,
+    TSC_STRING_PROTOTYPE_HTML_BLINK,
+    TSC_STRING_PROTOTYPE_HTML_BOLD,
+    TSC_STRING_PROTOTYPE_HTML_FIXED,
+    TSC_STRING_PROTOTYPE_HTML_FONTCOLOR,
+    TSC_STRING_PROTOTYPE_HTML_FONTSIZE,
+    TSC_STRING_PROTOTYPE_HTML_ITALICS,
+    TSC_STRING_PROTOTYPE_HTML_LINK,
+    TSC_STRING_PROTOTYPE_HTML_SMALL,
+    TSC_STRING_PROTOTYPE_HTML_STRIKE,
+    TSC_STRING_PROTOTYPE_HTML_SUB,
+    TSC_STRING_PROTOTYPE_HTML_SUP,
 } tsc_string_prototype_operation_t;
 
 typedef struct {
@@ -1831,7 +1850,105 @@ static const tsc_string_prototype_method_t string_prototype_methods[] = {
     { "toWellFormed", 12, 0.0, TSC_STRING_PROTOTYPE_TO_WELL_FORMED },
     { "toString", 8, 0.0, TSC_STRING_PROTOTYPE_TO_STRING },
     { "valueOf", 7, 0.0, TSC_STRING_PROTOTYPE_VALUE_OF },
+    { "anchor", 6, 1.0, TSC_STRING_PROTOTYPE_HTML_ANCHOR },
+    { "big", 3, 0.0, TSC_STRING_PROTOTYPE_HTML_BIG },
+    { "blink", 5, 0.0, TSC_STRING_PROTOTYPE_HTML_BLINK },
+    { "bold", 4, 0.0, TSC_STRING_PROTOTYPE_HTML_BOLD },
+    { "fixed", 5, 0.0, TSC_STRING_PROTOTYPE_HTML_FIXED },
+    { "fontcolor", 9, 1.0, TSC_STRING_PROTOTYPE_HTML_FONTCOLOR },
+    { "fontsize", 8, 1.0, TSC_STRING_PROTOTYPE_HTML_FONTSIZE },
+    { "italics", 7, 0.0, TSC_STRING_PROTOTYPE_HTML_ITALICS },
+    { "link", 4, 1.0, TSC_STRING_PROTOTYPE_HTML_LINK },
+    { "small", 5, 0.0, TSC_STRING_PROTOTYPE_HTML_SMALL },
+    { "strike", 6, 0.0, TSC_STRING_PROTOTYPE_HTML_STRIKE },
+    { "sub", 3, 0.0, TSC_STRING_PROTOTYPE_HTML_SUB },
+    { "sup", 3, 0.0, TSC_STRING_PROTOTYPE_HTML_SUP },
 };
+
+/* Annex B CreateHTML (B.2.2.2.1): one algorithm over a (tag, attribute)
+ * descriptor collection. The receiver converts before the attribute value,
+ * and every `"` code unit of the attribute value becomes `&quot;`. */
+typedef struct {
+    tsc_string_prototype_operation_t operation;
+    const char* tag;
+    size_t tag_len;
+    const char* attribute;
+    size_t attribute_len;
+} tsc_string_html_descriptor_t;
+
+static const tsc_string_html_descriptor_t string_html_descriptors[] = {
+    { TSC_STRING_PROTOTYPE_HTML_ANCHOR, "a", 1, "name", 4 },
+    { TSC_STRING_PROTOTYPE_HTML_BIG, "big", 3, NULL, 0 },
+    { TSC_STRING_PROTOTYPE_HTML_BLINK, "blink", 5, NULL, 0 },
+    { TSC_STRING_PROTOTYPE_HTML_BOLD, "b", 1, NULL, 0 },
+    { TSC_STRING_PROTOTYPE_HTML_FIXED, "tt", 2, NULL, 0 },
+    { TSC_STRING_PROTOTYPE_HTML_FONTCOLOR, "font", 4, "color", 5 },
+    { TSC_STRING_PROTOTYPE_HTML_FONTSIZE, "font", 4, "size", 4 },
+    { TSC_STRING_PROTOTYPE_HTML_ITALICS, "i", 1, NULL, 0 },
+    { TSC_STRING_PROTOTYPE_HTML_LINK, "a", 1, "href", 4 },
+    { TSC_STRING_PROTOTYPE_HTML_SMALL, "small", 5, NULL, 0 },
+    { TSC_STRING_PROTOTYPE_HTML_STRIKE, "strike", 6, NULL, 0 },
+    { TSC_STRING_PROTOTYPE_HTML_SUB, "sub", 3, NULL, 0 },
+    { TSC_STRING_PROTOTYPE_HTML_SUP, "sup", 3, NULL, 0 },
+};
+
+static tsc_value_t string_create_html_from_values(
+    tsc_value_t receiver,
+    tsc_value_t attribute_value,
+    const tsc_string_prototype_method_t* method
+) {
+    const tsc_string_html_descriptor_t* descriptor = NULL;
+    for (size_t index = 0; index < sizeof(string_html_descriptors) / sizeof(*string_html_descriptors); index++) {
+        if (string_html_descriptors[index].operation == method->operation) {
+            descriptor = &string_html_descriptors[index];
+            break;
+        }
+    }
+    if (!descriptor) tsc_panic("unknown String HTML method");
+    char label[64];
+    snprintf(label, sizeof(label), "String.prototype.%s", method->name);
+    string_require_object_coercible(receiver, label);
+    tsc_str_t* subject = tsc_value_to_string(receiver);
+    tsc_str_t* tag = tsc_str_from_lit(descriptor->tag, descriptor->tag_len);
+    tsc_str_t* open = tsc_str_concat(tsc_str_from_lit("<", 1), tag);
+    if (descriptor->attribute) {
+        tsc_str_t* value = tsc_value_to_string(attribute_value);
+        size_t len = 0;
+        const uint16_t* units = tsc_str_utf16_units(value, &len);
+        size_t quotes = 0;
+        for (size_t index = 0; index < len; index++) if (units[index] == '"') quotes++;
+        if (quotes) {
+            if (quotes > (SIZE_MAX - len) / 5) tsc_panic("String HTML attribute is too large");
+            size_t escaped_len = len + quotes * 5;
+            uint16_t* escaped = TSC_GC_MALLOC_ATOMIC(tsc_alloc_size(escaped_len, sizeof(uint16_t)));
+            size_t at = 0;
+            static const uint16_t quot[6] = { '&', 'q', 'u', 'o', 't', ';' };
+            for (size_t index = 0; index < len; index++) {
+                if (units[index] == '"') { memcpy(escaped + at, quot, sizeof(quot)); at += 6; }
+                else escaped[at++] = units[index];
+            }
+            value = tsc_str_from_units_range(escaped, 0, escaped_len);
+        }
+        open = tsc_str_concat_n(
+            6,
+            open,
+            tsc_str_from_lit(" ", 1),
+            tsc_str_from_lit(descriptor->attribute, descriptor->attribute_len),
+            tsc_str_from_lit("=\"", 2),
+            value,
+            tsc_str_from_lit("\"", 1)
+        );
+    }
+    return tsc_value_string(tsc_str_concat_n(
+        6,
+        open,
+        tsc_str_from_lit(">", 1),
+        subject,
+        tsc_str_from_lit("</", 2),
+        tag,
+        tsc_str_from_lit(">", 1)
+    ));
+}
 
 static tsc_value_t string_case_from_values(
     tsc_value_t receiver,
@@ -1965,6 +2082,20 @@ static tsc_value_t string_prototype_method_apply(
             return string_this_value_from_values(this_arg);
         case TSC_STRING_PROTOTYPE_VALUE_OF:
             return string_this_value_from_values(this_arg);
+        case TSC_STRING_PROTOTYPE_HTML_ANCHOR:
+        case TSC_STRING_PROTOTYPE_HTML_BIG:
+        case TSC_STRING_PROTOTYPE_HTML_BLINK:
+        case TSC_STRING_PROTOTYPE_HTML_BOLD:
+        case TSC_STRING_PROTOTYPE_HTML_FIXED:
+        case TSC_STRING_PROTOTYPE_HTML_FONTCOLOR:
+        case TSC_STRING_PROTOTYPE_HTML_FONTSIZE:
+        case TSC_STRING_PROTOTYPE_HTML_ITALICS:
+        case TSC_STRING_PROTOTYPE_HTML_LINK:
+        case TSC_STRING_PROTOTYPE_HTML_SMALL:
+        case TSC_STRING_PROTOTYPE_HTML_STRIKE:
+        case TSC_STRING_PROTOTYPE_HTML_SUB:
+        case TSC_STRING_PROTOTYPE_HTML_SUP:
+            return string_create_html_from_values(this_arg, first, method);
     }
     tsc_panic("unknown String prototype operation");
 }
@@ -2517,6 +2648,29 @@ static void symbol_constructor_define_value(
     );
 }
 
+/* Ordinary methods of the Symbol constructor (Symbol.for, Symbol.keyFor)
+ * are writable and configurable; only the well-known symbol values above
+ * are frozen. */
+static void symbol_constructor_define_method(
+    tsc_value_t constructor,
+    const char* name,
+    size_t name_len,
+    tsc_value_t value
+) {
+    (void)tsc_value_define_property_desc(
+        constructor,
+        tsc_str_from_lit(name, name_len),
+        value,
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true
+    );
+}
+
 tsc_value_t tsc_symbol_constructor_value(void) {
     if (primitive_symbol.constructor_initialized) return primitive_symbol.constructor;
     tsc_value_t constructor = tsc_value_function_builtin_named(
@@ -2526,13 +2680,13 @@ tsc_value_t tsc_symbol_constructor_value(void) {
         tsc_str_from_lit("Symbol", 6)
     );
     primitive_link_nonconstructable_constructor(&primitive_symbol, constructor);
-    symbol_constructor_define_value(
+    symbol_constructor_define_method(
         constructor,
         "for",
         3,
         tsc_value_function_builtin_named(symbol_for_apply, NULL, 1.0, tsc_str_from_lit("for", 3))
     );
-    symbol_constructor_define_value(
+    symbol_constructor_define_method(
         constructor,
         "keyFor",
         6,
@@ -3040,6 +3194,8 @@ typedef enum {
     TSC_GLOBAL_FUNCTION_DECODE_URI_COMPONENT,
     TSC_GLOBAL_FUNCTION_BTOA,
     TSC_GLOBAL_FUNCTION_ATOB,
+    TSC_GLOBAL_FUNCTION_ESCAPE,
+    TSC_GLOBAL_FUNCTION_UNESCAPE,
 } tsc_global_function_kind_t;
 
 typedef struct {
@@ -3050,6 +3206,84 @@ typedef struct {
     bool constructible, enumerable;
     size_t required_arguments;
 } tsc_global_function_descriptor_t;
+
+/* Annex B escape (B.2.1.1) and unescape (B.2.1.2) over UTF-16 code units.
+ * Output sizes are computed exactly before allocation. */
+static bool global_escape_keeps_unit(uint16_t unit) {
+    return (unit >= 'A' && unit <= 'Z') || (unit >= 'a' && unit <= 'z') || (unit >= '0' && unit <= '9') ||
+        unit == '@' || unit == '*' || unit == '_' || unit == '+' || unit == '-' || unit == '.' || unit == '/';
+}
+
+static tsc_str_t* global_escape(const tsc_str_t* input) {
+    static const char hex[] = "0123456789ABCDEF";
+    size_t len = 0;
+    const uint16_t* units = tsc_str_utf16_units(input, &len);
+    size_t out_len = 0;
+    for (size_t index = 0; index < len; index++) {
+        size_t width = global_escape_keeps_unit(units[index]) ? 1 : units[index] < 256 ? 3 : 6;
+        if (width > SIZE_MAX - out_len) tsc_panic("escape result is too large");
+        out_len += width;
+    }
+    uint16_t* out = TSC_GC_MALLOC_ATOMIC(tsc_alloc_size(out_len ? out_len : 1, sizeof(uint16_t)));
+    size_t at = 0;
+    for (size_t index = 0; index < len; index++) {
+        uint16_t unit = units[index];
+        if (global_escape_keeps_unit(unit)) {
+            out[at++] = unit;
+        } else if (unit < 256) {
+            out[at++] = '%';
+            out[at++] = (uint16_t)hex[unit >> 4];
+            out[at++] = (uint16_t)hex[unit & 15];
+        } else {
+            out[at++] = '%';
+            out[at++] = 'u';
+            out[at++] = (uint16_t)hex[(unit >> 12) & 15];
+            out[at++] = (uint16_t)hex[(unit >> 8) & 15];
+            out[at++] = (uint16_t)hex[(unit >> 4) & 15];
+            out[at++] = (uint16_t)hex[unit & 15];
+        }
+    }
+    return tsc_str_from_units_range(out, 0, out_len);
+}
+
+static int global_unescape_hex_value(uint16_t unit) {
+    if (unit >= '0' && unit <= '9') return unit - '0';
+    if (unit >= 'A' && unit <= 'F') return unit - 'A' + 10;
+    if (unit >= 'a' && unit <= 'f') return unit - 'a' + 10;
+    return -1;
+}
+
+static tsc_str_t* global_unescape(const tsc_str_t* input) {
+    size_t len = 0;
+    const uint16_t* units = tsc_str_utf16_units(input, &len);
+    uint16_t* out = TSC_GC_MALLOC_ATOMIC(tsc_alloc_size(len ? len : 1, sizeof(uint16_t)));
+    size_t at = 0;
+    for (size_t k = 0; k < len; k++) {
+        uint16_t unit = units[k];
+        if (unit == '%') {
+            if (k + 6 <= len && units[k + 1] == 'u') {
+                int digits[4];
+                bool hex = true;
+                for (size_t digit = 0; digit < 4; digit++) {
+                    digits[digit] = global_unescape_hex_value(units[k + 2 + digit]);
+                    if (digits[digit] < 0) hex = false;
+                }
+                if (hex) {
+                    unit = (uint16_t)((digits[0] << 12) | (digits[1] << 8) | (digits[2] << 4) | digits[3]);
+                    k += 5;
+                }
+            } else if (k + 3 <= len) {
+                int high = global_unescape_hex_value(units[k + 1]), low = global_unescape_hex_value(units[k + 2]);
+                if (high >= 0 && low >= 0) {
+                    unit = (uint16_t)((high << 4) | low);
+                    k += 2;
+                }
+            }
+        }
+        out[at++] = unit;
+    }
+    return tsc_str_from_units_range(out, 0, at);
+}
 
 static const tsc_global_function_descriptor_t global_function_descriptors[] = {
 #define TSC_GLOBAL_INTRINSIC(name, value, source_result)
@@ -3103,6 +3337,10 @@ static tsc_value_t global_function_apply(void* raw_descriptor, tsc_value_t this_
             return tsc_value_string(tsc_btoa(tsc_value_to_string(input)));
         case TSC_GLOBAL_FUNCTION_ATOB:
             return tsc_value_string(tsc_atob(tsc_value_to_string(input)));
+        case TSC_GLOBAL_FUNCTION_ESCAPE:
+            return tsc_value_string(global_escape(tsc_value_to_string(input)));
+        case TSC_GLOBAL_FUNCTION_UNESCAPE:
+            return tsc_value_string(global_unescape(tsc_value_to_string(input)));
     }
     tsc_panic("unknown global function descriptor");
     return tsc_value_undefined();
@@ -4306,7 +4544,6 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
             return value_event_listener_identity(ident->code.event_raw_identity.fn, ident->env, ident->code.event_raw_identity.identity);
         }
         if (str_lit_eq(key, "prototype") && tsc_function_has_prototype_metadata(ident)) return tsc_function_own_prototype(ident, v);
-        if (str_lit_eq(key, "__proto__")) return ident->prototype;
         if (ident->props && tsc_object_has_own(ident->props, key)) {
             return tsc_object_get_receiver(ident->props, key, v);
         }
@@ -4465,7 +4702,6 @@ tsc_value_t tsc_value_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc
             return value_event_listener_identity(ident->code.event_raw_identity.fn, ident->env, ident->code.event_raw_identity.identity);
         }
         if (str_lit_eq(key, "prototype") && tsc_function_has_prototype_metadata(ident)) return tsc_function_own_prototype(ident, v);
-        if (str_lit_eq(key, "__proto__")) return ident->prototype;
         if (ident->props && tsc_object_has_own(ident->props, key)) {
             return tsc_object_get_receiver(ident->props, key, receiver);
         }
@@ -5555,10 +5791,6 @@ bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* fn = (tsc_function_identity_t*)value_ptr(v);
-        if (str_lit_eq(key, "__proto__")) {
-            if (!value_is_valid_prototype(value)) return true;
-            return tsc_value_set_prototype_of(v, value);
-        }
         if (str_lit_eq(key, "prototype") && tsc_function_has_prototype_metadata(fn)) {
             if (!fn->func_prototype_writable) return false;
             tsc_function_identity_set_own_prototype(fn, value);
@@ -8093,20 +8325,24 @@ tsc_value_t tsc_value_stringify_indexed_range(tsc_value_t recv, size_t len, tsc_
     void* volatile receiver_root=tsc_value_gc_root(recv);
     void* volatile separator_root=tsc_value_gc_root(separator);
     tsc_str_t* volatile sep = tsc_value_is_undefined(separator) ? tsc_str_from_lit(",", 1) : tsc_value_to_string(separator);
-    tsc_str_t* volatile out = tsc_str_from_lit("", 0);
+    /* Every element converts in index order into one part collection, then
+     * the result materializes once: repeated pairwise concatenation of
+     * immutable Strings would copy the growing prefix for every element. */
+    tsc_array_t* volatile parts = tsc_array_new(sizeof(tsc_str_t*), 0);
     tsc_array_t* volatile empty_args=locale?tsc_array_new(sizeof(tsc_value_t),0):NULL;
     tsc_str_t* volatile method_name=locale?tsc_str_from_lit("toLocaleString",14):NULL;
     for (size_t i = 0; i < len; ++i) {
-        if (i > 0) out = tsc_str_concat(out, sep);
+        tsc_str_t* part = NULL;
+        if (i > 0) { part = sep; tsc_array_push_raw(parts, &part); }
         tsc_value_t value=tsc_value_get_index(recv,(double)i);void* volatile value_root=tsc_value_gc_root(value);
         if(locale&&!tsc_value_is_nullish(value)){
             value=tsc_value_invoke(value,method_name,empty_args);value_root=tsc_value_gc_root(value);
-            out=tsc_str_concat(out,tsc_value_to_string(value));
-        }else if(!locale)out=tsc_str_concat(out,value_join_part(value));
+            part=tsc_value_to_string(value);tsc_array_push_raw(parts,&part);
+        }else if(!locale){part=value_join_part(value);tsc_array_push_raw(parts,&part);}
         (void)value_root;
     }
     (void)receiver_root;(void)separator_root;
-    return tsc_value_string(out);
+    return tsc_value_string(tsc_str_concat_parts(parts));
 }
 tsc_value_t tsc_value_method_join(tsc_value_t recv, tsc_value_t separator) {
     void* volatile receiver_root=tsc_value_gc_root(recv);void* volatile separator_root=tsc_value_gc_root(separator);

@@ -178,6 +178,30 @@ static tsc_value_t object_prototype_legacy_accessor(void* env, tsc_value_t this_
     return tsc_value_undefined();
 }
 
+/* Annex B B.2.2.1: Object.prototype.__proto__ is an own accessor. Every
+ * ordinary object inherits it through the prototype chain, so objects with
+ * a null prototype and module namespaces read undefined, as specified. */
+static tsc_value_t object_prototype_proto_get(void* env, tsc_value_t receiver) {
+    (void)env;
+    if (tsc_value_is_nullish(receiver)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.prototype.__proto__ getter called on null or undefined"));
+    }
+    return tsc_value_get_prototype_of(tsc_value_to_object(receiver));
+}
+
+static bool object_prototype_proto_set(void* env, tsc_value_t receiver, tsc_value_t value) {
+    (void)env;
+    if (tsc_value_is_nullish(receiver)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.prototype.__proto__ setter called on null or undefined"));
+    }
+    if (!value_is_valid_prototype(value)) return true;
+    if (!value_is_box(receiver) || (value_tag(receiver) != TSC_VALUE_TAG_OBJECT && value_tag(receiver) != TSC_VALUE_TAG_ARRAY && value_tag(receiver) != TSC_VALUE_TAG_FUNCTION)) return true;
+    if (!tsc_value_set_prototype_of(receiver, value)) {
+        tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("Object.prototype.__proto__ setter: cannot set the prototype of this object"));
+    }
+    return true;
+}
+
 static void object_prototype_define_method(tsc_object_t* prototype, const char* name, size_t len, double arity, tsc_generic_function_t fn, void* env) {
     tsc_object_define(
         prototype,
@@ -209,6 +233,14 @@ tsc_value_t tsc_value_object_prototype(void) {
             object_prototype_define_method(prototype, #name, sizeof(#name) - 1, arity, fn, env);
         #include "tsc_object_prototype_methods.def"
         #undef TSC_OBJECT_PROTOTYPE_METHOD
+        (void)tsc_object_define_accessor(
+            prototype,
+            tsc_str_from_lit("__proto__", 9),
+            object_prototype_proto_get, NULL, true,
+            object_prototype_proto_set, NULL, true,
+            false, true,
+            true, true
+        );
         /* Complete the reciprocal intrinsic link before user code can read
          * an inherited constructor, even when no global Object read has
          * occurred. Reentry sees the already published prototype. */
@@ -836,10 +868,6 @@ bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value,
         ) {
             return tsc_value_set_prop_receiver(o->prototype, key, value, receiver);
         }
-        if (str_lit_eq(key, "__proto__")) {
-            if (!value_is_valid_prototype(value)) return true;
-            return tsc_value_set_prototype_of(receiver, value);
-        }
         return value_set_receiver_own_data(receiver, key, value);
     }
 }
@@ -995,6 +1023,20 @@ bool tsc_object_define_native_data(tsc_object_t* o, tsc_str_t* key,
     return true;
 }
 
+/* A native accessor identity is created from its C entry point and carries
+ * no name of its own. Its first property definition applies SetFunctionName
+ * with the "get"/"set" prefix (sec-setfunctionname), as the emitter does for
+ * source accessors; source functions already carry their names. */
+static tsc_value_t object_named_accessor_identity(tsc_value_t function, tsc_str_t* key, const char* prefix) {
+    if (!value_is_box(function) || value_tag(function) != TSC_VALUE_TAG_FUNCTION) return function;
+    tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(function);
+    if (identity->kind != TSC_FUNCTION_IDENTITY_GETTER && identity->kind != TSC_FUNCTION_IDENTITY_SETTER) return function;
+    if (identity->name && identity->name->len) return function;
+    (void)tsc_value_function_with_property_name(function, key, tsc_str_from_cstr(prefix));
+    identity->name = (tsc_str_t*)value_ptr(tsc_value_get_prop(function, tsc_str_from_lit("name", 4)));
+    return function;
+}
+
 bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_getter_t getter, void* getter_env, bool has_getter, tsc_accessor_setter_t setter, void* setter_env, bool has_setter, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
     double byte_index = 0;
     if (tsc_integer_indexed_key(o, key, &byte_index)) return false;
@@ -1006,9 +1048,9 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
             return tsc_value_define_accessor_desc(o->proxy_target, key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
         }
         tsc_proxy_require_callable_trap(trap, "Proxy defineProperty trap must be callable");
-        tsc_value_t getter_value = has_getter ? value_accessor_getter_identity(getter, getter_env) : tsc_value_undefined();
+        tsc_value_t getter_value = has_getter ? object_named_accessor_identity(value_accessor_getter_identity(getter, getter_env), key, "get") : tsc_value_undefined();
         void* volatile getter_root = tsc_value_gc_root(getter_value); (void)getter_root;
-        tsc_value_t setter_value = has_setter ? value_accessor_setter_identity(setter, setter_env) : tsc_value_undefined();
+        tsc_value_t setter_value = has_setter ? object_named_accessor_identity(value_accessor_setter_identity(setter, setter_env), key, "set") : tsc_value_undefined();
         void* volatile setter_root = tsc_value_gc_root(setter_value); (void)setter_root;
         tsc_descriptor_record_t record = {.present = 0};
         if (has_getter) {record.present |= TSC_DESCRIPTOR_BIT(GET); record.values[TSC_DESCRIPTOR_GET] = getter_value;}
@@ -1056,10 +1098,10 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
         prop->native_data = false;
         prop->getter = next_getter;
         prop->getter_env = next_getter_env;
-        object_prop_store_getter_value(prop, value_accessor_getter_identity(next_getter, next_getter_env));
+        object_prop_store_getter_value(prop, object_named_accessor_identity(value_accessor_getter_identity(next_getter, next_getter_env), key, "get"));
         prop->setter = next_setter;
         prop->setter_env = next_setter_env;
-        object_prop_store_setter_value(prop, value_accessor_setter_identity(next_setter, next_setter_env));
+        object_prop_store_setter_value(prop, object_named_accessor_identity(value_accessor_setter_identity(next_setter, next_setter_env), key, "set"));
         prop->writable = false;
         prop->enumerable = next_enumerable;
         prop->configurable = next_configurable;
@@ -1075,10 +1117,10 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
     o->props[o->len].native_data = false;
     o->props[o->len].getter = has_getter ? getter : NULL;
     o->props[o->len].getter_env = has_getter ? getter_env : NULL;
-    object_prop_store_getter_value(&o->props[o->len], value_accessor_getter_identity(o->props[o->len].getter, o->props[o->len].getter_env));
+    object_prop_store_getter_value(&o->props[o->len], object_named_accessor_identity(value_accessor_getter_identity(o->props[o->len].getter, o->props[o->len].getter_env), key, "get"));
     o->props[o->len].setter = has_setter ? setter : NULL;
     o->props[o->len].setter_env = has_setter ? setter_env : NULL;
-    object_prop_store_setter_value(&o->props[o->len], value_accessor_setter_identity(o->props[o->len].setter, o->props[o->len].setter_env));
+    object_prop_store_setter_value(&o->props[o->len], object_named_accessor_identity(value_accessor_setter_identity(o->props[o->len].setter, o->props[o->len].setter_env), key, "set"));
     o->props[o->len].writable = false;
     o->props[o->len].enumerable = has_enumerable ? enumerable : false;
     o->props[o->len].configurable = has_configurable ? configurable : false;
@@ -1229,9 +1271,6 @@ tsc_value_t tsc_object_get_receiver(const tsc_object_t* o, const tsc_str_t* key,
         (value_tag(o->prototype) == TSC_VALUE_TAG_ARRAY || value_tag(o->prototype) == TSC_VALUE_TAG_FUNCTION)
     ) {
         return tsc_value_get_prop_receiver(o->prototype, key, receiver);
-    }
-    if (!o->is_module_namespace && str_lit_eq(key, "__proto__")) {
-        return tsc_value_get_prototype_of(receiver);
     }
     return tsc_value_undefined();
 }

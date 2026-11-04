@@ -59,6 +59,8 @@ TSC_GLOBAL_FUNCTION(decodeURI, 1.0, TSC_GLOBAL_FUNCTION_DECODE_URI, false, false
 TSC_GLOBAL_FUNCTION(decodeURIComponent, 1.0, TSC_GLOBAL_FUNCTION_DECODE_URI_COMPONENT, false, false, 0, UNKNOWN)
 TSC_GLOBAL_FUNCTION(btoa, 1.0, TSC_GLOBAL_FUNCTION_BTOA, true, true, 1, UNKNOWN)
 TSC_GLOBAL_FUNCTION(atob, 1.0, TSC_GLOBAL_FUNCTION_ATOB, true, true, 1, UNKNOWN)
+TSC_GLOBAL_FUNCTION(escape, 1.0, TSC_GLOBAL_FUNCTION_ESCAPE, false, false, 0, UNKNOWN)
+TSC_GLOBAL_FUNCTION(unescape, 1.0, TSC_GLOBAL_FUNCTION_UNESCAPE, false, false, 0, UNKNOWN)
 TSC_GLOBAL_VALUE(globalThis, built_value, true, true)
 TSC_GLOBAL_VALUE(undefined, tsc_value_undefined(), false, false)
 TSC_GLOBAL_VALUE(NaN, tsc_value_num(NAN), false, false)
