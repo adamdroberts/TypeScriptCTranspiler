@@ -1559,6 +1559,11 @@ void tsc_dynamic_stat_hit(tsc_dynamic_stat_kind_t kind) {
 
 void tsc_bootstrap(int argc, char** argv) {
     TSC_GC_INIT();
+#ifndef TSC_NO_GC
+    /* Failed heap expansion is a catchable RangeError for the operations
+     * that permit it; the collector's own warnings never reach stderr. */
+    if (!getenv("TSC_GC_WARNINGS")) GC_set_warn_proc(GC_ignore_warn_proc);
+#endif
 #ifdef TSC_THREADS
 #ifndef TSC_NO_GC
     GC_allow_register_threads();
@@ -2388,7 +2393,9 @@ static double tsc_make_timeout(tsc_timeout_fn_t fn, void* env, double delay,bool
     }
     double id = g_next_timer_id++;
     double delay_ms = raw?delay:tsc_timer_delay_ms(delay);
-    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, false, !raw, delay_ms, tsc_timer_now() + delay_ms };
+    /* Raw timers carry exact runtime deadlines (Atomics waiters): they start
+     * from the live clock so a waiter never resolves before its timeout. */
+    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, false, !raw, delay_ms, (raw ? tsc_now_ms() : tsc_timer_now()) + delay_ms };
     return id;
 }
 

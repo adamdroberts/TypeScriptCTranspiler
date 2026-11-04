@@ -7911,10 +7911,9 @@ static void date_intrinsic_initialize(void) {
     if (date_intrinsic_initialized) return;
     tsc_runtime_lock();
     if (!date_intrinsic_initialized) {
-        tsc_date_t* prototype_date = tsc_date_from_ms(NAN);
-        date_prototype_object = tsc_object_new_class(prototype_date);
-        date_prototype_object->is_date = true;
-        prototype_date->object = date_prototype_object;
+        /* Date.prototype is an ordinary object without a [[DateValue]]
+         * internal slot: Date.prototype.getTime() throws a TypeError. */
+        date_prototype_object = tsc_object_new();
         tsc_value_t prototype = tsc_value_object(date_prototype_object);
 
         date_constructor = tsc_value_function_named_kind(

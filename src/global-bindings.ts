@@ -205,6 +205,11 @@ export const runtimePrimitiveDescriptors:ReadonlyMap<string,{kind:string;constru
         .map(([,kind,name])=>[name!,{kind:kind!.toLowerCase(),constructible:primitiveConstructors.has(kind!.toLowerCase())}]),
 );
 function primitiveMethodNames(table:string):string[]{const body=new RegExp("static const [^;]+\\b"+table+"\\[\\] = \\{([\\s\\S]*?)\\n\\};").exec(primitiveSource)?.[1];if(!body)throw new Error("missing canonical primitive method table "+table);return [...body.matchAll(/\{ "(\w+)"/g)].map(match=>match[1]!);}
+/** String.prototype method identities with their native lengths (the canonical runtime table). */
+export const runtimeStringPrototypeMethods:ReadonlyMap<string,{length:number}>=new Map(
+    [...(/static const [^;]+\bstring_prototype_methods\[\] = \{([\s\S]*?)\n\};/.exec(primitiveSource)?.[1]??"").matchAll(/\{ "(\w+)", \d+, ([0-9.]+), TSC_STRING_PROTOTYPE_\w+ \}/g)]
+        .map(match=>[match[1]!,{length:Number(match[2])}] as const));
+if(!runtimeStringPrototypeMethods.size)throw new Error("missing native String.prototype method descriptors");
 export const runtimePrimitivePrototypeMembers:ReadonlyMap<string,readonly string[]>=new Map([
     ["string",[...primitiveMethodNames("string_prototype_methods"),...[...primitiveSource.matchAll(/\(tsc_object_t\*\)value_ptr\(prototype\),\s*tsc_str_from_lit\("(\w+)"/g)].map(match=>match[1]!)]],
     ["number",primitiveMethodNames("number_format_methods")],

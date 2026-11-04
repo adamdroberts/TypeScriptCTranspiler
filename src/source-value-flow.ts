@@ -23,7 +23,7 @@ import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, functionConstructorSourceKey, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
 import {declarativeSourceBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding, sourceBindingTarget} from "./source-bindings";
-import {runtimeDynamicFunctionDescriptors,runtimeGeneratorMethods,runtimeCallbackTimerDescriptors,runtimeAtomicsMethods,runtimeTypedArrayDescriptors,runtimeMathMethods,runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeBufferExports, runtimeChildProcessOperations, runtimeUtilExports, runtimeFsExports, runtimeFsConstants, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeObjectPrototypeMethods, runtimeObjectPrototypeDescriptors, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
+import {runtimeDynamicFunctionDescriptors,runtimeGeneratorMethods,runtimeCallbackTimerDescriptors,runtimeAtomicsMethods,runtimeTypedArrayDescriptors,runtimeMathMethods,runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeBufferExports, runtimeChildProcessOperations, runtimeUtilExports, runtimeFsExports, runtimeFsConstants, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeStringPrototypeMethods, runtimeObjectPrototypeMethods, runtimeObjectPrototypeDescriptors, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
     readonly roots?: readonly string[];
@@ -68,7 +68,7 @@ type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpressio
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
 type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-has-own:${"static"|"prototype"}` | `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}`;
+    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
 type Primitive = SourcePrimitive;
 /** Callables and collection-iterator cells reachable from one escaping value;
  * a sink forwards them into one escaping call. */
@@ -101,6 +101,30 @@ const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operati
         ["getOwnPropertyDescriptor", "own-descriptor"], ["getOwnPropertyDescriptors", "own-descriptors"], ["getOwnPropertyNames", "object-own-keys:string"], ["getOwnPropertySymbols", "object-own-keys:symbol"]])],
     ["Reflect", new Map([["ownKeys", "reflect-own-keys"], ["get", "reflect-get"], ["getPrototypeOf", "reflect-get-prototype"], ["setPrototypeOf", "set-prototype:reflect"], ["apply", "reflect-apply"], ["construct", "construct"],
         ["defineProperty", "define-property"], ["set", "set-property"], ["deleteProperty", "delete-property"], ["getOwnPropertyDescriptor", "own-descriptor"]])],
+]);
+/** Primitive prototype methods (keyed "<kind>:<name>") whose result kind is
+ * fixed and which run no user code on a primitive receiver with primitive
+ * arguments: a String method converts any non-nullish, non-Symbol primitive
+ * receiver with ToString; a Number/BigInt method accepts only its own kind
+ * (thisNumberValue / thisBigIntValue throw otherwise). The RegExp protocol
+ * methods (match, matchAll, replace, replaceAll, search, split) resolve
+ * @@match-style members through String.prototype / RegExp.prototype and
+ * stay opaque. */
+type PrimitiveMemberResult={string?:true;number?:true;boolean?:true;undefined?:true};
+const PRIMITIVE_MEMBER_RESULTS:ReadonlyMap<string,PrimitiveMemberResult>=new Map<string,PrimitiveMemberResult>([
+    ...["charAt","concat","repeat","padStart","padEnd","slice","substring","substr","trim","trimStart","trimEnd","toLowerCase","toUpperCase","toLocaleLowerCase","toLocaleUpperCase","normalize","toWellFormed","anchor","big","blink","bold","fixed","fontcolor","fontsize","italics","link","small","strike","sub","sup"].map(name=>["string:"+name,{string:true as const}] as const),
+    ["string:at",{string:true,undefined:true}],
+    ...["charCodeAt","indexOf","lastIndexOf","localeCompare"].map(name=>["string:"+name,{number:true as const}] as const),
+    ["string:codePointAt",{number:true,undefined:true}],
+    ...["includes","startsWith","endsWith","isWellFormed"].map(name=>["string:"+name,{boolean:true as const}] as const),
+    ...["toFixed","toExponential","toPrecision","toLocaleString"].map(name=>["number:"+name,{string:true as const}] as const),
+    ["bigint:toLocaleString",{string:true}],
+]);
+/** Native `length` of every represented primitive prototype method. */
+const PRIMITIVE_MEMBER_LENGTHS:ReadonlyMap<string,number>=new Map<string,number>([
+    ...[...runtimeStringPrototypeMethods].map(([name,descriptor])=>["string:"+name,descriptor.length] as const),
+    ...["toFixed","toExponential","toPrecision"].map(name=>["number:"+name,1] as const),
+    ["number:toLocaleString",0],["bigint:toLocaleString",0],
 ]);
 const SOURCE_NATIVE_METHODS:ReadonlyMap<Operation,{name:string;length:number;owner:"Array"|"Function"|"String"|"Object"|"Reflect"|null;opaque:boolean}>=(()=>{
     const methods=new Map<Operation,{name:string;length:number;owner:"Array"|"Function"|"String"|"Object"|"Reflect"|null;opaque:boolean}>();
@@ -349,6 +373,7 @@ class SourceValueFlow {
     private readonly errorPrototypes = new Map<string,Cell>();
     private readonly primitivePrototypes = new Map<string,Cell>();
     private readonly typedArrayPrototypes = new Map<string,Cell>();
+    private readonly typedArrayConstructions = new Map<ts.Node,Set<number>>();
     private readonly atomicsWaitResults = new Map<ts.Node,Cell>();
     private readonly promiseConstructions = new Map<ts.Node,Map<string,Cell>>();
     private readonly promiseDestinations = new Map<Cell,Map<Cell,SourcePromiseDestination>>();
@@ -3664,7 +3689,11 @@ class SourceValueFlow {
                 if(key==="Iterator")this.defineField(fields,"prototype",this.iteratorPrototype());
                 if(runtimePrimitiveDescriptors.has(key))this.defineField(fields,"prototype",this.primitivePrototype(key),false);
                 const element=runtimeTypedArrayDescriptors.get(key);
-                if(element){const width=this.newCell();this.publish(width,this.primitive(element.width));this.defineField(fields,"BYTES_PER_ELEMENT",width,false);this.defineField(fields,"prototype",this.typedArrayPrototype(key,width),false);}
+                if(element){
+                    const width=this.newCell(),name=this.newCell(),length=this.newCell();this.publish(width,this.primitive(element.width));this.publish(name,this.primitive(key));this.publish(length,this.primitive(3));
+                    this.defineField(fields,"BYTES_PER_ELEMENT",width,false);this.defineField(fields,"prototype",this.typedArrayPrototype(key,width),false);
+                    this.defineField(fields,"name",name,false);this.defineField(fields,"length",length,false);
+                }
                 if(key==="Symbol") {
                     for (const [name, symbol] of this.wellKnownSymbols) {
                         const value = this.newCell(); this.publish(value, this.primitive(symbol)); this.defineField(fields, name, value);
@@ -3982,8 +4011,17 @@ class SourceValueFlow {
         this.defineField(owner,"async",async);this.defineField(owner,"value",value);
         return result;
     }
-    private typedArrayPrototype(name:string,width:Cell):Cell {
+    /** A TypedArray construction allocates through newTarget.prototype, falling
+     * back to the intrinsic %TypedArray% subclass prototype (GetPrototypeFromConstructor). */
+    private typedArrayInstancePrototype(owner:ObjectOwner,name:string,newTarget:Cell,context:ts.Node):void {
+        let targets=this.typedArrayConstructions.get(context);if(!targets){targets=new Set();this.typedArrayConstructions.set(context,targets);}
+        if(targets.has(newTarget.id))return;targets.add(newTarget.id);
+        owner.prototype??=this.newCell();const prototype=this.property(newTarget,"prototype",context),fallback=this.typedArrayPrototype(name);
+        this.rule([prototype],()=>{for(const atom of prototype.values){if(this.ordinaryOwner(atom)||atom.tag==="unknown"||atom.tag==="opaque-object")this.publish(owner.prototype!,atom);else if(atom.tag!=="abrupt"&&atom.tag!=="pending-source")this.copy(fallback,owner.prototype!);}});
+    }
+    private typedArrayPrototype(name:string,width?:Cell):Cell {
         let value=this.typedArrayPrototypes.get(name);if(value)return value;
+        if(!width){width=this.newCell();this.publish(width,this.primitive(runtimeTypedArrayDescriptors.get(name)!.width));}
         value=this.newCell();this.typedArrayPrototypes.set(name,value);
         const parent=this.newCell();this.publish(parent,this.unknown);
         const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:parent};
@@ -3998,15 +4036,19 @@ class SourceValueFlow {
         this.copy(this.opaqueMutation,owner.shape);this.publish(value,{tag:"object",owner});
         if(descriptor.constructible)owner.boxed!.set(descriptor.kind,this.primitiveDefault(descriptor.kind));
         for(const [member,operation]of [["valueOf",`primitive-value:${descriptor.kind}`],["toString",`primitive-text:${descriptor.kind}`]] as const){const method=this.newCell();this.publish(method,this.operation(operation));this.defineField(owner,member,method,false);}
-        for(const name of runtimePrimitivePrototypeMembers.get(descriptor.kind)??[]){if(name==="valueOf"||name==="toString")continue;const method=this.newCell();this.publish(method,this.unknown);this.defineField(owner,name,method,false);}
+        for(const name of runtimePrimitivePrototypeMembers.get(descriptor.kind)??[]){if(name==="valueOf"||name==="toString")continue;const method=this.newCell();
+            if(PRIMITIVE_MEMBER_LENGTHS.has(`${descriptor.kind}:${name}`))this.publish(method,this.operation(`primitive-member:${descriptor.kind}:${name}`));else this.publish(method,this.unknown);
+            this.defineField(owner,name,method,false);}
         if(descriptor.kind==="string"){const iterator=this.newCell();this.publish(iterator,this.unknown);this.defineField(owner,this.wellKnownSymbols.get("iterator")!,iterator,false);this.defineField(owner,"length",this.primitiveDefault("number"),false);}
-        if(descriptor.kind==="number"||descriptor.kind==="bigint"){const method=this.newCell();this.publish(method,this.unknown);this.defineField(owner,"toLocaleString",method,false);}
+        if(descriptor.kind==="number"||descriptor.kind==="bigint"){const method=this.newCell();this.publish(method,this.operation(`primitive-member:${descriptor.kind}:toLocaleString`));this.defineField(owner,"toLocaleString",method,false);}
         if(descriptor.kind==="symbol"){const getter=this.newCell();this.publish(getter,this.unknown);this.ownPresence(owner,"description").initial=true;this.defineAccessor(owner,"description","get",getter,this.program.getSourceFiles().find(file=>!file.isDeclarationFile)!);}
         this.defineField(owner,"constructor",this.globalBinding(name),false);
         if(descriptor.kind==="symbol"){const method=this.newCell();this.publish(method,this.operation("primitive-value:symbol"));this.defineField(owner,this.wellKnownSymbols.get("toPrimitive")!,method,false);}
         if(descriptor.kind==="symbol"||descriptor.kind==="bigint"){const tag=this.newCell();this.publish(tag,this.primitive(name));this.defineField(owner,this.wellKnownSymbols.get("toStringTag")!,tag,false);}
         return value;
     }
+    private readonly atomCells=new Map<Atom,Cell>();
+    private atomCell(atom:Atom):Cell {let cell=this.atomCells.get(atom);if(!cell){cell=this.newCell();this.atomCells.set(atom,cell);this.publish(cell,atom);}return cell;}
     private primitiveDefault(kind:string):Cell {let value=this.primitiveDefaults.get(kind);if(!value){value=this.newCell();this.primitiveDefaults.set(kind,value);this.publish(value,this.primitive(kind==="number"?0:kind==="string"?"":false));}return value;}
     private defaultedPrimitiveInput(input:Cell,kind:string):Cell {let kinds=this.defaultedPrimitiveInputs.get(input);if(!kinds){kinds=new Map();this.defaultedPrimitiveInputs.set(input,kinds);}let result=kinds.get(kind);if(!result){result=this.newCell();kinds.set(kind,result);this.copy(input,result);this.copy(this.primitiveDefault(kind),result);this.returnTransforms.set(result,{kind:"projection",inputs:[input],evaluate:inputs=>this.defaultedPrimitiveInput(inputs[0]!,kind)});}return result;}
     private booleanPrimitive(input:Cell):Cell {
@@ -4972,6 +5014,11 @@ class SourceValueFlow {
                 const operation=atom.operation.slice("math-member:".length),descriptor=runtimeMathMethods.get(operation)!,name=this.newCell(),length=this.newCell();this.publish(name,this.primitive(operation));this.publish(length,this.primitive(descriptor.length));this.defineField(owner,"name",name);this.defineField(owner,"length",length);
             }return owner;
         }
+        if(atom.tag==="operation"&&atom.operation.startsWith("primitive-member:")){
+            let owner=this.intrinsicOwners.get(atom);if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);this.copy(this.opaqueMutation,owner.shape);
+                const member=atom.operation.slice("primitive-member:".length),name=this.newCell(),length=this.newCell();this.publish(name,this.primitive(member.slice(member.indexOf(":")+1)));this.publish(length,this.primitive(PRIMITIVE_MEMBER_LENGTHS.get(member)!));this.defineField(owner,"name",name,false);this.defineField(owner,"length",length,false);
+            }return owner;
+        }
         if(atom.tag==="operation"&&atom.operation.startsWith("set-composition:")){
             let owner=this.intrinsicOwners.get(atom);if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);this.copy(this.opaqueMutation,owner.shape);
                 const name=this.newCell(),length=this.newCell(),operation=atom.operation.slice("set-composition:".length);this.publish(name,this.primitive([...runtimeSetCompositionMethods].find(([,value])=>value===operation)![0]));this.publish(length,this.primitive(1));this.defineField(owner,"name",name);this.defineField(owner,"length",length);
@@ -5091,6 +5138,32 @@ class SourceValueFlow {
         if (atom.tag === "unknown" || atom.tag === "opaque-object") {
             this.publish(result, this.unknown);
             if (handler) this.publish(handler, this.unknown);
+            return;
+        }
+        // GetValue on a primitive base (sec-getvalue): the wrapper object's own
+        // properties are only a String's length and indices (handled above);
+        // every other key continues on the kind's intrinsic prototype with the
+        // primitive itself as the receiver. An unknown String's length is a
+        // Number and its indices are single code units or undefined.
+        if(atom.tag==="primitive"||atom.tag==="unknown-string"||atom.tag==="text-operation"||atom.tag==="non-string"){
+            const kinds=atom.tag==="primitive"?({undefined:KIND_UNDEFINED,boolean:KIND_BOOLEAN,number:KIND_NUMBER,bigint:KIND_BIGINT,string:KIND_STRING,symbol:KIND_SYMBOL} as Record<string,number>)[typeof atom.value]!:
+                atom.tag==="unknown-string"?KIND_STRING:atom.tag==="non-string"?(atom.kinds??(KIND_PRIMITIVE&~KIND_STRING)):this.primitiveKinds(this.atomCell(atom));
+            if(kinds&(KIND_UNDEFINED|KIND_NULL)){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.nativeException(context!));}
+            if(ownOnly){
+                if(kinds&KIND_STRING&&typeof key==="string"&&(key==="length"||Number.isSafeInteger(Number(key))&&Number(key)>=0&&String(Number(key))===key))this.publish(result,this.unknown);
+                else this.publish(result,this.primitive(undefined));
+                return;
+            }
+            if(kinds&KIND_STRING&&atom.tag!=="primitive"&&typeof key==="string"){
+                if(key==="length"){let number=this.numericValues.get(KIND_NUMBER);if(!number){number={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,number);}this.publish(result,number);}
+                else if(Number.isSafeInteger(Number(key))&&Number(key)>=0&&String(Number(key))===key){this.publish(result,this.unknownString);this.publish(result,this.primitive(undefined));}
+            }
+            for(const [name,descriptor] of runtimePrimitiveDescriptors){
+                const mask=({boolean:KIND_BOOLEAN,number:KIND_NUMBER,bigint:KIND_BIGINT,string:KIND_STRING,symbol:KIND_SYMBOL} as Record<string,number>)[descriptor.kind]??0;
+                if(!(kinds&mask))continue;
+                const prototype=this.primitivePrototype(name);if(rule)this.watch(rule,prototype);
+                for(const parent of prototype.values)this.read(parent,base,key,result,handler,rule,context,false);
+            }
             return;
         }
         const firstOwner = this.ordinaryOwner(atom), worklist:Atom[] = firstOwner ? [atom] : [];
@@ -6613,6 +6686,30 @@ class SourceValueFlow {
                         else {const kinds=operation==="NOTIFY"?KIND_NUMBER:KIND_NUMERIC;let value=this.numericValues.get(kinds);if(!value){value={tag:"non-string",kinds};this.numericValues.set(kinds,value);}this.publish(result,value);}
                         continue;
                     }
+                    if(atom.tag==="operation"&&atom.operation.startsWith("primitive-member:")) {
+                        const member=atom.operation.slice("primitive-member:".length),memberKind=member.slice(0,member.indexOf(":")),handler=this.exceptionHandlers.get(node),kind=PRIMITIVE_MEMBER_RESULTS.get(member);
+                        if(invocation.construct){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.nativeException(node));continue;}
+                        // ToString(this) on an object receiver and ToString/ToNumber of an
+                        // object argument may run user code; primitives cannot.
+                        this.watch(rule,invocation.receiver);const receiverKinds=this.primitiveKinds(invocation.receiver);
+                        if(!receiverKinds)continue;
+                        let pendingArgument=false,objectArgument=false;
+                        if(argv)for(const input of argv){this.watch(rule,input);const kinds=this.primitiveKinds(input);if(!kinds)pendingArgument=true;else if(kinds&~KIND_PRIMITIVE)objectArgument=true;}
+                        const normalKinds=memberKind==="string"?KIND_PRIMITIVE&~(KIND_UNDEFINED|KIND_NULL|KIND_SYMBOL):memberKind==="number"?KIND_NUMBER:KIND_BIGINT;
+                        if(kind&&argv&&!objectArgument&&!(receiverKinds&~KIND_PRIMITIVE)){
+                            if(pendingArgument)continue;
+                            if(handler)this.publish(handler,this.nativeException(node));
+                            if(receiverKinds&~normalKinds)this.publish(result,this.abrupt);
+                            if(receiverKinds&normalKinds){
+                                if(kind.string)this.publish(result,this.unknownString);
+                                if(kind.number){let value=this.numericValues.get(KIND_NUMBER);if(!value){value={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,value);}this.publish(result,value);}
+                                if(kind.boolean){this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));}
+                                if(kind.undefined)this.publish(result,this.primitive(undefined));
+                            }
+                            continue;
+                        }
+                        this.publish(result,this.unknown);this.activateOpaqueEffect(node);if(handler)this.publish(handler,this.unknown);continue;
+                    }
                     if(atom.tag==="operation"&&atom.operation.startsWith("math-member:")) {
                         const descriptor=runtimeMathMethods.get(atom.operation.slice("math-member:".length))!;
                         if(invocation.construct){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));continue;}
@@ -6729,7 +6826,11 @@ class SourceValueFlow {
                         else{this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node,"TypeError"));}
                         continue;
                     }
-                    if(invocation.construct&&!(atom.tag==="builtin"&&atom.name==="Promise")){if(atom.tag==="builtin")this.markPropertyAlgorithm(this.owner(node),"opaque");this.publish(result!,{tag:"object",owner:this.owner(node)});}
+                    if(invocation.construct&&!(atom.tag==="builtin"&&atom.name==="Promise")){
+                        const owner=this.owner(node);
+                        if(atom.tag==="builtin"){this.markPropertyAlgorithm(owner,"opaque");if(runtimeTypedArrayDescriptors.has(atom.name))this.typedArrayInstancePrototype(owner,atom.name,invocation.newTarget??invocation.target,node);}
+                        this.publish(result!,{tag:"object",owner});
+                    }
                     const evolvingPrimitiveResult = constructorArguments !== undefined || atom.tag === "builtin" && (atom.normalResult === "primitive-string" || atom.name === "Symbol" || NUMERIC_CONVERSIONS.has(atom.name));
                     if (!evolvingPrimitiveResult && (atom.tag !== "operation" || PROPERTY_MUTATIONS.has(atom.operation)) && handled(atom, signature)) continue;
                     if (atom.tag === "intrinsic" && atom.domain === "constructor") {

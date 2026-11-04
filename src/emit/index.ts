@@ -38332,10 +38332,7 @@ class Emitter {
         if (ORDINARY_STRING_PROTOTYPE_METHODS.has(method)) {
             return this.emitDynamicNamedPropertyCall(call, recv, method);
         }
-        switch (method) {
-
-        }
-        unsupported(call, `string method .${method} (Phase 2)`);
+        return this.emitDynamicNamedPropertyCall(call, recv, method);
     }
 
     private emitNumberMethod(
@@ -38352,7 +38349,7 @@ class Emitter {
             case "valueOf":
                 return this.emitDynamicNamedPropertyCall(call, recv, method);
         }
-        unsupported(call, `Number method .${method}`);
+        return this.emitDynamicNamedPropertyCall(call, recv, method);
     }
 
     private emitBooleanMethod(
@@ -38380,7 +38377,7 @@ class Emitter {
                     ([value]) => value,
                 );
         }
-        unsupported(call, `Boolean method .${method}`);
+        return this.emitDynamicNamedPropertyCall(call, recv, method);
     }
 
     private emitClassMethodCall(call: ts.CallExpression, receiver: EmitResult, name: string): EmitResult {
