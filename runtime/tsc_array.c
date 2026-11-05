@@ -1488,7 +1488,9 @@ static tsc_value_t tsc_array_default_prototype(void) {
         proto->value_storage = true;
         proto->prototype = tsc_value_object_prototype();
         proto->props = tsc_object_new();
-        proto->holes = NULL;
+        proto->hole_bits = NULL;
+        proto->hole_words = 0;
+        proto->hole_count = 0;
         proto->box_element = NULL;
         proto->unbox_element = NULL;
         proto->data = NULL;
@@ -1550,7 +1552,9 @@ tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
     a->value_storage = false;
     a->prototype = tsc_array_default_prototype();
     a->props = tsc_object_new();
-    a->holes = NULL;
+    a->hole_bits = NULL;
+    a->hole_words = 0;
+    a->hole_count = 0;
     a->box_element = NULL;
     a->unbox_element = NULL;
     a->data = initial_cap ? TSC_GC_MALLOC(initial_cap * elem_size) : NULL;
@@ -1572,7 +1576,9 @@ tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap) {
     a->value_storage = false;
     a->prototype = tsc_array_default_prototype();
     a->props = tsc_object_new();
-    a->holes = NULL;
+    a->hole_bits = NULL;
+    a->hole_words = 0;
+    a->hole_count = 0;
     a->box_element = NULL;
     a->unbox_element = NULL;
     a->data = initial_cap ? TSC_GC_MALLOC_ATOMIC(initial_cap * elem_size) : NULL;
@@ -1778,13 +1784,23 @@ bool tsc_str_array_index(const tsc_str_t* key, size_t* out) {
     return true;
 }
 
+static bool array_hole_at(const tsc_array_t* a, size_t index) {
+    return a->hole_count && (index >> 6) < a->hole_words && ((a->hole_bits[index >> 6] >> (index & 63)) & 1u);
+}
+
+bool tsc_array_hole_at(const tsc_array_t* a, size_t index) {
+    return a && array_hole_at(a, index);
+}
+
+static bool array_side_index(const tsc_array_t* a, size_t index) {
+    return a->props && a->props->len && tsc_object_has_own(a->props, tsc_str_from_int((int64_t)index));
+}
+
 bool tsc_array_index_present(const tsc_array_t* a, size_t index) {
     if (!a || index >= a->len) return false;
-    tsc_str_t* key = tsc_str_from_int((int64_t)index);
-    if (a->props && tsc_object_has_own(a->props, key)) return true;
+    if (array_side_index(a, index)) return true;
     if (index >= a->dense_len) return false;
-    if (!a->holes) return true;
-    return !tsc_object_has_own(a->holes, key);
+    return !array_hole_at(a, index);
 }
 
 static int array_compare_indices(const void* left, const void* right) {
@@ -1792,38 +1808,81 @@ static int array_compare_indices(const void* left, const void* right) {
     return a < b ? -1 : a > b ? 1 : 0;
 }
 
-/* One collection enumerates actual own indices, never the logical hole range. */
 tsc_array_t* tsc_array_own_indices(const tsc_array_t* a) {
     tsc_array_t* indices = tsc_array_new(sizeof(size_t), 0);
     if (!a) return indices;
+    bool side = a->props && a->props->len > 0;
     for (size_t index = 0; index < a->dense_len && index < a->len; ++index) {
-        tsc_str_t* key = tsc_str_from_int((int64_t)index);
-        if (a->props && tsc_object_has_own(a->props, key)) continue;
-        if (!a->holes || !tsc_object_has_own(a->holes, key)) tsc_array_push_raw(indices, &index);
+        if (array_hole_at(a, index)) continue;
+        if (side && tsc_object_has_own(a->props, tsc_str_from_int((int64_t)index))) continue;
+        tsc_array_push_raw(indices, &index);
     }
-    tsc_array_t* keys = tsc_object_own_keys_dyn(a->props);
-    for (size_t cursor = 0; cursor < keys->len; ++cursor) {
-        size_t index;
-        if (tsc_str_array_index(TSC_ARR(tsc_str_t*, keys, cursor), &index) && index < a->len)
-            tsc_array_push_raw(indices, &index);
+    if (side) {
+        tsc_array_t* keys = tsc_object_own_keys_dyn(a->props);
+        for (size_t cursor = 0; cursor < keys->len; ++cursor) {
+            size_t index;
+            if (tsc_str_array_index(TSC_ARR(tsc_str_t*, keys, cursor), &index) && index < a->len)
+                tsc_array_push_raw(indices, &index);
+        }
     }
     if (indices->len > 1) qsort(indices->data, indices->len, sizeof(size_t), array_compare_indices);
     return indices;
 }
 
+static void array_reserve_hole_words(tsc_array_t* a, size_t words) {
+    if (words <= a->hole_words) return;
+    size_t cap_words = a->cap / 64 + 1;
+    if (words < cap_words) words = cap_words;
+    if (words < a->hole_words * 2) words = a->hole_words * 2;
+    if (words > SIZE_MAX / sizeof(uint64_t)) tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("Array hole bookkeeping is too large"));
+    uint64_t* bits = (uint64_t*)TSC_GC_MALLOC_ATOMIC(words * sizeof(uint64_t));
+    memset(bits, 0, words * sizeof(uint64_t));
+    if (a->hole_bits && a->hole_words) memcpy(bits, a->hole_bits, a->hole_words * sizeof(uint64_t));
+    a->hole_bits = bits;
+    a->hole_words = words;
+}
+
 void tsc_array_mark_hole(tsc_array_t* a, size_t index) {
     if (!a || index >= a->dense_len) return;
-    /* Internal bookkeeping: a null prototype and a define keep user code on
-     * Object.prototype (accessors, non-writable keys) out of hole marking. */
-    if (!a->holes) a->holes = tsc_object_new_with_prototype(tsc_value_null());
-    (void)tsc_object_define(a->holes, tsc_str_from_int((int64_t)index), tsc_value_bool(true), true, true, true);
+    array_reserve_hole_words(a, (index >> 6) + 1);
+    uint64_t mask = (uint64_t)1 << (index & 63);
+    if (!(a->hole_bits[index >> 6] & mask)) {
+        a->hole_bits[index >> 6] |= mask;
+        a->hole_count++;
+    }
     if (a->value_roots) a->value_roots[index] = NULL;
 }
 
 void tsc_array_clear_hole(tsc_array_t* a, size_t index) {
-    if (!a || !a->holes) return;
-    (void)tsc_object_delete(a->holes, tsc_str_from_int((int64_t)index));
+    if (!a || !array_hole_at(a, index)) return;
+    a->hole_bits[index >> 6] &= ~((uint64_t)1 << (index & 63));
+    a->hole_count--;
     array_refresh_value_root(a, index);
+}
+
+/* Every hole at or above `index` is forgotten; the caller discards those cells. */
+void tsc_array_clear_holes_from(tsc_array_t* a, size_t index) {
+    if (!a || !a->hole_count) return;
+    size_t word = index >> 6;
+    if (word >= a->hole_words) return;
+    uint64_t keep = (index & 63) ? (((uint64_t)1 << (index & 63)) - 1) : 0;
+    a->hole_bits[word] &= keep;
+    for (size_t cursor = word + 1; cursor < a->hole_words; ++cursor) a->hole_bits[cursor] = 0;
+    size_t count = 0;
+    for (size_t cursor = 0; cursor <= word; ++cursor) count += (size_t)__builtin_popcountll(a->hole_bits[cursor]);
+    a->hole_count = count;
+}
+
+/* Holes move with their cells when one cell is inserted at index 0. */
+static void array_shift_holes_up(tsc_array_t* a) {
+    if (!a->hole_count) return;
+    array_reserve_hole_words(a, (a->len >> 6) + 2);
+    uint64_t carry = 0;
+    for (size_t cursor = 0; cursor < a->hole_words; ++cursor) {
+        uint64_t word = a->hole_bits[cursor];
+        a->hole_bits[cursor] = (word << 1) | carry;
+        carry = word >> 63;
+    }
 }
 
 bool tsc_array_has_own_key(const tsc_array_t* a, const tsc_str_t* key) {
@@ -1881,28 +1940,12 @@ void tsc_array_push_raw(tsc_array_t* a, const void* elem) {
 
 
 void tsc_array_unshift_raw(tsc_array_t* a, const void* elem) {
-    tsc_object_t* shifted_holes = NULL;
-    if (a->holes && a->es == sizeof(tsc_value_t)) {
-        shifted_holes = tsc_object_new_with_prototype(tsc_value_null());
-        tsc_array_t* keys = tsc_object_own_keys_dyn(a->holes);
-        for (size_t i = 0; i < keys->len; i++) {
-            tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
-            size_t index = 0;
-            if (tsc_str_array_index(key, &index) && index < a->len) {
-                (void)tsc_object_define(
-                    shifted_holes,
-                    tsc_str_from_int((int64_t)(index + 1)),
-                    tsc_value_bool(true), true, true, true
-                );
-            }
-        }
-    }
     if (a->len + 1 > a->cap) tsc_array_reserve(a, a->len + 1);
     memmove((char*)a->data + a->es, a->data, a->len * a->es);
     tsc_array_store_raw(a, 0, elem);
     a->len++;
     a->dense_len = a->len;
-    a->holes = shifted_holes;
+    array_shift_holes_up(a);
     array_refresh_value_roots(a, 0, a->len);
 }
 
@@ -1914,7 +1957,7 @@ static void array_copy_holes_range(
     size_t destination_start,
     size_t count
 ) {
-    if (!src || !dst || src->es != sizeof(tsc_value_t) || dst->es != sizeof(tsc_value_t) || !src->holes) return;
+    if (!src || !dst || src->es != sizeof(tsc_value_t) || dst->es != sizeof(tsc_value_t) || !src->hole_count) return;
     for (size_t i = 0; i < count; i++) {
         if (!tsc_array_index_present(src, source_start + i)) {
             tsc_array_mark_hole(dst, destination_start + i);
@@ -1940,7 +1983,7 @@ tsc_array_t* tsc_array_slice(const tsc_array_t* a, double start, double end) {
     if (n > 0) memcpy(r->data, (char*)a->data + (size_t)i0 * a->es, n * a->es);
     r->len = n;
     r->dense_len = n;
-    if (a->holes) {
+    if (a->hole_count) {
         for (size_t i = 0; i < n; i++) {
             if (!tsc_array_index_present(a, (size_t)i0 + i)) tsc_array_mark_hole(r, i);
         }

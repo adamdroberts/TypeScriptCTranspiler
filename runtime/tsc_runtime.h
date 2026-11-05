@@ -798,6 +798,8 @@ bool tsc_array_index_present(const tsc_array_t* a, size_t index);
 tsc_array_t* tsc_array_own_indices(const tsc_array_t* a);
 void tsc_array_mark_hole(tsc_array_t* a, size_t index);
 void tsc_array_clear_hole(tsc_array_t* a, size_t index);
+void tsc_array_clear_holes_from(tsc_array_t* a, size_t index);
+bool tsc_array_hole_at(const tsc_array_t* a, size_t index);
 void tsc_array_oob(const tsc_array_t* a, double i);
 
 #define TSC_ARR(T, a, i) (((T*)((a)->data))[(size_t)(i)])

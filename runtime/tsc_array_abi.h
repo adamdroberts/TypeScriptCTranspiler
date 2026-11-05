@@ -32,7 +32,12 @@ typedef struct tsc_array {
     bool value_storage;
     tsc_value_t prototype;
     tsc_object_t* props;
-    tsc_object_t* holes;
+    /* Hole bookkeeping for the native-cell prefix is one bitset indexed like
+     * the cells: a set bit is an absent index below dense_len. hole_count is
+     * the number of set bits, so a hole-free array answers without a lookup. */
+    uint64_t* hole_bits;
+    size_t hole_words;
+    size_t hole_count;
     tsc_array_box_element_fn box_element;
     tsc_array_unbox_element_fn unbox_element;
     void* data;

@@ -4912,6 +4912,7 @@ static void array_discard_dense_tail(tsc_array_t* array, size_t length) {
     memset((char*)array->data + length * array->es, 0, count * array->es);
     if (array->value_roots) memset(array->value_roots + length, 0, count * sizeof(void*));
     array->dense_len = length;
+    tsc_array_clear_holes_from(array, length);
 }
 
 /* ArraySetLength consumes one descriptor and one descending own-index List.
@@ -4939,12 +4940,18 @@ static bool array_define_length_desc(tsc_array_t* array, tsc_value_t value, bool
         if (has_writable && !writable) array->length_writable = false;
         return true;
     }
-    tsc_array_t* volatile indices = tsc_array_own_indices(array);
+    /* A native cell without a side descriptor is a configurable data property
+     * whose deletion cannot fail, so only side-collection indices run the
+     * descending per-key deletion; the cells are discarded in one step. */
+    bool side = array->props && array->props->len > 0;
+    tsc_array_t* volatile indices = side ? tsc_array_own_indices(array) : NULL;
     array->len = length;
-    for (size_t cursor = indices->len; cursor > 0; --cursor) {
+    for (size_t cursor = indices ? indices->len : 0; cursor > 0; --cursor) {
         size_t index = TSC_ARR(size_t, indices, cursor - 1);
         if (index < length) break;
-        if (!tsc_value_delete_prop(tsc_value_array(array), tsc_str_from_int((int64_t)index))) {
+        tsc_str_t* key = tsc_str_from_int((int64_t)index);
+        if (index < array->dense_len && !tsc_object_has_own(array->props, key)) continue;
+        if (!tsc_value_delete_prop(tsc_value_array(array), key)) {
             array->len = index + 1;
             array_discard_dense_tail(array, array->len);
             if (has_writable && !writable) array->length_writable = false;
@@ -6243,8 +6250,7 @@ bool tsc_value_delete_prop(tsc_value_t v, tsc_str_t* key) {
         if (tsc_str_is_length_key(key)) return false;
         tsc_array_t* a = (tsc_array_t*)value_ptr(v);
         size_t idx;
-        bool dense = tsc_str_array_index(key, &idx) && idx < a->dense_len &&
-            (!a->holes || !tsc_object_has_own(a->holes, key));
+        bool dense = tsc_str_array_index(key, &idx) && idx < a->dense_len && !tsc_array_hole_at(a, idx);
         if (a->props && tsc_object_has_own(a->props, key)) {
             if (!tsc_object_delete(a->props, key)) return false;
             if (dense) {

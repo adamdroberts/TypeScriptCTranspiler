@@ -11,11 +11,14 @@ type ReferenceOptions<In extends Bun.SpawnOptions.Writable> =
     };
 
 /** Independent Node references keep their original program and process options.
+ * A bare `node` command resolves to TSC2C_NODE_REFERENCE when that is set, so
+ * one environment variable selects the reference Node for every test.
  * Regular files preserve complete console output before the process exits;
  * returning buffers retains the existing separate-stream assertion contract. */
 export function nodeReferenceSync<const In extends Bun.SpawnOptions.Writable = 'ignore'>(
     command: string[], options: ReferenceOptions<In>,
 ): Bun.ReadableSyncSubprocess {
+    if (command[0] === 'node' && process.env.TSC2C_NODE_REFERENCE) command = [process.env.TSC2C_NODE_REFERENCE, ...command.slice(1)];
     if (!command[0] || !/^node(?:\.exe)?$/.test(basename(command[0])) ||
         options.stdio !== undefined || options.maxBuffer !== undefined ||
         options.onExit !== undefined || options.ipc !== undefined) {
