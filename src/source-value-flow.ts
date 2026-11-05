@@ -2908,7 +2908,15 @@ class SourceValueFlow {
             const names=this.privateNames(identifier,rule,context);
             if(!names.length&&!this.unresolvedPrivateContexts.has(context)){
                 this.unresolvedPrivateContexts.add(context);
-                this.onActive(context,()=>{if(!this.privateNames(identifier,rule,context).length)this.unresolvedPrivate=true;});
+                this.onActive(context,()=>{
+                    if(this.privateNames(identifier,rule,context).length)return;
+                    // A direct eval source whose caller chain declares no such
+                    // name is a SyntaxError before any statement runs
+                    // (AllPrivateIdentifiersValid); privateNames publishes it,
+                    // so the access carries no value and the eval stays finite.
+                    if(this.evaluationEnvironments.get(this.sourceFile(identifier))?.direct)this.publish(result,this.abrupt);
+                    else this.unresolvedPrivate=true;
+                });
             }
             for(const name of names){
                 this.function(name.definition);
