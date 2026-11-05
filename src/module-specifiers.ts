@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import * as path from "node:path";
 import ts from "typescript";
+import { literalPropertyKey } from "./ecmascript-source";
 import { escapeRegExpString } from "./regexp-escape";
 import {sourceFileExpressionTexts} from "./source-file-expression-proof";
 
@@ -6527,9 +6528,8 @@ function enumMemberStringValues(decl: ts.EnumDeclaration): Map<string, string> |
 }
 
 function staticPropertyName(name: ts.PropertyName): string | null {
-    if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
-        return name.text;
-    }
+    const literal = literalPropertyKey(name);
+    if (literal !== null) return literal;
     if (ts.isComputedPropertyName(name)) {
         return staticStringExpressionText(name.expression);
     }

@@ -1,6 +1,6 @@
 import ts from "typescript";
 import { EVAL_CONTEXT_FIELD_INITIALIZER, EVAL_CONTEXT_SUPER_CALL, EVAL_CONTEXT_SUPER_PROPERTY, classHasHeritage, evalSourceContext } from "./eval-context";
-import { ecmaParseGoal, ecmaDirectivePrologueHasUseStrict } from "./ecmascript-source";
+import { ecmaParseGoal, ecmaDirectivePrologueHasUseStrict, literalPropertyKey } from "./ecmascript-source";
 import {
     bindingNameEntries,
     statementListLexicallyDeclaredNames,
@@ -333,7 +333,7 @@ export function callableNameInput(
         // `{ name = <definition> } = o`: the AssignmentProperty's Initializer names the definition.
         if (parent && ts.isShorthandPropertyAssignment(parent)) return {key: parent.name.text};
         // `__proto__: <definition>` is the prototype setter (isProtoSetter), not a NamedEvaluation.
-        if (parent && ts.isPropertyAssignment(parent) && !ts.isComputedPropertyName(parent.name) && literalPropName(parent.name) === "__proto__") return {key: ""};
+        if (parent && ts.isPropertyAssignment(parent) && !ts.isComputedPropertyName(parent.name) && literalPropertyKey(parent.name) === "__proto__") return {key: ""};
         if (parent && (ts.isPropertyAssignment(parent) || ts.isPropertyDeclaration(parent))) return {key: parent.name, definition: parent};
         if (parent && ts.isBinaryExpression(parent) && NAME_EVALUATING_ASSIGNMENTS.has(parent.operatorToken.kind)) {
             if (ts.isIdentifier(parent.left)) return {key: parent.left.text};
@@ -767,7 +767,7 @@ function objectLiteralFailure(node: ts.ObjectLiteralExpression, pattern: boolean
         if (pattern) continue;
         if (ts.isShorthandPropertyAssignment(member) && member.objectAssignmentInitializer)
             return { node: member, message: "an initialized shorthand property is only permitted in an assignment pattern" };
-        if (ts.isPropertyAssignment(member) && !ts.isComputedPropertyName(member.name) && literalPropName(member.name) === "__proto__" && ++protoSetters > 1)
+        if (ts.isPropertyAssignment(member) && !ts.isComputedPropertyName(member.name) && literalPropertyKey(member.name) === "__proto__" && ++protoSetters > 1)
             return { node: member, message: "duplicate __proto__ property in an object literal" };
     }
     return null;
@@ -779,13 +779,6 @@ function hasStaticModifier(node: ts.Node): boolean {
     return ts.canHaveModifiers(node) && (ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.StaticKeyword) ?? false);
 }
 
-/** PropName of a literal element name; null for a computed or private name. */
-function literalPropName(name: ts.PropertyName | undefined): string | null {
-    if (!name) return null;
-    if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text;
-    return null;
-}
-
 /** ClassBody early errors: one constructor, no special-method or field
  * named constructor, no static method or field named prototype
  * (sec-class-definitions-static-semantics-early-errors). The parser calls
@@ -794,7 +787,7 @@ function classElementFailure(node: ts.ClassLikeDeclaration): FunctionStaticSeman
     let constructors = 0;
     for (const member of node.members) {
         const isStatic = hasStaticModifier(member);
-        const name = literalPropName(member.name);
+        const name = literalPropertyKey(member.name);
         if (ts.isConstructorDeclaration(member)) {
             if (isStatic) continue;
             if (ts.getModifiers(member)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword))

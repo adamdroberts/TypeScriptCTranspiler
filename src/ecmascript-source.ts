@@ -297,3 +297,17 @@ export function createEcmaSourceFile(
     (sourceFile as ts.SourceFile & { ecmaParseGoal: EcmaParseGoal }).ecmaParseGoal = goal;
     return sourceFile;
 }
+
+/** PropName of a LiteralPropertyName (sec-object-initializer-static-semantics-propname):
+ * the IdentifierName's StringValue, the StringLiteral's SV, or ToString of
+ * the NumericLiteral's value, a DecimalBigIntegerLiteral included
+ * (`{ 0x10n: 1 }` defines "16"). The parser already stores a numeric
+ * literal's text in ToString form (`1e21` as "1e+21", `010` as "8") and a
+ * BigInt literal's text with its `n` suffix and source radix. Null for a
+ * computed, private or pattern name. */
+export function literalPropertyKey(name: ts.PropertyName | ts.BindingName | undefined): string | null {
+    if (!name) return null;
+    if (ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)) return name.text;
+    if (ts.isBigIntLiteral(name)) return BigInt(name.text.slice(0, -1)).toString();
+    return null;
+}

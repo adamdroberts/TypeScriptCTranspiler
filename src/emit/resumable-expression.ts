@@ -1,6 +1,7 @@
 import { definitionEvaluationChildren } from "./module-evaluation";
 import {classDefinitionPlan,sourceClassDefinition} from './class-definition';
 import ts from "typescript";
+import { literalPropertyKey } from "../ecmascript-source";
 import { isTailPositionCall } from "../tail-position";
 import { normalizeAssignmentTarget, unwrapTransparentExpression as transparent } from "./binding-tree";
 
@@ -243,9 +244,8 @@ export function planResumableExpression(expression: ts.Expression, options: { as
                     const raw = value(property.name.expression);
                     const normalize = operation({ kind: "property-key", source: raw }, key, define);
                     entry = build(property.name.expression, raw, normalize);
-                } else if (ts.isIdentifier(property.name) || ts.isStringLiteralLike(property.name) || ts.isNumericLiteral(property.name)) {
-                    const text = ts.isNumericLiteral(property.name) ? String(Number(property.name.text)) : property.name.text;
-                    entry = operation({ kind: "evaluate", expression: ts.factory.createStringLiteral(text), inputs: [] }, key, define);
+                } else if (literalPropertyKey(property.name) !== null) {
+                    entry = operation({ kind: "evaluate", expression: ts.factory.createStringLiteral(literalPropertyKey(property.name)!), inputs: [] }, key, define);
                 } else { reject(property.name); return complete; }
                 continue;
             }
@@ -265,8 +265,8 @@ export function planResumableExpression(expression: ts.Expression, options: { as
                 const raw = value(property.name.expression);
                 const normalize = operation({ kind: "property-key", source: raw }, key, entry);
                 entry = build(property.name.expression, raw, normalize);
-            } else if (ts.isIdentifier(property.name) || ts.isStringLiteralLike(property.name) || ts.isNumericLiteral(property.name)) {
-                const text = ts.isNumericLiteral(property.name) ? String(Number(property.name.text)) : property.name.text;
+            } else if (literalPropertyKey(property.name) !== null) {
+                const text = literalPropertyKey(property.name)!;
                 entry = operation({ kind: "evaluate", expression: ts.factory.createStringLiteral(text), inputs: [] }, key, entry);
             } else { reject(property.name); return complete; }
         }

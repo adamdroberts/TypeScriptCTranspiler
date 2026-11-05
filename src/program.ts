@@ -20,7 +20,7 @@ import {
     type DynamicRequireManifest,
 } from "./dynamic-require";
 import { resolveCommonJsRequireModuleName } from "./commonjs-resolve";
-import { createEcmaSourceFile, ecmaImportAttributesParserShadow, type EcmaParseGoal } from "./ecmascript-source";
+import { createEcmaSourceFile, ecmaImportAttributesParserShadow, literalPropertyKey, type EcmaParseGoal } from "./ecmascript-source";
 import {
     dynamicImportCalls,
     dynamicImportSpecifiersFromCall,
@@ -890,6 +890,5 @@ function commonJsFactoryWrapperInvocationForFunction(fn: ts.FunctionExpression |
 }
 
 function staticPropertyName(name: ts.PropertyName | ts.BindingName): string | null {
-    if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text;
-    return null;
+    return literalPropertyKey(name);
 }

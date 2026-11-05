@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { literalPropertyKey } from "./ecmascript-source";
 import {moduleNamespaceBinding,resolveModuleExport} from "./module-export-resolution";
 import {sourceModuleFailure,moduleSourceOriginal,moduleLinkRecord,type ModuleSourceFailure} from "./module-source-record";
 import * as path from "node:path";
@@ -682,8 +683,7 @@ function isCommonJsModuleAliasInitializer(expr: ts.Expression, moduleAliases: Se
 }
 
 function staticPropertyName(name: ts.PropertyName | ts.BindingName): string | null {
-    if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text;
-    return null;
+    return literalPropertyKey(name);
 }
 
 function commonJsIifeParameterArgument(param: ts.ParameterDeclaration): ts.Expression | null {

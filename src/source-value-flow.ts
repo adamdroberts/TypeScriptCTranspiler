@@ -16,7 +16,7 @@ import {sourceModuleFailure} from "./module-source-record";
 import { sourceUnitBodyIncluded, sourceUnitFileName } from "./program";
 import {sourceChoiceTuples} from "./source-choice-tuples";
 import {moduleVarDeclaredNames} from "./module-static-semantics";
-import { ecmaParseGoal } from "./ecmascript-source";
+import { ecmaParseGoal, literalPropertyKey } from "./ecmascript-source";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
 import {nativePrimitiveFormat} from "./util-format-source";
@@ -397,7 +397,7 @@ function legacyCallerValue(owner: FunctionOwner): boolean {
 }
 function propertyName(node: ts.Node | undefined): string | null {
     if (!node) return null;
-    if (ts.isIdentifier(node) || ts.isStringLiteralLike(node) || ts.isNumericLiteral(node)) return node.text;
+    if (ts.isIdentifier(node) || ts.isStringLiteralLike(node) || ts.isNumericLiteral(node) || ts.isBigIntLiteral(node)) return literalPropertyKey(node);
     if (ts.isPropertyAccessExpression(node)) return node.name.text;
     return null;
 }

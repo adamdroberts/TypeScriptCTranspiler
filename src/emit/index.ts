@@ -10,7 +10,7 @@ import {classDefinitionPlan, classConstructorMember, isClassConstructor, isStati
 import { directEvalContext } from "../eval-context";
 import ts from "typescript";
 import {moduleLinkRecord} from "../module-source-record";
-import { ecmaDirectivePrologueHasUseStrict, ecmaParseGoal } from "../ecmascript-source";
+import { ecmaDirectivePrologueHasUseStrict, ecmaParseGoal, literalPropertyKey } from "../ecmascript-source";
 import { sourceUnitFormat } from "../program";
 import { runtimeGlobalBindings, runtimeUtilExports, runtimeFsExports, runtimePathPosixOperations, runtimeBufferExports, runtimeChildProcessOperations } from "../global-bindings";
 import { canonicalParameterBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding } from "../source-bindings";
@@ -11385,9 +11385,8 @@ class Emitter {
         name: ts.PropertyName,
         seenConsts: Set<ts.Symbol>,
     ): string | null {
-        if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
-            return name.text;
-        }
+        const literal = literalPropertyKey(name);
+        if (literal !== null) return literal;
         if (ts.isComputedPropertyName(name)) {
             const names = this.staticComputedPropertyExpressionTexts(name.expression);
             if (names.length === 1) return names[0]!;
@@ -11633,9 +11632,7 @@ class Emitter {
         name: ts.PropertyName,
         seenConsts: Set<ts.Symbol>,
     ): boolean {
-        if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
-            return true;
-        }
+        if (literalPropertyKey(name) !== null) return true;
         if (!ts.isComputedPropertyName(name)) return false;
         return this.staticPropertyName(name) !== null &&
             this.isSideEffectFreeTopLevelConstInitializer(name.expression, seenConsts);
@@ -38357,11 +38354,9 @@ class Emitter {
     }
 
     private staticPropertyNames(name: ts.PropertyName): string[] {
-        if (ts.isIdentifier(name)) return [name.text];
         if (ts.isPrivateIdentifier(name)) return [name.text];
-        if (ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)) {
-            return [name.text];
-        }
+        const literal = literalPropertyKey(name);
+        if (literal !== null) return [literal];
         if (ts.isComputedPropertyName(name)) {
             return this.staticComputedPropertyExpressionTexts(name.expression);
         }
