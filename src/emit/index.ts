@@ -22021,6 +22021,12 @@ class Emitter {
         fn: ClosureLikeDeclaration,
     ): ClosureCapture[] {
         const captures = new Map<ts.Symbol, ClosureCapture>();
+        // A class element initializer or static block is lowered to a
+        // synthetic method whose body is not an ancestor of the original
+        // expression; the element itself bounds what the closure declares.
+        const declaredWithin = (node: ts.Node): boolean => this.isNodeWithin(node, fn) ||
+            ts.isMethodDeclaration(fn) && this.classElementInitializerOwners.has(fn) &&
+            this.isNodeWithin(node, this.classElementInitializerOwners.get(fn)!);
         const captureReference = (node: ts.Identifier, sym = this.symbolForIdentifier(node)): void => {
             const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
             const innerClassName = this.classNameBindingForIdentifier(node);
@@ -22037,9 +22043,7 @@ class Emitter {
                 (!this.test262ScriptGlobalBindingName(node) || this.dispatchCaptureClone ||
                     this.closureEnvBindingForSymbol(sym)?.sourceSnapshot) &&
                 (
-                    !(this.isNodeWithin(decl, fn) || ts.isMethodDeclaration(fn) &&
-                        this.classElementInitializerOwners.has(fn) &&
-                        this.isNodeWithin(decl, this.classElementInitializerOwners.get(fn)!)) ||
+                    !declaredWithin(decl) ||
                     decl === fn && ts.isFunctionDeclaration(fn) &&
                         this.isSupportedLexicalFunctionDeclaration(fn)
                 ) &&
@@ -22084,7 +22088,7 @@ class Emitter {
         const visit = (node: ts.Node): void => {
             if (this.isPrivateNameReference(node)) {
                 const name = resolveClassPrivateName(node);
-                if (name && !this.isNodeWithin(name.definition, fn)) {
+                if (name && !declaredWithin(name.definition)) {
                     const symbol = this.privateNameSymbol(node);
                     if (!captures.has(symbol)) captures.set(symbol, { symbol, type: T_VALUE, field: `${mangleIdent(node.text)}_${captures.size}`, lexical: null });
                 }
@@ -22092,7 +22096,7 @@ class Emitter {
             if (ts.isIdentifier(node) && !this.isNonValueIdentifier(node)) captureReference(node);
             if (this.sourceEnvironmentEnabled(fn.getSourceFile()) && this.isDirectEvalSyntax(node)) {
                 for (const name of classPrivateNamesInScope(node)) {
-                    if (this.isNodeWithin(name.definition, fn)) continue;
+                    if (declaredWithin(name.definition)) continue;
                     const identifier = name.declarations[0]!.name as ts.PrivateIdentifier;
                     const symbol = this.privateNameSymbol(identifier);
                     if (!captures.has(symbol)) captures.set(symbol, { symbol, type: T_VALUE,
