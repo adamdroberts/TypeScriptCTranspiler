@@ -37,6 +37,30 @@ test("RegExp literal early errors agree with Bun over generated patterns and fla
  expect(checked).toBeGreaterThan(2000);expect(rejected).toBeGreaterThan(200);expect(checked-rejected).toBeGreaterThan(200);
 });
 
+// v-mode ClassSetCharacter: an unescaped ClassSetSyntaxCharacter and every
+// ClassSetReservedDoublePunctuator are early errors inside a class, while the
+// same punctuators appear singly, escaped, or outside a class.
+test("v-mode class set punctuators agree with Bun over generated classes",()=>{
+ const alphabet=["&","!","#","$","%","*","+",",",".",":",";","<","=",">","?","@","^","`","~","-","(",")","[","]","{","}","/","|","\\","a","b","_"];
+ let seed=0x9e3779b9;
+ const next=()=>{seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return(seed>>>0)/0x100000000;};
+ let checked=0,rejected=0;
+ for(let sample=0;sample<2000;sample++){
+  let body="";const length=1+Math.floor(next()*5);
+  for(let index=0;index<length;index++)body+=alphabet[Math.floor(next()*alphabet.length)];
+  const pattern=(next()<0.5?"[":"[^")+body+"]"+(next()<0.3?body:"");
+  const file=literalFile(`/${pattern}/v;`);
+  const statement=file.statements[0];
+  if(file.statements.length!==1||!statement||!ts.isExpressionStatement(statement)||!ts.isRegularExpressionLiteral(statement.expression)||
+   statement.expression.text!==`/${pattern}/v`)continue;
+  let bun=true;try{new RegExp(pattern,"v");}catch{bun=false;}
+  const ours=earlyRegExpLiteralFailure(file)===null;
+  expect({pattern,accepted:ours}).toEqual({pattern,accepted:bun});
+  checked++;if(!bun)rejected++;
+ }
+ expect(checked).toBeGreaterThan(1000);expect(rejected).toBeGreaterThan(100);expect(checked-rejected).toBeGreaterThan(100);
+});
+
 test("the first invalid literal in source order is reported, including flags errors",()=>{
  const failure=earlyRegExpLiteralFailure(literalFile("const a=/ok/g;\nconst b=/(?i-i:a)/;\nconst c=/x/gg;\n"));
  expect(failure?.message).toBe("Invalid regular expression: /(?i-i:a)/: invalid pattern");

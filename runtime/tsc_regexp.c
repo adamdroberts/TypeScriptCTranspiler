@@ -514,6 +514,15 @@ static tsc_re_node_t* re_parse_v_class(tsc_re_parser_t* p, bool negated);
 
 /* One v-mode ClassSetOperand: single character, class escape, nested
  * class, or \q{...} strings (wrapped as a degenerate union operand). */
+/* ClassSetReservedDoublePunctuator: one of these doubled is a SyntaxError
+ * inside a v-mode class (sec-patterns-static-semantics-early-errors). */
+static bool re_is_v_double_punctuator(uint16_t u) {
+    return u == '&' || u == '!' || u == '#' || u == '$' || u == '%' || u == '*' ||
+        u == '+' || u == ',' || u == '.' || u == ':' || u == ';' || u == '<' ||
+        u == '=' || u == '>' || u == '?' || u == '@' || u == '^' || u == '`' ||
+        u == '~';
+}
+
 static bool re_parse_v_operand(tsc_re_parser_t* p, re_catom_t* out) {
     if (re_at_end(p)) return false;
     uint16_t u = p->units[p->pos];
@@ -521,9 +530,9 @@ static bool re_parse_v_operand(tsc_re_parser_t* p, re_catom_t* out) {
         u == '/' || u == '|') {
         return false;
     }
-    if (u == '&' && p->pos + 1 < p->len && p->units[p->pos + 1] == '&') {
-        /* A double ampersand opens an intersection; the operand is
-         * missing here. */
+    if (re_is_v_double_punctuator(u) && p->pos + 1 < p->len && p->units[p->pos + 1] == u) {
+        /* A double ampersand opens an intersection and every other
+         * reserved double punctuator is an error; no operand starts here. */
         return false;
     }
     if (u == '[') {
