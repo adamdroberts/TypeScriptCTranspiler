@@ -319,6 +319,25 @@ export function createEcmaSourceFile(
     // the correct tree but adds its own TS18030 restriction to parse diagnostics.
     const parsed = sourceFile as ts.SourceFile & { parseDiagnostics?: readonly ts.DiagnosticWithLocation[] };
     if (parsed.parseDiagnostics) parsed.parseDiagnostics = parsed.parseDiagnostics.filter(diagnostic => diagnostic.code !== 18030);
+    // Annex B legacy literals (LegacyOctalIntegerLiteral,
+    // NonOctalDecimalIntegerLiteral, LegacyOctalEscapeSequence and
+    // NonOctalDecimalEscapeSequence) are permitted in non-strict code and
+    // never in a template or a BigInt. TypeScript reports them unconditionally
+    // (TS1121, TS1487, TS1488, TS1489); the report stays for strict code only.
+    const legacyLiteralCodes = new Set([1121, 1487, 1488, 1489]);
+    if (parsed.parseDiagnostics?.some(diagnostic => legacyLiteralCodes.has(diagnostic.code))) {
+        const sloppy: Array<readonly [number, number]> = [];
+        const pending: Array<{node: ts.Node; strict: boolean}> = [{node: sourceFile, strict: goal === "module" || ecmaDirectivePrologueHasUseStrict(sourceFile.statements, sourceFile)}];
+        while (pending.length) {
+            const {node, strict: inherited} = pending.pop()!;
+            const strict = inherited || ts.isClassLike(node) || ts.isFunctionLike(node) &&
+                "body" in node && !!node.body && ts.isBlock(node.body) && ecmaDirectivePrologueHasUseStrict(node.body.statements, sourceFile);
+            if (!strict && (ts.isNumericLiteral(node) || ts.isStringLiteral(node))) sloppy.push([node.getStart(sourceFile), node.end]);
+            node.forEachChild(child => { pending.push({node: child, strict}); });
+        }
+        parsed.parseDiagnostics = parsed.parseDiagnostics.filter(diagnostic => !legacyLiteralCodes.has(diagnostic.code) ||
+            diagnostic.start === undefined || !sloppy.some(([start, end]) => diagnostic.start! >= start && diagnostic.start! < end));
+    }
     (sourceFile as ts.SourceFile & { ecmaParseGoal: EcmaParseGoal }).ecmaParseGoal = goal;
     return sourceFile;
 }

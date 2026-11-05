@@ -400,7 +400,10 @@ static tsc_re_node_t* re_parse_legacy_class(tsc_re_parser_t* p, bool negated) {
                 re_fail(p, p->pos);
                 return NULL;
             }
+            /* B.1.2 CharacterRangeOrUnion: a class escape on either side
+             * makes the range the union of both sides and U+002D itself. */
             re_range_push(p, cls, first.cp, first.cp);
+            re_range_push(p, cls, '-', '-');
             if (!re_class_push_atom(p, cls, &second)) return NULL;
             continue;
         }
@@ -419,13 +422,13 @@ static tsc_re_node_t* re_parse_legacy_class(tsc_re_parser_t* p, bool negated) {
                 re_fail(p, p->pos);
                 return NULL;
             }
+            if (!re_class_push_atom(p, cls, &first)) return NULL;
+            re_range_push(p, cls, '-', '-');
             if (!second.is_set) {
-                if (!re_class_push_atom(p, cls, &first)) return NULL;
                 uint32_t cp = second.cp;
                 re_range_push(p, cls, cp, cp);
                 continue;
             }
-            if (!re_class_push_atom(p, cls, &first)) return NULL;
             if (!re_class_push_atom(p, cls, &second)) return NULL;
             continue;
         }
@@ -694,6 +697,18 @@ static tsc_re_node_t* re_parse_atom(tsc_re_parser_t* p) {
         if (strict) {
             re_fail(p, p->pos);
             return NULL;
+        }
+        /* Annex B Term :: InvalidBracedQuantifier is a SyntaxError even
+         * though a lone brace is a literal ExtendedPatternCharacter. */
+        if (u == '{') {
+            size_t qmin = 0;
+            size_t qmax = 0;
+            bool lazy = false;
+            size_t start = p->pos;
+            if (re_try_quantifier(p, &qmin, &qmax, &lazy)) {
+                re_fail(p, start);
+                return NULL;
+            }
         }
         p->pos++;
         tsc_re_node_t* lit = re_new_node(p, RE_N_UNIT);
