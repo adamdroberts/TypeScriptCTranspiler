@@ -212,7 +212,11 @@ let sourceFactsEpoch=0;
 class SourceFactEdges extends Map<SourceFacts,"value"|"origin"> {
     override set(key:SourceFacts,kind:"value"|"origin"):this{sourceFactsEpoch++;return super.set(key,kind);}
 }
-class SourceFacts extends Set<Atom> {
+/** A fact collection is not a Set subclass: engines fast-path array spread
+ * and iteration of Set instances by copying raw entries, which would bypass
+ * the transitive traversal below (observed in JavaScriptCore's DFG tier). */
+class SourceFacts implements Iterable<Atom> {
+    private readonly own = new Set<Atom>();
     // One monotone dependency collection distinguishes complete value flow
     // from origin-only effects without copying every origin into each field.
     readonly sources:Map<SourceFacts,"value"|"origin"> = new SourceFactEdges();
@@ -220,26 +224,29 @@ class SourceFacts extends Set<Atom> {
     private knownNonempty=false;
     private flattened:readonly Atom[]|undefined;
     private flattenedEpoch=-1;
-    override add(atom:Atom):this{sourceFactsEpoch++;return super.add(atom);}
-    override *[Symbol.iterator](): SetIterator<Atom> {
+    add(atom:Atom):this{sourceFactsEpoch++;this.own.add(atom);return this;}
+    /** Atoms stored here, without the copied sources. */
+    ownValues():IterableIterator<Atom>{return this.own.values();}
+    ownHas(atom:Atom):boolean{return this.own.has(atom);}
+    *[Symbol.iterator](): IterableIterator<Atom> {
         if(this.flattenedEpoch===sourceFactsEpoch&&this.flattened){yield* this.flattened;return undefined;}
         const epoch=sourceFactsEpoch,collected:Atom[]=[];
         const pending:{facts:SourceFacts;origins:boolean}[]=[{facts:this,origins:false}],visited=new Map<SourceFacts,number>(),values=new Set<Atom>();
         while(pending.length){const {facts,origins}=pending.pop()!,bit=origins?1:2,prior=visited.get(facts)??0;if(prior&bit)continue;visited.set(facts,prior|bit);
-            for(const value of Set.prototype.values.call(facts) as SetIterator<Atom>)if((!origins||value.tag==="unknown")&&!values.has(value)){values.add(value);collected.push(value);yield value;}
+            for(const value of facts.own)if((!origins||value.tag==="unknown")&&!values.has(value)){values.add(value);collected.push(value);yield value;}
             for(const [source,kind]of facts.sources)pending.push({facts:source,origins:origins||kind==="origin"});
         }
         // Store only a complete traversal during which nothing grew.
         if(epoch===sourceFactsEpoch){this.flattened=collected;this.flattenedEpoch=epoch;}
         return undefined;
     }
-    override has(atom: Atom): boolean {
-        if (Set.prototype.has.call(this, atom) || this.memberships.has(atom)) return true;
+    has(atom: Atom): boolean {
+        if (this.own.has(atom) || this.memberships.has(atom)) return true;
         const pending:SourceFacts[] = [this], visited = new Set<SourceFacts>();
         while (pending.length) {
             const facts = pending.pop()!;
             if (visited.has(facts)) continue; visited.add(facts);
-            if (Set.prototype.has.call(facts,atom) || facts.memberships.has(atom)) {
+            if (facts.own.has(atom) || facts.memberships.has(atom)) {
                 // Facts and copy edges only grow. A positive membership proof
                 // remains valid throughout this graph's monotone solution.
                 this.memberships.add(atom); return true;
@@ -249,7 +256,7 @@ class SourceFacts extends Set<Atom> {
         return false;
     }
     get nonempty():boolean{if(this.knownNonempty)return true;for(const _ of this){this.knownNonempty=true;return true;}return false;}
-    override get size(): number {let size=0; for (const _ of this) size++; return size;}
+    get size(): number {let size=0; for (const _ of this) size++; return size;}
 }
 interface PrimitiveCellCache {proof?:PrimitiveChoiceProof;kind?:number;readiness?:PrimitiveReadiness;}
 interface Cell { ownRevision:number;primitiveCache?:PrimitiveCellCache;readonly id: number; readonly values: SourceFacts; readonly users: Set<Rule>; }
@@ -326,6 +333,19 @@ const DEFAULT_SOURCE_ANALYSIS_RULE_BUDGET = 20_000_000;
  * This only ever leaves more dynamic-code sources unproven, which fails
  * closed. TSC2C_SOURCE_ANALYSIS_MEMORY_MB overrides it. */
 const DEFAULT_SOURCE_ANALYSIS_MEMORY_MB = 3072;
+/** Value cells one solve may allocate before it stops (fail closed like the
+ * step budget, and deterministic unlike resident memory): a cascade in which
+ * every call site escapes the global object allocates cells without bound,
+ * while ordinary programs stay under ten thousand and the largest property
+ * stress inputs under four hundred thousand. TSC2C_SOURCE_ANALYSIS_CELLS
+ * overrides it. */
+const DEFAULT_SOURCE_ANALYSIS_CELL_BUDGET = 1_000_000;
+function sourceAnalysisCellBudget(): number {
+    const raw = process.env.TSC2C_SOURCE_ANALYSIS_CELLS;
+    if (raw === undefined || raw === "") return DEFAULT_SOURCE_ANALYSIS_CELL_BUDGET;
+    if (!/^[1-9][0-9]{0,9}$/.test(raw)) throw new Error(`TSC2C_SOURCE_ANALYSIS_CELLS must be a positive integer, got ${JSON.stringify(raw)}`);
+    return Number(raw);
+}
 function sourceAnalysisMemoryLimit(): number {
     const raw = process.env.TSC2C_SOURCE_ANALYSIS_MEMORY_MB;
     if (raw === undefined || raw === "") return DEFAULT_SOURCE_ANALYSIS_MEMORY_MB * 1048576;
@@ -904,7 +924,7 @@ class SourceValueFlow {
                 if(capture){this.copy(this.captureProjection(project(capture.source),capture.constraints),target);extend();return;}
                 const transform=this.returnTransforms.get(source);
                 if(transform){this.copy(transform.evaluate(transform.inputs.map(project)),target);extend();return;}
-                for(const atom of Set.prototype.values.call(source.values) as Iterable<Atom>){
+                for(const atom of source.values.ownValues()){
                     let value=atom;
                     if(atom.tag==="text-operation"&&!this.projectedAtomPhases.get(atom)?.has(phase!)) {let previous=atoms.get(atom);if(!previous){previous={...atom,parts:atom.parts.map(project)};atoms.set(atom,previous);
                         this.projectedAtomPhases.set(previous,new Set([...(this.projectedAtomPhases.get(atom)??[]),phase!]));
@@ -1193,7 +1213,7 @@ class SourceValueFlow {
         const current=this.newEscapeReach();reach.cells.set(input,current);
         this.rule([input],()=>{
             for(const[facts,sourceKind]of input.values.sources)if(sourceKind==="value")this.linkEscapeReach(this.escapeCellReach(this.sourceCells.get(facts)!,sourceCallbacksOnly,kind),current);
-            for(const atom of Set.prototype.values.call(input.values) as Iterable<Atom>)this.linkEscapeReach(this.escapeAtomReach(atom,input,sourceCallbacksOnly,kind),current);
+            for(const atom of input.values.ownValues())this.linkEscapeReach(this.escapeAtomReach(atom,input,sourceCallbacksOnly,kind),current);
         });
         return current;
     }
@@ -1388,7 +1408,7 @@ class SourceValueFlow {
         const found=(source:SourceFacts):boolean=>{for(let current:SourceFacts|null=source;current;current=parents.get(current)??null)known.set(current,true);return true;};
         while(pending.length){const current=pending.pop()!,cached=known.get(current);
             if(cached===true)return found(current);if(cached===false)continue;
-            for(const atom of Set.prototype.values.call(current) as Iterable<Atom>)if(atom.tag==="unknown"&&this.effectVisible(atom,context,argumentsRead))return found(current);
+            for(const atom of current.ownValues())if(atom.tag==="unknown"&&this.effectVisible(atom,context,argumentsRead))return found(current);
             for(const source of current.sources.keys())if(!parents.has(source)){parents.set(source,current);pending.push(source);}
         }
         // Exhausting the shared worklist proves every visited subgraph false,
@@ -1593,10 +1613,10 @@ class SourceValueFlow {
                             if(replay!==source){worklist.push({source:replay,origins:false});continue;}
                         }
                     }
-                    for(const atom of Set.prototype.values.call(source.values) as Iterable<Atom>){
+                    for(const atom of source.values.ownValues()){
                         // Publishing is idempotent: an untransformed atom already in the
                         // target needs no repeated visibility proof on later reruns.
-                        if(atom.tag!=="text-operation"&&Set.prototype.has.call(target.values,atom))continue;
+                        if(atom.tag!=="text-operation"&&target.values.ownHas(atom))continue;
                         if(origins&&atom.tag!=="unknown"||constraints.phases.some(phase=>!phase.activationOnly&&!this.effectVisible(atom,phase.context,phase.argumentsRead)))continue;
                         this.publish(target,atom.tag==="text-operation"?this.captureAtom(atom,constraints):atom);
                     }
@@ -1624,7 +1644,7 @@ class SourceValueFlow {
             revision=input.ownRevision;timed=repeated;entryVersion=version;
             const definitions=this.reachingDefinitions(context,read);
             if(definitions===null){this.copy(input,result);return;}
-            for(const atom of Set.prototype.values.call(input.values) as Iterable<Atom>)this.publish(result,atom);
+            for(const atom of input.values.ownValues())this.publish(result,atom);
             for(const[facts,kind]of input.values.sources){const source=this.sourceCells.get(facts)!,write=this.knownWriteOrigins.get(source);
                 if(kind==="value"&&!entries?.has(source)&&write?.lexical&&write.event&&write.location===location&&this.sourceActivation(write.origin)===frame&&!definitions.has(write.event))continue;
                 this.copy(source,result,kind);
@@ -2167,7 +2187,7 @@ class SourceValueFlow {
     private markReadonly(owner:ObjectOwner,key:SourcePropertyKey):void {
         const record=this.ownPresence(owner,key);
         // Already marked: publishing the same true fact again is a no-op.
-        if(record.readonlyWrite&&Set.prototype.has.call(record.readonlyWrite.values,this.primitive(true)))return;
+        if(record.readonlyWrite&&record.readonlyWrite.values.ownHas(this.primitive(true)))return;
         if(!record.readonlyWrite){record.readonlyWrite=this.newCell();this.publish(owner.shape,{tag:"descriptor",identity:record.readonlyWrite});}
         this.publish(record.readonlyWrite,this.primitive(true));
     }
@@ -7587,10 +7607,10 @@ class SourceValueFlow {
         // memory bounded. Exhausting it ends the analysis without sealing:
         // every discovered dynamic-code site is reported unproven, which the
         // compiler admits only through a manifest or --unsafe-eval.
-        const budget=sourceAnalysisRuleBudget(),memoryLimit=sourceAnalysisMemoryLimit(),memoryBase=process.memoryUsage().rss;let runs=0,exhausted=false;
+        const budget=sourceAnalysisRuleBudget(),cellBudget=sourceAnalysisCellBudget(),memoryLimit=sourceAnalysisMemoryLimit(),memoryBase=process.memoryUsage().rss;let runs=0,exhausted=false;
         solving: for (;;) {
             while (this.moduleNamespacePending.length || this.initializers.length || this.queueCursor < this.queue.length || this.primitiveChanges.size) {
-                if (++runs > budget || (runs & 4095) === 0 && process.memoryUsage().rss - memoryBase > memoryLimit) { exhausted = true; break solving; }
+                if (++runs > budget || this.nextCell > cellBudget || (runs & 4095) === 0 && process.memoryUsage().rss - memoryBase > memoryLimit) { exhausted = true; break solving; }
                 if (this.moduleNamespacePending.length) { const namespace = this.moduleNamespacePending.pop()!; this.initializeModuleNamespace(namespace.source,namespace.symbol,namespace.owner); }
                 else if (this.initializers.length) { const initializer = this.initializers.pop()!; this.initialize(initializer.node, initializer.result); }
                 else if (this.primitiveChanges.size) this.flushPrimitiveChanges();
@@ -7636,7 +7656,7 @@ class SourceValueFlow {
             if (!changed) break;
         }
         if (exhausted) {
-            reportSourceAnalysisExhaustion(`tsc2c: warning: source-value analysis stopped after ${runs} steps (limits: ${budget} steps, ${Math.round(memoryLimit / 1048576)} MB); dynamic code sources stay unproven (raise TSC2C_SOURCE_ANALYSIS_BUDGET or TSC2C_SOURCE_ANALYSIS_MEMORY_MB to analyze further)\n`);
+            reportSourceAnalysisExhaustion(`tsc2c: warning: source-value analysis stopped after ${runs} steps and ${this.nextCell} cells (limits: ${budget} steps, ${cellBudget} cells, ${Math.round(memoryLimit / 1048576)} MB); dynamic code sources stay unproven (raise TSC2C_SOURCE_ANALYSIS_BUDGET, TSC2C_SOURCE_ANALYSIS_CELLS or TSC2C_SOURCE_ANALYSIS_MEMORY_MB to analyze further)\n`);
             const result = {
                 constructors: [...this.invocations.values()].flatMap(records => [...records.values()]).map(invocation =>
                     ({kind:invocation.kind,arguments:null,complete:false,...(this.domain?{domain:this.domain}:{})})),
