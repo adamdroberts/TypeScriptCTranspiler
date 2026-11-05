@@ -6,7 +6,8 @@ import { classPrivateNames, classPrivateNamesInScope, externalPrivateNames, reso
 import { moduleRequestFromDeclaration, moduleRequestKey, type ModuleRequest } from "../module-request";
 import { exportedModuleNames, moduleNamespaceBinding, resolveModuleExport, type ModuleExportRecord } from "../module-export-resolution";
 import { definitionEvaluationChildren, moduleHasTopLevelAwait } from "./module-evaluation";
-import {classDefinitionPlan} from './class-definition';
+import {classDefinitionPlan, classConstructorMember, isClassConstructor, isStaticConstructorMethod} from './class-definition';
+import { directEvalContext } from "../eval-context";
 import ts from "typescript";
 import {moduleLinkRecord} from "../module-source-record";
 import { ecmaDirectivePrologueHasUseStrict, ecmaParseGoal } from "../ecmascript-source";
@@ -12090,11 +12091,11 @@ class Emitter {
         }
         const directEvalEntries = (this.options.sourceEval ?? this.options.test262Observation)?.directEvalEntries ?? [];
         if (directEvalEntries.length > 0 || this.options.unsafeEval) {
-            out.line("static tsc_value_t test262_direct_eval_dispatch(tsc_str_t* source, bool strict_caller) {");
+            out.line("static tsc_value_t test262_direct_eval_dispatch(tsc_str_t* source, bool strict_caller, unsigned context) {");
             for (const [index, entry] of directEvalEntries.entries()) {
                 out.line(
                     `    ${index === 0 ? "if" : "else if"} (` +
-                    `strict_caller == ${entry.strictCaller ? "true" : "false"} && ` +
+                    `strict_caller == ${entry.strictCaller ? "true" : "false"} && context == ${entry.context ?? 0}u && ` +
                     `tsc_str_eq(source, ${this.cStringLiteral(entry.source)})) {`,
                 );
                 if (entry.entry === null) {
@@ -22456,7 +22457,7 @@ class Emitter {
             const fieldName = this.classInstanceFieldStorageKey(m);
             fields.set(fieldName, { name: fieldName, type: mapType(m, this.checker), initializer: m.initializer });
         }
-        const ctor = cd.members.find((m) => ts.isConstructorDeclaration(m)) as
+        const ctor = classConstructorMember(cd) as
             | ts.ConstructorDeclaration
             | undefined;
         for (const parameter of ctor?.parameters ?? []) {
@@ -22488,7 +22489,7 @@ class Emitter {
 
     private emitClassPrototypes(cd: ts.ClassDeclaration): void {
         if (!cd.name) return;
-        const name = nativeTypeName(cd), ctor = cd.members.find(ts.isConstructorDeclaration);
+        const name = nativeTypeName(cd), ctor = classConstructorMember(cd);
         const parameters = this.collectParams(ctor?.parameters ?? []);
         this.protos.line(`static inline void ${name}_init(${[`${name}_t* self`, ...parameters].join(", ")});`);
         this.protos.line(`static inline ${name}_t* ${name}_new(${parameters.length ? parameters.join(", ") : "void"});`);
@@ -22506,7 +22507,7 @@ class Emitter {
             if (field.initializer) initialized.add(field.name);
         }
 
-        const ctor = cd.members.find((m) => ts.isConstructorDeclaration(m)) as
+        const ctor = classConstructorMember(cd) as
             | ts.ConstructorDeclaration
             | undefined;
         if (ctor?.body) {
@@ -23780,7 +23781,7 @@ class Emitter {
     private emitNativeClassBodies(cd: ts.ClassDeclaration): void {
         if (!cd.name) return;
         const name = nativeTypeName(cd);
-        const ctor = cd.members.find((m) => ts.isConstructorDeclaration(m)) as
+        const ctor = classConstructorMember(cd) as
             | ts.ConstructorDeclaration
             | undefined;
         const ctorParams = this.collectParams(ctor?.parameters ?? []);
@@ -24415,7 +24416,7 @@ class Emitter {
         if (!cd.name) unsupported(cd, "class constructor value requires a named class");
         const className = nativeTypeName(cd);
         const runtimeName = this.classRuntimeName(cd);
-        const ctor = cd.members.find(ts.isConstructorDeclaration);
+        const ctor = classConstructorMember(cd);
         const params = ctor?.parameters ?? [];
         const paramTypes = params.map((param) => this.prepareType(mapTsType(
             param,
@@ -24464,7 +24465,7 @@ class Emitter {
         definition: ts.ClassLikeDeclaration, constructor: string, prototype: string, nativeStorage: boolean,
     ): string[] {
         const pieces: string[] = [`tsc_value_function_with_home_object(${constructor}, ${prototype})`];
-        const bodyDeclaration = !nativeStorage ? definition.members.find(ts.isConstructorDeclaration) : undefined;
+        const bodyDeclaration = !nativeStorage ? classConstructorMember(definition) : undefined;
         if (bodyDeclaration) {
             if (!this.isSupportedDynamicConstructor(bodyDeclaration))
                 unsupported(bodyDeclaration, "class element requires the canonical initialization plan");
@@ -24483,11 +24484,14 @@ class Emitter {
         keyOverride?: string,
     ): string[] {
         const pieces: string[] = [];
+        const staticConstructor = isStaticConstructorMethod(member);
         const callable = (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) ||
-            ts.isSetAccessorDeclaration(member)) && !!member.body;
+            ts.isSetAccessorDeclaration(member) || staticConstructor) && !!member.body;
         const field = ts.isPropertyDeclaration(member);
         const block = ts.isClassStaticBlockDeclaration(member);
-        if (ts.isConstructorDeclaration(member)) return pieces;
+        if (ts.isConstructorDeclaration(member) && !staticConstructor) return pieces;
+        if (staticConstructor && ts.getModifiers(member)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword))
+            unsupported(member, "static async constructor method requires the canonical method plan");
         if (!nativeStorage && !callable && !field && !block && member.kind !== ts.SyntaxKind.SemicolonClassElement) {
             unsupported(member, "class element requires the canonical initialization plan");
         }
@@ -24499,7 +24503,7 @@ class Emitter {
         if (!callable && !field) return pieces;
         // Declaration fields retain their key for later initialization;
         // expression methods borrow a local carrier owned by this definition.
-        const name = member.name!;
+        const name: ts.PropertyName = staticConstructor ? ts.setTextRange(ts.factory.createIdentifier("constructor"), member) : member.name!;
         const publicName = this.classMemberPublicName(name);
         const privateMember = ts.isPrivateIdentifier(name);
         let key = privateMember ? this.emitPrivateNameValue(name).c : this.stringLit(publicName);
@@ -24533,7 +24537,7 @@ class Emitter {
             const prefix = ts.isGetAccessorDeclaration(member) ? this.stringLit("get") : ts.isSetAccessorDeclaration(member) ? this.stringLit("set") : "NULL";
             pieces.push(`${value} = tsc_value_function_with_property_name(${value}, ${key}, ${prefix})`);
         }
-        if (ts.isMethodDeclaration(member)) {
+        if (ts.isMethodDeclaration(member) || staticConstructor) {
             pieces.push(`if (!tsc_value_define_property_desc(${target}, ${key}, ${value}, true, true, true, false, true, true, true)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class method definition failed"))`);
         } else {
             const kind = ts.isGetAccessorDeclaration(member) ? "getter" : "setter";
@@ -29947,7 +29951,7 @@ class Emitter {
             !this.classHasDecorators(definition) && definition.members.every((member) =>
                 member.kind === ts.SyntaxKind.SemicolonClassElement ||
                 ts.isClassStaticBlockDeclaration(member) ||
-                ts.isConstructorDeclaration(member) && this.isSupportedDynamicConstructor(member) ||
+                ts.isConstructorDeclaration(member) && (isStaticConstructorMethod(member) ? !!member.body : this.isSupportedDynamicConstructor(member)) ||
                 ts.isPropertyDeclaration(member) ||
                 (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) &&
                     !!member.body);
@@ -32989,23 +32993,33 @@ class Emitter {
             ? { c: `tsc_environment_get_this(${binding.c})`, ty: T_VALUE } : binding;
     }
 
+    /** Direct eval code outside any function of its own reads `this`, the
+     * home object and the constructor record from the function Environment
+     * Record it was evaluated in (GetThisEnvironment). */
+    private isEvalCodeOutsideFunction(node: ts.Node): boolean {
+        return this.isTest262EvalSourceFile(node.getSourceFile()) && !this.nearestEnclosingNewTargetOwner(node);
+    }
+
     private constructorThisEnvironment(node: ts.Node): EmitResult | null {
         const binding = this.currentFunctionActivationBinding("this") ??
             this.activeArrowLexicalBinding(node, "this") ?? this.functionThisStack.at(-1);
-        return binding?.ty.kind === "environment" ? binding : null;
+        if (binding?.ty.kind === "environment") return binding;
+        if (this.isEvalCodeOutsideFunction(node)) return { c: "tsc_environment_eval_function_record()", ty: T_ENVIRONMENT };
+        return null;
     }
 
     private superHomeObject(node: ts.Node): EmitResult {
         return this.currentFunctionActivationBinding("home-object") ??
             this.activeArrowLexicalBinding(node, "home-object") ??
-            { c: "tsc_value_current_home_object()", ty: T_VALUE };
+            { c: this.isEvalCodeOutsideFunction(node) ? "tsc_environment_eval_home_object()" : "tsc_value_current_home_object()", ty: T_VALUE };
     }
 
     private superThisValue(node: ts.Node): EmitResult {
         const receiver = this.currentFunctionActivationBinding("this") ??
             this.activeArrowLexicalBinding(node, "this") ??
             this.functionThisStack[this.functionThisStack.length - 1] ??
-            (this.currentClass ? { c: "self", ty: classType(this.currentClass) } : undefined);
+            (this.currentClass ? { c: "self", ty: classType(this.currentClass) } : undefined) ??
+            (this.isEvalCodeOutsideFunction(node) ? { c: "tsc_environment_eval_this()", ty: T_VALUE } : undefined);
         if (!receiver) unsupported(node, "super property requires a method receiver");
         return this.readThisBinding(receiver);
     }
@@ -34072,7 +34086,7 @@ class Emitter {
             `{ .previous = tsc_environment_current(), .record = tsc_environment_project(${projection}, ${references.length}) }; ` +
             `tsc_environment_private_names_project(${scope}.record, ${privateProjection}, ${privateNames.length}); ` +
             `(void)tsc_environment_swap(${scope}.record); ` +
-            `tsc_test262_direct_eval_call(${callee}, ${receiver}, ${argumentsValue}, ${this.nodeIsInStrictMode(call) ? "true" : "false"}); })`;
+            `tsc_test262_direct_eval_call(${callee}, ${receiver}, ${argumentsValue}, ${this.nodeIsInStrictMode(call) ? "true" : "false"}, ${directEvalContext(call)}u); })`;
     }
 
     private cStringLiteral(value: string): string {
@@ -34818,7 +34832,7 @@ class Emitter {
                 this.returnStack.push(ret);
                 if (isAsync) this.asyncFunctionStack.push({ promiseType: ret });
                 this.cellScopes.push(capturedCells);
-                const functionThisBinding = ts.isConstructorDeclaration(fn)
+                const functionThisBinding = isClassConstructor(fn)
                     ? { c: "tsc_value_current_constructor_environment()", ty: T_ENVIRONMENT }
                     : type.thisParam ? { c: "__tsc_this", ty: type.thisParam }
                     : arrowLexicalBindings.get("this") ?? null;
@@ -39538,7 +39552,7 @@ class Emitter {
                 return this.emitDynamicValueConstruct(n, ctor);
             }
         }
-        const ctorDecl = classLike?.members.find(ts.isConstructorDeclaration);
+        const ctorDecl = classLike ? classConstructorMember(classLike) : undefined;
         if ((classLike?.typeParameters?.length || targetClassExpression) && ctorDecl) {
             const paramTypes = ctorDecl.parameters.map((param) =>
                 this.prepareType(mapType(param, this.checker)),

@@ -41,6 +41,10 @@ struct tsc_environment {
     void* this_root;
     tsc_value_t new_target;
     void* new_target_root;
+    /* [[HomeObject]] of the function whose record this is, read by direct
+     * eval code for SuperProperty (GetThisEnvironment, sec-performeval). */
+    tsc_value_t home_object;
+    void* home_object_root;
 };
 
 #define current_environment (*tsc_agent_environment_slot())
@@ -70,6 +74,8 @@ tsc_environment_t* tsc_environment_new(tsc_environment_t* parent, bool variable_
     environment->this_root = NULL;
     environment->new_target = tsc_value_undefined();
     environment->new_target_root = NULL;
+    environment->home_object = tsc_value_undefined();
+    environment->home_object_root = NULL;
     return environment;
 }
 
@@ -226,8 +232,11 @@ void tsc_environment_function_enter(tsc_environment_scope_t* scope, bool arrow, 
         }
         tsc_environment_binding_t* arguments = environment_create_binding(scope->record, tsc_str_from_cstr("arguments"), false, false, false);
         binding_store(arguments, tsc_call_arguments());
+        scope->record->home_object = tsc_value_current_home_object();
+        scope->record->home_object_root = tsc_value_gc_root(scope->record->home_object);
     }
 }
+
 
 static tsc_environment_t* environment_context(void) {
     for (tsc_environment_t* record = current_environment; record; record = record->parent)
@@ -239,6 +248,18 @@ tsc_value_t tsc_environment_eval_this(void) {
     tsc_environment_t* record = environment_context();
     return record ? tsc_environment_get_this(record) : tsc_global_object();
 }
+tsc_value_t tsc_environment_eval_home_object(void) {
+    tsc_environment_t* record = environment_context();
+    return record && record->context == ENV_CONTEXT_FUNCTION ? record->home_object : tsc_value_undefined();
+}
+
+tsc_environment_t* tsc_environment_eval_function_record(void) {
+    tsc_environment_t* record = environment_context();
+    if (!record || record->context != ENV_CONTEXT_FUNCTION)
+        tsc_throw_error(TSC_ERROR_SYNTAX, tsc_str_from_cstr("super call requires a constructor evaluation context"));
+    return record;
+}
+
 
 void tsc_environment_require_function_context(void) {
     tsc_environment_t* record = environment_context();

@@ -29,6 +29,7 @@ import { invokeCc } from "./link/cc";
 import { emitNetPolicyC, NetPolicyError, parseNetPolicy, type NetPolicy } from "./link/net-policy";
 import { commonJsRequireSpecifierArgument, staticStringExpressionText, staticStringExpressionTexts } from "./module-specifiers";
 import { evaluationSourceRequests, evalSourceIsValid, evalSourceKey, evalSourceRequest, type EvalSourceRequest, type SourceEvalPlan } from "./eval-source";
+import { setEvalSourceContext } from "./eval-context";
 import { setSourceAnalysisWarningWriter, sourceConstructorInvocations, sourceEvaluationInvocations } from "./source-value-flow";
 import { declarativeSourceBindingSymbol, sourceDeclarationIntroducesBinding } from "./source-bindings";
 import {
@@ -810,7 +811,9 @@ async function compileWithDiagnostics(opts: CompileOptions, writeDiagnostic: (me
         const entries = kind === "agent" ? opts.test262Observation?.agentEntries : kind === "script" ? opts.test262Observation?.evalScriptEntries :
             kind === "direct" ? opts.test262Observation?.directEvalEntries : opts.test262Observation?.indirectEvalEntries;
         for (const entry of entries ?? []) {
-            const request = evalSourceRequest(kind, entry.source, "strictCaller" in entry ? entry.strictCaller as boolean : false, entry.domain);
+            const request = evalSourceRequest(kind, entry.source, "strictCaller" in entry ? entry.strictCaller as boolean : false, entry.domain,
+                "context" in entry && typeof entry.context === "number" ? entry.context : 0);
+            if (kind === "direct" && entry.entry) setEvalSourceContext(entry.entry, request.context);
             const admitted=evalSourceIsValid(request);
             if(!admitted && entry.entry)rejectedEvalRoots.add(path.resolve(entry.entry));
             evalEntries.set(evalSourceKey(request), { ...request, entry: admitted ? entry.entry : null });
@@ -846,6 +849,7 @@ async function compileWithDiagnostics(opts: CompileOptions, writeDiagnostic: (me
             let entry: string | null = null;
             if (evalSourceIsValid(request)) {
                 entry = path.join(buildDir, `eval-source-${createHash("sha256").update(key).digest("hex")}.js`);
+                if (request.kind === "direct") setEvalSourceContext(entry, request.context);
                 await fs.writeFile(entry, Buffer.from("\ufeff" + request.source, "utf16le"));
                 addedRoot = true;
             }

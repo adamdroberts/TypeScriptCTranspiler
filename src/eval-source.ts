@@ -2,6 +2,7 @@ import ts from "typescript";
 import { earlyControlFlowStaticSemanticsFailure } from "./control-static-semantics";
 import { earlyFunctionStaticSemanticsFailure } from "./function-static-semantics";
 import { earlyRegExpLiteralFailure } from "./regexp-static-semantics";
+import { directEvalContext } from "./eval-context";
 import { earlyShortCircuitMixFailure } from "./function-static-semantics";
 import { earlyPrivateStaticSemanticsFailure } from "./emit/private-names";
 import { createEcmaSourceFile, ecmaDirectivePrologueHasUseStrict, ecmaParseGoal } from "./ecmascript-source";
@@ -9,7 +10,7 @@ import { sourceEvaluationInvocations } from "./source-value-flow";
 import type { SourceValueGraphEntries } from "./source-value-flow";
 
 export interface EvalSourceEntry { readonly source: string; readonly entry: string | null; readonly domain?: string; }
-export interface DirectEvalSourceEntry extends EvalSourceEntry { readonly strictCaller: boolean; readonly strict: boolean; }
+export interface DirectEvalSourceEntry extends EvalSourceEntry { readonly strictCaller: boolean; readonly strict: boolean; readonly context?: number; }
 export interface IndirectEvalSourceEntry extends EvalSourceEntry { readonly strict: boolean; }
 export interface SourceEvalPlan {
     readonly unresolvedCalls?: readonly ts.Node[];
@@ -24,11 +25,13 @@ export interface EvalSourceRequest {
     readonly source: string;
     readonly strictCaller: boolean;
     readonly strict: boolean;
+    /** PerformEval context bits of a direct eval (src/eval-context.ts); 0 otherwise. */
+    readonly context: number;
 }
 export function evalSourceKey(request: EvalSourceRequest): string { return JSON.stringify(request.kind==="agent"?{...request,domain:undefined}:request); }
-export function evalSourceRequest(kind: EvalSourceRequest["kind"], source: string, strictCaller = false,domain?:string): EvalSourceRequest {
+export function evalSourceRequest(kind: EvalSourceRequest["kind"], source: string, strictCaller = false,domain?:string, context = 0): EvalSourceRequest {
     const parsed = createEcmaSourceFile("eval-source.js", source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS, "script");
-    return {kind, source, strictCaller, strict: strictCaller || ecmaDirectivePrologueHasUseStrict(parsed.statements),...(domain?{domain}:{})};
+    return {kind, source, strictCaller, strict: strictCaller || ecmaDirectivePrologueHasUseStrict(parsed.statements), context: kind === "direct" ? context : 0,...(domain?{domain}:{})};
 }
 
 export function sourceFileIsStrict(source: ts.SourceFile): boolean {
@@ -61,7 +64,7 @@ export function evaluationSourceRequests(program: ts.Program, entries: SourceVal
             const file = invocation.node.getSourceFile();
             const strictCaller = invocation.direct && ts.isCallExpression(invocation.node) && directEvalIsStrict(invocation.node, strictContexts.get(file.fileName) ?? sourceFileIsStrict(file));
             const request = evalSourceRequest(invocation.operation === "agent-start" ? "agent" : invocation.operation === "eval-script" ? "script" : invocation.direct ? "direct" : "indirect",
-                source, strictCaller,invocation.domain);
+                source, strictCaller,invocation.domain, invocation.direct ? directEvalContext(invocation.node) : 0);
             requests.set(evalSourceKey(request), request);
         }
     }
@@ -72,7 +75,8 @@ export function evalSourceIsValid(request: EvalSourceRequest): boolean {
     const text = request.strict ? '"use strict";\n' + request.source : request.source;
     const file = createEcmaSourceFile("eval-source.js", text, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS, "script");
     return !(file as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics?.length &&
-        !earlyControlFlowStaticSemanticsFailure(file) && !earlyFunctionStaticSemanticsFailure(file) &&
+        !earlyControlFlowStaticSemanticsFailure(file) &&
+        !earlyFunctionStaticSemanticsFailure(file, request.kind === "direct" || request.kind === "indirect" ? request.context : null) &&
         !earlyPrivateStaticSemanticsFailure(file, request.kind === "direct") && !earlyRegExpLiteralFailure(file) &&
         !earlyShortCircuitMixFailure(file);
 }

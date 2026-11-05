@@ -96,7 +96,7 @@ export function normalizeAssignmentTarget(
                 defaultValue,
             ));
         }
-        return ts.factory.createArrayBindingPattern(elements);
+        return attachSynthesizedPattern(ts.factory.createArrayBindingPattern(elements), targetExpression);
     }
     if (ts.isObjectLiteralExpression(targetExpression)) {
         const elements: ts.BindingElement[] = [];
@@ -140,7 +140,16 @@ export function normalizeAssignmentTarget(
                 defaultValue,
             ));
         }
-        return ts.factory.createObjectBindingPattern(elements);
+        return attachSynthesizedPattern(ts.factory.createObjectBindingPattern(elements), targetExpression);
     }
     return null;
+}
+
+/** A synthesized pattern keeps the literal's source range and parent so a
+ * consumer can still reach the enclosing function and source file. */
+function attachSynthesizedPattern<T extends ts.BindingPattern>(pattern: T, literal: ts.Expression): T {
+    ts.setTextRange(pattern, literal);
+    Object.assign(pattern, {parent: literal.parent});
+    for (const element of pattern.elements) if (ts.isBindingElement(element) && element.pos < 0) Object.assign(element, {parent: pattern});
+    return pattern;
 }

@@ -6,6 +6,19 @@ export type ClassDefinitionStage =
     | { readonly kind: "element"; readonly member: ts.ClassElement; readonly key: ts.Expression | null }
     | { readonly kind: "complete"; readonly definition: ts.ClassLikeDeclaration };
 
+/** The parser calls a `static constructor() {}` member a ConstructorDeclaration;
+ * it is a static method named "constructor", not the class constructor. */
+export function isStaticConstructorMethod(member: ts.Node): member is ts.ConstructorDeclaration {
+    return ts.isConstructorDeclaration(member) &&
+        (ts.getModifiers(member)?.some(modifier => modifier.kind === ts.SyntaxKind.StaticKeyword) ?? false);
+}
+export function isClassConstructor(member: ts.Node): member is ts.ConstructorDeclaration {
+    return ts.isConstructorDeclaration(member) && !isStaticConstructorMethod(member);
+}
+export function classConstructorMember(definition: ts.ClassLikeDeclaration): ts.ConstructorDeclaration | undefined {
+    return definition.members.find(isClassConstructor);
+}
+
 /** Definition-time evaluations are separate from retained constructor,
  * method and initializer bodies. All consumers walk this ordered plan. */
 export function classDefinitionPlan(definition: ts.ClassLikeDeclaration): readonly ClassDefinitionStage[] {
@@ -15,7 +28,7 @@ export function classDefinitionPlan(definition: ts.ClassLikeDeclaration): readon
         for (const heritage of clause.types) stages.push({ kind: "heritage", expression: heritage.expression });
     }
     for (const member of definition.members) {
-        if (ts.isConstructorDeclaration(member) || member.kind === ts.SyntaxKind.SemicolonClassElement) continue;
+        if (isClassConstructor(member) || member.kind === ts.SyntaxKind.SemicolonClassElement) continue;
         stages.push({ kind: "element", member,
             key: member.name && ts.isComputedPropertyName(member.name) ? member.name.expression : null });
     }

@@ -40,7 +40,7 @@ void tsc_test262_set_indirect_eval_callback(tsc_test262_indirect_eval_callback_t
     g_test262_indirect_eval_callback = callback;
 }
 
-tsc_value_t tsc_test262_direct_eval(tsc_value_t source, bool strict_caller) {
+tsc_value_t tsc_test262_direct_eval(tsc_value_t source, bool strict_caller, unsigned context) {
     if (!value_is_box(source) || value_tag(source) != TSC_VALUE_TAG_STRING) return source;
     if (!g_test262_direct_eval_callback) {
         tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("direct eval has no finite AOT source graph"));
@@ -48,7 +48,7 @@ tsc_value_t tsc_test262_direct_eval(tsc_value_t source, bool strict_caller) {
     tsc_parse_unit_t* volatile unit = tsc_parse_unit_new();
     tsc_parse_unit_t* previous = tsc_parse_unit_swap(unit);
     tsc_environment_t* previous_environment = tsc_environment_current();
-    tsc_value_t result = g_test262_direct_eval_callback(tsc_value_as_string(source), strict_caller);
+    tsc_value_t result = g_test262_direct_eval_callback(tsc_value_as_string(source), strict_caller, context);
     (void)tsc_parse_unit_swap(previous);
     (void)tsc_environment_swap(previous_environment);
     (void)unit;
@@ -59,14 +59,15 @@ tsc_value_t tsc_test262_direct_eval_call(
     tsc_value_t callee,
     tsc_value_t receiver,
     tsc_value_t args,
-    bool strict_caller
+    bool strict_caller,
+    unsigned context
 ) {
     if (tsc_value_eq(callee, tsc_eval_intrinsic_value())) {
             tsc_array_t* list = tsc_value_as_array(args);
             tsc_value_t source = list && list->len > 0
                 ? TSC_ARR(tsc_value_t, list, 0)
                 : tsc_value_undefined();
-        return tsc_test262_direct_eval(source, strict_caller);
+        return tsc_test262_direct_eval(source, strict_caller, context);
     }
     return tsc_value_apply_function(callee, receiver, args);
 }

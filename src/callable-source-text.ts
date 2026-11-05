@@ -6,7 +6,7 @@ import ts from "typescript";
  * spans that erasure cannot represent use the native representation. */
 export function callableSourceText(definition: ts.Node | null): string | null {
     if (!definition || definition.pos < 0) return null;
-    if (ts.isConstructorDeclaration(definition)) definition = definition.parent;
+    if (ts.isConstructorDeclaration(definition) && !(ts.getModifiers(definition)?.some(modifier => modifier.kind === ts.SyntaxKind.StaticKeyword) ?? false)) definition = definition.parent;
     const source = definition.getSourceFile();
     const typescript = !!source && /\.[cm]?ts$/i.test(source.fileName);
     if (!source || !typescript && !/\.[cm]?jsx?$/i.test(source.fileName)) return null;

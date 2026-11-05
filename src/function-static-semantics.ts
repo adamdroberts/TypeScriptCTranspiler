@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { EVAL_CONTEXT_FIELD_INITIALIZER, EVAL_CONTEXT_SUPER_CALL, EVAL_CONTEXT_SUPER_PROPERTY, classHasHeritage, evalSourceContext } from "./eval-context";
 import { ecmaParseGoal, ecmaDirectivePrologueHasUseStrict } from "./ecmascript-source";
 import {
     bindingNameEntries,
@@ -458,6 +459,13 @@ function functionLikeFailure(
             pushChildren(worklist, current);
         }
     }
+    // A getter has no parameters and a setter exactly one FormalParameter
+    // (PropertySetParameterList admits a default but no rest).
+    const valueParameters = node.parameters.filter(parameter => !(ts.isIdentifier(parameter.name) && parameter.name.text === "this"));
+    if (ts.isGetAccessorDeclaration(node) && valueParameters.length)
+        return { node: valueParameters[0]!, message: "a getter cannot have parameters" };
+    if (ts.isSetAccessorDeclaration(node) && (valueParameters.length !== 1 || valueParameters[0]!.dotDotDotToken))
+        return { node: valueParameters[0] ?? node, message: "a setter must have exactly one parameter" };
     const parameters = node.parameters;
     for (let index = 0; index < parameters.length; index++) {
         const parameter = parameters[index]!;
@@ -547,6 +555,7 @@ function functionLikeFailure(
  * parameter count nor generated fixture families affect the decision. */
 export function earlyFunctionStaticSemanticsFailure(
     sourceFile: ts.SourceFile,
+    evalContext: number | null = evalSourceContext(sourceFile),
 ): FunctionStaticSemanticsFailure | null {
     const module = ecmaParseGoal(sourceFile) === "module";
     const javascript = isJavaScriptSourceFile(sourceFile);
@@ -570,7 +579,7 @@ export function earlyFunctionStaticSemanticsFailure(
             ts.isAsExpression(node) || ts.isTypeAssertionExpression(node) || ts.isSatisfiesExpression(node) ||
             ts.isNonNullExpression(node) || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node) ||
             ts.isEnumDeclaration(node) || ts.isImportEqualsDeclaration(node) ||
-            ts.isParameter(node) && !!node.questionToken)) {
+            ts.isParameter(node) && (!!node.questionToken || ts.isIdentifier(node.name) && node.name.text === "this"))) {
             return { node, message: "TypeScript syntax is not permitted in ECMAScript source" };
         }
         // A FunctionExpression's own BindingIdentifier is parsed with [~Yield]
@@ -626,8 +635,43 @@ export function earlyFunctionStaticSemanticsFailure(
                     if ("name" in parent && parent.name === current) continue;
                     break;
                 }
-                if (ts.isSourceFile(parent)) break;
+                if (ts.isSourceFile(parent)) {
+                    if (evalContext !== null && (evalContext & EVAL_CONTEXT_FIELD_INITIALIZER))
+                        return { node, message: "'arguments' is not permitted in eval code of a class field initializer or static block" };
+                    break;
+                }
             }
+        }
+        // SuperProperty needs a HomeObject (a method, accessor, constructor,
+        // field initializer or static block) and SuperCall a derived class
+        // constructor; a Script or Module admits neither and eval code only
+        // what its PerformEval context admits. Element keys and class heritage
+        // are evaluated in the enclosing scope (sec-class-definitions-static-semantics-early-errors, sec-performeval).
+        if (node.kind === ts.SyntaxKind.SuperKeyword) {
+            const call = ts.isCallExpression(node.parent) && node.parent.expression === node;
+            let owner: ts.Node | undefined;
+            for (let current: ts.Node = node, parent: ts.Node | undefined = node.parent; parent; current = parent, parent = parent.parent) {
+                if (ts.isArrowFunction(parent)) continue;
+                if ((ts.isFunctionLike(parent) || ts.isPropertyDeclaration(parent) || ts.isPropertyAssignment(parent)) && "name" in parent && parent.name === current) continue;
+                if (ts.isFunctionLike(parent) || ts.isClassStaticBlockDeclaration(parent) || ts.isPropertyDeclaration(parent) || ts.isSourceFile(parent)) { owner = parent; break; }
+            }
+            let propertyAllowed = false, callAllowed = false;
+            if (!owner || ts.isSourceFile(owner)) {
+                propertyAllowed = evalContext !== null && (evalContext & EVAL_CONTEXT_SUPER_PROPERTY) !== 0;
+                callAllowed = evalContext !== null && (evalContext & EVAL_CONTEXT_SUPER_CALL) !== 0;
+            } else if (ts.isConstructorDeclaration(owner) && !hasStaticModifier(owner)) {
+                propertyAllowed = true;
+                callAllowed = ts.isClassLike(owner.parent) && classHasHeritage(owner.parent);
+            } else if (ts.isMethodDeclaration(owner) || ts.isGetAccessorDeclaration(owner) || ts.isSetAccessorDeclaration(owner) ||
+                ts.isConstructorDeclaration(owner) || ts.isClassStaticBlockDeclaration(owner) || ts.isPropertyDeclaration(owner)) {
+                propertyAllowed = true;
+            }
+            if (call ? !callAllowed : !propertyAllowed)
+                return { node, message: call ? "super() is only permitted in a derived class constructor" : "super property access requires a method, accessor, field initializer or static block" };
+        }
+        if (ts.isClassLike(node)) {
+            const failure = classElementFailure(node);
+            if (failure) return failure;
         }
         if (ts.isAwaitExpression(node) && !allowAwait)
             return { node, message: "AwaitExpression is not permitted in this grammar context" };
@@ -701,6 +745,48 @@ function isAssignmentTargetPosition(node: ts.Node): boolean {
 
 /** IdentifierName property positions do not consume the contextual
  * BindingIdentifier/IdentifierReference grammar parameters. */
+function hasStaticModifier(node: ts.Node): boolean {
+    return ts.canHaveModifiers(node) && (ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.StaticKeyword) ?? false);
+}
+
+/** PropName of a literal element name; null for a computed or private name. */
+function literalPropName(name: ts.PropertyName | undefined): string | null {
+    if (!name) return null;
+    if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text;
+    return null;
+}
+
+/** ClassBody early errors: one constructor, no special-method or field
+ * named constructor, no static method or field named prototype
+ * (sec-class-definitions-static-semantics-early-errors). The parser calls
+ * `async constructor` and `static constructor` ConstructorDeclarations. */
+function classElementFailure(node: ts.ClassLikeDeclaration): FunctionStaticSemanticsFailure | null {
+    let constructors = 0;
+    for (const member of node.members) {
+        const isStatic = hasStaticModifier(member);
+        const name = literalPropName(member.name);
+        if (ts.isConstructorDeclaration(member)) {
+            if (isStatic) continue;
+            if (ts.getModifiers(member)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword))
+                return { node: member, message: "the class constructor cannot be a special method" };
+            if (member.body && ++constructors > 1) return { node: member, message: "a class has at most one constructor" };
+            continue;
+        }
+        if (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) {
+            if (!isStatic && name === "constructor")
+                return { node: member.name, message: "the class constructor cannot be a special method" };
+            if (isStatic && name === "prototype")
+                return { node: member.name, message: "a static method cannot be named prototype" };
+            continue;
+        }
+        if (ts.isPropertyDeclaration(member)) {
+            if (name === "constructor") return { node: member.name, message: "a class field cannot be named constructor" };
+            if (isStatic && name === "prototype") return { node: member.name, message: "a static field cannot be named prototype" };
+        }
+    }
+    return null;
+}
+
 /** Whether an identifier is a BindingIdentifier or LabelIdentifier rather
  * than an IdentifierReference. */
 function isDeclaredName(node: ts.Identifier): boolean {

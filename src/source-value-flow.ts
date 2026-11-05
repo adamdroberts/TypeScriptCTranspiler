@@ -7,6 +7,7 @@ import ts from "typescript";
 import { callableSourceText } from "./callable-source-text";
 import {classPrivateNames,classPrivateNamesInScope,resolveClassPrivateName,type ClassPrivateName} from "./emit/private-names";
 import { normalizeAssignmentTarget, unwrapTransparentExpression as unwrap } from "./emit/binding-tree";
+import { classConstructorMember, isClassConstructor, isStaticConstructorMethod } from "./emit/class-definition";
 import { isStrictCodeContext, callableNameInput, expectedArgumentCount, functionBodyCompletions, statementBodyCompletions, type StatementBodyCompletions, NAME_EVALUATING_ASSIGNMENTS } from "./function-static-semantics";
 import {consoleOperations} from "./console-operations";
 import {jsonMethods, jsonOperations, type JSONSourceOperation} from "./json-methods";
@@ -5343,7 +5344,7 @@ class SourceValueFlow {
     private function(node: CallableDefinition): FunctionOwner {
         let owner = this.functions.get(node);
         if (owner) return owner;
-        const activation = ts.isClassLike(node) ? node.members.find(ts.isConstructorDeclaration) ?? null : node;
+        const activation = ts.isClassLike(node) ? classConstructorMember(node) ?? null : node;
         const constructor = ts.isClassLike(node) && activation ? this.function(activation) : null;
         owner = { definition: node, node: activation,parameters:(activation?.parameters??[]).filter(parameter=>!ts.isIdentifier(parameter.name)||parameter.name.text!=="this"),actuals:new Map(),actualChanges:this.newCell(), kind: functionKindForDeclaration(node), fields: this.owner(node),
             yields:this.newCell(),yieldReceives:this.newCell(),yieldThrows:this.exceptionCell(), returns: constructor?.returns ?? this.newCell(), throws: constructor?.throws ?? this.exceptionCell(),
@@ -5401,9 +5402,10 @@ class SourceValueFlow {
                 else privateInitializers.push({name,template});
             }
             for (const member of node.members) {
-                if (ts.isConstructorDeclaration(member) || ts.isClassStaticBlockDeclaration(member)) continue;
+                if (isClassConstructor(member) || ts.isClassStaticBlockDeclaration(member)) continue;
                 const isStatic = (ts.canHaveModifiers(member) ? ts.getModifiers(member) ?? [] : []).some(modifier=>modifier.kind===ts.SyntaxKind.StaticKeyword);
                 const target = isStatic ? owner.fields : prototype;
+                if (isStaticConstructorMethod(member)) { this.defineField(target, "constructor", this.cell(member)); continue; }
                 if (member.name && ts.isPrivateIdentifier(member.name)) continue;
                 if (!isStatic && ts.isPropertyDeclaration(member)) {
                     const value=member.initializer?this.cell(member.initializer):this.newCell(),keys=this.newCell();
@@ -6396,7 +6398,7 @@ class SourceValueFlow {
             // The callee publishes the actual native/exotic result owner.
             const target = unwrap(node.expression);
             const activation=this.enclosingActivation(node);
-            const superOwner=target.kind===ts.SyntaxKind.SuperKeyword && activation?.node && ts.isConstructorDeclaration(activation.node) && ts.isClassLike(activation.node.parent) ? this.function(activation.node.parent) : null;
+            const superOwner=target.kind===ts.SyntaxKind.SuperKeyword && activation?.node && isClassConstructor(activation.node) && ts.isClassLike(activation.node.parent) ? this.function(activation.node.parent) : null;
             const objects = ts.isCallExpression(node) && ts.isIdentifier(target) ? this.withBindingObjects(target) : [];
             const constructedReceiver = this.newCell();
             this.publish(constructedReceiver,{tag:"object",owner:this.owner(node)});

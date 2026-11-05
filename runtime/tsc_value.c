@@ -683,7 +683,7 @@ tsc_value_t tsc_value_function_class_named(
     double length,
     tsc_str_t* name
 ) {
-    return tsc_value_function_named_kind(
+    tsc_value_t constructor = tsc_value_function_named_kind(
         tsc_value_class_call_failure,
         construct,
         env,
@@ -691,6 +691,10 @@ tsc_value_t tsc_value_function_class_named(
         name,
         TSC_FUNCTION_IDENTITY_BUILTIN
     );
+    /* A class constructor's prototype property is { [[Writable]]: false,
+     * [[Enumerable]]: false, [[Configurable]]: false } (ClassDefinitionEvaluation). */
+    ((tsc_function_identity_t*)value_ptr(constructor))->func_prototype_writable = false;
+    return constructor;
 }
 
 /* The constructor owns the inner name binding through every suspended
