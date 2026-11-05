@@ -117,7 +117,9 @@ export function buildModuleGraph(
         for(const statement of moduleSourceOriginal(info.sf).statements){
             if(!ts.isImportDeclaration(statement)&&!ts.isExportDeclaration(statement)||isTypeOnlyModuleEdge(statement))continue;
             const parsed=moduleRequestFromDeclaration(statement);
-            if(parsed?.error)throw new Error(`${info.fileName}: ${parsed.error}`);
+            // An invalid request (duplicate attribute key, non-string value)
+            // is the module's early SyntaxError, reported by its source
+            // record and the compile diagnostics; it resolves nothing.
             if(!parsed?.request)continue;
             const key=moduleRequestKey(parsed.request),request=requests.get(key)??parsed.request;requests.set(key,request);
             const resolved=ts.resolveModuleName(request.specifier,info.fileName,options,ts.sys).resolvedModule;
@@ -160,7 +162,6 @@ export function buildModuleGraph(
         for(const statement of info.sf.statements){
             for(const call of dynamicImportCalls(statement)){
                 const parsed=dynamicImportSpecifiersFromCall(call);
-                if(parsed?.error)throw new Error(`${info.fileName}: ${parsed.error}`);
                 for(const specifier of parsed?.specifiers??[]){
                     dynamicSpecifiers.add(specifier);
                     const resolved=ts.resolveModuleName(specifier,info.fileName,options,ts.sys).resolvedModule;

@@ -68,7 +68,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
-type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-has-own:${"static"|"prototype"}` | `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `legacy-function-accessor:${"caller"|"arguments"}:${"get"|"set"}` | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
+type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-enumerable:${"keys"|"values"|"entries"}` | `object-has-own:${"static"|"prototype"}` | `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `legacy-function-accessor:${"caller"|"arguments"}:${"get"|"set"}` | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
     "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
 type Primitive = SourcePrimitive;
 /** Callables and collection-iterator cells reachable from one escaping value;
@@ -113,7 +113,7 @@ const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operati
     ["Array", new Map([["isArray", "array-brand"]])],
     ["JSON", new Map([...jsonMethods.values()].map(descriptor=>[descriptor.name,descriptor.operation]))],
     ["console", new Map([...consoleOperations].map(name=>[name,"host-print" as const]))],
-    ["Object", new Map([["is","object-is"],["hasOwn","object-has-own:static"],["getPrototypeOf", "object-get-prototype"], ["setPrototypeOf", "set-prototype:object"], ["create", "create-object"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
+    ["Object", new Map([["is","object-is"],["keys","object-enumerable:keys"],["values","object-enumerable:values"],["entries","object-enumerable:entries"],["hasOwn","object-has-own:static"],["getPrototypeOf", "object-get-prototype"], ["setPrototypeOf", "set-prototype:object"], ["create", "create-object"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
         ["getOwnPropertyDescriptor", "own-descriptor"], ["getOwnPropertyDescriptors", "own-descriptors"], ["getOwnPropertyNames", "object-own-keys:string"], ["getOwnPropertySymbols", "object-own-keys:symbol"]])],
     ["Reflect", new Map([["ownKeys", "reflect-own-keys"], ["get", "reflect-get"], ["getPrototypeOf", "reflect-get-prototype"], ["setPrototypeOf", "set-prototype:reflect"], ["apply", "reflect-apply"], ["construct", "construct"],
         ["defineProperty", "define-property"], ["set", "set-property"], ["deleteProperty", "delete-property"], ["getOwnPropertyDescriptor", "own-descriptor"]])],
@@ -3305,11 +3305,25 @@ class SourceValueFlow {
     /** One own-key collection feeds every key-kind selection. Its Array
      * stores possible elements at numeric locations independently of length;
      * optional/unknown key extents never enumerate subsets or lengths. */
-    private ownKeyArray(input:Cell,context:ts.Node,kind:"all"|"string"|"symbol",coerce:boolean):Cell {
+    /** "names" is [[OwnPropertyKeys]] of the kind; "keys", "values" and
+     * "entries" are EnumerableOwnProperties (enumerable string keys, values
+     * through [[Get]], entries as fresh two-element arrays). */
+    private ownKeyArray(input:Cell,context:ts.Node,kind:"all"|"string"|"symbol",coerce:boolean,projection:"names"|"keys"|"values"|"entries"="names"):Cell {
         let calls=this.ownKeyArrays.get(context);if(!calls){calls=new Map();this.ownKeyArrays.set(context,calls);}
-        const signature=input.id+":"+kind+":"+coerce,previous=calls.get(signature);if(previous)return previous;
+        const signature=input.id+":"+kind+":"+coerce+":"+projection,previous=calls.get(signature);if(previous)return previous;
         const result=this.newCell(),objects=coerce?this.toObject(input,context):input;calls.set(signature,result);
-        this.returnTransforms.set(result,{kind:"allocation",inputs:[input],evaluate:inputs=>this.ownKeyArray(inputs[0]!,context,kind,coerce)});
+        this.returnTransforms.set(result,{kind:"allocation",inputs:[input],evaluate:inputs=>this.ownKeyArray(inputs[0]!,context,kind,coerce,projection)});
+        const pairs=new Map<string,ObjectOwner>();
+        const element=(key:SourcePropertyKey):void=>{
+            if(projection==="names"||projection==="keys"){this.publish(values,this.primitive(key));return;}
+            if(projection==="values"){this.copy(this.property(objects,key,context),values);return;}
+            const id=this.keyIdentity(key);let pair=pairs.get(id);
+            if(!pair){
+                pair=this.arrayOwner(context);const two=this.newCell(),name=this.newCell();this.publish(two,this.primitive(2));this.publish(name,this.primitive(key));
+                this.defineField(pair,"length",two,false);this.defineField(pair,"0",name,true);this.defineField(pair,"1",this.property(objects,key,context),true);pairs.set(id,pair);
+            }
+            this.publish(values,{tag:"object",owner:pair});
+        };
         const owner=this.descriptorOwner(context),values=this.newCell(),indices=this.newCell(),length=this.newCell();
         this.arrayOwner(context,owner);
         this.defineField(owner,"length",length,false);this.publish(indices,{tag:"non-string",kinds:KIND_NUMBER});
@@ -3317,8 +3331,8 @@ class SourceValueFlow {
         const unknownNumber:Atom={tag:"non-string",kinds:KIND_NUMBER},unknownSymbol:Atom={tag:"non-string",kinds:KIND_SYMBOL};
         let escaped=false;
         const incomplete=(effects:boolean):void=>{
-            if(kind!=="symbol")this.publish(values,this.unknownString);
-            if(kind!=="string")this.publish(values,unknownSymbol);
+            if(projection==="values"||projection==="entries")this.publish(values,this.unknown);
+            else{if(kind!=="symbol")this.publish(values,this.unknownString);if(kind!=="string")this.publish(values,unknownSymbol);}
             this.publish(length,unknownNumber);
             if(effects){this.activateOpaqueEffect(context);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.unknown);
                 if(!escaped){escaped=true;this.onActive(context,()=>this.escapeCallableArgument(objects,context));}}
@@ -3341,7 +3355,14 @@ class SourceValueFlow {
                 const present=this.propertyPresence(source,key,context);this.watch(rule,present);
                 if(!present.values.nonempty){pending=true;continue;}
                 if(!present.values.has(this.primitive(true)))continue;
-                this.publish(values,this.primitive(key));count++;
+                if(projection!=="names"){
+                    // An enumerability not yet decided counts the key and
+                    // leaves the length open, like the spread copy.
+                    const enumerable=this.ownPresence(source,key).enumerable;this.watch(rule,enumerable);
+                    if(enumerable.values.nonempty&&!enumerable.values.has(this.primitive(true)))continue;
+                    if(!enumerable.values.nonempty||enumerable.values.has(this.primitive(false)))uncertain=true;
+                }
+                element(key);count++;
                 if(present.values.has(this.primitive(false)))uncertain=true;
             }
             if(uncertain)incomplete(opaqueAlgorithm);else if(!pending)this.publish(length,this.primitive(count));
@@ -7396,6 +7417,9 @@ class SourceValueFlow {
                             const receiver=argv?argv.length>=3?argv[2]!:target:this.newCell();
                             if(!argv){this.copy(target,receiver);const supplied=argument(2);if(supplied)this.copy(supplied,receiver);}
                             this.copy(this.reflectiveGet(target,key,receiver,node),result);continue;
+                        }
+                        if(atom.operation==="object-enumerable:keys"||atom.operation==="object-enumerable:values"||atom.operation==="object-enumerable:entries"){
+                            this.copy(this.ownKeyArray(argument(0)??omittedArgument,node,"string",true,atom.operation.slice("object-enumerable:".length) as "keys"|"values"|"entries"),result);continue;
                         }
                         if(atom.operation==="reflect-own-keys"||atom.operation==="object-own-keys:string"||atom.operation==="object-own-keys:symbol"){
                             const kind=atom.operation==="reflect-own-keys"?"all":atom.operation==="object-own-keys:string"?"string":"symbol";

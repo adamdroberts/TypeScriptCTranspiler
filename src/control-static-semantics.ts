@@ -137,6 +137,12 @@ export function earlyControlFlowStaticSemanticsFailure(
         const body = ts.isFunctionLike(node) ? (node as ts.SignatureDeclaration & {body?:ts.ConciseBody}).body : undefined;
         const strict = entry.context.strict || ts.isClassLike(node) || !!body && ts.isBlock(body) && ecmaDirectivePrologueHasUseStrict(body.statements, sourceFile);
         const context = strict === entry.context.strict ? entry.context : {...entry.context, strict};
+        // ModuleItem: ImportDeclaration and ExportDeclaration are productions
+        // of the module body only, never of a StatementList.
+        if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node) || ts.isExportAssignment(node) || ts.isImportEqualsDeclaration(node) ||
+                ts.canHaveModifiers(node) && !!ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) &&
+                node.parent && !ts.isSourceFile(node.parent))
+            return { node, message: "an import or export declaration is only permitted at the top level of a module" };
         if (ts.isTaggedTemplateExpression(node) && ((node.flags | node.tag.flags) & ts.NodeFlags.OptionalChain))
             return { node, message: "optional chain is not permitted as a template tag" };
         if (ts.isNewExpression(node) && (node.expression.flags & ts.NodeFlags.OptionalChain))

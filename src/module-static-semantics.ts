@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { moduleRequestFromDeclaration } from "./module-request";
 
 export interface ModuleStaticSemanticsFailure {
     readonly node: ts.Node;
@@ -374,6 +375,12 @@ export function earlyModuleStaticSemanticsFailure(
     const exportedNames: NameEntry[] = [];
 
     for (const statement of sourceFile.statements) {
+        // WithClause: duplicate attribute keys and non-string values are
+        // early errors of the importing module (sec-import-attributes).
+        if ((ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) && statement.attributes) {
+            const request = moduleRequestFromDeclaration(statement);
+            if (request?.error) return { node: statement.attributes, message: request.error };
+        }
         if (ts.isImportDeclaration(statement)) {
             lexicalNames.push(...importBoundNames(statement));
             continue;

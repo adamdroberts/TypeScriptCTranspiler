@@ -179,8 +179,15 @@ export function createEcmaSourceFile(
     goal?: EcmaParseGoal,
 ): ts.SourceFile {
     goal ??= /\.c[jt]s$/iu.test(filename) ? "script" : /\.m[jt]s$/iu.test(filename) ? "module" : undefined;
+    // A Module goal is a module before any ImportDeclaration or
+    // ExportDeclaration is seen: TypeScript reparses top-level `await` as an
+    // AwaitExpression only for a file it already knows to be a module.
     const parserOptions = goal === "script" && typeof languageVersion === "object"
         ? { ...languageVersion, setExternalModuleIndicator: (_file: ts.SourceFile): void => {} }
+        : goal === "module"
+        ? { ...(typeof languageVersion === "object" ? languageVersion : { languageVersion }), setExternalModuleIndicator: (file: ts.SourceFile): void => {
+            (file as ts.SourceFile & { externalModuleIndicator?: ts.Node }).externalModuleIndicator ??= file.endOfFileToken;
+        } }
         : languageVersion;
     let shadow = ecmaImportAttributesParserShadow(source);
     let sourceFile = ts.createSourceFile(filename, shadow, parserOptions, setParentNodes, scriptKind);
