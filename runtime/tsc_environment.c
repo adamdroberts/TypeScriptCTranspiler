@@ -11,6 +11,7 @@ typedef struct tsc_environment_binding {
     bool strict_immutable;
     bool lexical;
     bool deletable;
+    bool catch_parameter;
     tsc_async_cell_ref_t cell;
     struct tsc_environment_binding* next;
 } tsc_environment_binding_t;
@@ -95,6 +96,7 @@ static tsc_environment_binding_t* environment_create_binding(tsc_environment_t* 
     binding->strict_immutable = true;
     binding->lexical = lexical;
     binding->deletable = deletable;
+    binding->catch_parameter = false;
     binding->cell = (tsc_async_cell_ref_t){ &binding->value, &binding->value_root, &binding->initialized };
     binding->next = environment->bindings;
     environment->bindings = binding;
@@ -289,6 +291,7 @@ void tsc_environment_alias(tsc_environment_t* record, const tsc_environment_bind
     binding->lexical = reference->lexical;
     binding->immutable = reference->immutable;
     binding->deletable = false;
+    binding->catch_parameter = reference->catch_parameter;
 }
 
 void tsc_environment_alias_variable(const tsc_environment_binding_ref_t* reference) {
@@ -342,7 +345,8 @@ void tsc_environment_declaration_instantiation(tsc_global_declaration_t* declara
         }
         for (tsc_environment_t* scope = environment; scope && scope != variable; scope = scope->parent) {
             tsc_environment_binding_t* binding = environment_own_binding(scope, declaration->name);
-            if (binding && binding->lexical)
+            /* B.3.4: a simple catch parameter does not conflict with an eval var. */
+            if (binding && binding->lexical && !binding->catch_parameter)
                 tsc_throw_error(TSC_ERROR_SYNTAX, tsc_str_from_cstr("eval var conflicts with a lexical binding"));
         }
         tsc_environment_binding_t* binding = environment_own_binding(variable, declaration->name);

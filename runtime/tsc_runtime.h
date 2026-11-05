@@ -946,6 +946,8 @@ typedef struct {
     bool lexical;
     bool immutable;
     bool outer;
+    /* A simple catch parameter: B.3.4 lets a direct eval's var share its name. */
+    bool catch_parameter;
 } tsc_environment_binding_ref_t;
 typedef struct {
     tsc_environment_t* previous;

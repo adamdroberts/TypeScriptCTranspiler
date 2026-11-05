@@ -356,6 +356,12 @@ export function earlyControlFlowStaticSemanticsFailure(
             }
         }
         if (ts.isLabeledStatement(node)) {
+            // LabelIdentifier is an Identifier: strict mode reserved words are
+            // early errors, while `eval` and `arguments` are only restricted
+            // as BindingIdentifiers.
+            if (context.strict && strictModeBindingIdentifierNames.has(node.label.text) &&
+                node.label.text !== "eval" && node.label.text !== "arguments")
+                return { node: node.label, message: `label '${node.label.text}' is not permitted in strict mode` };
             if (context.labels.has(node.label.text)) {
                 return { node: node.label, message: `duplicate active label '${node.label.text}'` };
             }

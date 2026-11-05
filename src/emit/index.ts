@@ -18211,7 +18211,9 @@ class Emitter {
 
     private isUnresolvedParameterScopeReference(id: ts.Identifier): boolean {
         const reference = this.parameterScopeReference(id);
-        return !!reference && !reference.symbol;
+        // `arguments` that no parameter-scope binding resolves is the
+        // arguments object (FunctionDeclarationInstantiation step 22).
+        return !!reference && !reference.symbol && !this.isImplicitArgumentsIdentifier(id);
     }
 
     private readonly bindingInitializerReferences = new Map<ts.Identifier, ts.Symbol>();
@@ -21561,7 +21563,9 @@ class Emitter {
     private isImplicitArgumentsIdentifier(identifier: ts.Identifier): boolean {
         if (identifier.text !== "arguments") return false;
         const symbol = this.symbolForIdentifier(identifier);
-        if (symbol?.declarations?.length || symbol?.valueDeclaration) return false;
+        // A body declaration named `arguments` is outside a parameter expression's scope.
+        const bodyShadow = this.parameterScopeReference(identifier);
+        if ((symbol?.declarations?.length || symbol?.valueDeclaration) && !(bodyShadow && !bodyShadow.symbol)) return false;
         for (let current: ts.Node | undefined = identifier.parent; current; current = current.parent) {
             if (ts.isArrowFunction(current)) continue;
             if (ts.isFunctionLike(current)) return true;
@@ -22210,9 +22214,12 @@ class Emitter {
         const initialized = this.captureInitializationPtrForSymbol(symbol) ?? "NULL";
         const lexical = this.environmentBindingIsLexical(symbol);
         const immutable = this.localLexicalMetadataForSymbol(symbol)?.immutable ?? false;
+        const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
+        // B.3.4: an eval var may share a simple catch parameter's name.
+        const catchParameter = !!declaration && ts.isVariableDeclaration(declaration) && ts.isCatchClause(declaration.parent) && ts.isIdentifier(declaration.name);
         return `(tsc_environment_binding_ref_t){ ${this.stringLit(symbol.getName())}, ` +
             `(tsc_async_cell_ref_t){ (void*)${value}, ${root}, ${initialized} }, ` +
-            `${lexical ? "true" : "false"}, ${immutable ? "true" : "false"}, ${outer ? "true" : "false"} }`;
+            `${lexical ? "true" : "false"}, ${immutable ? "true" : "false"}, ${outer ? "true" : "false"}, ${catchParameter ? "true" : "false"} }`;
     }
 
     private emitSourceFunctionEnvironment(buffer: CBuf, fn: ts.FunctionLikeDeclaration,
@@ -28045,38 +28052,48 @@ class Emitter {
         this.emitVariableDeclarationList(buf, vs.declarationList);
     }
 
+    /** A var inside a catch clause (B.3.4: it may redeclare a simple catch
+     * parameter, whose binding the assignment then reaches) or a with body
+     * assigns through the lexical environment rather than its hoisted cell. */
+    private varDeclarationResolvesThroughEnvironment(declaration: ts.VariableDeclaration): boolean {
+        for (let owner: ts.Node | undefined = declaration.parent; owner; owner = owner.parent) {
+            if (ts.isFunctionLike(owner) || ts.isClassStaticBlockDeclaration(owner)) break;
+            if (ts.isCatchClause(owner)) return true;
+        }
+        return this.withEnvironmentContainsNode(declaration);
+    }
+
+    private emitEnvironmentVarBinding(buf: CBuf, d: ts.VariableDeclaration, value: string): void {
+        const references = new Map<ts.Identifier, (value: string)=>string>();
+        this.emitBindingInitialization(buf, d.name, value,
+            (target, identifier, actual) => target.line(`(void)(${references.get(identifier)!(actual)});`),
+            (target, identifier) => {
+                const symbol=this.checker.resolveName(identifier.text,identifier,ts.SymbolFlags.Value,false);
+                const previous=this.bindingInitializerReferences.get(identifier);
+                if(symbol)this.bindingInitializerReferences.set(identifier,symbol);
+                const owner=ts.factory.createBinaryExpression(identifier,ts.SyntaxKind.EqualsToken,ts.factory.createNull());
+                Object.assign(owner,{parent:d.parent});
+                try{
+                    const reference=this.preparePatternAssignmentReference(target,identifier,owner);
+                    references.set(identifier,actual=>{
+                        if(symbol)this.bindingInitializerReferences.set(identifier,symbol);
+                        try{return reference(actual);}finally{
+                            if(previous)this.bindingInitializerReferences.set(identifier,previous);else this.bindingInitializerReferences.delete(identifier);
+                        }
+                    });
+                }finally{
+                    if(previous)this.bindingInitializerReferences.set(identifier,previous);else this.bindingInitializerReferences.delete(identifier);
+                }
+            });
+    }
+
     private emitVariableDeclarationList(buf: CBuf, list: ts.VariableDeclarationList): void {
         const isConst =
             (list.flags & ts.NodeFlags.Const) !== 0;
         for (const d of list.declarations) {
-            let catchContext = false;
-            for(let owner: ts.Node|undefined=d.parent;owner;owner=owner.parent){
-                if(ts.isFunctionLike(owner)||ts.isClassStaticBlockDeclaration(owner))break;
-                if(ts.isCatchClause(owner)){catchContext=true;break;}
-            }
-            if ((list.flags & ts.NodeFlags.BlockScoped) === 0 && (catchContext || this.withEnvironmentContainsNode(d))) {
+            if ((list.flags & ts.NodeFlags.BlockScoped) === 0 && this.varDeclarationResolvesThroughEnvironment(d)) {
                 if (!d.initializer) continue;
-                const references = new Map<ts.Identifier, (value: string)=>string>();
-                this.emitBindingInitialization(buf, d.name, this.coerce(this.emitExpr(d.initializer), T_VALUE, d.initializer),
-                    (target, identifier, value) => target.line(`(void)(${references.get(identifier)!(value)});`),
-                    (target, identifier) => {
-                        const symbol=this.checker.resolveName(identifier.text,identifier,ts.SymbolFlags.Value,false);
-                        const previous=this.bindingInitializerReferences.get(identifier);
-                        if(symbol)this.bindingInitializerReferences.set(identifier,symbol);
-                        const owner=ts.factory.createBinaryExpression(identifier,ts.SyntaxKind.EqualsToken,ts.factory.createNull());
-                        Object.assign(owner,{parent:d.parent});
-                        try{
-                            const reference=this.preparePatternAssignmentReference(target,identifier,owner);
-                            references.set(identifier,value=>{
-                                if(symbol)this.bindingInitializerReferences.set(identifier,symbol);
-                                try{return reference(value);}finally{
-                                    if(previous)this.bindingInitializerReferences.set(identifier,previous);else this.bindingInitializerReferences.delete(identifier);
-                                }
-                            });
-                        }finally{
-                            if(previous)this.bindingInitializerReferences.set(identifier,previous);else this.bindingInitializerReferences.delete(identifier);
-                        }
-                    });
+                this.emitEnvironmentVarBinding(buf, d, this.coerce(this.emitExpr(d.initializer), T_VALUE, d.initializer));
                 continue;
             }
             if (this.emitTest262ScriptGlobalVarInitializer(buf, d)) continue;
@@ -28801,7 +28818,9 @@ class Emitter {
     /** One var-binding path serves the head initializer and every iteration value. */
     private emitSyncIterationVarBinding(buf: CBuf, fos: ts.ForInStatement | ts.ForOfStatement, declaration: ts.VariableDeclaration | undefined, value: string): void {
         const globalPattern = this.test262ScriptGlobalVarBindingPattern(fos.initializer);
-        if (globalPattern) {
+        if (declaration && (fos.initializer.flags & ts.NodeFlags.BlockScoped) === 0 && this.varDeclarationResolvesThroughEnvironment(declaration)) {
+            this.emitEnvironmentVarBinding(buf, declaration, value);
+        } else if (globalPattern) {
             this.emitTest262ScriptBindingName(buf, globalPattern.name, value, "var");
         } else if (declaration && this.moduleVariableDeclarationKind(declaration) === "var") {
             this.emitBindingInitialization(buf,declaration.name,value,
@@ -29169,8 +29188,9 @@ class Emitter {
                 if (formal) {
                     if (separate) this.emitCaptureCellRebinding(buf,cell,formal.value);
                 } else this.emitCaptureCellInitialization(buf,cell,separate && original ? original.value :
-                    this.sourceEnvironmentEnabled(fn.getSourceFile()) && symbol.getName() === "arguments"
-                        ? `tsc_environment_reference_get(${this.stringLit("arguments")})` : this.zeroValue(cell.type));
+                    symbol.getName() === "arguments" && !ts.isArrowFunction(fn) && !this.environmentBindingIsLexical(symbol) && cell.type.kind === "value"
+                        ? (this.sourceEnvironmentEnabled(fn.getSourceFile()) ? `tsc_environment_reference_get(${this.stringLit("arguments")})` : "tsc_call_arguments()")
+                        : this.zeroValue(cell.type));
                 if (this.sourceEnvironmentEnabled(functionBody.getSourceFile()))
                     buf.line(`tsc_environment_alias_variable(&${this.environmentBindingReference(symbol, declaration)});`);
             }
@@ -30284,8 +30304,11 @@ class Emitter {
             const environment = this.freshTemp("_source_lexical_scope");
             buf.line(`tsc_environment_scope_t ${environment} __attribute__((cleanup(tsc_environment_scope_leave))) = { .previous = tsc_environment_current(), .record = tsc_environment_new(tsc_environment_current(), false) };`);
             buf.line(`(void)tsc_environment_swap(${environment}.record);`);
-            for (const [symbol, binding] of lexicalScope) if (this.environmentBindingIsLexical(symbol))
-                buf.line(`tsc_environment_alias(${environment}.record, &(tsc_environment_binding_ref_t){ ${this.stringLit(binding.name)}, (tsc_async_cell_ref_t){ (void*)&(${binding.value}), (void**)&(${binding.gcRoot}), &(${binding.initialized}) }, true, ${binding.immutable ? "true" : "false"}, false });`);
+            for (const [symbol, binding] of lexicalScope) if (this.environmentBindingIsLexical(symbol)) {
+                // B.3.4: an eval var may share a simple catch parameter's name.
+                const catchParameter = ts.isVariableDeclaration(binding.declaration) && ts.isCatchClause(binding.declaration.parent) && ts.isIdentifier(binding.declaration.name);
+                buf.line(`tsc_environment_alias(${environment}.record, &(tsc_environment_binding_ref_t){ ${this.stringLit(binding.name)}, (tsc_async_cell_ref_t){ (void*)&(${binding.value}), (void**)&(${binding.gcRoot}), &(${binding.initialized}) }, true, ${binding.immutable ? "true" : "false"}, false, ${catchParameter ? "true" : "false"} });`);
+            }
         }
         return lexicalScope;
     }
@@ -31250,7 +31273,11 @@ class Emitter {
 
     private emitTypeOf(to: ts.TypeOfExpression): EmitResult {
         const operand = unwrapTransparentExpression(to.expression);
-        if (ts.isIdentifier(operand) && !this.classNameBindingForIdentifier(operand) && (
+        // The arguments object has no environment binding outside a source
+        // environment, whatever the checker resolves for the name.
+        const implicitArguments = ts.isIdentifier(operand) && this.isImplicitArgumentsIdentifier(operand) &&
+            !this.sourceEnvironmentEnabled(operand.getSourceFile());
+        if (ts.isIdentifier(operand) && !implicitArguments && !this.classNameBindingForIdentifier(operand) && (
             this.withEnvironmentReferenceName(operand) ||
             this.test262ScriptGlobalBindingName(operand) ||
             this.isSourceGlobalReference(operand) ||

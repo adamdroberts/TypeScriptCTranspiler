@@ -584,6 +584,51 @@ export function earlyFunctionStaticSemanticsFailure(
         if (ts.isIdentifier(node) && node.text === "yield" && (node.flags & ts.NodeFlags.YieldContext) &&
             !(expressionName && !expressionName.asteriskToken) && isContextualGrammarIdentifier(node))
             return { node, message: "identifier 'yield' is not permitted in this grammar context" };
+        // ArrowParameters inherit the enclosing [Yield]/[Await] parameters while a
+        // ConciseBody resets them, so an identifier `yield`/`await` inside arrow
+        // parameters answers to the first non-arrow function, class static
+        // block or module around them (the parser flags only the body).
+        if (ts.isIdentifier(node) && (node.text === "yield" || node.text === "await") && isContextualGrammarIdentifier(node)) {
+            let inArrowParameters = false;
+            let owner: ts.Node | undefined;
+            for (let current: ts.Node = node, parent = node.parent; parent; current = parent, parent = parent.parent) {
+                if (ts.isArrowFunction(parent)) {
+                    if (parent.body === current) { owner = parent; break; }
+                    inArrowParameters = true;
+                    continue;
+                }
+                if (ts.isFunctionLike(parent) || ts.isClassStaticBlockDeclaration(parent) || ts.isSourceFile(parent)) { owner = parent; break; }
+            }
+            if (inArrowParameters && owner) {
+                const generator = ts.isFunctionLike(owner) && !ts.isArrowFunction(owner) && !!(owner as ts.FunctionLikeDeclaration).asteriskToken;
+                const asyncOwner = ts.isFunctionLike(owner) && ts.canHaveModifiers(owner) &&
+                    (ts.getModifiers(owner)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ?? false);
+                if (node.text === "yield" && generator)
+                    return { node, message: "identifier 'yield' is not permitted in this grammar context" };
+                if (node.text === "await" && (asyncOwner || ts.isClassStaticBlockDeclaration(owner) || (ts.isSourceFile(owner) && module)))
+                    return { node, message: "identifier 'await' is not permitted in this grammar context" };
+            }
+        }
+        // ContainsArguments: a class static block body and a class field
+        // initializer must not contain an IdentifierReference named
+        // `arguments`. The walk does not enter a non-arrow function except
+        // through its ClassElementName, and a class's own computed key is
+        // evaluated outside the class (sec-class-definitions-static-semantics-early-errors).
+        if (ts.isIdentifier(node) && node.text === "arguments" && isContextualGrammarIdentifier(node) && !isDeclaredName(node)) {
+            for (let current: ts.Node = node, parent = node.parent; parent; current = parent, parent = parent.parent) {
+                if (ts.isClassStaticBlockDeclaration(parent))
+                    return { node, message: "'arguments' is not permitted in a class static block" };
+                if (ts.isPropertyDeclaration(parent)) {
+                    if (parent.initializer === current) return { node, message: "'arguments' is not permitted in a class field initializer" };
+                    continue;
+                }
+                if (ts.isFunctionLike(parent) && !ts.isArrowFunction(parent)) {
+                    if ("name" in parent && parent.name === current) continue;
+                    break;
+                }
+                if (ts.isSourceFile(parent)) break;
+            }
+        }
         if (ts.isAwaitExpression(node) && !allowAwait)
             return { node, message: "AwaitExpression is not permitted in this grammar context" };
         if (ts.isYieldExpression(node) && !allowYield)
@@ -656,6 +701,17 @@ function isAssignmentTargetPosition(node: ts.Node): boolean {
 
 /** IdentifierName property positions do not consume the contextual
  * BindingIdentifier/IdentifierReference grammar parameters. */
+/** Whether an identifier is a BindingIdentifier or LabelIdentifier rather
+ * than an IdentifierReference. */
+function isDeclaredName(node: ts.Identifier): boolean {
+    const parent = node.parent;
+    if ((ts.isVariableDeclaration(parent) || ts.isParameter(parent) || ts.isBindingElement(parent) ||
+        ts.isFunctionDeclaration(parent) || ts.isFunctionExpression(parent) || ts.isClassLike(parent)) && parent.name === node) return true;
+    if (ts.isLabeledStatement(parent) && parent.label === node) return true;
+    if (ts.isBreakOrContinueStatement(parent) && parent.label === node) return true;
+    return false;
+}
+
 export function isContextualGrammarIdentifier(node: ts.Identifier): boolean {
     const parent = node.parent;
     if (ts.isPropertyAccessExpression(parent) && parent.name === node) return false;
