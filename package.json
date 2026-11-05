@@ -13,6 +13,7 @@
     "test": "bun tests/e2e/run.ts",
     "test:property": "bun tests/property/run.ts",
     "compliance:fetch": "bun tests/test262/fetch.ts",
+    "unicode:generate": "bun src/tools/generate-unicode-tables.ts --fetch --out runtime/tsc_unicode_data.h",
     "compliance:catalog": "bun tests/test262/spec-catalog.ts",
     "compliance:catalog:check": "bun tests/test262/spec-catalog.ts --check",
     "compliance:features": "bun tests/test262/feature-map.ts",

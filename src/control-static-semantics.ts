@@ -47,6 +47,26 @@ export function earlyControlFlowStaticSemanticsFailure(
             ((ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)) &&
                 !(expression.flags & ts.NodeFlags.OptionalChain));
     };
+    /* AssignmentTargetType web-compat (B.3.? Runtime Errors for Function Call
+     * Assignment Targets): a non-optional call in non-strict code is admitted
+     * in the direct target positions; the runtime evaluates the call and then
+     * throws ReferenceError. */
+    const webCompatCallTarget = (expression: ts.Expression): boolean => {
+        while (
+            ts.isParenthesizedExpression(expression) ||
+            ts.isAsExpression(expression) ||
+            ts.isTypeAssertionExpression(expression) ||
+            ts.isSatisfiesExpression(expression) || ts.isNonNullExpression(expression)
+        ) {
+            expression = expression.expression;
+        }
+        // SuperCall and ImportCall are their own productions with an invalid target type.
+        return ts.isCallExpression(expression) && !(expression.flags & ts.NodeFlags.OptionalChain) &&
+            expression.expression.kind !== ts.SyntaxKind.SuperKeyword && expression.expression.kind !== ts.SyntaxKind.ImportKeyword;
+    };
+    // Logical assignment requires a simple target: web-compat call targets are early errors there.
+    const logicalAssignment = (kind: ts.SyntaxKind): boolean =>
+        kind === ts.SyntaxKind.AmpersandAmpersandEqualsToken || kind === ts.SyntaxKind.BarBarEqualsToken || kind === ts.SyntaxKind.QuestionQuestionEqualsToken;
     const assignmentTarget = (root: ts.Expression): boolean => {
         const targets: ts.Expression[] = [root];
         while (targets.length > 0) {
@@ -297,18 +317,28 @@ export function earlyControlFlowStaticSemanticsFailure(
         if (
             (ts.isPostfixUnaryExpression(node) || ts.isPrefixUnaryExpression(node)) &&
             (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) &&
-            !simpleAssignmentTarget(node.operand)
+            !simpleAssignmentTarget(node.operand) && !(!context.strict && webCompatCallTarget(node.operand))
         ) {
             return { node: node.operand, message: "update expression operand is not a valid assignment target" };
         }
         if (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
             node.operatorToken.kind <= ts.SyntaxKind.LastAssignment &&
-            !(node.operatorToken.kind === ts.SyntaxKind.EqualsToken ? assignmentTarget(node.left) : simpleAssignmentTarget(node.left))) {
+            !(node.operatorToken.kind === ts.SyntaxKind.EqualsToken ? assignmentTarget(node.left) : simpleAssignmentTarget(node.left)) &&
+            !(!context.strict && !logicalAssignment(node.operatorToken.kind) && webCompatCallTarget(node.left))) {
             return { node: node.left, message: "assignment expression left-hand side is not a valid assignment target" };
         }
         if ((ts.isForInStatement(node) || ts.isForOfStatement(node)) && !ts.isVariableDeclarationList(node.initializer) &&
-            !assignmentTarget(node.initializer)) {
+            !assignmentTarget(node.initializer) && !(!context.strict && webCompatCallTarget(node.initializer))) {
             return { node: node.initializer, message: "iteration expression left-hand side is not a valid assignment target" };
+        }
+        if ((ts.isForInStatement(node) || ts.isForOfStatement(node)) && ts.isVariableDeclarationList(node.initializer)) {
+            // Only Annex B's non-strict `for (var BindingIdentifier Initializer in ...)` keeps an initializer.
+            const annexB = ts.isForInStatement(node) && !context.strict && (node.initializer.flags & ts.NodeFlags.BlockScoped) === 0;
+            for (const declaration of node.initializer.declarations) {
+                if (declaration.initializer && !(annexB && ts.isIdentifier(declaration.name))) {
+                    return { node: declaration, message: `${ts.isForInStatement(node) ? "for-in" : "for-of"} declaration cannot have an initializer` };
+                }
+            }
         }
         if (ts.isLabeledStatement(node)) {
             if (context.labels.has(node.label.text)) {

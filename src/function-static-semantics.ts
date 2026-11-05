@@ -329,6 +329,8 @@ export function callableNameInput(
         let parent = current.parent;
         while (parent && transparent(parent)) parent = parent.parent;
         if (parent && (ts.isVariableDeclaration(parent) || ts.isParameter(parent) || ts.isBindingElement(parent)) && ts.isIdentifier(parent.name)) return {key: parent.name.text};
+        // `{ name = <definition> } = o`: the AssignmentProperty's Initializer names the definition.
+        if (parent && ts.isShorthandPropertyAssignment(parent)) return {key: parent.name.text};
         if (parent && (ts.isPropertyAssignment(parent) || ts.isPropertyDeclaration(parent))) return {key: parent.name, definition: parent};
         if (parent && ts.isBinaryExpression(parent) && NAME_EVALUATING_ASSIGNMENTS.has(parent.operatorToken.kind)) {
             if (ts.isIdentifier(parent.left)) return {key: parent.left.text};

@@ -28722,6 +28722,14 @@ class Emitter {
             return;
         }
 
+        const direct = unwrapTransparentExpression(initializer);
+        if (ts.isCallExpression(direct)) {
+            const message = `Invalid left-hand side in ${ts.isForOfStatement(initializer.parent) ? "for-of" : "for-in"} loop`;
+            buf.line(`(void)${this.coerce(value, T_VALUE, initializer)};`);
+            buf.line(`(void)(${this.emitExpr(direct).c});`);
+            buf.line(`tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_lit("${escapeCString(message)}", ${utf8ByteLen(message)}));`);
+            return;
+        }
         const targets = new Map<ts.Identifier, ts.Expression>();
         const binding = normalizeAssignmentTarget(initializer, targets);
         if (!binding) unsupported(initializer, "iteration assignment requires a canonical binding tree");
@@ -31809,6 +31817,11 @@ class Emitter {
         prefix: boolean,
     ): EmitResult {
         const operand = unwrapTransparentExpression(expression.operand);
+        if (ts.isCallExpression(operand)) {
+            return this.emitCallTargetReferenceError(operand, prefix
+                ? "Invalid left-hand side expression in prefix operation"
+                : "Invalid left-hand side expression in postfix operation");
+        }
         const importUpdate = this.emitImmutableImportUpdate(operand, op);
         if (importUpdate) return importUpdate;
         const sourceUpdate = this.emitSourceReferenceUpdate(operand, op, prefix);
@@ -32620,6 +32633,18 @@ class Emitter {
         };
     }
 
+    /** B.3.? Runtime Errors for Function Call Assignment Targets: the call is
+     * evaluated, then ReferenceError is thrown before any right-hand side,
+     * ToNumeric or iteration body runs. Static semantics admit the target
+     * only in non-strict code. */
+    private emitCallTargetReferenceError(call: ts.CallExpression, message: string): EmitResult {
+        const evaluated = this.emitExpr(call);
+        return {
+            c: `({ (void)(${evaluated.c}); tsc_throw_error(TSC_ERROR_REFERENCE, tsc_str_from_lit("${escapeCString(message)}", ${utf8ByteLen(message)})); tsc_value_undefined(); })`,
+            ty: T_VALUE,
+        };
+    }
+
     private emitPatternAssignment(bin: ts.BinaryExpression): EmitResult {
         const targets = new Map<ts.Identifier, ts.Expression>();
         const binding = normalizeAssignmentTarget(bin.left, targets);
@@ -32651,6 +32676,7 @@ class Emitter {
         op: ts.SyntaxKind,
     ): EmitResult {
         const target = unwrapTransparentExpression(bin.left);
+        if (ts.isCallExpression(target)) return this.emitCallTargetReferenceError(target, "Invalid left-hand side in assignment");
         if (op === ts.SyntaxKind.EqualsToken && (ts.isArrayLiteralExpression(target) || ts.isObjectLiteralExpression(target)))
             return this.emitPatternAssignment(bin);
         const immutableImportAssignment = this.emitImmutableImportAssignment(bin, op);
