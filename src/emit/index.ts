@@ -28152,14 +28152,7 @@ class Emitter {
             if (!ts.isIdentifier(d.name)) {
                 if ((list.flags & ts.NodeFlags.BlockScoped) === 0 && this.functionVarDeclarationOwner(d)) {
                     if (!d.initializer) unsupported(d, "var binding pattern requires an initializer");
-                    this.emitBindingInitialization(buf, d.name, this.coerce(this.emitExpr(d.initializer), T_VALUE, d.initializer),
-                        (target, identifier, value) => {
-                            const cell = this.currentFunctionCellForSymbol(this.symbolForIdentifier(identifier));
-                            if (!cell || !this.preallocatedVariableCells.some(scope => scope.has(cell)))
-                                unsupported(identifier, "var binding pattern requires a canonical function binding cell");
-                            target.line(`*${cell.cellName} = ${value};`);
-                            if (cell.rootCellName) target.line(`*${cell.rootCellName} = tsc_value_gc_root(*${cell.cellName});`);
-                        });
+                    this.emitFunctionVarPatternBinding(buf, d, this.coerce(this.emitExpr(d.initializer), T_VALUE, d.initializer));
                     continue;
                 }
                 if (this.isCommonJsModuleDestructureAliasDeclaration(d)) {
@@ -28806,6 +28799,20 @@ class Emitter {
         this.emitOrdinarySyncIteration(buf, fos, iter);
     }
 
+    /** A var pattern owned by a function binds through the function's
+     * preallocated cells; a VariableStatement and ForIn/OfBodyEvaluation
+     * share this plan. */
+    private emitFunctionVarPatternBinding(buf: CBuf, declaration: ts.VariableDeclaration, value: string): void {
+        this.emitBindingInitialization(buf, declaration.name, value,
+            (target, identifier, actual) => {
+                const cell = this.currentFunctionCellForSymbol(this.symbolForIdentifier(identifier));
+                if (!cell || !this.preallocatedVariableCells.some(scope => scope.has(cell)))
+                    unsupported(identifier, "var binding pattern requires a canonical function binding cell");
+                target.line(`*${cell.cellName} = ${actual};`);
+                if (cell.rootCellName) target.line(`*${cell.rootCellName} = tsc_value_gc_root(*${cell.cellName});`);
+            });
+    }
+
     /** One var-binding path serves the head initializer and every iteration value. */
     private emitSyncIterationVarBinding(buf: CBuf, fos: ts.ForInStatement | ts.ForOfStatement, declaration: ts.VariableDeclaration | undefined, value: string): void {
         const globalPattern = this.test262ScriptGlobalVarBindingPattern(fos.initializer);
@@ -28816,6 +28823,8 @@ class Emitter {
         } else if (declaration && this.moduleVariableDeclarationKind(declaration) === "var") {
             this.emitBindingInitialization(buf,declaration.name,value,
                 (target,identifier,source)=>this.emitModuleBindingLeaf(target,identifier,source));
+        } else if (declaration && !ts.isIdentifier(declaration.name) && this.functionVarDeclarationOwner(declaration)) {
+            this.emitFunctionVarPatternBinding(buf, declaration, value);
         } else {
             this.emitIterationIdentifierBinding(buf, fos.initializer, { c: value, ty: T_VALUE });
         }
@@ -28837,7 +28846,8 @@ class Emitter {
             unsupported(fos.initializer, "invalid synchronous iteration declaration");
         }
         if (declaration && !this.isIterationLexicalDeclaration(declaration) &&
-            !ts.isIdentifier(declaration.name) && !globalPattern && this.moduleVariableDeclarationKind(declaration) !== "var") {
+            !ts.isIdentifier(declaration.name) && !globalPattern && this.moduleVariableDeclarationKind(declaration) !== "var" &&
+            !this.functionVarDeclarationOwner(declaration) && !this.varDeclarationResolvesThroughEnvironment(declaration)) {
             unsupported(fos.initializer, "synchronous iteration var pattern requires a canonical function environment");
         }
         buf.open("");
