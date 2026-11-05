@@ -22227,6 +22227,7 @@ class Emitter {
                 `${this.stringLit(symbol.getName())}, (tsc_async_cell_ref_t){ (void*)&${plan.value}, ` +
                 `(void**)&${plan.gcRoot}, ${plan.initialized ? `&${plan.initialized}` : "NULL"} }, false, false, false });`);
         }
+        if (this.parameterListContainsExpression(fn)) buffer.line("tsc_environment_parameter_phase(true);");
     }
 
     private parameterListContainsExpression(fn: ts.FunctionLikeDeclaration): boolean {
@@ -22249,6 +22250,7 @@ class Emitter {
     private emitSourceBodyEnvironment(buffer: CBuf, fn: ts.FunctionLikeDeclaration): void {
         if (!this.sourceEnvironmentEnabled(fn.getSourceFile()) || !this.parameterListContainsExpression(fn)) return;
         const scope = this.freshTemp("_body_environment");
+        buffer.line("tsc_environment_parameter_phase(false);");
         buffer.line(`tsc_environment_scope_t ${scope} __attribute__((cleanup(tsc_environment_scope_leave))) = {0};`);
         buffer.line(`tsc_environment_variable_enter(&${scope});`);
     }
@@ -28785,8 +28787,28 @@ class Emitter {
     }
 
     private emitSyncIterationWithEnvironment(buf: CBuf, fos: ts.ForInStatement | ts.ForOfStatement): void {
+        // B.3.5 Initializers in ForIn Statement Heads: the var initializer is
+        // evaluated (with NamedEvaluation) and bound before the object expression.
+        const declaration = ts.isVariableDeclarationList(fos.initializer) ? fos.initializer.declarations[0] : undefined;
+        if (ts.isForInStatement(fos) && declaration?.initializer && (fos.initializer.flags & ts.NodeFlags.BlockScoped) === 0) {
+            const initial = this.coerce(this.emitExpr(declaration.initializer), T_VALUE, declaration.initializer);
+            this.emitSyncIterationVarBinding(buf, fos, declaration, initial);
+        }
         const iter = this.emitExpr(fos.expression);
         this.emitOrdinarySyncIteration(buf, fos, iter);
+    }
+
+    /** One var-binding path serves the head initializer and every iteration value. */
+    private emitSyncIterationVarBinding(buf: CBuf, fos: ts.ForInStatement | ts.ForOfStatement, declaration: ts.VariableDeclaration | undefined, value: string): void {
+        const globalPattern = this.test262ScriptGlobalVarBindingPattern(fos.initializer);
+        if (globalPattern) {
+            this.emitTest262ScriptBindingName(buf, globalPattern.name, value, "var");
+        } else if (declaration && this.moduleVariableDeclarationKind(declaration) === "var") {
+            this.emitBindingInitialization(buf,declaration.name,value,
+                (target,identifier,source)=>this.emitModuleBindingLeaf(target,identifier,source));
+        } else {
+            this.emitIterationIdentifierBinding(buf, fos.initializer, { c: value, ty: T_VALUE });
+        }
     }
 
     /** One ordinary iterator record and lexical owner drives every binding/body
@@ -28836,13 +28858,8 @@ class Emitter {
                     target.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.value});`);
                     target.line(`${binding.initialized} = true;`);
                 });
-            } else if (globalPattern) {
-                this.emitTest262ScriptBindingName(buf, globalPattern.name, value, "var");
-            } else if (declaration && this.moduleVariableDeclarationKind(declaration) === "var") {
-                this.emitBindingInitialization(buf,declaration.name,value,
-                    (target,identifier,source)=>this.emitModuleBindingLeaf(target,identifier,source));
             } else {
-                this.emitIterationIdentifierBinding(buf, fos.initializer, { c: value, ty: T_VALUE });
+                this.emitSyncIterationVarBinding(buf, fos, declaration, value);
             }
             const continueTarget = this.directLabeledLoopName(fos)
                 ? this.freshTemp("_for_of_labeled_continue") : null;

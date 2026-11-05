@@ -26,6 +26,9 @@ struct tsc_environment {
     tsc_environment_binding_t* bindings;
     tsc_array_t* private_names;
     bool variable_scope;
+    /* Parameters are being evaluated: the specification keeps them in a
+     * declarative record between a direct eval and its variable environment. */
+    bool parameter_phase;
     tsc_environment_t* captured;
     enum { ENV_CONTEXT_NONE, ENV_CONTEXT_MODULE, ENV_CONTEXT_FUNCTION, ENV_CONTEXT_OBJECT } context;
     tsc_value_t binding_object;
@@ -54,6 +57,7 @@ tsc_environment_t* tsc_environment_new(tsc_environment_t* parent, bool variable_
     environment->bindings = NULL;
     environment->private_names = NULL;
     environment->variable_scope = variable_scope;
+    environment->parameter_phase = false;
     environment->captured = NULL;
     environment->context = ENV_CONTEXT_NONE;
     environment->binding_object = tsc_value_undefined();
@@ -195,6 +199,11 @@ tsc_value_t tsc_environment_super_construct(tsc_environment_t* environment, tsc_
     environment->this_initialized = true;
     tsc_value_class_initialize_elements(environment->constructor, receiver, false);
     return receiver;
+}
+
+void tsc_environment_parameter_phase(bool active) {
+    tsc_environment_t* variable = environment_variable_record();
+    if (variable) variable->parameter_phase = active;
 }
 
 void tsc_environment_function_enter(tsc_environment_scope_t* scope, bool arrow, bool strict) {
@@ -339,6 +348,11 @@ void tsc_environment_declaration_instantiation(tsc_global_declaration_t* declara
         tsc_environment_binding_t* binding = environment_own_binding(variable, declaration->name);
         if (binding && binding->lexical)
             tsc_throw_error(TSC_ERROR_SYNTAX, tsc_str_from_cstr("eval var conflicts with a lexical binding"));
+        /* During parameter evaluation every binding of the function record is a
+         * parameter-scope binding the eval's var walk reaches before its
+         * variable environment (EvalDeclarationInstantiation step 3.d). */
+        if (binding && !binding->lexical && variable->parameter_phase)
+            tsc_throw_error(TSC_ERROR_SYNTAX, tsc_str_from_cstr("eval var redeclares a parameter under evaluation"));
     }
     /* Global var/function insertion retains the global object's descriptor
      * and extensibility preflight; lexical declarations stay in this record. */

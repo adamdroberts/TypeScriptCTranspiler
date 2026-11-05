@@ -1,6 +1,7 @@
 import {sourceUnitFormats,type SourceUnitFormat} from './source-unit-format';
 export {sourceUnitFormat} from './source-unit-format';
 import ts from "typescript";
+import { resilientTypeChecker } from "./resilient-checker";
 import {buildModuleGraph,moduleLoadFailures} from "./resolve";
 import {retainModuleParseFailure,inertModuleSource} from "./module-source-record";
 import * as path from "node:path";
@@ -26,6 +27,9 @@ import {
 } from "./module-request";
 
 export interface BuildProgramOpts {
+    /** Receives the location of a checker query that exhausted the stack; the
+     * query answers with the unknown shape (see src/resilient-checker.ts). */
+    onCheckerOverflow?: (location: ts.Node | undefined) => void;
     entry: string;
     packageRoot: string;
     retainModuleFailures?: boolean;
@@ -282,6 +286,10 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
             program=ts.createProgram({rootNames,options:compilerOptions,host:compilerHost});
             programSourceUnits.set(program,units);programUnitFiles.set(program,materializedUnits);
         }
+    }
+    if (opts.onCheckerOverflow) {
+        const resilient = resilientTypeChecker(program.getTypeChecker(), opts.onCheckerOverflow);
+        program.getTypeChecker = () => resilient;
     }
     const checker = program.getTypeChecker();
     const entrySourceFile = program.getSourceFile(opts.entry);

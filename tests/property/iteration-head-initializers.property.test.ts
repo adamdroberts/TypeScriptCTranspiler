@@ -1,5 +1,9 @@
 import {expect,test} from 'bun:test';
 import ts from 'typescript';
+import {mkdtemp,writeFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {compile} from '../../src/compile';
 import {earlyControlFlowStaticSemanticsFailure} from '../../src/control-static-semantics';
 import {createEcmaSourceFile} from '../../src/ecmascript-source';
 import {nodeReferenceSync} from './node-reference';
@@ -10,7 +14,9 @@ const NODE=process.env.TSC2C_NODE_REFERENCE??'node';
  * except Annex B's non-strict `for (var BindingIdentifier Initializer in ...)`.
  * Generated heads over declaration kinds, binding shapes, loop kinds and
  * strictness compare the early verdict with Node's parser; one deep pattern
- * checks the walk. */
+ * checks the walk. At runtime (B.3.5) the initializer is evaluated once, with
+ * NamedEvaluation, and bound before the object expression: generated loops
+ * over contexts, initializers and objects compare their logs with Node. */
 
 function rng(seed:number):()=>number{
  let state=seed>>>0;
@@ -58,3 +64,36 @@ test('one deep pattern with an initializer is rejected and the plain Annex B hea
  expect(ours(`function g(){ for (var x = 1 in o) ; }`)).toBe(false);
  expect(ours(`function g(){ "use strict"; for (var x = 1 in o) ; }`)).toBe(true);
 });
+
+const initializers=['f()','function () {}','() => {}','(log.push("init"), 5)','++effects','class {}'];
+const objects=['{p: 1, q: 2}','(log.push("rhs:" + String(a && a.name || a)), o)','[]','null'];
+function loop(random:()=>number,index:number):string{
+ const initializer=initializers[Math.floor(random()*initializers.length)]!;
+ const object=objects[Math.floor(random()*objects.length)]!;
+ const body=`for (var a = ${initializer} in ${object}) log.push("body:" + a); log.push("after:" + (typeof a === "function" ? a.name : String(a)));`;
+ switch(Math.floor(random()*3)){
+  case 0:return `${body}\n`;
+  case 1:return `(function run${index}() { ${body} })();\n`;
+  default:return `(function run${index}() { { ${body} } })();\n`;
+ }
+}
+function runtimeProgram(random:()=>number,count:number):string{
+ let text='var log = [], effects = 0, a, o = {x: 1};\nfunction f() { log.push("f"); return "F"; }\n';
+ for(let index=0;index<count;index++)text+=loop(random,index);
+ return text+'console.log(log.join("\\n"), effects);\n';
+}
+
+test('Annex B for-in head initializers run once, with NamedEvaluation, before the object expression',async()=>{
+ const source=runtimeProgram(rng(0xf0e1),24);
+ const root=await mkdtemp(join(tmpdir(),'tsc2c-for-in-initializer-'));
+ try{
+  const entry=join(root,'main.cjs');await writeFile(entry,source);
+  const node=nodeReferenceSync([NODE,entry],{stdout:'pipe',stderr:'pipe',timeout:120000});
+  expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const diagnostics:string[]=[],output=join(root,'program');
+  const built=await compile({entry,output,buildDir:join(root,'build'),diagnosticWriter:x=>diagnostics.push(x)});
+  expect({code:built.exitCode,diagnostics}).toEqual({code:0,diagnostics:[]});
+  const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120000});
+  expect({code:native.exitCode,stderr:native.stderr.toString(),stdout:native.stdout.toString()}).toEqual({code:0,stderr:'',stdout:node.stdout.toString()});
+ }finally{await rm(root,{recursive:true,force:true});}
+},600000);

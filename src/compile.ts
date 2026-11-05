@@ -1,5 +1,6 @@
 import ts from "typescript";
 import { earlyPrivateStaticSemanticsFailure } from "./emit/private-names";
+import { preEmitDiagnostics } from "./resilient-checker";
 import {
     earlyControlFlowStaticSemanticsFailure,
     type ControlStaticSemanticsFailure,
@@ -781,10 +782,19 @@ async function compileWithDiagnostics(opts: CompileOptions, writeDiagnostic: (me
     }
     let usesNodeEmbed = !!opts.unsafeEval || nativeAddonManifestHasEntries(nativeAddons);
 
+    let checkerOverflowReported = false;
+    const checkerOverflow = (location: ts.Node | undefined): void => {
+        if (checkerOverflowReported) return;
+        checkerOverflowReported = true;
+        const file = location?.getSourceFile();
+        const position = file && location ? file.getLineAndCharacterOfPosition(location.getStart(file)) : undefined;
+        writeDiagnostic(`tsc2c: warning: the TypeScript checker exhausted its stack${file && position ? ` at ${file.fileName}:${position.line + 1}:${position.character + 1}` : ""}; the query answers with the unknown type\n`);
+    };
     const programOptions = {
         entry: opts.entry,
         packageRoot: pkg,
         retainModuleFailures:true,
+        onCheckerOverflow: checkerOverflow,
         additionalRoots: opts.additionalRoots,
         moduleRoots: opts.moduleRoots,
         isolatedScriptRoots: opts.isolatedScriptRoots,
@@ -925,7 +935,7 @@ async function compileWithDiagnostics(opts: CompileOptions, writeDiagnostic: (me
         return {exitCode:2,buildDir,mainC:""};
     }
     const failedFiles=new Set([...loadFailures.keys()].map(id=>graph.modules.get(id)!.fileName));
-    const pre = ts.getPreEmitDiagnostics(program).filter(diagnostic=>!diagnostic.file||!failedFiles.has(diagnostic.file.fileName));
+    const pre = preEmitDiagnostics(program, checkerOverflow).filter(diagnostic=>!diagnostic.file||!failedFiles.has(diagnostic.file.fileName));
     if (pre.length > 0) {
         writeDiagnostic(formatTsDiagnostics(pre));
         return { exitCode: 2, buildDir, mainC: "" };

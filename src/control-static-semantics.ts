@@ -174,6 +174,23 @@ export function earlyControlFlowStaticSemanticsFailure(
         if (ts.isVariableStatement(node) && (node.declarationList.flags & ts.NodeFlags.BlockScoped) &&
             node.parent && isStatementBody(node.parent, node))
             return {node, message:"lexical declaration is not permitted as a Statement"};
+        if (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) {
+            // A Declaration is not a Statement. As the body of an if, iteration,
+            // with or labelled statement only Annex B admits a plain function in
+            // non-strict code (B.3.2 LabelledItem, B.3.3 IfStatement), and never
+            // where the body's IsLabelledFunction early error applies.
+            let item: ts.Node = node;
+            let labelled = false;
+            while (ts.isLabeledStatement(item.parent) && item.parent.statement === item) { item = item.parent; labelled = true; }
+            const parent = item.parent;
+            const plainFunction = ts.isFunctionDeclaration(node) && !node.asteriskToken &&
+                !(ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ?? false);
+            if (parent && (labelled || isStatementBody(parent, item))) {
+                const admitted = !context.strict && plainFunction &&
+                    (labelled ? !isStatementBody(parent, item) : ts.isIfStatement(parent));
+                if (!admitted) return { node, message: "declaration is not permitted in Statement position" };
+            }
+        }
         if (ts.isWithStatement(node) && context.strict)
             return {node, message:"with statement is not permitted in strict mode"};
         if(ts.isCatchClause(node)){
@@ -197,12 +214,6 @@ export function earlyControlFlowStaticSemanticsFailure(
             worklist.push({node:node.block,context:{...context,catchPatternNames}});
             if(node.variableDeclaration)worklist.push({node:node.variableDeclaration,context});
             continue;
-        }
-        if (ts.isWithStatement(node)) {
-            let body=node.statement;
-            while(ts.isLabeledStatement(body))body=body.statement;
-            if (ts.isFunctionDeclaration(body) || ts.isClassDeclaration(body))
-                return {node:body, message:"with body must be a Statement"};
         }
         if (ts.isFunctionLike(node)) {
             const body = (node as ts.SignatureDeclaration & { body?: ts.ConciseBody }).body;
@@ -331,6 +342,10 @@ export function earlyControlFlowStaticSemanticsFailure(
             !assignmentTarget(node.initializer) && !(!context.strict && webCompatCallTarget(node.initializer))) {
             return { node: node.initializer, message: "iteration expression left-hand side is not a valid assignment target" };
         }
+        // `for ( [lookahead ≠ async of] LeftHandSideExpression of ...`: the unescaped token only.
+        if (ts.isForOfStatement(node) && !node.awaitModifier && ts.isIdentifier(node.initializer) &&
+            node.initializer.getText(sourceFile) === "async")
+            return { node: node.initializer, message: "for-of head cannot start with the async token" };
         if ((ts.isForInStatement(node) || ts.isForOfStatement(node)) && ts.isVariableDeclarationList(node.initializer)) {
             // Only Annex B's non-strict `for (var BindingIdentifier Initializer in ...)` keeps an initializer.
             const annexB = ts.isForInStatement(node) && !context.strict && (node.initializer.flags & ts.NodeFlags.BlockScoped) === 0;

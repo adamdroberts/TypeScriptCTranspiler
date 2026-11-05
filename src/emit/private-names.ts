@@ -67,7 +67,9 @@ export function earlyPrivateStaticSemanticsFailure(source: ts.SourceFile, allowE
         if (ts.isPrivateIdentifier(node)) {
             const parent = node.parent;
             const declaration = (ts.isPropertyDeclaration(parent) || ts.isMethodDeclaration(parent) ||
-                ts.isGetAccessorDeclaration(parent) || ts.isSetAccessorDeclaration(parent)) && parent.name === node;
+                ts.isGetAccessorDeclaration(parent) || ts.isSetAccessorDeclaration(parent)) && parent.name === node &&
+                // PropertyDefinition : MethodDefinition has no PrivateBoundNames.
+                !ts.isObjectLiteralExpression(parent.parent);
             if (!declaration) {
                 const property = ts.isPropertyAccessExpression(parent) && parent.name === node;
                 const brand = ts.isBinaryExpression(parent) && parent.operatorToken.kind === ts.SyntaxKind.InKeyword && parent.left === node;

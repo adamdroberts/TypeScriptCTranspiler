@@ -952,6 +952,8 @@ typedef struct {
     tsc_environment_t* record;
 } tsc_environment_scope_t;
 void tsc_environment_function_enter(tsc_environment_scope_t* scope, bool arrow, bool strict);
+/* Marks the current variable record's parameters as under evaluation (or done). */
+void tsc_environment_parameter_phase(bool active);
 void tsc_environment_object_enter(tsc_environment_scope_t* scope, tsc_value_t object);
 void tsc_environment_lexical_clone(void);
 tsc_environment_t* tsc_environment_module_new(void);

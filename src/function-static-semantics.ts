@@ -573,12 +573,16 @@ export function earlyFunctionStaticSemanticsFailure(
             ts.isParameter(node) && !!node.questionToken)) {
             return { node, message: "TypeScript syntax is not permitted in ECMAScript source" };
         }
+        // A FunctionExpression's own BindingIdentifier is parsed with [~Yield]
+        // unless it is a generator and [~Await] unless it is async.
+        const expressionName = ts.isIdentifier(node) && ts.isFunctionExpression(node.parent) && node.parent.name === node ? node.parent : null;
+        const asyncExpressionName = !!expressionName && (ts.getModifiers(expressionName)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ?? false);
         if (ts.isIdentifier(node) && node.text === "await" &&
-            (module || ((node.flags & ts.NodeFlags.AwaitContext) &&
-                !(ts.isFunctionExpression(node.parent) && node.parent.name === node))) && isContextualGrammarIdentifier(node)) {
+            (module || ((node.flags & ts.NodeFlags.AwaitContext) && !(expressionName && !asyncExpressionName))) && isContextualGrammarIdentifier(node)) {
             return { node, message: "identifier 'await' is not permitted in this grammar context" };
         }
-        if (ts.isIdentifier(node) && node.text === "yield" && (node.flags & ts.NodeFlags.YieldContext) && isContextualGrammarIdentifier(node))
+        if (ts.isIdentifier(node) && node.text === "yield" && (node.flags & ts.NodeFlags.YieldContext) &&
+            !(expressionName && !expressionName.asteriskToken) && isContextualGrammarIdentifier(node))
             return { node, message: "identifier 'yield' is not permitted in this grammar context" };
         if (ts.isAwaitExpression(node) && !allowAwait)
             return { node, message: "AwaitExpression is not permitted in this grammar context" };
