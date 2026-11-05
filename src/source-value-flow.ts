@@ -7,7 +7,7 @@ import ts from "typescript";
 import { callableSourceText } from "./callable-source-text";
 import {classPrivateNames,classPrivateNamesInScope,resolveClassPrivateName,type ClassPrivateName} from "./emit/private-names";
 import { normalizeAssignmentTarget, unwrapTransparentExpression as unwrap } from "./emit/binding-tree";
-import { classConstructorMember, isClassConstructor, isStaticConstructorMethod } from "./emit/class-definition";
+import { classConstructorMember, isClassConstructor } from "./emit/class-definition";
 import { isStrictCodeContext, callableNameInput, expectedArgumentCount, functionBodyCompletions, statementBodyCompletions, type StatementBodyCompletions, NAME_EVALUATING_ASSIGNMENTS } from "./function-static-semantics";
 import {consoleOperations} from "./console-operations";
 import {jsonMethods, jsonOperations, type JSONSourceOperation} from "./json-methods";
@@ -5433,7 +5433,6 @@ class SourceValueFlow {
                 if (isClassConstructor(member) || ts.isClassStaticBlockDeclaration(member)) continue;
                 const isStatic = (ts.canHaveModifiers(member) ? ts.getModifiers(member) ?? [] : []).some(modifier=>modifier.kind===ts.SyntaxKind.StaticKeyword);
                 const target = isStatic ? owner.fields : prototype;
-                if (isStaticConstructorMethod(member)) { this.defineField(target, "constructor", this.cell(member)); continue; }
                 if (member.name && ts.isPrivateIdentifier(member.name)) continue;
                 if (!isStatic && ts.isPropertyDeclaration(member)) {
                     const value=member.initializer?this.cell(member.initializer):this.newCell(),keys=this.newCell();

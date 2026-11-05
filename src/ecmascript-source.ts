@@ -223,7 +223,7 @@ export function createEcmaSourceFile(
     // once; the algorithm has no nesting or statement-count bound.
     const referenceTokens = new Map<number, string>();
     const javascript = scriptKind === ts.ScriptKind.JS || scriptKind === ts.ScriptKind.JSX;
-    if (javascript) {
+    {
         for (;;) {
             let changed = false;
             const worklist: Array<{node: ts.Node; parent?: ts.Node; strict: boolean}> = [{
@@ -233,11 +233,11 @@ export function createEcmaSourceFile(
                 const {node, parent, strict: inherited} = worklist.pop()!;
                 const strict = inherited || ts.isClassLike(node) || ts.isFunctionLike(node) &&
                     "body" in node && !!node.body && ts.isBlock(node.body) && ecmaDirectivePrologueHasUseStrict(node.body.statements, sourceFile);
-                if (goal === "script" && ts.isAwaitExpression(node) && !(node.flags & ts.NodeFlags.AwaitContext)) {
+                if (javascript && goal === "script" && ts.isAwaitExpression(node) && !(node.flags & ts.NodeFlags.AwaitContext)) {
                     const start = node.getStart(sourceFile);
                     if (!referenceTokens.has(start)) { referenceTokens.set(start, "await"); changed = true; }
                 }
-                if (ts.isVariableStatement(node) && (node.declarationList.flags & ts.NodeFlags.BlockScoped)) {
+                if (javascript && ts.isVariableStatement(node) && (node.declarationList.flags & ts.NodeFlags.BlockScoped)) {
                     const start = node.getStart(sourceFile);
                     const scanner = ts.createScanner(ts.ScriptTarget.ESNext, true, ts.LanguageVariant.Standard, shadow, undefined, start);
                     const keyword = scanner.scan(), escaped = scanner.hasUnicodeEscape(); scanner.scan();
@@ -248,6 +248,24 @@ export function createEcmaSourceFile(
                         scanner.hasPrecedingLineBreak() && scanner.getToken() !== ts.SyntaxKind.OpenBracketToken;
                     if (!strict && keyword === ts.SyntaxKind.LetKeyword && (escaped || statementIdentifier)) {
                         if (!referenceTokens.has(start)) { referenceTokens.set(start, "let"); changed = true; }
+                    }
+                }
+                // The parser calls a static member named "constructor" a
+                // ConstructorDeclaration and parses its body without the
+                // async or generator context of its modifiers. Shadow the
+                // name so the member parses as the static method it is.
+                if (ts.isConstructorDeclaration(node)) {
+                    const modifiers = ts.getModifiers(node) ?? [];
+                    if (modifiers.some(modifier => modifier.kind === ts.SyntaxKind.StaticKeyword)) {
+                        const scanner = ts.createScanner(ts.ScriptTarget.ESNext, true, ts.LanguageVariant.Standard, shadow, undefined, modifiers[modifiers.length - 1]!.end);
+                        scanner.scan();
+                        const start = scanner.getTokenPos();
+                        if (scanner.getTokenValue() === "constructor" && !referenceTokens.has(start)) {
+                            referenceTokens.set(start, "constructor"); changed = true;
+                            // The body was parsed without its await context;
+                            // the reparse walks its correct tree.
+                            continue;
+                        }
                     }
                 }
                 node.forEachChild(child => { worklist.push({node: child, parent: node, strict}); });

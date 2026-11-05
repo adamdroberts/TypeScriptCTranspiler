@@ -6,7 +6,7 @@ import { classPrivateNames, classPrivateNamesInScope, externalPrivateNames, reso
 import { moduleRequestFromDeclaration, moduleRequestKey, type ModuleRequest } from "../module-request";
 import { exportedModuleNames, moduleNamespaceBinding, resolveModuleExport, type ModuleExportRecord } from "../module-export-resolution";
 import { definitionEvaluationChildren, moduleHasTopLevelAwait } from "./module-evaluation";
-import {classDefinitionPlan, classConstructorMember, isClassConstructor, isStaticConstructorMethod} from './class-definition';
+import {classDefinitionPlan, classConstructorMember, isClassConstructor} from './class-definition';
 import { directEvalContext } from "../eval-context";
 import ts from "typescript";
 import {moduleLinkRecord} from "../module-source-record";
@@ -24485,14 +24485,11 @@ class Emitter {
         keyOverride?: string,
     ): string[] {
         const pieces: string[] = [];
-        const staticConstructor = isStaticConstructorMethod(member);
         const callable = (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) ||
-            ts.isSetAccessorDeclaration(member) || staticConstructor) && !!member.body;
+            ts.isSetAccessorDeclaration(member)) && !!member.body;
         const field = ts.isPropertyDeclaration(member);
         const block = ts.isClassStaticBlockDeclaration(member);
-        if (ts.isConstructorDeclaration(member) && !staticConstructor) return pieces;
-        if (staticConstructor && ts.getModifiers(member)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword))
-            unsupported(member, "static async constructor method requires the canonical method plan");
+        if (ts.isConstructorDeclaration(member)) return pieces;
         if (!nativeStorage && !callable && !field && !block && member.kind !== ts.SyntaxKind.SemicolonClassElement) {
             unsupported(member, "class element requires the canonical initialization plan");
         }
@@ -24504,7 +24501,7 @@ class Emitter {
         if (!callable && !field) return pieces;
         // Declaration fields retain their key for later initialization;
         // expression methods borrow a local carrier owned by this definition.
-        const name: ts.PropertyName = staticConstructor ? ts.setTextRange(ts.factory.createIdentifier("constructor"), member) : member.name!;
+        const name: ts.PropertyName = member.name!;
         const publicName = this.classMemberPublicName(name);
         const privateMember = ts.isPrivateIdentifier(name);
         let key = privateMember ? this.emitPrivateNameValue(name).c : this.stringLit(publicName);
@@ -24538,7 +24535,7 @@ class Emitter {
             const prefix = ts.isGetAccessorDeclaration(member) ? this.stringLit("get") : ts.isSetAccessorDeclaration(member) ? this.stringLit("set") : "NULL";
             pieces.push(`${value} = tsc_value_function_with_property_name(${value}, ${key}, ${prefix})`);
         }
-        if (ts.isMethodDeclaration(member) || staticConstructor) {
+        if (ts.isMethodDeclaration(member)) {
             pieces.push(`if (!tsc_value_define_property_desc(${target}, ${key}, ${value}, true, true, true, false, true, true, true)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("class method definition failed"))`);
         } else {
             const kind = ts.isGetAccessorDeclaration(member) ? "getter" : "setter";
@@ -29952,7 +29949,7 @@ class Emitter {
             !this.classHasDecorators(definition) && definition.members.every((member) =>
                 member.kind === ts.SyntaxKind.SemicolonClassElement ||
                 ts.isClassStaticBlockDeclaration(member) ||
-                ts.isConstructorDeclaration(member) && (isStaticConstructorMethod(member) ? !!member.body : this.isSupportedDynamicConstructor(member)) ||
+                ts.isConstructorDeclaration(member) && this.isSupportedDynamicConstructor(member) ||
                 ts.isPropertyDeclaration(member) ||
                 (ts.isMethodDeclaration(member) || ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member)) &&
                     !!member.body);

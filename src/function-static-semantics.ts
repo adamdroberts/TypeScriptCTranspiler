@@ -789,7 +789,6 @@ function classElementFailure(node: ts.ClassLikeDeclaration): FunctionStaticSeman
         const isStatic = hasStaticModifier(member);
         const name = literalPropertyKey(member.name);
         if (ts.isConstructorDeclaration(member)) {
-            if (isStatic) continue;
             if (ts.getModifiers(member)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword))
                 return { node: member, message: "the class constructor cannot be a special method" };
             if (member.body && ++constructors > 1) return { node: member, message: "a class has at most one constructor" };
