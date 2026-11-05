@@ -332,6 +332,8 @@ export function callableNameInput(
         if (parent && (ts.isVariableDeclaration(parent) || ts.isParameter(parent) || ts.isBindingElement(parent)) && ts.isIdentifier(parent.name)) return {key: parent.name.text};
         // `{ name = <definition> } = o`: the AssignmentProperty's Initializer names the definition.
         if (parent && ts.isShorthandPropertyAssignment(parent)) return {key: parent.name.text};
+        // `__proto__: <definition>` is the prototype setter (isProtoSetter), not a NamedEvaluation.
+        if (parent && ts.isPropertyAssignment(parent) && !ts.isComputedPropertyName(parent.name) && literalPropName(parent.name) === "__proto__") return {key: ""};
         if (parent && (ts.isPropertyAssignment(parent) || ts.isPropertyDeclaration(parent))) return {key: parent.name, definition: parent};
         if (parent && ts.isBinaryExpression(parent) && NAME_EVALUATING_ASSIGNMENTS.has(parent.operatorToken.kind)) {
             if (ts.isIdentifier(parent.left)) return {key: parent.left.text};
@@ -673,6 +675,10 @@ export function earlyFunctionStaticSemanticsFailure(
             const failure = classElementFailure(node);
             if (failure) return failure;
         }
+        if (ts.isObjectLiteralExpression(node)) {
+            const failure = objectLiteralFailure(node, isAssignmentTargetPosition(node));
+            if (failure) return failure;
+        }
         if (ts.isAwaitExpression(node) && !allowAwait)
             return { node, message: "AwaitExpression is not permitted in this grammar context" };
         if (ts.isYieldExpression(node) && !allowYield)
@@ -741,6 +747,30 @@ function isAssignmentTargetPosition(node: ts.Node): boolean {
         if (ts.isSpreadAssignment(parent)) { current = parent.parent; continue; }
         return false;
     }
+}
+
+/** ObjectLiteral early errors (sec-object-initializer-static-semantics-early-errors,
+ * sec-__proto__-property-names-in-object-initializers). A CoverInitializedName
+ * (`{ a = 1 }`) and a second `__proto__: value` member are permitted only
+ * when the literal covers an ObjectAssignmentPattern; computed, shorthand
+ * and method forms of `__proto__` do not count. The parser attaches any
+ * modifier it sees to the member (`async` to a shorthand property, `static`
+ * to an accessor), and only `async` on a method is ECMAScript syntax. */
+function objectLiteralFailure(node: ts.ObjectLiteralExpression, pattern: boolean): FunctionStaticSemanticsFailure | null {
+    let protoSetters = 0;
+    for (const member of node.properties) {
+        const modifiers = (member as { modifiers?: ts.NodeArray<ts.ModifierLike> }).modifiers ?? [];
+        for (const modifier of modifiers) {
+            if (ts.isMethodDeclaration(member) && modifier.kind === ts.SyntaxKind.AsyncKeyword) continue;
+            return { node: modifier, message: `${ts.isDecorator(modifier) ? "a decorator" : `'${ts.tokenToString(modifier.kind)}'`} is not permitted on an object literal member` };
+        }
+        if (pattern) continue;
+        if (ts.isShorthandPropertyAssignment(member) && member.objectAssignmentInitializer)
+            return { node: member, message: "an initialized shorthand property is only permitted in an assignment pattern" };
+        if (ts.isPropertyAssignment(member) && !ts.isComputedPropertyName(member.name) && literalPropName(member.name) === "__proto__" && ++protoSetters > 1)
+            return { node: member, message: "duplicate __proto__ property in an object literal" };
+    }
+    return null;
 }
 
 /** IdentifierName property positions do not consume the contextual
