@@ -377,6 +377,16 @@ const DEFAULT_SOURCE_ANALYSIS_MEMORY_MB = 3072;
  * stress inputs under four hundred thousand. TSC2C_SOURCE_ANALYSIS_CELLS
  * overrides it. */
 const DEFAULT_SOURCE_ANALYSIS_CELL_BUDGET = 1_000_000;
+/** Distinct source texts one eval site may contribute before it fails closed
+ * as an unknown source (a site enumerating every code unit would otherwise
+ * generate tens of thousands of eval code files). TSC2C_EVAL_SOURCE_CHOICES
+ * overrides the limit. */
+function evalSourceChoiceLimit(): number {
+    const raw = process.env.TSC2C_EVAL_SOURCE_CHOICES;
+    if (raw === undefined || raw === "") return 1024;
+    if (!/^[1-9][0-9]{0,9}$/.test(raw)) throw new Error(`TSC2C_EVAL_SOURCE_CHOICES must be a positive integer, got ${JSON.stringify(raw)}`);
+    return Number(raw);
+}
 function sourceAnalysisCellBudget(): number {
     const raw = process.env.TSC2C_SOURCE_ANALYSIS_CELLS;
     if (raw === undefined || raw === "") return DEFAULT_SOURCE_ANALYSIS_CELL_BUDGET;
@@ -8052,9 +8062,10 @@ class SourceValueFlow {
                 const unresolved = this.unresolvedPrivate || unknown || source && (!source.values.nonempty ||
                     [...source.values].some(value => value.tag === "unknown" || value.tag === "pending-source") ||
                     !proof!.textComplete || operation !== "eval" && !proof!.primitiveComplete);
-                const choices = unresolved ? null : source
+                const listed = unresolved ? null : source
                     ? [...new Set(primitives.filter(value => operation !== "eval" || typeof value === "string").map(String))]
                     : operation !== "eval" ? ["undefined"] : [];
+                const choices = listed && listed.length > evalSourceChoiceLimit() ? null : listed;
                 return { node: invocation.node, operation, direct: invocation.direct, choices,...(this.domain?{domain:this.domain}:{}) };
             })],
         };
