@@ -17,6 +17,7 @@ import { sourceUnitBodyIncluded, sourceUnitFileName } from "./program";
 import {sourceChoiceTuples} from "./source-choice-tuples";
 import {moduleVarDeclaredNames} from "./module-static-semantics";
 import { ecmaParseGoal, literalPropertyKey } from "./ecmascript-source";
+import { annexBBlockFunctions, annexBFunctionVarScope } from "./annex-b-functions";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
 import {nativePrimitiveFormat} from "./util-format-source";
@@ -305,7 +306,7 @@ interface EvaluationEnvironment {
     readonly realms:Cell;
     readonly callers: Map<ts.Node,Set<SourceRealmRecord>>;
     readonly references: Map<ts.Identifier, {value: Cell; writes: Cell}>;
-    readonly declarations:Map<string,{node:ts.Identifier;function?:ts.FunctionDeclaration}>;
+    readonly declarations:Map<string,{node:ts.Identifier;function?:ts.FunctionDeclaration;annexB?:true;updates?:ts.FunctionDeclaration[]}>;
 }
 interface SourceRealmRecord {objectPrototype?:Cell;readonly bindings:Map<string,Cell>;owner?:ObjectOwner;host?:ObjectOwner;readonly global:Atom;readonly record:Atom;readonly operations:Map<Operation,Atom>;readonly intrinsics:Map<string,Atom>;}
 type SourceActivation=FunctionOwner|ts.SourceFile;
@@ -741,6 +742,13 @@ class SourceValueFlow {
                     for(const entry of moduleVarDeclaredNames(file))if(ts.isIdentifier(entry.node))environment.declarations.set(entry.name,{node:entry.node});
                     for(const statement of file.statements)if(ts.isFunctionDeclaration(statement)&&statement.name)
                         environment.declarations.set(statement.name.text,{node:statement.name,function:statement});
+                    // B.3.2.3: a block-level function of the eval code is one of
+                    // its var-declared names (undefined until evaluated).
+                    for(const declaration of annexBBlockFunctions(file)){
+                        const existing=environment.declarations.get(declaration.name.text);
+                        if(existing)(existing.updates??=[]).push(declaration);
+                        else environment.declarations.set(declaration.name.text,{node:declaration.name,function:declaration,annexB:true});
+                    }
                 }
                 const environments=this.evaluationSourceEnvironments.get(entry.source)??[];
                 environments.push(environment);this.evaluationSourceEnvironments.set(entry.source,environments);
@@ -1779,6 +1787,8 @@ class SourceValueFlow {
         if (declaration && callableDefinition(declaration) && !sourceDeclarationIntroducesBinding(declaration)) return this.cell(declaration);
         if (declaration && isAmbientSourceDeclaration(declaration)) return this.globalLexicals.get(node.text)?.value ?? this.globalBinding(node.text);
         if (!symbol || !(symbol.declarations ?? []).some(sourceDeclarationIntroducesBinding)) {
+            const annexB = this.annexBVarBinding(node);
+            if (annexB) return annexB;
             const owner=this.enclosingActivation(node);
             if(owner){
                 let names=this.evaluationVarBindings.get(owner);if(!names){names=new Map();this.evaluationVarBindings.set(owner,names);}
@@ -1837,7 +1847,8 @@ class SourceValueFlow {
             if(!this.connectGeneratedEnvironment(environment,caller,realm))continue;
             if(direct&&isStrictCodeContext(caller))continue;
             for(const[name,declaration]of environment.declarations){
-                const binding=this.binding(declaration.node);
+                const binding=declaration.annexB?this.annexBVarBinding(declaration.node)??this.binding(declaration.node):this.binding(declaration.node);
+                for(const update of declaration.updates??[])this.copy(this.cell(update),binding);
                 if(direct){
                     const target=ts.setTextRange(ts.factory.createIdentifier(name),caller);(target as ts.Identifier&{parent:ts.Node}).parent=caller;
                     const symbol=this.bindingSymbol(target),lexical=(symbol?.declarations??[]).some(node=>
@@ -1854,7 +1865,7 @@ class SourceValueFlow {
                     const receiver=this.newCell();this.publish(receiver,realm.global);
                     this.writeProperty(receiver,name,binding,true,"define",caller);
                 }
-                if(declaration.function)this.copy(this.cell(declaration.function),binding);
+                if(declaration.function&&!declaration.annexB)this.copy(this.cell(declaration.function),binding);
             }
         }
     }
@@ -3827,9 +3838,30 @@ class SourceValueFlow {
         if(this.currentRealm.owner)this.attachField(this.currentRealm.owner,key,cell);
         return cell;
     }
+    private readonly annexBVarBindings = new Map<ts.Node, Map<string, Cell>>();
+    /** B.3.2.1: a reference the checker leaves unresolved may be the var
+     * binding of a block-level function declaration of the enclosing
+     * non-strict var scope: undefined until the declaration is evaluated,
+     * the function object afterwards. */
+    private annexBVarBinding(node: ts.Identifier): Cell | null {
+        if (isStrictCodeContext(node)) return null;
+        const root = annexBFunctionVarScope(node);
+        if (ts.isSourceFile(root) && ecmaParseGoal(root) !== "script") return null;
+        const declarations = annexBBlockFunctions(root).filter(declaration => declaration.name.text === node.text);
+        if (!declarations.length) return null;
+        let names = this.annexBVarBindings.get(root); if (!names) { names = new Map(); this.annexBVarBindings.set(root, names); }
+        let cell = names.get(node.text);
+        if (!cell) {
+            cell = this.newCell(); names.set(node.text, cell);
+            this.publish(cell, this.primitive(undefined));
+            for (const declaration of declarations) this.copy(this.cell(declaration), cell);
+        }
+        return cell;
+    }
     private isAmbientIdentifier(node: ts.Identifier): boolean {
         if(this.implicitArgumentsOwner(node))return false;
         if(this.evaluationGlobalTargets.has(node))return true;
+        if(this.annexBVarBinding(node))return false;
         return !(this.bindingSymbol(node)?.declarations ?? []).some(declaration =>
             !isAmbientSourceDeclaration(declaration) && sourceDeclarationIntroducesBinding(declaration));
     }

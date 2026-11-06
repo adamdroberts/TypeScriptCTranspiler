@@ -7,6 +7,7 @@ import { moduleRequestFromDeclaration, moduleRequestKey, type ModuleRequest } fr
 import { exportedModuleNames, moduleNamespaceBinding, resolveModuleExport, type ModuleExportRecord } from "../module-export-resolution";
 import { definitionEvaluationChildren, moduleHasTopLevelAwait } from "./module-evaluation";
 import {classDefinitionPlan, classConstructorMember, isClassConstructor} from './class-definition';
+import {annexBBlockFunctions, annexBFunctionVarScope, bindingIdentifiers, type NamedFunctionDeclaration} from '../annex-b-functions';
 import { directEvalContext } from "../eval-context";
 import ts from "typescript";
 import {moduleLinkRecord} from "../module-source-record";
@@ -20269,21 +20270,7 @@ class Emitter {
     /** BoundNames is one source-ordered tree worklist shared by declaration
      * instantiation, identifier resolution, and binding initialization. */
     private test262BindingNames(name: ts.BindingName): ts.Identifier[] {
-        const names: ts.Identifier[] = [];
-        const worklist: ts.BindingName[] = [name];
-        while (worklist.length > 0) {
-            const current = worklist.pop()!;
-            if (ts.isIdentifier(current)) {
-                names.push(current);
-                continue;
-            }
-            for (let index = current.elements.length - 1; index >= 0; index--) {
-                const element = current.elements[index];
-                if (!element || !ts.isBindingElement(element)) continue;
-                worklist.push(element.name);
-            }
-        }
-        return names;
+        return bindingIdentifiers(name);
     }
 
     private isTest262ScriptGlobalLexicalDeclaration(
@@ -20311,11 +20298,7 @@ class Emitter {
      * declaration joins: the nearest enclosing function body, else the
      * Script. Class bodies are strict, so no candidate lives in one. */
     private annexBFunctionRoot(declaration: ts.Node): ts.SourceFile | ts.FunctionLikeDeclaration {
-        for (let current = declaration.parent; current; current = current.parent) {
-            if (ts.isFunctionLike(current) && "body" in current && current.body && ts.isBlock(current.body)) return current as ts.FunctionLikeDeclaration;
-            if (ts.isSourceFile(current)) return current;
-        }
-        return declaration.getSourceFile();
+        return annexBFunctionVarScope(declaration);
     }
 
     private isAnnexBBlockFunction(
@@ -20326,154 +20309,21 @@ class Emitter {
             this.annexBBlockFunctions(this.annexBFunctionRoot(declaration)).includes(declaration as ts.FunctionDeclaration & { name: ts.Identifier });
     }
 
-    private readonly annexBBlockFunctionCache = new WeakMap<ts.Node, readonly (ts.FunctionDeclaration & { name: ts.Identifier })[]>();
-
     /** B.3.2.1 / B.3.2.2: the block-level function declarations of one var
      * scope (a non-strict JavaScript function body or Script) that also get
-     * a var binding there, in source order. */
-    private annexBBlockFunctions(root: ts.SourceFile | ts.FunctionLikeDeclaration): readonly (ts.FunctionDeclaration & { name: ts.Identifier })[] {
-        const cached = this.annexBBlockFunctionCache.get(root);
-        if (cached) return cached;
+     * a var binding there, from the shared candidate collection. */
+    private annexBBlockFunctions(root: ts.SourceFile | ts.FunctionLikeDeclaration): readonly NamedFunctionDeclaration[] {
         const sf = root.getSourceFile();
         const body = ts.isSourceFile(root) ? root : root.body;
         const eligible = !!body && (ts.isSourceFile(root) ? this.isTest262ScriptSourceFile(sf) : ts.isBlock(body) && this.isJavaScriptSourceFile(sf)) &&
             !this.nodeIsInStrictMode(ts.isSourceFile(root) ? root : body);
-        const candidates = eligible ? this.annexBBlockFunctionCandidates(body as ts.SourceFile | ts.Block, sf)
-            .filter((declaration) => this.annexBFunctionReplacementAllowed(declaration, root)) : [];
-        this.annexBBlockFunctionCache.set(root, candidates);
-        return candidates;
+        return eligible ? annexBBlockFunctions(root) : [];
     }
 
-    private test262AnnexBFunctionHasCandidateParent(declaration: ts.FunctionDeclaration): boolean {
-        const parent = declaration.parent;
-        return ts.isBlock(parent) || ts.isCaseClause(parent) || ts.isDefaultClause(parent) ||
-            (ts.isIfStatement(parent) &&
-                (parent.thenStatement === declaration || parent.elseStatement === declaration));
-    }
 
-    /** The web-compat insertion is induced by source containment. This one
-     * worklist visits every candidate regardless of block or branch depth and
-     * stops at independent function/class declaration scopes. */
-    private annexBBlockFunctionCandidates(body: ts.SourceFile | ts.Block, sf: ts.SourceFile): (ts.FunctionDeclaration & { name: ts.Identifier })[] {
-        const out: (ts.FunctionDeclaration & { name: ts.Identifier })[] = [];
-        const worklist: ts.Node[] = [...body.statements];
-        while (worklist.length > 0) {
-            const current = worklist.pop()!;
-            if (ts.isFunctionDeclaration(current)) {
-                /* Annex B.3.2 only synthesizes the var-style companion for
-                 * ordinary FunctionDeclarations. Async/generator forms remain
-                 * lexical declarations of the CaseBlock. */
-                // A declaration directly in the root body is already a
-                // var-scoped function of that scope, not a block function.
-                if (current.name &&
-                    !current.asteriskToken &&
-                    !this.isAsyncDeclaration(current) &&
-                    current.parent !== body &&
-                    this.test262AnnexBFunctionHasCandidateParent(current)) {
-                    out.push(current as ts.FunctionDeclaration & { name: ts.Identifier });
-                }
-                continue;
-            }
-            if (ts.isFunctionLike(current) || ts.isClassLike(current) ||
-                ts.isClassStaticBlockDeclaration(current)) {
-                continue;
-            }
-            ts.forEachChild(current, (child) => { worklist.push(child); });
-        }
-        return out.sort((left, right) => left.getStart(sf) - right.getStart(sf));
-    }
 
-    private test262DirectLexicalNames(
-        statements: readonly ts.Statement[],
-        replaced: ts.FunctionDeclaration,
-        functionDeclarationsAreLexical = true,
-    ): Set<string> {
-        const names = new Set<string>();
-        const addStatement = (source: ts.Statement): void => {
-            let statement = source;
-            while (ts.isLabeledStatement(statement)) statement = statement.statement;
-            if (statement === replaced) return;
-            if (ts.isFunctionDeclaration(statement)) {
-                if (functionDeclarationsAreLexical && statement.name) names.add(statement.name.text);
-                return;
-            }
-            if (ts.isClassDeclaration(statement)) {
-                if (statement.name) names.add(statement.name.text);
-                return;
-            }
-            if (!ts.isVariableStatement(statement)) return;
-            const flags = statement.declarationList.flags;
-            if ((flags & (
-                ts.NodeFlags.Const |
-                ts.NodeFlags.Let |
-                ts.NodeFlags.Using |
-                ts.NodeFlags.AwaitUsing
-            )) === 0) return;
-            for (const declaration of statement.declarationList.declarations) {
-                for (const name of this.test262BindingNames(declaration.name)) names.add(name.text);
-            }
-        };
-        for (const statement of statements) addStatement(statement);
-        return names;
-    }
 
-    private test262LexicalLoopHeadContainsName(node: ts.Node, name: string): boolean {
-        if (!(ts.isForStatement(node) || ts.isForInStatement(node) || ts.isForOfStatement(node))) {
-            return false;
-        }
-        const initializer = node.initializer;
-        if (!initializer || !ts.isVariableDeclarationList(initializer) ||
-            (initializer.flags & (
-                ts.NodeFlags.Const |
-                ts.NodeFlags.Let |
-                ts.NodeFlags.Using |
-                ts.NodeFlags.AwaitUsing
-            )) === 0) {
-            return false;
-        }
-        return initializer.declarations.some((declaration) =>
-            this.test262BindingNames(declaration.name).some((bound) => bound.text === name),
-        );
-    }
 
-    /** Decide the spec's hypothetical `var F` replacement by following the
-     * new VarDeclaredName through its enclosing static-semantic scopes. */
-    private annexBFunctionReplacementAllowed(
-        declaration: ts.FunctionDeclaration & { name: ts.Identifier },
-        root: ts.SourceFile | ts.FunctionLikeDeclaration,
-    ): boolean {
-        const name = declaration.name.text;
-        for (let current: ts.Node | undefined = declaration.parent; current; current = current.parent) {
-            if (!ts.isSourceFile(root) && current === root.body) {
-                // B.3.2.1: body-level function declarations are var-like, a
-                // parameter name is never replaced, and `arguments` keeps
-                // its own binding.
-                if (name === "arguments") return false;
-                if (root.parameters.some(parameter => this.test262BindingNames(parameter.name).some(bound => bound.text === name))) return false;
-                return !this.test262DirectLexicalNames((current as ts.Block).statements, declaration, false).has(name);
-            }
-            if (ts.isBlock(current) &&
-                this.test262DirectLexicalNames(current.statements, declaration).has(name)) {
-                return false;
-            }
-            if (ts.isCaseBlock(current)) {
-                const statements = current.clauses.flatMap((clause) => [...clause.statements]);
-                if (this.test262DirectLexicalNames(statements, declaration).has(name)) return false;
-            }
-            if (this.test262LexicalLoopHeadContainsName(current, name)) return false;
-            if (ts.isCatchClause(current) && current.variableDeclaration &&
-                this.test262BindingNames(current.variableDeclaration.name)
-                    .some((bound) => bound.text === name) &&
-                !ts.isIdentifier(current.variableDeclaration.name)) {
-                return false;
-            }
-            if (current === root) {
-                return !this.test262DirectLexicalNames((current as ts.SourceFile).statements, declaration, false).has(name);
-            }
-            if (ts.isFunctionLike(current) || ts.isClassLike(current)) return false;
-        }
-        return false;
-    }
 
     /** Synthetic Module Link initializes its sole default cell to undefined;
      * evaluation publishes the parsed value into that same rooted handle. */

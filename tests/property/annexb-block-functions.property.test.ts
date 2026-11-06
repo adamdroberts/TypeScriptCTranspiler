@@ -2,6 +2,8 @@ import {expect,test} from 'bun:test';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {buildProgram} from '../../src/program';
+import {sourceEvaluationInvocations} from '../../src/source-value-flow';
 import {compile} from '../../src/compile';
 import {nodeReferenceSync} from './node-reference';
 
@@ -14,8 +16,11 @@ import {nodeReferenceSync} from './node-reference';
  * binding and the var binding stay distinct afterwards (an assignment
  * inside the block after the declaration does not reach the var), a
  * conflicting let/const/class or parameter name suppresses the var, and
- * strict code never hoists. Generated functions compare observations with
- * Node; one function with many sequential blocks is the stress input. */
+ * strict code never hoists. The source analysis gives a reference the
+ * checker leaves unresolved the same var binding (undefined or the block's
+ * function), so a message formatted from it keeps the eval source finite
+ * instead of escaping every global. Generated functions compare observations
+ * with Node; one function with many sequential blocks is the stress input. */
 
 function rng(seed:number):()=>number{
  let state=seed>>>0;
@@ -63,6 +68,30 @@ async function compare(name:string,source:string):Promise<void>{
   expect({name,code:native.exitCode,stderr:native.stderr.toString(),stdout:native.stdout.toString()}).toEqual({name,code:0,stderr:'',stdout:node.stdout.toString()});
  }finally{await rm(root,{recursive:true,force:true});}
 }
+
+function verdictProgram(random:()=>number,count:number):string{
+ let text='const executeSource = eval;\nconst out = [];\n';
+ for(let index=0;index<count;index++){
+  const read=`out.push("v" + String(f${index}) + typeof f${index});`;
+  const form=index%3;
+  const block=form===0?`{ function f${index}() { return ${index}; } }`:form===1?`if (true) function f${index}() { return ${index}; }`:`switch (1) { case 1: function f${index}() { return ${index}; } }`;
+  const body=random()<0.5?`${read} ${block} ${read}`:`${block} ${read}`;
+  text+=random()<0.5?`${body}\n`:`(function () { ${body} })();\n`;
+ }
+ return text+'console.log(executeSource("17;"), out.length);\n';
+}
+
+test('reads of block-level function names keep the eval source finite',async()=>{
+ const source=verdictProgram(rng(0xb33f),24);
+ const root=await mkdtemp(join(tmpdir(),'tsc2c-annexb-verdict-'));
+ try{
+  const entry=join(root,'main.js');await writeFile(entry,source);
+  const built=buildProgram({entry,packageRoot:process.cwd(),retainModuleFailures:true,isolatedScriptRoots:[entry],initializationEntries:[entry]});
+  const choices=sourceEvaluationInvocations(built.program,{roots:[entry]}).filter(call=>call.operation==='eval').map(call=>call.choices);
+  expect(choices).toEqual([['17;']]);
+ }finally{await rm(root,{recursive:true,force:true});}
+ await compare('verdict',source.replace('main.js','main.cjs'));
+},600000);
 
 test('block-level function declarations hoist a var binding exactly like Node',async()=>{
  await compare('functions',program(rng(0xb3b2),60));
