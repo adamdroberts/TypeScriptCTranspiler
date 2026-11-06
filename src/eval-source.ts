@@ -72,7 +72,11 @@ export function evaluationSourceRequests(program: ts.Program, entries: SourceVal
 }
 
 export function evalSourceIsValid(request: EvalSourceRequest): boolean {
-    const text = request.strict ? '"use strict";\n' + request.source : request.source;
+    // A strict caller's eval code is checked with a "use strict" prologue; a
+    // HashbangComment is only a comment at the start of the Script, so it
+    // stays first.
+    const hashbang = /^#![^\r\n\u2028\u2029]*(?:\r\n|[\n\r\u2028\u2029]|$)/.exec(request.source)?.[0] ?? "";
+    const text = request.strict ? hashbang + '"use strict";\n' + request.source.slice(hashbang.length) : request.source;
     const file = createEcmaSourceFile("eval-source.js", text, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS, "script");
     return !(file as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics?.length &&
         !earlyControlFlowStaticSemanticsFailure(file) &&

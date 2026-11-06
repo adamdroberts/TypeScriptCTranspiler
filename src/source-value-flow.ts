@@ -69,7 +69,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
-type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `regexp-flag:${string}` | `regexp-member:${string}` | `object-enumerable:${"keys"|"values"|"entries"}` | `object-has-own:${"static"|"prototype"}` | `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `legacy-function-accessor:${"caller"|"arguments"}:${"get"|"set"}` | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
+type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-integrity:${"preventExtensions"|"seal"|"freeze"}` | `object-integrity-test:${"isExtensible"|"isSealed"|"isFrozen"}` | `regexp-flag:${string}` | `regexp-member:${string}` | `object-enumerable:${"keys"|"values"|"entries"}` | `object-has-own:${"static"|"prototype"}` | `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `legacy-function-accessor:${"caller"|"arguments"}:${"get"|"set"}` | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
     "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
 type Primitive = SourcePrimitive;
 /** Callables and collection-iterator cells reachable from one escaping value;
@@ -114,7 +114,7 @@ const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operati
     ["Array", new Map([["isArray", "array-brand"]])],
     ["JSON", new Map([...jsonMethods.values()].map(descriptor=>[descriptor.name,descriptor.operation]))],
     ["console", new Map([...consoleOperations].map(name=>[name,"host-print" as const]))],
-    ["Object", new Map([["is","object-is"],["keys","object-enumerable:keys"],["values","object-enumerable:values"],["entries","object-enumerable:entries"],["hasOwn","object-has-own:static"],["getPrototypeOf", "object-get-prototype"], ["setPrototypeOf", "set-prototype:object"], ["create", "create-object"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
+    ["Object", new Map([["is","object-is"],["preventExtensions","object-integrity:preventExtensions"],["seal","object-integrity:seal"],["freeze","object-integrity:freeze"],["isExtensible","object-integrity-test:isExtensible"],["isSealed","object-integrity-test:isSealed"],["isFrozen","object-integrity-test:isFrozen"],["keys","object-enumerable:keys"],["values","object-enumerable:values"],["entries","object-enumerable:entries"],["hasOwn","object-has-own:static"],["getPrototypeOf", "object-get-prototype"], ["setPrototypeOf", "set-prototype:object"], ["create", "create-object"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
         ["getOwnPropertyDescriptor", "own-descriptor"], ["getOwnPropertyDescriptors", "own-descriptors"], ["getOwnPropertyNames", "object-own-keys:string"], ["getOwnPropertySymbols", "object-own-keys:symbol"]])],
     ["Reflect", new Map([["ownKeys", "reflect-own-keys"], ["get", "reflect-get"], ["getPrototypeOf", "reflect-get-prototype"], ["setPrototypeOf", "set-prototype:reflect"], ["apply", "reflect-apply"], ["construct", "construct"],
         ["defineProperty", "define-property"], ["set", "set-property"], ["deleteProperty", "delete-property"], ["getOwnPropertyDescriptor", "own-descriptor"]])],
@@ -327,6 +327,8 @@ interface FunctionOwner {
     readonly parameters:readonly ts.ParameterDeclaration[];readonly actuals:Map<string,SourceCallArguments>;readonly actualChanges:Cell;arguments?:SourceArgumentsRecord;
     readonly definition: CallableDefinition; readonly node: FunctionNode | null; readonly kind: DynamicFunctionKind; readonly fields: ObjectOwner;
     readonly yields:Cell;readonly yieldReceives:Cell;readonly yieldThrows:Cell; readonly returns: Cell; readonly throws: Cell; readonly receiver: Cell; readonly active: Cell; readonly sourceText: string;
+    /** The NewTarget of every activation: undefined for a call, the construct target for a construction. */
+    readonly newTarget: Cell;
     base?: Cell;
     completion?: StatementBodyCompletions;
 }
@@ -5672,7 +5674,7 @@ class SourceValueFlow {
         const constructor = ts.isClassLike(node) && activation ? this.function(activation) : null;
         owner = { definition: node, node: activation,parameters:(activation?.parameters??[]).filter(parameter=>!ts.isIdentifier(parameter.name)||parameter.name.text!=="this"),actuals:new Map(),actualChanges:this.newCell(), kind: functionKindForDeclaration(node), fields: this.owner(node),
             yields:this.newCell(),yieldReceives:this.newCell(),yieldThrows:this.exceptionCell(), returns: constructor?.returns ?? this.newCell(), throws: constructor?.throws ?? this.exceptionCell(),
-            receiver: constructor?.receiver ?? this.newCell(), active: constructor?.active ?? this.newCell(), sourceText: (functionNode(node) ? this.dynamicSourceTexts.get(node) : null) ?? callableSourceText(node) ?? "function () { [native code] }" };
+            receiver: constructor?.receiver ?? this.newCell(), active: constructor?.active ?? this.newCell(), newTarget: constructor?.newTarget ?? this.newCell(), sourceText: (functionNode(node) ? this.dynamicSourceTexts.get(node) : null) ?? callableSourceText(node) ?? "function () { [native code] }" };
         this.functions.set(node, owner);
         const length=this.newCell();this.publish(length,this.primitive(activation?expectedArgumentCount(activation):0));this.defineField(owner.fields,"length",length);
         const name = this.newCell(), input = callableNameInput(node);
@@ -6598,6 +6600,26 @@ class SourceValueFlow {
                     }
                 });
             }
+        } else if (ts.isMetaProperty(node) && node.keywordToken === ts.SyntaxKind.NewKeyword) {
+            // new.target is the NewTarget of the nearest non-arrow function
+            // activation; eval code reads its caller's.
+            let owner:ts.Node|undefined=node.parent;
+            while(owner&&!(ts.isFunctionLike(owner)&&!ts.isArrowFunction(owner)&&"body" in owner))owner=owner.parent;
+            if(owner&&callableDefinition(owner))this.copy(this.function(owner).newTarget,result);
+            else{
+                const environment=this.evaluationEnvironments.get(this.sourceFile(node));
+                if(environment){
+                    let rule!:Rule;const seen=new Set<ts.Node>();
+                    rule=this.rule([],()=>{this.watch(rule,this.evaluationCallerChange(environment));
+                        for(const caller of environment.callers.keys()){
+                            if(seen.has(caller))continue;seen.add(caller);
+                            let enclosing:ts.Node|undefined=caller.parent;
+                            while(enclosing&&!(ts.isFunctionLike(enclosing)&&!ts.isArrowFunction(enclosing)&&"body" in enclosing))enclosing=enclosing.parent;
+                            if(enclosing&&callableDefinition(enclosing))this.copy(this.function(enclosing).newTarget,result);
+                            else this.publish(result,this.primitive(undefined));
+                        }});
+                }else this.publish(result,this.unknown);
+            }
         } else if (ts.isMetaProperty(node) && node.keywordToken === ts.SyntaxKind.ImportKeyword) {
             const source = node.getSourceFile();
             let metadata = this.moduleMetadata.get(source);
@@ -7385,6 +7407,7 @@ class SourceValueFlow {
                             this.copy(this.property(invocation.target,"prototype"),instance.prototype);
                         }
                         this.copy(invocation.construct?invocation.receiver:this.functionThisBinding(atom.owner,invocation.receiver,node), atom.owner.receiver);
+                        if(invocation.construct)this.copy(invocation.newTarget??invocation.target,atom.owner.newTarget);else this.publish(atom.owner.newTarget,this.primitive(undefined));
                         if(invocation.construct && ts.isClassLike(atom.owner.definition) && !atom.owner.node && atom.owner.base){
                             continue;
                         }
@@ -7716,6 +7739,18 @@ class SourceValueFlow {
                         if(atom.operation==="reflect-own-keys"||atom.operation==="object-own-keys:string"||atom.operation==="object-own-keys:symbol"){
                             const kind=atom.operation==="reflect-own-keys"?"all":atom.operation==="object-own-keys:string"?"string":"symbol";
                             this.copy(this.ownKeyArray(argument(0)??omittedArgument,node,kind,atom.operation!=="reflect-own-keys"),result);continue;
+                        }
+                        // SetIntegrityLevel / TestIntegrityLevel: the argument is returned
+                        // unchanged (a primitive as itself), freeze marks a represented
+                        // owner's own properties immutable, the tests answer either way; no
+                        // argument escapes and no code runs.
+                        if (atom.operation.startsWith("object-integrity:")) {
+                            const input=argument(0)??omittedArgument;this.copy(input,result);
+                            if(atom.operation==="object-integrity:freeze")this.rule([input],()=>{for(const value of input.values){const owner=this.ordinaryOwner(value);if(owner&&!owner.proxy)owner.immutableOwn=true;}});
+                            continue;
+                        }
+                        if (atom.operation.startsWith("object-integrity-test:")) {
+                            this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));continue;
                         }
                         if (atom.operation === "object-get-prototype" || atom.operation === "reflect-get-prototype") {
                             const input=argument(0)??omittedArgument;
