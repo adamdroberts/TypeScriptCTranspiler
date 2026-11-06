@@ -4267,6 +4267,9 @@ static tsc_value_t tsc_value_apply_with_activation(
     tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args,
     tsc_value_t callee, tsc_value_t new_target, tsc_environment_t* constructor_environment
 ) {
+    /* Every dynamic invocation (arrows and typed closures included, which
+     * push no activation of their own) crosses the native stack guard here. */
+    tsc_stack_depth_check();
     bool tail_hides_caller = false;
     for (;;) {
         // The canonical invocation owns its encoded operands across argument-list

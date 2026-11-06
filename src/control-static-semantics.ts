@@ -163,6 +163,12 @@ export function earlyControlFlowStaticSemanticsFailure(
         // (zero-width) expression and starts a new statement.
         if (ts.isThrowStatement(node) && (!node.expression || node.expression.getFullWidth() === 0))
             return { node, message: "throw requires an expression on the same line" };
+        // ImportCall : import ( AssignmentExpression ,opt ) and
+        // import ( AssignmentExpression , AssignmentExpression ,opt ): no
+        // other arity and no spread argument.
+        if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+            (node.arguments.length === 0 || node.arguments.length > 2 || node.arguments.some(ts.isSpreadElement)))
+            return { node, message: "import() takes a specifier and an optional options argument" };
         if (ts.isTaggedTemplateExpression(node) && ((node.flags | node.tag.flags) & ts.NodeFlags.OptionalChain))
             return { node, message: "optional chain is not permitted as a template tag" };
         if (ts.isNewExpression(node) && (node.expression.flags & ts.NodeFlags.OptionalChain))

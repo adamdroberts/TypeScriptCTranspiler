@@ -1,3 +1,4 @@
+import {registerProofCompanionRoots} from "./source-file-expression-proof";
 import ts from "typescript";
 import { earlyPrivateStaticSemanticsFailure } from "./emit/private-names";
 import { preEmitDiagnostics } from "./resilient-checker";
@@ -352,10 +353,9 @@ function permanentLimitDiagnostics(
                         });
                     }
                 } else if (expr.kind === ts.SyntaxKind.ImportKeyword) {
-                    const parsed = dynamicImportSpecifiersFromCall(node);
-                    if (parsed?.error) {
-                        diagnostics.push({ node, message: parsed.error });
-                    }
+                    // A specifier without a finite proof compiles to a
+                    // runtime rejection: the module set is fixed at build
+                    // time, so an unproven string names no AOT module.
                     const spec = node.arguments[0];
                     const literalSpec = spec ? stringSpecifierText(spec) : null;
                     if (literalSpec && isNativeAddonSpecifier(literalSpec)) {
@@ -791,6 +791,9 @@ async function compileWithDiagnostics(opts: CompileOptions, writeDiagnostic: (me
         const position = file && location ? file.getLineAndCharacterOfPosition(location.getStart(file)) : undefined;
         writeDiagnostic(`tsc2c: warning: the TypeScript checker exhausted its stack${file && position ? ` at ${file.fileName}:${position.line + 1}:${position.character + 1}` : ""}; the query answers with the unknown type\n`);
     };
+    // The specifier proof of a Test262 test builds its own program; the
+    // harness scripts and host module files take part in it.
+    if (opts.test262Observation) registerProofCompanionRoots(opts.test262Observation.testEntry, opts.test262Observation.setupEntries);
     const programOptions = {
         entry: opts.entry,
         packageRoot: pkg,

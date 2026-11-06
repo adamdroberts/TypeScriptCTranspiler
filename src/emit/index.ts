@@ -32010,6 +32010,8 @@ class Emitter {
                 buf.line(`void* volatile ${updated}_root = tsc_value_gc_root(${updated}); (void)${updated}_root;`);
                 setReference(op.reference, updated, nodeForSlot(operation.output));
                 evaluated = op.prefix ? updated : old;
+            } else if (op.kind === "call" && ts.isCallExpression(op.node) && op.node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+                evaluated = this.emitResumableDynamicImport(op.node, read(op.arguments));
             } else if (op.kind === "call") {
                 evaluated = this.emitCallApplication(op.node,read(op.callee),
                     op.receiver === null ? "tsc_value_undefined()" : read(op.receiver),read(op.arguments));
@@ -33414,7 +33416,10 @@ class Emitter {
             if (callee.ty.kind === "value") {
                 return this.emitDynamicValueCall(call, callee);
             }
-            unsupported(call, `call target kind ${ts.SyntaxKind[call.expression.kind]}`);
+            // Any other callee type (a literal, a typed non-function) calls
+            // through the runtime, which throws the TypeError for a
+            // non-callable value.
+            return this.emitDynamicValueCall(call, { c: this.coerce(callee, T_VALUE, call.expression), ty: T_VALUE });
         }
         const calleeId = call.expression;
         const name = calleeId.text;
@@ -33606,25 +33611,48 @@ class Emitter {
     }
 
     private emitDynamicImportCall(call: ts.CallExpression): EmitResult {
-        const parsed = dynamicImportSpecifiersFromCall(call);
-        if (!parsed || parsed.specifiers === null) {
-            unsupported(call, parsed?.error ?? "invalid dynamic import request");
-        }
+        const specifiers = this.dynamicImportCandidates(call);
         const specifierNode = call.arguments[0]!;
         const specifier = this.emitExpr(specifierNode);
         const optionsNode = call.arguments[1];
         const options = optionsNode
             ? this.emitExpr(optionsNode)
             : { c: "tsc_value_undefined()", ty: T_VALUE };
-        const adapter = this.ensureDynamicImportAdapter(call, parsed.specifiers);
-        const stateType = `${adapter}_state_t`;
         return this.emitSequencedExpr(
             promiseType(T_VALUE),
             [
                 { value: specifier, target: T_VALUE, node: specifierNode },
                 { value: options, target: T_VALUE, node: optionsNode ?? specifierNode },
             ],
-            ([specifierValue, optionsValue]) => {
+            ([specifierValue, optionsValue]) => this.dynamicImportApplication(call, specifiers, specifierValue, optionsValue),
+        );
+    }
+
+    /** The AOT candidate modules of an ImportCall: the finite specifier
+     * proof when the analysis has one, otherwise none, so every runtime
+     * specifier rejects (the module set cannot grow after the build). */
+    private dynamicImportCandidates(call: ts.CallExpression): readonly string[] {
+        const parsed = dynamicImportSpecifiersFromCall(call);
+        if (!parsed) unsupported(call, "invalid dynamic import request");
+        return parsed.specifiers ?? [];
+    }
+
+    /** An ImportCall whose argument list a resumable expression already
+     * evaluated into one arguments array (an `await` or `yield` inside it). */
+    private emitResumableDynamicImport(call: ts.CallExpression, argumentsArray: string): string {
+        const specifiers = this.dynamicImportCandidates(call);
+        const list = this.freshTemp("_dynamic_import_arguments");
+        const element = (index: number): string =>
+            `(${list}->len > ${index} ? TSC_ARR(tsc_value_t, ${list}, ${index}) : tsc_value_undefined())`;
+        return `({ tsc_array_t* const ${list} = tsc_value_as_array(${argumentsArray}); ` +
+            `tsc_value_promise(${this.dynamicImportApplication(call, specifiers, element(0), element(1))}); })`;
+    }
+
+    private dynamicImportApplication(call: ts.CallExpression, specifiers: readonly string[], specifierValue: string, optionsValue: string): string {
+        const adapter = this.ensureDynamicImportAdapter(call, specifiers);
+        const stateType = `${adapter}_state_t`;
+        {
+            {
                 const promise = this.freshTemp("_dynamic_import");
                 const state = this.freshTemp("_dynamic_import_state");
                 const frame = this.freshTemp("_dynamic_import_eh");
@@ -33641,8 +33669,8 @@ class Emitter {
                     `${state}->attributes = ${attributes}; tsc_queue_microtask(${adapter}, ${state}); ` +
                     `tsc_try_pop(); } else { tsc_value_t ${reason} = tsc_current_error_value(); ` +
                     `tsc_try_pop(); tsc_promise_reject_in_place(${promise}, ${reason}); } ${promise}; })`;
-            },
-        );
+            }
+        }
     }
 
     private ensureDynamicImportAdapter(
@@ -33652,7 +33680,12 @@ class Emitter {
         const adapter = this.freshTemp("tsc_dynamic_import_job");
         const stateType = `${adapter}_state_t`;
         const body = new CBuf();
-        body.line(`typedef struct { tsc_promise_t* promise; tsc_promise_t* evaluation; tsc_value_t (*namespace)(void); tsc_str_t* specifier; tsc_dynamic_import_attribute_type_t attributes; } ${stateType};`);
+        // The job state and entry points are declared ahead of every function
+        // definition: an import() inside a hoisted function declaration is
+        // emitted before the closure definitions that hold the job bodies.
+        this.protos.line(`typedef struct { tsc_promise_t* promise; tsc_promise_t* evaluation; tsc_value_t (*namespace)(void); tsc_str_t* specifier; tsc_dynamic_import_attribute_type_t attributes; } ${stateType};`);
+        this.protos.line(`static void ${adapter}_settle(void* opaque);`);
+        this.protos.line(`static void ${adapter}(void* opaque);`);
         body.open(`static void ${adapter}_settle(void* opaque)`);
         body.line(`${stateType}* state = (${stateType}*)opaque;`);
         body.line("if (tsc_promise_is_rejected(state->evaluation)) { tsc_promise_reject_in_place(state->promise, tsc_promise_reason(state->evaluation)); return; }");
@@ -39001,10 +39034,7 @@ class Emitter {
             // Any other callee (a function expression, a typed callable)
             // constructs through the runtime, which throws the TypeError for
             // a non-constructor.
-            if (ctor.ty.kind === "function") {
-                return this.emitDynamicValueConstruct(n, { c: this.coerce(ctor, T_VALUE, n.expression), ty: T_VALUE });
-            }
-            unsupported(n, "new expression must use a class identifier or dynamic constructor value");
+            return this.emitDynamicValueConstruct(n, { c: this.coerce(ctor, T_VALUE, n.expression), ty: T_VALUE });
         }
         const localConstructor = this.localLexicalReferenceForIdentifier(ctorExpr);
         if (localConstructor?.type.kind === "value") {

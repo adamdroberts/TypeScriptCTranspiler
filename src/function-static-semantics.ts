@@ -606,6 +606,10 @@ export function earlyFunctionStaticSemanticsFailure(
                 if (ts.isArrowFunction(parent)) {
                     if (parent.body === current) { owner = parent; break; }
                     inArrowParameters = true;
+                    // AsyncArrowHead parses its ArrowFormalParameters with
+                    // [+Await], so an async arrow owns identifiers in its own
+                    // parameters, nested arrow parameters included.
+                    if (ts.getModifiers(parent)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword)) { owner = parent; break; }
                     continue;
                 }
                 if (ts.isFunctionLike(parent) || ts.isClassStaticBlockDeclaration(parent) || ts.isSourceFile(parent)) { owner = parent; break; }

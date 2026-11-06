@@ -729,6 +729,7 @@ void tsc_call_activation_push(
 );
 void tsc_call_activation_pop(tsc_call_activation_t* activation);
 void tsc_call_activation_configure(bool strict, tsc_array_t* parameter_cells);
+void tsc_stack_depth_check(void);
 tsc_value_t tsc_call_receiver(void);
 tsc_value_t tsc_call_arguments(void);
 tsc_value_t tsc_value_current_callee(void);

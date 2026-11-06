@@ -6,6 +6,15 @@ import {sourceExpressionTexts} from './source-value-flow';
 import {dynamicImportCalls} from './module-request';
 
 const proofs=new WeakMap<ts.SourceFile,ReadonlyMap<string,readonly string[]|null>>();
+const companionRoots=new Map<string,readonly string[]>();
+/** Scripts that share the entry's global object (a Test262 harness) take
+ * part in the entry's proof program, so harness bindings are known values
+ * instead of unresolved globals whose opaque effects widen every mutable
+ * binding a specifier expression reads. Module files are discovered from
+ * the proven specifiers themselves. */
+export function registerProofCompanionRoots(entry:string,scripts:readonly string[]):void {
+    companionRoots.set(path.resolve(entry),scripts.map(root=>path.resolve(root)));
+}
 const proofSources=new WeakMap<ts.SourceFile,ts.SourceFile>();
 const active=new Set<ts.SourceFile>();
 let sourceTrees:Map<string,ts.SourceFile>|undefined;
@@ -43,13 +52,15 @@ export function sourceFileExpressionTexts(expression:ts.Expression):readonly str
                 proofSources.set(parsed,source);
                 const expressions:ts.Expression[]=[],pending:ts.Node[]=[parsed];
                 while(pending.length){const node=pending.pop()!;if(ts.isExpression(node))expressions.push(node);node.forEachChild(child=>{pending.push(child)});}
+                const companions=(companionRoots.get(path.resolve(source.fileName))??[]).filter(root=>root!==path.resolve(source.fileName));
                 const built=buildProgram({entry:path.resolve(source.fileName),packageRoot:resolvePackageRoot(),retainModuleFailures:true,deferDynamicImportDiscovery:true,
-                    additionalRoots:[...roots],moduleRoots:[...(ecmaParseGoal(source)==="module"?[path.resolve(source.fileName)]:[]),...roots],
-                    ...(ecmaParseGoal(source)==="script"?{isolatedScriptRoots:[path.resolve(source.fileName)]}:{}),
+                    additionalRoots:[...companions,...roots],moduleRoots:[...(ecmaParseGoal(source)==="module"?[path.resolve(source.fileName)]:[]),...roots],
+                    isolatedScriptRoots:[...companions,...(ecmaParseGoal(source)==="script"?[path.resolve(source.fileName)]:[])],
+                    ...(companions.length?{initializationEntries:[...companions,path.resolve(source.fileName)],ignoreCheckJsDirectiveRoots:[...companions,path.resolve(source.fileName)]}:{}),
                     sourceOverrides:new Map([[path.resolve(source.fileName),parsed]]),sourceFileCreated:adopt});
                 const program=built.program;
                 const targetArguments=program.getSourceFiles().filter(file=>!file.isDeclarationFile).flatMap(file=>dynamicImportCalls(file).flatMap(call=>call.arguments[0]?[call.arguments[0]]:[]));
-                const queries=sourceExpressionTexts(program,[...expressions,...targetArguments],{roots:[path.resolve(source.fileName)]});
+                const queries=sourceExpressionTexts(program,[...expressions,...targetArguments],{roots:[...companions,path.resolve(source.fileName)]});
                 result=new Map(expressions.map(node=>[key(node),queries.get(node)??null]));
                 let added=false;
                 for(const argument of targetArguments)for(const text of queries.get(argument)??[]){

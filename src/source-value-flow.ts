@@ -421,7 +421,9 @@ function conversionOperands(node: ts.Node): readonly ts.Expression[] | null {
     if (ts.isComputedPropertyName(node)) return [node.expression];
     const operation = sourceNumericOperation(node);
     if (operation) return ts.isBinaryExpression(node) ? [node.left, node.right] : [(node as ts.PrefixUnaryExpression | ts.PostfixUnaryExpression).operand];
-    if (ts.isBinaryExpression(node) && node.operatorToken.kind===ts.SyntaxKind.InKeyword)return [node.left,node.right];
+    // `key in object` converts only its left operand (ToPropertyKey); the
+    // right operand is required to be an Object and is never coerced.
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind===ts.SyntaxKind.InKeyword)return [node.left];
     return null;
 }
 
@@ -6559,7 +6561,13 @@ class SourceValueFlow {
         if(ts.isBinaryExpression(node)&&node.operatorToken.kind===ts.SyntaxKind.InKeyword&&ts.isPrivateIdentifier(node.left)){this.copy(this.privateAccess(this.cell(node.right),node.left,node,"has"),result);return;}
         if(ts.isBinaryExpression(node)&&node.operatorToken.kind===ts.SyntaxKind.InstanceOfKeyword){this.copy(this.instanceofSource(this.cell(node.left),this.cell(node.right),node),result);return;}
         if (ts.isDeleteExpression(node) || ts.isBinaryExpression(node) && BOOLEAN_BINARY_RESULTS.has(node.operatorToken.kind)) {
-            this.publish(result, this.primitive(true)); this.publish(result, this.primitive(false)); return;
+            this.publish(result, this.primitive(true)); this.publish(result, this.primitive(false));
+            // `key in value` throws TypeError for a non-Object right operand.
+            if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.InKeyword) {
+                const right = this.cell(node.right), handler = this.exceptionHandlers.get(node);
+                if (handler) this.rule([right], () => { if ([...right.values].some(atom => atom.tag === "primitive")) this.publish(handler, this.nativeException(node, "TypeError")); });
+            }
+            return;
         }
         if (ts.isVoidExpression(node)) { this.publish(result, this.primitive(undefined)); return; }
         if (ts.isTypeOfExpression(node)) {
@@ -6810,7 +6818,10 @@ class SourceValueFlow {
                 modules=this.rule([converted],()=>{
                     const proof=this.primitiveState(converted,modules,true);
                     if(proof.pending&&!proof.unresolved)return;
-                    if(!proof.proof.primitiveComplete){this.publish(namespace,this.unknown);return;}
+                    // The AOT module set is fixed at build time: a specifier
+                    // without a finite proof names no candidate, so the
+                    // import rejects instead of producing an unknown namespace.
+                    if(!proof.proof.primitiveComplete){this.publish(rejection,this.nativeException(context));return;}
                     for(const text of proof.proof.values){
                         const resolved=ts.resolveModuleName(String(text),node.getSourceFile().fileName,this.program.getCompilerOptions(),ts.sys).resolvedModule;
                         const source=resolved?this.program.getSourceFile(sourceUnitFileName(this.program,resolved.resolvedFileName,"module")):undefined;
@@ -6818,7 +6829,10 @@ class SourceValueFlow {
                         if(source&&sourceModuleFailure(source))this.publish(rejection,this.nativeException(context));
                         else if(source&&(symbol||source.flags&ts.NodeFlags.JsonFile))this.copy(this.moduleNamespace(source,symbol),namespace);
                         else if(resolved&&!source)this.publish(namespace,this.pendingSource);
-                        else if(!resolved&&(String(text).startsWith("./")||String(text).startsWith("../")||path.isAbsolute(String(text))))this.publish(rejection,this.nativeException(context));
+                        // No module outside the build's graph can load: an
+                        // unresolved specifier rejects, except a host module
+                        // request whose namespace the runtime supplies.
+                        else if(!resolved&&!String(text).startsWith("node:"))this.publish(rejection,this.nativeException(context));
                         else this.publish(namespace,this.unknown);
                     }
                 });

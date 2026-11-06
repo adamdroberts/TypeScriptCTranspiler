@@ -197,6 +197,10 @@ export function planResumableExpression(expression: ts.Expression, options: { as
         }
         if (ts.isCallExpression(node) && target.kind === ts.SyntaxKind.SuperKeyword)
             return operation({ kind: "super-constructor", node }, callee, argumentsEntry);
+        // ImportCall has no callee value; the emitter applies the import to
+        // the evaluated argument list.
+        if (ts.isCallExpression(node) && target.kind === ts.SyntaxKind.ImportKeyword)
+            return operation({ kind: "undefined" }, callee, argumentsEntry);
         if (ts.isIdentifier(target)) return buildReference(target, reference => {
             if (reference.kind !== "binding") throw new Error("identifier call requires a binding Reference");
             const got = operation({kind: "binding-receiver", reference}, receiver!, argumentsEntry);

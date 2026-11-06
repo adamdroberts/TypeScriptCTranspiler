@@ -1,3 +1,6 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 #include "tsc_internal.h"
 #include <pthread.h>
 #include <sched.h>
@@ -2738,12 +2741,39 @@ void tsc_run_event_loop(void) {
 
 /* ---------------- exceptions ---------------- */
 
+/* Every ordinary function entry pushes an activation, so the native stack
+ * depth is checked here: a call that would run into the thread's guard
+ * region throws RangeError instead of faulting. The limit is the thread's
+ * stack floor plus a margin for the deepest generated frame plus the
+ * unwinding runtime. */
+static __thread char* g_stack_floor_limit;
+static __thread bool g_stack_floor_known;
+#define TSC_STACK_RESERVE (1024u * 1024u)
+static void stack_floor_resolve(void) {
+    g_stack_floor_known = true;
+    g_stack_floor_limit = NULL;
+    pthread_attr_t attributes;
+    if (pthread_getattr_np(pthread_self(), &attributes) != 0) return;
+    void* address = NULL;
+    size_t size = 0;
+    if (pthread_attr_getstack(&attributes, &address, &size) == 0 && address && size > 2 * TSC_STACK_RESERVE)
+        g_stack_floor_limit = (char*)address + TSC_STACK_RESERVE;
+    pthread_attr_destroy(&attributes);
+}
+void tsc_stack_depth_check(void) {
+    if (!g_stack_floor_known) stack_floor_resolve();
+    char marker;
+    if (g_stack_floor_limit && &marker < g_stack_floor_limit)
+        tsc_throw_error(TSC_ERROR_RANGE, tsc_str_from_cstr("Maximum call stack size exceeded"));
+}
+
 void tsc_call_activation_push(
     tsc_call_activation_t* activation,
     tsc_array_t* arguments,
     tsc_value_t this_arg,
     tsc_value_t callee
 ) {
+    tsc_stack_depth_check();
     if (!activation) return;
     activation->prev = g_call_activation_top;
     activation->this_arg_gc_root = tsc_value_gc_root(this_arg);
