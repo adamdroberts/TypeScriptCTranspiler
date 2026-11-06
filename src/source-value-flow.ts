@@ -69,7 +69,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
-type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-enumerable:${"keys"|"values"|"entries"}` | `object-has-own:${"static"|"prototype"}` | `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `legacy-function-accessor:${"caller"|"arguments"}:${"get"|"set"}` | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
+type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `regexp-flag:${string}` | `regexp-member:${string}` | `object-enumerable:${"keys"|"values"|"entries"}` | `object-has-own:${"static"|"prototype"}` | `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `legacy-function-accessor:${"caller"|"arguments"}:${"get"|"set"}` | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
     "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
 type Primitive = SourcePrimitive;
 /** Callables and collection-iterator cells reachable from one escaping value;
@@ -143,6 +143,40 @@ const PRIMITIVE_MEMBER_LENGTHS:ReadonlyMap<string,number>=new Map<string,number>
     ...["toFixed","toExponential","toPrecision"].map(name=>["number:"+name,1] as const),
     ["number:toLocaleString",0],["bigint:toLocaleString",0],
 ]);
+/* RegExp values (sec-regexp-regular-expression-objects): one prototype owner
+ * carries the flag accessors and the method operations; an instance carries
+ * its [[OriginalSource]] and [[OriginalFlags]] as cells. Matching itself is
+ * not modelled: results are strings, numbers, booleans and match arrays of
+ * unknown content, never an unknown value. */
+const REGEXP_ACCESSORS=["flags","source","global","ignoreCase","multiline","dotAll","unicode","unicodeSets","sticky","hasIndices"] as const;
+const REGEXP_FLAG_LETTERS:ReadonlyMap<string,string>=new Map([["hasIndices","d"],["global","g"],["ignoreCase","i"],["multiline","m"],["dotAll","s"],["unicode","u"],["unicodeSets","v"],["sticky","y"]]);
+const REGEXP_METHODS:ReadonlyMap<string,{symbol:boolean;length:number}>=new Map([["exec",{symbol:false,length:1}],["test",{symbol:false,length:1}],["toString",{symbol:false,length:0}],["compile",{symbol:false,length:2}],
+    ["match",{symbol:true,length:1}],["matchAll",{symbol:true,length:1}],["replace",{symbol:true,length:2}],["search",{symbol:true,length:1}],["split",{symbol:true,length:2}]]);
+/** String.prototype methods that dispatch to a RegExp argument's @@-method. */
+const REGEXP_STRING_MEMBERS:ReadonlyMap<string,string>=new Map([["match","match"],["matchAll","matchAll"],["replace","replace"],["replaceAll","replace"],["search","search"],["split","split"]]);
+/** The canonical flags text (sec-get-regexp.prototype.flags order), or null for an invalid flags string. */
+function canonicalRegExpFlags(flags:string):string|null{
+    const order="dgimsuvy";
+    for(const letter of flags)if(!order.includes(letter))return null;
+    if(new Set(flags).size!==flags.length||flags.includes("u")&&flags.includes("v"))return null;
+    let out="";for(const letter of order)if(flags.includes(letter))out+=letter;return out;
+}
+/** EscapeRegExpPattern as the runtime computes it: `/` outside a class and
+ * line terminators are escaped, an empty pattern is "(?:)". */
+function escapeRegExpPattern(pattern:string,unicodeSets:boolean):string{
+    if(pattern==="")return "(?:)";
+    let out="",depth=0;
+    for(let index=0;index<pattern.length;index++){
+        let unit=pattern[index]!;const escaped=unit==="\\"&&index+1<pattern.length;
+        if(escaped)unit=pattern[++index]!;
+        if(unit==="\n"||unit==="\r"){out+=unit==="\n"?"\\n":"\\r";continue;}
+        if(unit==="\u2028"||unit==="\u2029"){out+="\\u"+unit.charCodeAt(0).toString(16);continue;}
+        if(escaped||unit==="/"&&!depth)out+="\\";
+        out+=unit;
+        if(!escaped){if(unit==="["&&(!depth||unicodeSets))depth++;else if(unit==="]"&&depth)depth--;}
+    }
+    return out;
+}
 const SOURCE_NATIVE_METHODS:ReadonlyMap<Operation,{name:string;length:number;owner:"Array"|"Function"|"String"|"Object"|"Reflect"|null;opaque:boolean}>=(()=>{
     const methods=new Map<Operation,{name:string;length:number;owner:"Array"|"Function"|"String"|"Object"|"Reflect"|null;opaque:boolean}>();
     const collections=[
@@ -3817,6 +3851,7 @@ class SourceValueFlow {
                     }
                 }
                 if(key==="Iterator")this.defineField(fields,"prototype",this.iteratorPrototype());
+                if(key==="RegExp")this.defineField(fields,"prototype",this.regexpPrototype(),false);
                 if(runtimePrimitiveDescriptors.has(key))this.defineField(fields,"prototype",this.primitivePrototype(key),false);
                 const element=runtimeTypedArrayDescriptors.get(key);
                 if(element){
@@ -3864,6 +3899,202 @@ class SourceValueFlow {
         if(this.annexBVarBinding(node))return false;
         return !(this.bindingSymbol(node)?.declarations ?? []).some(declaration =>
             !isAmbientSourceDeclaration(declaration) && sourceDeclarationIntroducesBinding(declaration));
+    }
+    private regexpPrototypeCell:Cell|undefined;
+    private readonly regexpData=new WeakMap<ObjectOwner,{readonly source:Cell;readonly flags:Cell}>();
+    private readonly regexpResults=new Map<ts.Node,Map<string,Cell>>();
+    private readonly regexpFlagReads=new Map<Cell,Map<string,Cell>>();
+    private regexpPrototype():Cell {
+        if(this.regexpPrototypeCell)return this.regexpPrototypeCell;
+        const value=this.newCell();this.regexpPrototypeCell=value;
+        const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype(),ordinary:true};
+        this.sourceObjectOwners.add(owner);this.markPropertyAlgorithm(owner,"ordinary");this.copy(this.opaqueMutation,owner.shape);this.publish(value,{tag:"object",owner});
+        this.defineField(owner,"constructor",this.globalBinding("RegExp"),false);
+        for(const name of REGEXP_ACCESSORS){const getter=this.newCell();this.publish(getter,this.operation(`regexp-flag:${name}`));this.defineAccessor(owner,name,"get",getter);}
+        for(const [name,descriptor] of REGEXP_METHODS){const method=this.newCell();this.publish(method,this.operation(`regexp-member:${name}`));this.defineField(owner,descriptor.symbol?this.wellKnownSymbols.get(name)!:name,method,false);}
+        return value;
+    }
+    private regexpOwnerData(atom:Atom):{readonly source:Cell;readonly flags:Cell}|null {
+        const owner=this.ordinaryOwner(atom);return owner?this.regexpData.get(owner)??null:null;
+    }
+    private numberValue():Atom {
+        let value=this.numericValues.get(KIND_NUMBER);if(!value){value={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,value);}return value;
+    }
+    /** The RegExp object a literal or construction site creates; repeated
+     * evaluations share the site's owner like an object literal's. */
+    private regexpInstance(context:ts.Node,source:Cell,flags:Cell):Cell {
+        const owner=this.owner(context);
+        const data=this.regexpData.get(owner);
+        if(data){this.copy(source,data.source);this.copy(flags,data.flags);}
+        else{
+            owner.prototype=this.regexpPrototype();owner.ordinary=true;this.markPropertyAlgorithm(owner,"ordinary");
+            if(!this.ownerCreations.has(owner))this.ownerCreations.set(owner,context);
+            const lastIndex=this.newCell();this.publish(lastIndex,this.numberValue());this.defineField(owner,"lastIndex",lastIndex,false);
+            const sourceCell=this.newCell(),flagsCell=this.newCell();this.copy(source,sourceCell);this.copy(flags,flagsCell);
+            this.regexpData.set(owner,{source:sourceCell,flags:flagsCell});
+        }
+        const value=this.newCell();this.publish(value,{tag:"object",owner});return value;
+    }
+    /** Primitive texts of a cell mapped through `transform`; an incomplete
+     * proof contributes an unknown string, an abrupt input its completion. */
+    private derivedText(input:Cell,transform:(value:string)=>string|null):Cell {
+        const output=this.newCell();let rule!:Rule;
+        rule=this.rule([input],()=>{
+            for(const atom of input.values)if(atom.tag==="abrupt"||atom.tag==="pending-source")this.publish(output,atom);
+            const state=this.primitiveState(input,rule,true);
+            if(state.pending&&!state.unresolved)return;
+            for(const value of state.proof.values){const text=transform(String(value));if(text!==null)this.publish(output,this.primitive(text));}
+            if(!state.proof.primitiveComplete)this.publish(output,this.unknownString);
+        });
+        return output;
+    }
+    /** RegExp(pattern, flags) and new RegExp: a RegExp pattern contributes its
+     * source (and its flags when flags is undefined); other patterns and the
+     * flags are ToString'd (user code on objects) and escaped/canonicalized.
+     * The construction may throw a SyntaxError for an invalid pattern. */
+    private regexpConstruct(pattern:Cell,flags:Cell,context:ts.Node,construct:boolean):Cell {
+        let calls=this.regexpResults.get(context);if(!calls){calls=new Map();this.regexpResults.set(context,calls);}
+        const signature="construct:"+pattern.id+":"+flags.id+":"+construct,prior=calls.get(signature);if(prior)return prior;
+        const source=this.newCell(),flagText=this.newCell(),patternText=this.newCell(),flagsInput=this.newCell(),result=this.newCell();calls.set(signature,result);
+        const instance=this.regexpInstance(context,source,flagText);this.copy(instance,result);
+        const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context,"SyntaxError"));
+        this.rule([pattern,flags],()=>{
+            for(const atom of pattern.values){
+                if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
+                const data=this.regexpOwnerData(atom);
+                if(data){
+                    this.copy(data.source,source);
+                    for(const flag of flags.values)if(flag===this.primitive(undefined))this.copy(data.flags,flagText);
+                    if(!construct)this.publish(result,atom);
+                    continue;
+                }
+                if(atom===this.primitive(undefined))this.publish(source,this.primitive("(?:)"));else this.publish(patternText,atom);
+            }
+            for(const atom of flags.values){if(atom===this.primitive(undefined))this.publish(flagText,this.primitive(""));else this.publish(flagsInput,atom);}
+        });
+        const [patternString,flagsString]=this.convertList([patternText,flagsInput],context,"text");
+        this.copy(this.derivedText(flagsString!,canonicalRegExpFlags),flagText);
+        this.copy(this.derivedText(patternString!,value=>escapeRegExpPattern(value,false)),source);
+        return result;
+    }
+    /** A flag accessor read on a receiver: a RegExp instance answers from its
+     * cells, %RegExp.prototype% answers "(?:)", "" and undefined, a primitive
+     * or another object is a TypeError (`flags` on another object reads its
+     * properties instead). */
+    private regexpFlagRead(name:string,receiver:Cell,context:ts.Node):Cell {
+        let reads=this.regexpFlagReads.get(receiver);if(!reads){reads=new Map();this.regexpFlagReads.set(receiver,reads);}
+        const key=name+":"+(context.pos),prior=reads.get(key);if(prior)return prior;
+        const result=this.newCell();reads.set(key,result);
+        const handler=this.exceptionHandlers.get(context);const prototype=this.regexpPrototype();
+        const fail=():void=>{this.publish(result,this.abrupt);if(handler)this.publish(handler,this.nativeException(context,"TypeError"));};
+        this.rule([receiver],()=>{for(const atom of receiver.values){
+            if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
+            const data=this.regexpOwnerData(atom);
+            if(data){
+                if(name==="source")this.copy(data.source,result);
+                else if(name==="flags")this.copy(data.flags,result);
+                else this.copy(this.derivedFlag(data.flags,REGEXP_FLAG_LETTERS.get(name)!),result);
+                continue;
+            }
+            const owner=this.ordinaryOwner(atom);
+            if(owner&&[...prototype.values].some(value=>this.ordinaryOwner(value)===owner)){
+                this.publish(result,name==="source"?this.primitive("(?:)"):name==="flags"?this.primitive(""):this.primitive(undefined));continue;
+            }
+            if(!owner&&atom.tag!=="unknown"&&atom.tag!=="opaque-object"){fail();continue;}
+            if(name==="flags"){this.publish(result,this.unknownString);this.activateOpaqueEffect(context);if(handler)this.publish(handler,this.unknown);}
+            else if(owner)fail();
+            else{this.publish(result,this.unknown);this.activateOpaqueEffect(context);if(handler)this.publish(handler,this.unknown);}
+        }});
+        return result;
+    }
+    private derivedFlag(flags:Cell,letter:string):Cell {
+        let reads=this.regexpFlagReads.get(flags);if(!reads){reads=new Map();this.regexpFlagReads.set(flags,reads);}
+        const prior=reads.get("letter:"+letter);if(prior)return prior;
+        const output=this.newCell();reads.set("letter:"+letter,output);let rule!:Rule;
+        rule=this.rule([flags],()=>{
+            const state=this.primitiveState(flags,rule,true);
+            if(state.pending&&!state.unresolved)return;
+            for(const value of state.proof.values)this.publish(output,this.primitive(String(value).includes(letter)));
+            if(!state.proof.primitiveComplete){this.publish(output,this.primitive(true));this.publish(output,this.primitive(false));}
+        });
+        return output;
+    }
+    /** A match result: an Array of unknown strings (or undefined for an
+     * unmatched group) with index, input, groups and indices. */
+    private regexpMatchResult(context:ts.Node,input:Cell):Cell {
+        let calls=this.regexpResults.get(context);if(!calls){calls=new Map();this.regexpResults.set(context,calls);}
+        const signature="match:"+input.id,prior=calls.get(signature);if(prior)return prior;
+        const value=this.newCell();calls.set(signature,value);
+        const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell()};this.arrayOwner(context,owner);
+        const values=this.newCell(),indices=this.newCell(),length=this.newCell(),index=this.newCell(),groups=this.newCell(),groupValues=this.newCell(),nullPrototype=this.newCell(),indexList=this.newCell();
+        this.publish(values,this.unknownString);this.publish(values,this.primitive(undefined));this.publish(indices,this.numberValue());this.publish(length,this.numberValue());this.publish(index,this.numberValue());
+        this.defineField(owner,"length",length,false);this.defineField(owner,null,values,true,indices);this.defineField(owner,"index",index,true);this.defineField(owner,"input",input,true);
+        const groupOwner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:nullPrototype,ordinary:true};
+        this.publish(nullPrototype,this.primitive(null));this.sourceObjectOwners.add(groupOwner);this.markPropertyAlgorithm(groupOwner,"ordinary");this.ownerCreations.set(groupOwner,context);this.ownerMutation(groupOwner);
+        this.publish(groupValues,this.unknownString);this.publish(groupValues,this.primitive(undefined));this.defineField(groupOwner,null,groupValues,true);
+        this.publish(groups,this.primitive(undefined));this.publish(groups,{tag:"object",owner:groupOwner});this.defineField(owner,"groups",groups,true);
+        this.publish(indexList,this.primitive(undefined));this.publish(indexList,this.opaqueObject);this.defineField(owner,"indices",indexList,true);
+        this.publish(value,{tag:"object",owner});return value;
+    }
+    /** An Array of unknown strings (split results, global matches). */
+    private regexpStringArray(context:ts.Node,signatureKey:string):Cell {
+        let calls=this.regexpResults.get(context);if(!calls){calls=new Map();this.regexpResults.set(context,calls);}
+        const prior=calls.get(signatureKey);if(prior)return prior;
+        const value=this.newCell();calls.set(signatureKey,value);
+        const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell()};this.arrayOwner(context,owner);
+        const values=this.newCell(),indices=this.newCell(),length=this.newCell();
+        this.publish(values,this.unknownString);this.publish(indices,this.numberValue());this.publish(length,this.numberValue());
+        this.defineField(owner,"length",length,false);this.defineField(owner,null,values,true,indices);
+        this.publish(value,{tag:"object",owner});return value;
+    }
+    /** A RegExp.prototype method (or a String method dispatching to one):
+     * typed results without modelling the match itself; a replacer function
+     * escapes as a callee; compile forgets the receiver's source and flags. */
+    private regexpMember(name:string,receiver:Cell,args:readonly Cell[]|null,context:ts.Node,construct:boolean):Cell {
+        let calls=this.regexpResults.get(context);if(!calls){calls=new Map();this.regexpResults.set(context,calls);}
+        const signature="member:"+name+":"+receiver.id+":"+(args?args.map(cell=>cell.id).join(","):"null")+":"+construct,prior=calls.get(signature);if(prior)return prior;
+        const result=this.newCell();calls.set(signature,result);
+        const handler=this.exceptionHandlers.get(context);
+        if(construct){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.nativeException(context,"TypeError"));return result;}
+        const omitted=this.newCell();this.publish(omitted,this.primitive(undefined));
+        const first=args?.[0]??omitted,second=args?.[1]??omitted;
+        const [text]=name==="toString"||name==="compile"?[first]:this.convertList([first],context,"text");
+        if(name==="replace")this.escapeCallableArgument(second,context);
+        if(name==="compile"){for(const input of this.convertList([first,second],context,"text"))this.watchText(this.rule([input],()=>{}),input);}
+        if(!args){this.activateOpaqueEffect(context);if(handler)this.publish(handler,this.unknown);}
+        if(handler)this.publish(handler,this.nativeException(context,"TypeError"));
+        // RegExp.prototype.toString reads the receiver's source and flags
+        // (user getters on another object run through the property graph)
+        // and joins them once; the per-atom rule below only validates.
+        if(name==="toString"){
+            const slash=this.newCell();this.publish(slash,this.primitive("/"));
+            const [sourceText,flagsText]=this.convertList([this.property(receiver,"source",context),this.property(receiver,"flags",context)],context,"text");
+            this.publish(result,{tag:"text-operation",operation:"template",parts:[slash,sourceText!,slash,flagsText!]});
+        }
+        this.rule([receiver],()=>{for(const atom of receiver.values){
+            if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
+            const data=this.regexpOwnerData(atom),owner=this.ordinaryOwner(atom);
+            if(name==="toString"){
+                if(!owner&&atom.tag!=="unknown"&&atom.tag!=="opaque-object")this.publish(result,this.abrupt);
+                continue;
+            }
+            if(!data){
+                if(owner||atom.tag==="unknown"||atom.tag==="opaque-object"){this.publish(result,this.unknown);this.activateOpaqueEffect(context);if(handler)this.publish(handler,this.unknown);}
+                else this.publish(result,this.abrupt);
+                continue;
+            }
+            switch(name){
+                case "test":this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));break;
+                case "exec":case "match":this.publish(result,this.primitive(null));this.copy(this.regexpMatchResult(context,text!),result);if(name==="match")this.copy(this.regexpStringArray(context,"matches"),result);break;
+                case "compile":this.publish(data.source,this.unknownString);this.publish(data.flags,this.unknownString);this.copy(receiver,result);break;
+                case "search":this.publish(result,this.numberValue());break;
+                case "split":this.copy(this.regexpStringArray(context,"split"),result);break;
+                case "replace":this.publish(result,this.unknownString);break;
+                case "matchAll":this.publish(result,this.opaqueObject);break;
+                default:this.publish(result,this.unknown);this.activateOpaqueEffect(context);
+            }
+        }});
+        return result;
     }
     private collectionPrototype(kind:CollectionKind):Cell {
         const prior=this.collectionPrototypes.get(kind);if(prior)return prior;
@@ -5170,6 +5401,14 @@ class SourceValueFlow {
                 const member=atom.operation.slice("primitive-member:".length),name=this.newCell(),length=this.newCell();this.publish(name,this.primitive(member.slice(member.indexOf(":")+1)));this.publish(length,this.primitive(PRIMITIVE_MEMBER_LENGTHS.get(member)!));this.defineField(owner,"name",name,false);this.defineField(owner,"length",length,false);
             }return owner;
         }
+        if(atom.tag==="operation"&&(atom.operation.startsWith("regexp-flag:")||atom.operation.startsWith("regexp-member:"))){
+            let owner=this.intrinsicOwners.get(atom);if(!owner){
+                owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);this.copy(this.opaqueMutation,owner.shape);
+                const member=atom.operation.slice(atom.operation.indexOf(":")+1),flag=atom.operation.startsWith("regexp-flag:"),method=REGEXP_METHODS.get(member);
+                const name=this.newCell(),length=this.newCell();this.publish(name,this.primitive(flag?`get ${member}`:method?.symbol?`[Symbol.${member}]`:member));this.publish(length,this.primitive(flag?0:method?.length??0));
+                this.defineField(owner,"name",name,false);this.defineField(owner,"length",length,false);
+            }return owner;
+        }
         if(atom.tag==="operation"&&atom.operation.startsWith("set-composition:")){
             let owner=this.intrinsicOwners.get(atom);if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);this.copy(this.opaqueMutation,owner.shape);
                 const name=this.newCell(),length=this.newCell(),operation=atom.operation.slice("set-composition:".length);this.publish(name,this.primitive([...runtimeSetCompositionMethods].find(([,value])=>value===operation)![0]));this.publish(length,this.primitive(1));this.defineField(owner,"name",name);this.defineField(owner,"length",length);
@@ -5354,7 +5593,7 @@ class SourceValueFlow {
             // `length` and `name` (sec-ecmascript-standard-built-in-objects),
             // so every other key is a known absence on it.
             const plainFunction=current.tag==="builtin"&&(runtimeGlobalBindings.get(current.name)?.kind==="function"||runtimeObjectPrototypeDescriptors.has(current.name)&&current.normalResult!=="not-callable");
-            const representedAbsence=current.tag==="builtin"&&(current.name==="Object"&&key===this.wellKnownSymbols.get("species")&&!runtimeObjectConstructorOwnKeys.has(key)||runtimeErrorKinds.has(current.name)&&key===this.wellKnownSymbols.get("hasInstance")||
+            const representedAbsence=current.tag==="builtin"&&(current.name==="Object"&&key===this.wellKnownSymbols.get("species")&&!runtimeObjectConstructorOwnKeys.has(key)||current.normalResult!=="not-callable"&&key===this.wellKnownSymbols.get("hasInstance")||
                 key===this.wellKnownSymbols.get("toPrimitive")&&runtimeGlobalBindings.has(current.name)||
                 // No built-in function or constructor owns or inherits a
                 // toJSON (SerializeJSONProperty reads it before treating a
@@ -6316,6 +6555,11 @@ class SourceValueFlow {
             });
             return;
         }
+        if (ts.isRegularExpressionLiteral(node)) {
+            const close=node.text.lastIndexOf("/"),source=this.newCell(),flags=this.newCell();
+            this.publish(source,this.primitive(node.text.slice(1,close)));this.publish(flags,this.primitive(canonicalRegExpFlags(node.text.slice(close+1))??""));
+            this.copy(this.regexpInstance(node,source,flags),result);return;
+        }
         if (ts.isStringLiteralLike(node)) this.publish(result, this.text(node.text));
         else if (ts.isNumericLiteral(node)) this.publish(result, this.primitive(Number(node.text)));
         else if (ts.isBigIntLiteral(node)) this.publish(result, this.primitive(BigInt(node.text.replace(/n$/i, ""))));
@@ -6855,6 +7099,13 @@ class SourceValueFlow {
                         if(!receiverKinds)continue;
                         let pendingArgument=false,objectArgument=false;
                         if(argv)for(const input of argv){this.watch(rule,input);const kinds=this.primitiveKinds(input);if(!kinds)pendingArgument=true;else if(kinds&~KIND_PRIMITIVE)objectArgument=true;}
+                        // A RegExp argument dispatches to its @@-method (sec-string.prototype.match and siblings).
+                        const regexpMember=memberKind==="string"?REGEXP_STRING_MEMBERS.get(member.slice("string:".length)):undefined;
+                        if(regexpMember&&argv?.length&&argv[0]!.values.nonempty&&[...argv[0]!.values].every(atom=>atom.tag==="abrupt"||atom.tag==="pending-source"||!!this.regexpOwnerData(atom))){
+                            const [text]=this.convertList([invocation.receiver],node,"text");
+                            if(member.endsWith(":replaceAll")&&handler)this.publish(handler,this.nativeException(node,"TypeError"));
+                            this.copy(this.regexpMember(regexpMember,argv[0]!,[text!,...argv.slice(1)],node,false),result);continue;
+                        }
                         const normalKinds=memberKind==="string"?KIND_PRIMITIVE&~(KIND_UNDEFINED|KIND_NULL|KIND_SYMBOL):memberKind==="number"?KIND_NUMBER:KIND_BIGINT;
                         if(kind&&argv&&!objectArgument&&!(receiverKinds&~KIND_PRIMITIVE)){
                             if(pendingArgument)continue;
@@ -6997,6 +7248,7 @@ class SourceValueFlow {
                         const path = new Set(invocation.boundPath); path.add(atom);
                         worklist.push({...invocation, target:atom.owner.base, direct:false, boundPath:path});
                     }
+                    if(atom.tag==="builtin"&&atom.name==="RegExp"){this.copy(this.regexpConstruct(argument(0)??omittedArgument,argument(1)??omittedArgument,node,invocation.construct),result!);continue;}
                     if(atom.tag==="builtin"&&atom.name==="Proxy") {
                         if(invocation.construct)this.copy(this.proxyCreate(argument(0)??omittedArgument,argument(1)??omittedArgument,node),result);
                         else{this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node,"TypeError"));}
@@ -7212,6 +7464,8 @@ class SourceValueFlow {
                             }
                             continue;
                         }
+                        if(atom.operation.startsWith("regexp-flag:")){this.copy(this.regexpFlagRead(atom.operation.slice("regexp-flag:".length),invocation.receiver,node),result);continue;}
+                        if(atom.operation.startsWith("regexp-member:")){this.copy(this.regexpMember(atom.operation.slice("regexp-member:".length),invocation.receiver,argv,node,invocation.construct),result);continue;}
                         if(atom.operation==="error-text"){this.copy(this.errorText(invocation.receiver,node),result);continue;}
                         if(atom.operation==="json-stringify"){
                             this.copy(this.jsonSerialization(argument(0)??omittedArgument,argument(1)??omittedArgument,argument(2)??omittedArgument,node),result);
