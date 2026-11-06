@@ -445,7 +445,7 @@ interface Test262ScriptGlobalDeclarationPlan {
     }>;
     functions: ts.FunctionDeclaration[];
     vars: ts.Identifier[];
-    annexBFunctions: ts.FunctionDeclaration[];
+    annexBFunctions: (ts.FunctionDeclaration & { name: ts.Identifier })[];
 }
 
 export interface EmittedProgram {
@@ -12787,7 +12787,7 @@ class Emitter {
         return !!fd.name && !!fd.body && !this.isTopLevelValueDeclaration(fd) &&
             this.isPrunableLocalFunction(fd) && !this.isGenericFunction(fd) &&
             !this.isDirectScopeLexicalDeclaration(fd) &&
-            this.isTest262AnnexBGlobalFunctionDeclaration(fd) &&
+            this.isAnnexBBlockFunction(fd) &&
             this.collectClosureCaptures(fd).length === 0;
     }
 
@@ -19178,6 +19178,10 @@ class Emitter {
             : (ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration)) && declaration.name
                 ? declaration.parent
                 : null;
+        // B.3.3: a FunctionDeclaration as an IfStatement clause is the sole
+        // declaration of a Block of its own.
+        if (owner && ts.isFunctionDeclaration(declaration) && ts.isIfStatement(owner) &&
+            (owner.thenStatement === declaration || owner.elseStatement === declaration)) return true;
         // Ordinary function bodies have a lexical Environment Record as well
         // as their parameter/var environment. Their direct declarations use
         // the same retained binding and closure representation as Blocks.
@@ -20303,13 +20307,41 @@ class Emitter {
             this.isTest262ScriptSourceFile(decl.getSourceFile());
     }
 
-    private isTest262AnnexBGlobalFunctionDeclaration(
+    /** The var scope whose B.3.2 semantics a block-level function
+     * declaration joins: the nearest enclosing function body, else the
+     * Script. Class bodies are strict, so no candidate lives in one. */
+    private annexBFunctionRoot(declaration: ts.Node): ts.SourceFile | ts.FunctionLikeDeclaration {
+        for (let current = declaration.parent; current; current = current.parent) {
+            if (ts.isFunctionLike(current) && "body" in current && current.body && ts.isBlock(current.body)) return current as ts.FunctionLikeDeclaration;
+            if (ts.isSourceFile(current)) return current;
+        }
+        return declaration.getSourceFile();
+    }
+
+    private isAnnexBBlockFunction(
         declaration: ts.Node,
     ): declaration is ts.FunctionDeclaration & { name: ts.Identifier } {
         return ts.isFunctionDeclaration(declaration) &&
             !!declaration.name &&
-            this.test262ScriptGlobalDeclarations(declaration.getSourceFile())
-                .annexBFunctions.includes(declaration);
+            this.annexBBlockFunctions(this.annexBFunctionRoot(declaration)).includes(declaration as ts.FunctionDeclaration & { name: ts.Identifier });
+    }
+
+    private readonly annexBBlockFunctionCache = new WeakMap<ts.Node, readonly (ts.FunctionDeclaration & { name: ts.Identifier })[]>();
+
+    /** B.3.2.1 / B.3.2.2: the block-level function declarations of one var
+     * scope (a non-strict JavaScript function body or Script) that also get
+     * a var binding there, in source order. */
+    private annexBBlockFunctions(root: ts.SourceFile | ts.FunctionLikeDeclaration): readonly (ts.FunctionDeclaration & { name: ts.Identifier })[] {
+        const cached = this.annexBBlockFunctionCache.get(root);
+        if (cached) return cached;
+        const sf = root.getSourceFile();
+        const body = ts.isSourceFile(root) ? root : root.body;
+        const eligible = !!body && (ts.isSourceFile(root) ? this.isTest262ScriptSourceFile(sf) : ts.isBlock(body) && this.isJavaScriptSourceFile(sf)) &&
+            !this.nodeIsInStrictMode(ts.isSourceFile(root) ? root : body);
+        const candidates = eligible ? this.annexBBlockFunctionCandidates(body as ts.SourceFile | ts.Block, sf)
+            .filter((declaration) => this.annexBFunctionReplacementAllowed(declaration, root)) : [];
+        this.annexBBlockFunctionCache.set(root, candidates);
+        return candidates;
     }
 
     private test262AnnexBFunctionHasCandidateParent(declaration: ts.FunctionDeclaration): boolean {
@@ -20322,21 +20354,23 @@ class Emitter {
     /** The web-compat insertion is induced by source containment. This one
      * worklist visits every candidate regardless of block or branch depth and
      * stops at independent function/class declaration scopes. */
-    private test262AnnexBGlobalFunctionCandidates(sf: ts.SourceFile): ts.FunctionDeclaration[] {
-        if (!this.isTest262ScriptSourceFile(sf) || this.nodeIsInStrictMode(sf)) return [];
-        const out: ts.FunctionDeclaration[] = [];
-        const worklist: ts.Node[] = [...sf.statements];
+    private annexBBlockFunctionCandidates(body: ts.SourceFile | ts.Block, sf: ts.SourceFile): (ts.FunctionDeclaration & { name: ts.Identifier })[] {
+        const out: (ts.FunctionDeclaration & { name: ts.Identifier })[] = [];
+        const worklist: ts.Node[] = [...body.statements];
         while (worklist.length > 0) {
             const current = worklist.pop()!;
             if (ts.isFunctionDeclaration(current)) {
                 /* Annex B.3.2 only synthesizes the var-style companion for
                  * ordinary FunctionDeclarations. Async/generator forms remain
                  * lexical declarations of the CaseBlock. */
+                // A declaration directly in the root body is already a
+                // var-scoped function of that scope, not a block function.
                 if (current.name &&
                     !current.asteriskToken &&
                     !this.isAsyncDeclaration(current) &&
+                    current.parent !== body &&
                     this.test262AnnexBFunctionHasCandidateParent(current)) {
-                    out.push(current);
+                    out.push(current as ts.FunctionDeclaration & { name: ts.Identifier });
                 }
                 continue;
             }
@@ -20404,12 +20438,20 @@ class Emitter {
 
     /** Decide the spec's hypothetical `var F` replacement by following the
      * new VarDeclaredName through its enclosing static-semantic scopes. */
-    private test262AnnexBFunctionReplacementAllowed(
+    private annexBFunctionReplacementAllowed(
         declaration: ts.FunctionDeclaration & { name: ts.Identifier },
-        sf: ts.SourceFile,
+        root: ts.SourceFile | ts.FunctionLikeDeclaration,
     ): boolean {
         const name = declaration.name.text;
         for (let current: ts.Node | undefined = declaration.parent; current; current = current.parent) {
+            if (!ts.isSourceFile(root) && current === root.body) {
+                // B.3.2.1: body-level function declarations are var-like, a
+                // parameter name is never replaced, and `arguments` keeps
+                // its own binding.
+                if (name === "arguments") return false;
+                if (root.parameters.some(parameter => this.test262BindingNames(parameter.name).some(bound => bound.text === name))) return false;
+                return !this.test262DirectLexicalNames((current as ts.Block).statements, declaration, false).has(name);
+            }
             if (ts.isBlock(current) &&
                 this.test262DirectLexicalNames(current.statements, declaration).has(name)) {
                 return false;
@@ -20425,8 +20467,8 @@ class Emitter {
                 !ts.isIdentifier(current.variableDeclaration.name)) {
                 return false;
             }
-            if (current === sf) {
-                return !this.test262DirectLexicalNames(sf.statements, declaration, false).has(name);
+            if (current === root) {
+                return !this.test262DirectLexicalNames((current as ts.SourceFile).statements, declaration, false).has(name);
             }
             if (ts.isFunctionLike(current) || ts.isClassLike(current)) return false;
         }
@@ -20894,7 +20936,7 @@ class Emitter {
         if (symbol.valueDeclaration) declarations.add(symbol.valueDeclaration);
         for (const declaration of symbol.declarations ?? []) declarations.add(declaration);
         for (const declaration of declarations) {
-            if (!this.isTest262AnnexBGlobalFunctionDeclaration(declaration)) continue;
+            if (!this.isAnnexBBlockFunction(declaration)) continue;
             const parent = declaration.parent;
             const lexicalScope = ts.isBlock(parent)
                 ? parent
@@ -20914,7 +20956,7 @@ class Emitter {
                 this.isTest262ScriptGlobalLexicalDeclaration(declaration)) {
                 return id.text;
             }
-            if (this.isTest262AnnexBGlobalFunctionDeclaration(declaration)) return id.text;
+            if (this.isAnnexBBlockFunction(declaration)) return id.text;
         }
         return null;
     }
@@ -21053,11 +21095,7 @@ class Emitter {
                 vars.push(name);
             }
         }
-        const annexBFunctions = this.test262AnnexBGlobalFunctionCandidates(sf)
-            .filter((declaration): declaration is ts.FunctionDeclaration & { name: ts.Identifier } =>
-                !!declaration.name,
-            )
-            .filter((declaration) => this.test262AnnexBFunctionReplacementAllowed(declaration, sf));
+        const annexBFunctions = [...this.annexBBlockFunctions(sf)];
         const plan = { lexicals, functions, vars, annexBFunctions };
         this.test262ScriptGlobalDeclarationsCache.set(sf, plan);
         return plan;
@@ -21126,21 +21164,27 @@ class Emitter {
             for (let index = 0; index < length; ++index) buf.line(`${plan}[${index}].value_gc_root = tsc_value_gc_root(${plan}[${index}].value);`);
             buf.line(`${evalSource ? "tsc_environment" : "tsc_global"}_declaration_instantiation(${plan}, ${length});`);
         }
-        for (const declaration of declarations.annexBFunctions) {
-            if (!this.isSupportedLocalFunctionDeclaration(declaration) &&
-                !this.isSupportedLexicalFunctionDeclaration(declaration)) {
-                unsupported(
-                    declaration,
-                    "Annex B global block function requires the canonical closure-capable function lowering",
-                );
-            }
-            const reference = this.freshTemp("_annex_b_outer_reference");
-            this.test262AnnexBFunctionReferences.set(declaration, reference);
-            buf.line(
-                `tsc_reference_t* ${reference} = tsc_environment_annex_b_function_instantiation(` +
-                `${this.test262GlobalBindingKey(declaration.name!.text)}, ${evalSource ? "true" : "false"});`,
+        for (const declaration of declarations.annexBFunctions) this.emitAnnexBFunctionInstantiation(buf, declaration, evalSource);
+    }
+
+    /** B.3.2 step 1: the var binding of the enclosing var scope, created
+     * (or found) in the current variable Environment Record; its reference
+     * receives the block's function object when the declaration is
+     * evaluated. */
+    private emitAnnexBFunctionInstantiation(buf: CBuf, declaration: ts.FunctionDeclaration & { name: ts.Identifier }, deletable: boolean): void {
+        if (!this.isSupportedLocalFunctionDeclaration(declaration) &&
+            !this.isSupportedLexicalFunctionDeclaration(declaration)) {
+            unsupported(
+                declaration,
+                "Annex B block function requires the canonical closure-capable function lowering",
             );
         }
+        const reference = this.freshTemp("_annex_b_outer_reference");
+        this.test262AnnexBFunctionReferences.set(declaration, reference);
+        buf.line(
+            `tsc_reference_t* ${reference} = tsc_environment_annex_b_function_instantiation(` +
+            `${this.test262GlobalBindingKey(declaration.name.text)}, ${deletable ? "true" : "false"});`,
+        );
     }
 
     private emitTest262AnnexBGlobalFunctionUpdate(
@@ -22136,7 +22180,10 @@ class Emitter {
         while (worklist.length > 0 && !enabled) {
             const node = worklist.pop()!;
             if (ts.isWithStatement(node) ||
-                ((this.options.sourceEval || this.options.test262Observation && this.isJavaScriptSourceFile(source)) && this.isDirectEvalSyntax(node))) enabled = true;
+                ((this.options.sourceEval || this.options.test262Observation && this.isJavaScriptSourceFile(source)) && this.isDirectEvalSyntax(node)) ||
+                // B.3.2.1 var bindings of block-level functions live in the
+                // function's runtime variable Environment Record.
+                ts.isFunctionLike(node) && "body" in node && !!node.body && ts.isBlock(node.body) && this.annexBBlockFunctions(node as ts.FunctionLikeDeclaration).length > 0) enabled = true;
             else ts.forEachChild(node, child => { worklist.push(child); });
         }
         this.sourceEnvironmentFiles.set(source, enabled);
@@ -28560,6 +28607,21 @@ class Emitter {
     }
 
     private emitStmtInBlock(buf: CBuf, statement: ts.Statement): void {
+        if (ts.isFunctionDeclaration(statement) && ts.isIfStatement(statement.parent) && this.isDirectScopeLexicalDeclaration(statement)) {
+            // B.3.3: the clause is a Block whose only declaration is this function.
+            buf.open("");
+            const declarations = [statement];
+            const scope = this.createScopeLexicalBindings(buf, declarations);
+            this.lexicalBindingScopes.push(scope);
+            try {
+                this.initializeScopeFunctions(buf, declarations);
+                this.emitStmt(buf, statement);
+            } finally {
+                if (this.lexicalBindingScopes.pop() !== scope) throw new Error("lexical scope stack corruption");
+            }
+            buf.close();
+            return;
+        }
         this.emitStmt(buf, statement);
     }
 
@@ -29196,6 +29258,8 @@ class Emitter {
                 if (this.sourceEnvironmentEnabled(functionBody.getSourceFile()))
                     buf.line(`tsc_environment_alias_variable(&${this.environmentBindingReference(symbol, declaration)});`);
             }
+            if (this.sourceEnvironmentEnabled(functionBody.getSourceFile()))
+                for (const declaration of this.annexBBlockFunctions(fn)) this.emitAnnexBFunctionInstantiation(buf, declaration, false);
         }
         this.preallocatedVariableCells.push(preallocatedVars);
         this.localDynamicRootScopes.push(new Map());
@@ -30186,18 +30250,23 @@ class Emitter {
         return this.directSwitchLexicalDeclarations(sw).length > 0;
     }
 
-    private scopeFunctionOwner(declaration: ts.FunctionDeclaration): ts.Block | ts.CaseBlock | null {
+    /** The scope whose function collection a declaration joins: its Block
+     * or CaseBlock, or (B.3.3) the declaration itself when it is the sole
+     * member of an IfStatement clause's implicit Block. */
+    private scopeFunctionOwner(declaration: ts.FunctionDeclaration): ts.Block | ts.CaseBlock | ts.FunctionDeclaration | null {
         const parent = declaration.parent;
         return ts.isBlock(parent) ? parent :
-            ts.isCaseClause(parent) || ts.isDefaultClause(parent) ? parent.parent : null;
+            ts.isCaseClause(parent) || ts.isDefaultClause(parent) ? parent.parent :
+            ts.isIfStatement(parent) && (parent.thenStatement === declaration || parent.elseStatement === declaration) ? declaration : null;
     }
 
     /** Function instantiation and dependency discovery share last-declaration
      * selection on one canonical scope collection, including parameter aliases. */
-    private scopeFunctions(owner: ts.Block | ts.CaseBlock): ReadonlyMap<ts.Symbol, NamedScopeFunctionDeclaration> {
+    private scopeFunctions(owner: ts.Block | ts.CaseBlock | ts.FunctionDeclaration): ReadonlyMap<ts.Symbol, NamedScopeFunctionDeclaration> {
         const previous = this.scopeFunctionSelections.get(owner);
         if (previous) return previous;
         const declarations = ts.isBlock(owner) ? directLexicalDeclarations(owner.statements) :
+            ts.isFunctionDeclaration(owner) ? directLexicalDeclarations([owner]) :
             this.directSwitchLexicalDeclarations(owner.parent);
         const functions = new Map<ts.Symbol, NamedScopeFunctionDeclaration>();
         for (const declaration of declarations) {
