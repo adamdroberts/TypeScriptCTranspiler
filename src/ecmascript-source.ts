@@ -170,6 +170,36 @@ export function isStatementBody(parent: ts.Node, child: ts.Node): boolean {
 
 /** Parse JavaScript or TypeScript with the ECMA-262 import-attributes trivia grammar while
  * exposing the original exact source bytes and original line map to consumers. */
+/** The UTF-16 length of the code point or \u escape at `start` when
+ * IdentifierName admits it there and TypeScript's scanner does not, else 0. */
+function ecmaAdmittedIdentifierUnits(text: string, start: number): number {
+    let codePoint: number, length: number;
+    if (text[start] === "\\" && text[start + 1] === "u") {
+        const braced = text[start + 2] === "{" ? /^\{([0-9a-fA-F]+)\}/.exec(text.slice(start + 2)) : null;
+        const fixed = braced ? null : /^[0-9a-fA-F]{4}/.exec(text.slice(start + 2));
+        if (!braced && !fixed) return 0;
+        codePoint = parseInt(braced ? braced[1]! : fixed![0], 16);
+        if (codePoint > 0x10ffff) return 0;
+        length = 2 + (braced ? braced[0].length : 4);
+    } else {
+        codePoint = text.codePointAt(start) ?? 0;
+        length = codePoint > 0xffff ? 2 : 1;
+    }
+    const character = String.fromCodePoint(codePoint);
+    const previous = start > 0 ? text.codePointAt(start - (text.charCodeAt(start - 1) >= 0xdc00 && text.charCodeAt(start - 1) <= 0xdfff ? 2 : 1)) ?? 0 : 0;
+    const continues = start > 0 && text[start - 1] !== "#" && (ts.isIdentifierPart(previous, ts.ScriptTarget.ESNext) || text[start - 1] === "_");
+    const admitted = continues
+        ? /^[\p{ID_Continue}$_\u200c\u200d]$/u.test(character) && !ts.isIdentifierPart(codePoint, ts.ScriptTarget.ESNext)
+        : /^[\p{ID_Start}$_]$/u.test(character) && !ts.isIdentifierStart(codePoint, ts.ScriptTarget.ESNext);
+    return admitted ? length : 0;
+}
+
+/** StringValue of an IdentifierName: its \u escapes decoded. */
+function ecmaDecodeIdentifierName(text: string): string {
+    return text.replace(/\\u\{([0-9a-fA-F]+)\}|\\u([0-9a-fA-F]{4})/g, (_match, braced: string | undefined, fixed: string | undefined) =>
+        String.fromCodePoint(parseInt((braced ?? fixed)!, 16)));
+}
+
 export function createEcmaSourceFile(
     filename: string,
     source: string,
@@ -229,6 +259,7 @@ export function createEcmaSourceFile(
     // expose another body in the recovered tree. Each source token is added
     // once; the algorithm has no nesting or statement-count bound.
     const referenceTokens = new Map<number, string>();
+    const shadowedIdentifierUnits = new Set<number>();
     const javascript = scriptKind === ts.ScriptKind.JS || scriptKind === ts.ScriptKind.JSX;
     {
         for (;;) {
@@ -256,6 +287,18 @@ export function createEcmaSourceFile(
                     if (!strict && keyword === ts.SyntaxKind.LetKeyword && (escaped || statementIdentifier)) {
                         if (!referenceTokens.has(start)) { referenceTokens.set(start, "let"); changed = true; }
                     }
+                }
+                // IdentifierName admits every ID_Start / ID_Continue code
+                // point of the current Unicode version; TypeScript's scanner
+                // carries an older table and reports "Invalid character".
+                // Shadow each admitted code point (or its \u escape) with an
+                // identifier character and restore the name after parsing.
+                if (node === sourceFile) for (const diagnostic of (sourceFile as ts.SourceFile & { parseDiagnostics?: readonly ts.DiagnosticWithLocation[] }).parseDiagnostics ?? []) {
+                    if (diagnostic.code !== 1127 || diagnostic.start === undefined || shadowedIdentifierUnits.has(diagnostic.start)) continue;
+                    const admitted = ecmaAdmittedIdentifierUnits(shadow, diagnostic.start);
+                    if (!admitted) continue;
+                    for (let index = diagnostic.start; index < diagnostic.start + admitted; ++index) shadowedIdentifierUnits.add(index);
+                    changed = true;
                 }
                 // The parser calls a static member named "constructor" a
                 // ConstructorDeclaration and parses its body without the
@@ -286,15 +329,23 @@ export function createEcmaSourceFile(
                 scanner.scan();
                 for (let index = start; index < scanner.getTextPos(); ++index) characters[index] = index === start ? "a" : "_";
             }
+            for (const index of shadowedIdentifierUnits) characters[index] = "_";
             shadow = characters.join("");
             sourceFile = ts.createSourceFile(filename, shadow, parserOptions, setParentNodes, scriptKind);
         }
         const worklist: ts.Node[] = [sourceFile];
         while (worklist.length) {
             const node = worklist.pop()!;
-            if (ts.isIdentifier(node)) {
-                const name = referenceTokens.get(node.getStart(sourceFile));
+            if (ts.isIdentifier(node) || ts.isPrivateIdentifier(node)) {
+                const start = node.getStart(sourceFile);
+                const name = ts.isIdentifier(node) ? referenceTokens.get(start) : undefined;
                 if (name) (node as ts.Identifier & {escapedText: ts.__String}).escapedText = name as ts.__String;
+                else if (shadowedIdentifierUnits.size) {
+                    let shadowed = false;
+                    for (let index = start; index < node.end && !shadowed; ++index) shadowed = shadowedIdentifierUnits.has(index);
+                    if (shadowed) (node as ts.Node & {escapedText: ts.__String}).escapedText =
+                        ts.escapeLeadingUnderscores(ecmaDecodeIdentifierName(source.slice(start, node.end)));
+                }
             }
             node.forEachChild(child => { worklist.push(child); });
         }
