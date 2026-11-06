@@ -26,6 +26,14 @@ const controlFlowPartitions: readonly ControlFlowPartition[] = [
         source: "while (false) { function nested() { break; } }\n",
         diagnostic: "break statement is not contained in an iteration or switch statement",
     },
+    // ThrowStatement : throw [no LineTerminator here] Expression ;
+    { source: "throw\n1;\n", diagnostic: "throw requires an expression on the same line" },
+    { source: "throw /*\n*/ 1;\n", diagnostic: "throw requires an expression on the same line" },
+    { source: "function f() { throw\nnew Error(); }\n", diagnostic: "throw requires an expression on the same line" },
+    { source: "throw;\n", diagnostic: "throw requires an expression on the same line" },
+    { source: "throw /* c */ 1;\n", diagnostic: null },
+    { source: "throw (\n1);\n", diagnostic: null },
+    { source: "throw\t1;\n", diagnostic: null },
 ];
 
 function parsedScript(source: string): ts.SourceFile {

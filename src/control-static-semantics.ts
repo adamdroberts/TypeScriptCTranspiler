@@ -143,6 +143,11 @@ export function earlyControlFlowStaticSemanticsFailure(
                 ts.canHaveModifiers(node) && !!ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) &&
                 node.parent && !ts.isSourceFile(node.parent))
             return { node, message: "an import or export declaration is only permitted at the top level of a module" };
+        // ThrowStatement : throw [no LineTerminator here] Expression ; — the
+        // parser gives a throw split by a line terminator a missing
+        // (zero-width) expression and starts a new statement.
+        if (ts.isThrowStatement(node) && (!node.expression || node.expression.getFullWidth() === 0))
+            return { node, message: "throw requires an expression on the same line" };
         if (ts.isTaggedTemplateExpression(node) && ((node.flags | node.tag.flags) & ts.NodeFlags.OptionalChain))
             return { node, message: "optional chain is not permitted as a template tag" };
         if (ts.isNewExpression(node) && (node.expression.flags & ts.NodeFlags.OptionalChain))
