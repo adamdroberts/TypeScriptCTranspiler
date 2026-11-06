@@ -14,11 +14,15 @@ import {nodeReferenceSync} from './node-reference';
  * own argument facts. The analysis verdict is observable through the eval
  * source of a helper: a helper that escapes as a callee gets an unknown
  * source, one that is only stored or compared keeps its finite source. Every
- * native from the runtime table is placed at every argument position; one
- * long program of non-callback placements is the stress input. */
+ * native from the runtime table is placed at every argument position (the
+ * iteration natives have their own precise model and are covered by
+ * array-iteration-source); one long program of non-callback placements is
+ * the stress input. */
 
 const CALLBACK_NATIVES=new Set(['forEach','map','flatMap','filter','some','every','find','findIndex','findLast','findLastIndex','reduce','reduceRight','sort','toSorted']);
-const PRECISE_NATIVES=new Set(['some','every','push','toString','join','keys','values','entries']);
+// Natives with their own model: the iteration natives invoke the callback
+// with the element values, so a helper passed there keeps a finite source.
+const PRECISE_NATIVES=new Set(['forEach','map','flatMap','filter','some','every','find','findIndex','findLast','findLastIndex','reduce','reduceRight','push','toString','join','keys','values','entries']);
 // toLocaleString forwards locales/options to element conversions whose
 // locale validation is host-defined; the verdict test still covers it.
 const RUNTIME_SKIP=new Set(['toLocaleString']);
@@ -39,7 +43,7 @@ test('only callback positions of Array natives make a passed helper an unknown c
  const directory=await mkdtemp(join(tmpdir(),'tsc2c-array-escape-'));
  try{
   const natives=[...runtimeArrayPrototypeMethods.keys()].filter(name=>!PRECISE_NATIVES.has(name));
-  expect(natives.length).toBeGreaterThan(20);
+  expect(natives.length).toBeGreaterThan(12);
   for(const name of natives)for(const position of [0,1,2]){
    const source=prelude+'const out=[];\n'+placement(name,position)+'read();\n';
    const entry=join(directory,`${name}-${position}.js`);await writeFile(entry,source);

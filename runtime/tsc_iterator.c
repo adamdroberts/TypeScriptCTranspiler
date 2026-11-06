@@ -111,13 +111,21 @@ static const struct { const char* name; iterator_consumer_operation_t operation;
 };
 static tsc_value_t iterator_consume(void* env, tsc_value_t receiver, tsc_array_t* args);
 
+/* %AsyncIteratorPrototype%[@@asyncIterator] is its own function object:
+ * builtin identities are keyed by code pointer, so sharing
+ * iterator_self_apply with %Iterator.prototype%[@@iterator] would alias
+ * the two and give the async one the sync name. */
+static tsc_value_t async_iterator_self_apply(void* env, tsc_value_t receiver, tsc_array_t* args) {
+    return iterator_self_apply(env, receiver, args);
+}
+
 tsc_value_t tsc_async_iterator_prototype_value(void) {
     tsc_object_t* prototype = tsc_realm_state_get(&async_iterator_prototype_realm_state_key);
     if (!prototype) {
         prototype = tsc_object_new();
         tsc_realm_state_set(&async_iterator_prototype_realm_state_key, prototype);
         tsc_object_define(prototype, tsc_symbol_property_key(tsc_symbol_async_iterator()),
-            tsc_value_function_builtin_named(iterator_self_apply, NULL, 0,
+            tsc_value_function_builtin_named(async_iterator_self_apply, NULL, 0,
                 tsc_str_from_lit("[Symbol.asyncIterator]", 22)), true, false, true);
     }
     return tsc_value_object(prototype);

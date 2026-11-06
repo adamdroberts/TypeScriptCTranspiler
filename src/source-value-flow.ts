@@ -69,7 +69,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
-type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-integrity:${"preventExtensions"|"seal"|"freeze"}` | `object-integrity-test:${"isExtensible"|"isSealed"|"isFrozen"}` | `regexp-flag:${string}` | `regexp-member:${string}` | `object-enumerable:${"keys"|"values"|"entries"}` | `object-has-own:${"static"|"prototype"}` | `array-predicate:${"some"|"every"}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `legacy-function-accessor:${"caller"|"arguments"}:${"get"|"set"}` | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
+type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-integrity:${"preventExtensions"|"seal"|"freeze"}` | `object-integrity-test:${"isExtensible"|"isSealed"|"isFrozen"}` | `regexp-flag:${string}` | `regexp-member:${string}` | `object-enumerable:${"keys"|"values"|"entries"}` | `object-has-own:${"static"|"prototype"}` | `array-iteration:${ArrayIterationMode}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `legacy-function-accessor:${"caller"|"arguments"}:${"get"|"set"}` | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
     "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
 type Primitive = SourcePrimitive;
 /** Callables and collection-iterator cells reachable from one escaping value;
@@ -107,6 +107,14 @@ const SOURCE_OBJECT_PROTOTYPE_OPERATIONS:ReadonlyMap<string,Operation>=new Map([
  * itself. Natives outside this table keep every position callable. */
 const NATIVE_DIRECT_CALLEE_POSITIONS:ReadonlyMap<string,ReadonlySet<number>>=new Map([...runtimeArrayPrototypeMethods.keys()].map(name=>
     [`native-array:${name}`,new Set(["forEach","map","flatMap","filter","some","every","find","findIndex","findLast","findLastIndex","reduce","reduceRight","sort","toSorted"].includes(name)?[0]:[])]));
+/** Global builtins without [[Construct]] (ES2026 19.2 function properties)
+ * and the namespace objects (not callable at all). */
+const NON_CONSTRUCTOR_BUILTINS:ReadonlySet<string>=new Set(["eval","isFinite","isNaN","parseFloat","parseInt","decodeURI","decodeURIComponent","encodeURI","encodeURIComponent","escape","unescape","Math","JSON","Reflect","Atomics","Intl","globalThis","undefined","NaN","Infinity"]);
+/** Array.prototype natives that call a callback once per element (ES2026
+ * 23.1.3); one iteration model covers them, parametrized by how the
+ * callback's completions form the result. */
+type ArrayIterationMode="some"|"every"|"forEach"|"find"|"findLast"|"findIndex"|"findLastIndex"|"map"|"filter"|"flatMap"|"reduce"|"reduceRight";
+const ARRAY_ITERATION_MODES:readonly ArrayIterationMode[]=["some","every","forEach","find","findLast","findIndex","findLastIndex","map","filter","flatMap","reduce","reduceRight"];
 // Initial intrinsic member identities, installed on their canonical owners.
 // Source lookups and later writes use the ordinary field graph.
 const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operation>> = new Map<string, ReadonlyMap<string, Operation>>([
@@ -182,7 +190,7 @@ const SOURCE_NATIVE_METHODS:ReadonlyMap<Operation,{name:string;length:number;own
     const collections=[
         {owner:"Object" as const,methods:runtimeObjectStaticMethods,prefix:"native-object-static:",precise:INITIAL_SOURCE_OPERATIONS.get("Object")!},
         {owner:"Reflect" as const,methods:runtimeReflectMethods,prefix:"native-reflect:",precise:INITIAL_SOURCE_OPERATIONS.get("Reflect")!},
-        {owner:"Array" as const,methods:runtimeArrayPrototypeMethods,prefix:"native-array:",precise:new Map<string,Operation>([["some","array-predicate:some"],["every","array-predicate:every"],["push","array-push"],["toString","array-text"],["join","array-join"],["keys","array-keys"],["values","array-values"],["entries","array-entries"]])},
+        {owner:"Array" as const,methods:runtimeArrayPrototypeMethods,prefix:"native-array:",precise:new Map<string,Operation>([...ARRAY_ITERATION_MODES.map(mode=>[mode,`array-iteration:${mode}` as Operation] as const),["push","array-push"],["toString","array-text"],["join","array-join"],["keys","array-keys"],["values","array-values"],["entries","array-entries"]])},
         {owner:"String" as const,methods:runtimeStringStaticMethods,prefix:"native-string-static:",precise:new Map<string,Operation>([["fromCharCode","string-codes:unit"],["fromCodePoint","string-codes:point"]])},
         {owner:"Function" as const,methods:runtimeFunctionPrototypeMethods,prefix:"native-function:",precise:new Map<string,Operation>([["call","call"],["apply","apply"],["bind","bind"],["toString","function-text"]])},
     ];
@@ -493,7 +501,8 @@ class SourceValueFlow {
     private readonly prototypeReads = new Map<ts.Node,Map<string,Cell>>();
     private readonly prototypeWrites = new Map<ts.Node,Map<string,Cell>>();
     private readonly writablePrototypes = new Map<ObjectOwner,Cell>();
-    private readonly arrayPredicates=new Map<ts.Node,Map<string,Cell>>();
+    private readonly arrayIterations=new Map<ts.Node,Map<string,Cell>>();
+    private readonly freshArrays=new Map<ts.Node,Map<string,Cell>>();
     private readonly invocationTimings=new WeakMap<ts.Node,{readonly repeated:boolean;readonly deferred:boolean}>();
     private readonly arrayPushes=new Map<ts.Node,Map<string,Cell>>();
     private readonly arrayJoinSummaries=new Map<ts.Node,Map<string,Cell>>();
@@ -4059,11 +4068,19 @@ class SourceValueFlow {
     private regexpStringArray(context:ts.Node,signatureKey:string):Cell {
         let calls=this.regexpResults.get(context);if(!calls){calls=new Map();this.regexpResults.set(context,calls);}
         const prior=calls.get(signatureKey);if(prior)return prior;
-        const value=this.newCell();calls.set(signatureKey,value);
+        const values=this.newCell();this.publish(values,this.unknownString);
+        const value=this.arrayOfValues(context,"regexp:"+signatureKey,values);calls.set(signatureKey,value);return value;
+    }
+    /** A fresh Array whose indexed elements are the values of one cell and
+     * whose length is an unknown number: the result of a native that builds
+     * an array from values the model already holds. */
+    private arrayOfValues(context:ts.Node,key:string,elements:Cell):Cell {
+        let calls=this.freshArrays.get(context);if(!calls){calls=new Map();this.freshArrays.set(context,calls);}
+        const prior=calls.get(key);if(prior)return prior;
+        const value=this.newCell();calls.set(key,value);
         const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell()};this.arrayOwner(context,owner);
-        const values=this.newCell(),indices=this.newCell(),length=this.newCell();
-        this.publish(values,this.unknownString);this.publish(indices,this.numberValue());this.publish(length,this.numberValue());
-        this.defineField(owner,"length",length,false);this.defineField(owner,null,values,true,indices);
+        const indices=this.newCell(),length=this.newCell();this.publish(indices,this.numberValue());this.publish(length,this.numberValue());
+        this.defineField(owner,"length",length,false);this.defineField(owner,null,elements,true,indices);
         this.publish(value,{tag:"object",owner});return value;
     }
     /** A RegExp.prototype method (or a String method dispatching to one):
@@ -4787,28 +4804,76 @@ class SourceValueFlow {
     /** Predicate callbacks share one numeric read and actual-call worklist.
      * The semantic loop retains repeated activation timing without choosing
      * an extent or enumerating possible callback counts. */
-    private arrayPredicate(mode:"some"|"every",receiver:Cell,callback:Cell,thisArg:Cell,context:ts.Node):Cell {
-        let calls=this.arrayPredicates.get(context);if(!calls){calls=new Map();this.arrayPredicates.set(context,calls);}
-        const key=mode+":"+receiver.id+":"+callback.id+":"+thisArg.id,previous=calls.get(key);if(previous)return previous;
-        const result=this.newCell(),objects=this.toObject(receiver,context),checked=this.newCell(),selected=this.newCell(),indices=this.newCell(),callee=this.newCell(),returned=this.newCell();calls.set(key,result);
+    /** One iteration model for every Array.prototype native that invokes a
+     * callback per element: the callback is called with the array's indexed
+     * values, an index and the array (an accumulator first for reduce and
+     * reduceRight, whose initial value is the extra argument or the
+     * elements themselves), a non-callable callback throws TypeError, and the
+     * callback's completions form the result by mode: a boolean for some and
+     * every, undefined for forEach, an element or undefined for find and
+     * findLast, a number for findIndex and findLastIndex, a fresh array of
+     * the returned values (map), of the elements (filter) or of the returned
+     * values and their elements (flatMap), and the accumulator for reduce. */
+    private arrayIteration(mode:ArrayIterationMode,receiver:Cell,callback:Cell,extra:Cell|null,context:ts.Node):Cell {
+        let calls=this.arrayIterations.get(context);if(!calls){calls=new Map();this.arrayIterations.set(context,calls);}
+        const key=mode+":"+receiver.id+":"+callback.id+":"+(extra?extra.id:"-"),previous=calls.get(key);if(previous)return previous;
+        const result=this.newCell(),objects=this.toObject(receiver,context),checked=this.newCell(),selected=this.newCell(),indices=this.newCell(),callee=this.newCell(),returned=this.newCell(),normalReturns=this.newCell(),accumulator=this.newCell(),undefinedCell=this.newCell();calls.set(key,result);
+        this.publish(undefinedCell,this.primitive(undefined));this.publish(indices,this.numberValue());
+        const reduction=mode==="reduce"||mode==="reduceRight",collecting=mode==="map"||mode==="filter"||mode==="flatMap";
         const step=this.invocationContext(context,{repeated:true});
         const caught=this.exceptionHandlers.get(context);if(caught)this.exceptionHandlers.set(step,caught);
-        let number=this.numericValues.get(KIND_NUMBER);if(!number){number={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,number);}this.publish(indices,number);
         const length=this.coerceCell(this.property(objects,"length",context),context,"length"),target=this.callableTarget(checked,step);this.copy(target.completion,result);
-        const values=this.computedProperty(selected,indices,step);this.invoke(step,callee,thisArg,[{cell:values,spread:false},{cell:indices,spread:false},{cell:selected,spread:false}],returned);
+        // The callback sees only present elements (HasProperty before Get):
+        // the values at the known index keys and the abstract indexed
+        // locations; an accessor at an unknown key falls back to the
+        // computed read, which also admits absence.
+        const values=this.newCell(),seenKeys=new Set<SourcePropertyKey>(),seenLocations=new Set<Cell>();let computedFallback=false;
+        this.rule([returned],()=>{for(const atom of returned.values)if(atom.tag!=="abrupt"&&atom.tag!=="pending-source")this.publish(normalReturns,atom);});
+        if(reduction){if(extra)this.copy(extra,accumulator);this.copy(values,accumulator);this.copy(normalReturns,accumulator);}
+        const parts=(reduction?[accumulator,values,indices,selected]:[values,indices,selected]).map(cell=>({cell,spread:false}));
+        this.invoke(step,callee,reduction?undefinedCell:extra??undefinedCell,parts,returned);
+        const elements=this.newCell();
+        if(mode==="map")this.copy(normalReturns,elements);
+        else if(mode==="filter")this.copy(values,elements);
+        else if(mode==="flatMap"){
+            // FlattenIntoArray: an Array return contributes its elements, any
+            // other return is an element itself.
+            const arrays=this.newCell();
+            this.rule([normalReturns],()=>{for(const atom of normalReturns.values)if(this.ordinaryOwner(atom)?.listLength)this.publish(arrays,atom);else this.publish(elements,atom);});
+            this.copy(this.computedProperty(arrays,indices,step),elements);
+        }
+        const collected=collecting?this.arrayOfValues(context,"iteration:"+key,elements):null;
+        const emptyResult=():void=>{
+            if(mode==="some")this.publish(result,this.primitive(false));
+            else if(mode==="every")this.publish(result,this.primitive(true));
+            else if(mode==="forEach"||mode==="find"||mode==="findLast")this.publish(result,this.primitive(undefined));
+            else if(mode==="findIndex"||mode==="findLastIndex")this.publish(result,this.primitive(-1));
+            else if(collected)this.copy(collected,result);
+            else if(extra)this.copy(extra,result);
+            else if(caught)this.publish(caught,this.nativeException(context,"TypeError"));
+        };
         let rule!:Rule;rule=this.rule([length,target.callable,returned],()=>{
             const state=this.primitiveState(length,rule,true);if(state.pending&&!state.unresolved)return;
             if(state.proof.primitiveComplete&&!state.proof.values.length){this.publish(result,this.abrupt);return;}
             this.copy(callback,checked);if(!target.callable.values.nonempty)return;
-            if(!state.proof.primitiveComplete||state.proof.values.some(value=>Number(value)===0))this.publish(result,this.primitive(mode==="every"));
+            if(!state.proof.primitiveComplete||state.proof.values.some(value=>Number(value)===0))emptyResult();
             if(state.proof.primitiveComplete&&state.proof.values.every(value=>Number(value)===0))return;
             const domain=this.propertyKeyDomain(objects,step,rule,"index");if(domain.pending)return;
             if(domain.opaque){this.activateOpaqueEffect(context);if(caught)this.publish(caught,this.unknown);this.onActive(context,()=>this.escapeCallableArgument(objects,context));}
             const present=domain.opaque||domain.keys.length||domain.getters.length||domain.locations.some(value=>{this.watch(rule,value);return value.values.nonempty;});
-            if(!present){this.publish(result,this.primitive(mode==="every"));return;}
+            if(!present){emptyResult();return;}
+            if((domain.opaque||domain.getters.length)&&!computedFallback){computedFallback=true;this.copy(this.computedProperty(selected,indices,step),values);}
+            for(const key of domain.keys)if(!seenKeys.has(key)){seenKeys.add(key);this.copy(this.property(objects,key,step),values);}
+            for(const location of domain.locations)if(!seenLocations.has(location)){seenLocations.add(location);this.copy(location,values);}
             this.copy(objects,selected);this.copy(target.callable,callee);
             for(const value of returned.values)if(value.tag==="abrupt"||value.tag==="pending-source")this.publish(result,value);
-            if([...returned.values].some(value=>value.tag!=="abrupt"&&value.tag!=="pending-source")){this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));}
+            if(![...returned.values].some(value=>value.tag!=="abrupt"&&value.tag!=="pending-source"))return;
+            if(mode==="some"||mode==="every"){this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));}
+            else if(mode==="forEach")this.publish(result,this.primitive(undefined));
+            else if(mode==="find"||mode==="findLast"){this.copy(values,result);this.publish(result,this.primitive(undefined));}
+            else if(mode==="findIndex"||mode==="findLastIndex")this.publish(result,this.numberValue());
+            else if(collected)this.copy(collected,result);
+            else this.copy(accumulator,result);
         });
         return result;
     }
@@ -7249,7 +7314,14 @@ class SourceValueFlow {
                         if(runtimePromiseMethods.get(member)?.static){
                             this.watch(rule,invocation.receiver);
                             const receivers=[...invocation.receiver.values];if(!receivers.length)continue;
-                            if(receivers.some(receiver=>receiver.tag!=="builtin"||receiver.name!=="Promise")){
+                            // NewPromiseCapability(C) throws TypeError before
+                            // any call when C is not a constructor: a primitive,
+                            // a native function or namespace member (an
+                            // operation atom such as eval or Math.max) or a
+                            // non-constructor global never escapes as a receiver.
+                            const nonConstructor=(receiver:Atom):boolean=>receiver.tag==="primitive"||receiver.tag==="operation"||receiver.tag==="builtin"&&NON_CONSTRUCTOR_BUILTINS.has(receiver.name);
+                            if(receivers.some(nonConstructor)){const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node,"TypeError"));}
+                            if(receivers.some(receiver=>!nonConstructor(receiver)&&(receiver.tag!=="builtin"||receiver.name!=="Promise"))){
                                 this.publish(result,this.unknown);this.opaqueCallableCaptures(invocation.receiver,node);this.activateOpaqueEffect(node);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.unknown);
                             }
                             if(!receivers.some(receiver=>receiver.tag==="builtin"&&receiver.name==="Promise"))continue;
@@ -7524,7 +7596,7 @@ class SourceValueFlow {
                             continue;
                         }
                         if(atom.operation==="array-text"){this.copy(this.arrayText(invocation.receiver,node),result);continue;}
-                        if(atom.operation.startsWith("array-predicate:")){this.copy(this.arrayPredicate(atom.operation.slice("array-predicate:".length) as "some"|"every",invocation.receiver,argument(0)??omittedArgument,argument(1)??omittedArgument,node),result);continue;}
+                        if(atom.operation.startsWith("array-iteration:")){this.copy(this.arrayIteration(atom.operation.slice("array-iteration:".length) as ArrayIterationMode,invocation.receiver,argument(0)??omittedArgument,argument(1)??null,node),result);continue;}
                         if(atom.operation==="array-push"){this.copy(this.arrayPush(invocation.receiver,argv,invocation.sequence,node),result);continue;}
                         if(atom.operation==="array-join"){
                             const length=this.arrayLikeLength(invocation.receiver,node);
