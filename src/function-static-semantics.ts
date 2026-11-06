@@ -729,7 +729,7 @@ export function earlyFunctionStaticSemanticsFailure(
  * a destructuring assignment target reached through array elements, spread,
  * property values and shorthand members. A pattern element's default value
  * and a plain literal value are not targets. */
-function isAssignmentTargetPosition(node: ts.Node): boolean {
+export function isAssignmentTargetPosition(node: ts.Node): boolean {
     let current: ts.Node = node;
     for (;;) {
         const parent: ts.Node | undefined = current.parent;

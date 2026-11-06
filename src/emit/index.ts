@@ -25,7 +25,7 @@ import { AgentStoragePlan } from "./agent-storage";
 import { planAsyncControlFlowGraph, type AsyncControlFlowTarget } from "./async-cfg";
 import { normalizeAssignmentTarget, unwrapTransparentExpression } from "./binding-tree";
 import { callableSourceText } from "../callable-source-text";
-import { callableName, expectedArgumentCount, statementCompletionStartsUndefined, statementBodyCompletions } from "../function-static-semantics";
+import { callableName, expectedArgumentCount, isAssignmentTargetPosition, statementCompletionStartsUndefined, statementBodyCompletions } from "../function-static-semantics";
 import { isTailPositionCall } from "../tail-position";
 import { planResumableExpression, type ResumableReference, type ResumableExpressionState } from "./resumable-expression";
 import {
@@ -22033,7 +22033,10 @@ class Emitter {
                 ((this.options.sourceEval || this.options.test262Observation && this.isJavaScriptSourceFile(source)) && this.isDirectEvalSyntax(node)) ||
                 // B.3.2.1 var bindings of block-level functions live in the
                 // function's runtime variable Environment Record.
-                ts.isFunctionLike(node) && "body" in node && !!node.body && ts.isBlock(node.body) && this.annexBBlockFunctions(node as ts.FunctionLikeDeclaration).length > 0) enabled = true;
+                ts.isFunctionLike(node) && "body" in node && !!node.body && ts.isBlock(node.body) && this.annexBBlockFunctions(node as ts.FunctionLikeDeclaration).length > 0 ||
+                // A sloppy write to the implicit `arguments` binding needs the
+                // mutable binding the function Environment Record creates.
+                ts.isIdentifier(node) && node.text === "arguments" && isAssignmentTargetPosition(node) && this.isImplicitArgumentsIdentifier(node)) enabled = true;
             else ts.forEachChild(node, child => { worklist.push(child); });
         }
         this.sourceEnvironmentFiles.set(source, enabled);

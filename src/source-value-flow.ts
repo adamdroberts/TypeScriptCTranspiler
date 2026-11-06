@@ -719,6 +719,7 @@ class SourceValueFlow {
     private readonly assignmentTargets=new WeakMap<ts.Expression,{binding:ts.BindingName|null;references:Map<ts.Identifier,ts.Expression>}>();
     private readonly sourceReferences=new WeakMap<SourceReferenceExpression,SourceReference>();
     private readonly assignmentDefaults=new WeakSet<ts.BinaryExpression>();
+    private readonly writtenAmbientBindings=new WeakSet<Cell>();
     private readonly knownWriteOrigins=new WeakMap<Cell,SourceWriteOrigin>();
     private readonly ownerCreations=new WeakMap<ObjectOwner,ts.Node>();
     private readonly readCaptures = new Map<Cell,Map<SourceCaptureConstraints,Cell>>();
@@ -2036,6 +2037,10 @@ class SourceValueFlow {
         }
         this.copyWrite(value,this.binding(node),context,true,node);
         if(this.isAmbientIdentifier(node)){
+            // A sloppy write creates the global; its value may still depend on
+            // own-location absence (a pattern default), so the binding is not
+            // an unresolved external input.
+            this.writtenAmbientBindings.add(this.binding(node));
             const realm=this.evaluationGlobalTargets.get(node)??this.currentRealm;
             const receiver=this.newCell();this.publish(receiver,realm.global);
             this.writeProperty(receiver,node.text,value,true,"set",context??node);
@@ -8007,7 +8012,7 @@ class SourceValueFlow {
                     const origins=this.sourceOrigins.get(this.sourceFile(node));
                     if(origins&&!origins.values.nonempty)continue;
                     const binding=this.binding(node);
-                    if(!binding.values.nonempty){this.publish(binding,this.unknown);changed=true;}
+                    if(!binding.values.nonempty&&!this.writtenAmbientBindings.has(binding)){this.publish(binding,this.unknown);changed=true;}
                 }
                 if(changed)continue;
                 this.presenceClosed=true;for(const rule of this.presenceRules)this.schedule(rule);continue;

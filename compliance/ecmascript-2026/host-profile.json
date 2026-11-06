@@ -7,6 +7,10 @@
     "tests/test262/native-host.ts"
   ],
   "implementationFiles": [
+    "runtime/tsc_unicode_data.h",
+    "src/annex-b-functions.ts",
+    "src/eval-context.ts",
+    "src/resilient-checker.ts",
     "src/source-choice-tuples.ts",
     "src/callable-source-text.ts",
     "bun.lock",
@@ -113,6 +117,7 @@
     "src/runtime-code-aot.ts",
     "src/tools/check-emitter-method-reachability.ts",
     "src/tools/emitter-method-graph.ts",
+    "src/tools/generate-unicode-tables.ts",
     "src/util-format-source.ts",
     "stdlib/lib.core.d.ts",
     "tests/test262/HOST_PROTOCOL.md",
