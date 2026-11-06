@@ -34,6 +34,16 @@ const controlFlowPartitions: readonly ControlFlowPartition[] = [
     { source: "throw /* c */ 1;\n", diagnostic: null },
     { source: "throw (\n1);\n", diagnostic: null },
     { source: "throw\t1;\n", diagnostic: null },
+    // LexicalDeclaration: BoundNames must not contain "let".
+    { source: "let let = 1;\n", diagnostic: "'let' is not permitted as a lexically bound name" },
+    { source: "const [a, { b: let }] = [1, {}];\n", diagnostic: "'let' is not permitted as a lexically bound name" },
+    { source: "for (let let of []) ;\n", diagnostic: "'let' is not permitted as a lexically bound name" },
+    { source: "var let = 1; let lett = 2;\n", diagnostic: null },
+    // A const binding outside a for-in/of head requires an Initializer.
+    { source: "const x;\n", diagnostic: "a const declaration requires an initializer" },
+    { source: "const x = 1, y;\n", diagnostic: "a const declaration requires an initializer" },
+    { source: "switch (1) { case 1: const z; }\n", diagnostic: "a const declaration requires an initializer" },
+    { source: "for (const x of []) ; for (const y in {}) ;\n", diagnostic: null },
 ];
 
 function parsedScript(source: string): ts.SourceFile {

@@ -5356,6 +5356,10 @@ class SourceValueFlow {
             const plainFunction=current.tag==="builtin"&&(runtimeGlobalBindings.get(current.name)?.kind==="function"||runtimeObjectPrototypeDescriptors.has(current.name)&&current.normalResult!=="not-callable");
             const representedAbsence=current.tag==="builtin"&&(current.name==="Object"&&key===this.wellKnownSymbols.get("species")&&!runtimeObjectConstructorOwnKeys.has(key)||runtimeErrorKinds.has(current.name)&&key===this.wellKnownSymbols.get("hasInstance")||
                 key===this.wellKnownSymbols.get("toPrimitive")&&runtimeGlobalBindings.has(current.name)||
+                // No built-in function or constructor owns or inherits a
+                // toJSON (SerializeJSONProperty reads it before treating a
+                // callable value as undefined).
+                key==="toJSON"&&current.normalResult!=="not-callable"||
                 plainFunction&&!(typeof key==="string"&&(key==="name"||key==="length")));
             if (current.tag === "builtin" && !owner.closedOwn && !representedAbsence && !closedIndex && !presence?.values.has(this.primitive(true)) &&
                 !(typeof key === "string" && (runtimeObjectPrototypeMethods.has(key) || key === "constructor" ||
@@ -7430,8 +7434,10 @@ class SourceValueFlow {
                                     });
                                     if (!generated.length) this.publish(result!,this.pendingSource);
                                     if (this.invalidEvaluations.has(contextKey)||this.invalidEvaluations.has(sharedKey)) {
+                                        // PerformEval step: an eval code that fails to parse
+                                        // throws a SyntaxError before any evaluation.
                                         const handler = this.exceptionHandlers.get(node);
-                                        if (handler) this.onActive(node, () => this.publish(handler, this.nativeException(node)));
+                                        if (handler) this.onActive(node, () => this.publish(handler, this.nativeException(node, "SyntaxError")));
                                     }
                                     for (const value of generated) this.copy(value.completion, result!);
                                     const handler=this.exceptionHandlers.get(node);

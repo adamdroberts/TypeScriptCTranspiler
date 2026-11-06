@@ -143,6 +143,21 @@ export function earlyControlFlowStaticSemanticsFailure(
                 ts.canHaveModifiers(node) && !!ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) &&
                 node.parent && !ts.isSourceFile(node.parent))
             return { node, message: "an import or export declaration is only permitted at the top level of a module" };
+        // LexicalDeclaration / ForDeclaration: it is a Syntax Error if the
+        // BoundNames of BindingList contains "let"; a const or using binding
+        // outside a for-in/of head requires an Initializer.
+        if (ts.isVariableDeclarationList(node) && (node.flags & ts.NodeFlags.BlockScoped) !== 0) {
+            const head = ts.isForInStatement(node.parent) || ts.isForOfStatement(node.parent);
+            if (!head && (node.flags & (ts.NodeFlags.Const | ts.NodeFlags.Using)) !== 0)
+                for (const declaration of node.declarations)
+                    if (!declaration.initializer) return { node: declaration, message: `a ${(node.flags & ts.NodeFlags.Using) ? "using" : "const"} declaration requires an initializer` };
+            const pending: ts.BindingName[] = node.declarations.map(declaration => declaration.name);
+            while (pending.length) {
+                const name = pending.pop()!;
+                if (ts.isIdentifier(name)) { if (name.text === "let") return { node: name, message: "'let' is not permitted as a lexically bound name" }; continue; }
+                for (const element of name.elements) if (ts.isBindingElement(element)) pending.push(element.name);
+            }
+        }
         // ThrowStatement : throw [no LineTerminator here] Expression ; — the
         // parser gives a throw split by a line terminator a missing
         // (zero-width) expression and starts a new statement.
@@ -421,9 +436,6 @@ export function earlyControlFlowStaticSemanticsFailure(
                     const headNames = new Set<string>();
                     for (const declaration of list.declarations) {
                         for (const entry of bindingNameEntries(declaration.name)) {
-                            if (entry.name === "let") {
-                                return { node: entry.node, message: "lexical iteration binding cannot be named 'let'" };
-                            }
                             if (headNames.has(entry.name)) {
                                 return { node: entry.node, message: `duplicate lexical iteration binding '${entry.name}'` };
                             }
