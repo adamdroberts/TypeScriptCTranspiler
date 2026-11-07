@@ -116,7 +116,7 @@ export function finiteEvalScriptSourceGraph(
         setSourceAnalysisWarningWriter(() => {});
         let projected: ReturnType<typeof evaluationSourceRequests>;
         try {
-            projected = evaluationSourceRequests(program, {roots:roots.map(root=>path.resolve(root.path)), evaluations: records.filter(record => record.evaluation)
+            projected = evaluationSourceRequests(program, {host:"test262",roots:roots.map(root=>path.resolve(root.path)), evaluations: records.filter(record => record.evaluation)
                 .map(record => ({source:record.source,entry:path.resolve(record.path),kind:record.kind,domain:record.domain})) },
                 new Map(records.filter(record => record.strictContext !== undefined).map(record => [path.resolve(record.path), record.strictContext!])));
         } finally {

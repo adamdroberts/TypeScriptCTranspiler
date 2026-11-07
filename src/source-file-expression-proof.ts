@@ -60,7 +60,7 @@ export function sourceFileExpressionTexts(expression:ts.Expression):readonly str
                     sourceOverrides:new Map([[path.resolve(source.fileName),parsed]]),sourceFileCreated:adopt});
                 const program=built.program;
                 const targetArguments=program.getSourceFiles().filter(file=>!file.isDeclarationFile).flatMap(file=>dynamicImportCalls(file).flatMap(call=>call.arguments[0]?[call.arguments[0]]:[]));
-                const queries=sourceExpressionTexts(program,[...expressions,...targetArguments],{roots:[...companions,path.resolve(source.fileName)]});
+                const queries=sourceExpressionTexts(program,[...expressions,...targetArguments],{...(companionRoots.has(path.resolve(source.fileName))?{host:"test262" as const}:{}),roots:[...companions,path.resolve(source.fileName)]});
                 result=new Map(expressions.map(node=>[key(node),queries.get(node)??null]));
                 let added=false;
                 for(const argument of targetArguments)for(const text of queries.get(argument)??[]){

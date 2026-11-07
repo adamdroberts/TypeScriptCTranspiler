@@ -240,7 +240,7 @@ function permanentLimitDiagnostics(
     const checker = program.getTypeChecker();
     const finiteEvalCalls = new Map<ts.Node, boolean>();
     const sourceEval = opts.sourceEval ?? opts.test262Observation;
-    if (sourceEval) for (const invocation of sourceEvaluationInvocations(program,{roots: opts.sourceRoots, functions: opts.functionEntries, evaluations:[
+    if (sourceEval) for (const invocation of sourceEvaluationInvocations(program,{...(opts.test262Observation?{host:"test262" as const}:{}),roots: opts.sourceRoots, functions: opts.functionEntries, evaluations:[
         ...(sourceEval.agentEntries ?? []),
         ...(sourceEval.evalScriptEntries ?? []),
         ...(sourceEval.directEvalEntries ?? []),
@@ -838,7 +838,7 @@ async function compileWithDiagnostics(opts: CompileOptions, writeDiagnostic: (me
     // through the same JS parser/binder and ordinary function lowering.
     for (;;) {
         let addedRoot = false;
-        const graphEntries = { roots:opts.initializationEntries??[opts.entry],functions: [...functionEntries.values()], evaluations: [...evalEntries.values()] };
+        const graphEntries = { ...(opts.test262Observation?{host:"test262" as const}:{}), roots:opts.initializationEntries??[opts.entry],functions: [...functionEntries.values()], evaluations: [...evalEntries.values()] };
         const strictContexts = new Map([...evalEntries.values()].flatMap(entry => entry.entry ? [[path.resolve(entry.entry), entry.strict] as const] : []));
         const evaluation = evaluationSourceRequests(built.program, graphEntries, strictContexts);
         unresolvedCalls = evaluation.unresolved.map(invocation => invocation.node);
@@ -861,7 +861,7 @@ async function compileWithDiagnostics(opts: CompileOptions, writeDiagnostic: (me
         if (sourceEval) sourceEval = refreshEvalPlan();
         const sources = finiteFunctionConstructorSources(built.program, [
             { parameters: "", body: "" }, ...runtimeCode.functions,
-        ], { roots:opts.initializationEntries??[opts.entry],functions: [...functionEntries.values()], evaluations: [...evalEntries.values()] });
+        ], { ...(opts.test262Observation?{host:"test262" as const}:{}), roots:opts.initializationEntries??[opts.entry],functions: [...functionEntries.values()], evaluations: [...evalEntries.values()] });
         for (const source of sources) {
             const key = functionConstructorSourceKey(source);
             if (functionEntries.has(key)) continue;

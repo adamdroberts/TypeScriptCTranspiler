@@ -29,6 +29,11 @@ import {runtimeDynamicFunctionDescriptors,runtimeGeneratorMethods,runtimeCallbac
 
 export interface SourceValueGraphEntries {
     readonly roots?: readonly string[];
+    /** The host whose global object the program runs on. Under the Test262
+     * host the global object holds exactly the runtime's global bindings, the
+     * host's `print` and `$262` and the declarations of the analysed
+     * scripts, so a reference to any other name is unresolvable. */
+    readonly host?: "test262";
     readonly functions?: readonly FunctionConstructorEntry[];
     readonly evaluations?: readonly { readonly source: string; readonly entry: string | null; readonly kind?: string; readonly domain?: string }[];
 }
@@ -107,6 +112,12 @@ const SOURCE_OBJECT_PROTOTYPE_OPERATIONS:ReadonlyMap<string,Operation>=new Map([
  * itself. Natives outside this table keep every position callable. */
 const NATIVE_DIRECT_CALLEE_POSITIONS:ReadonlyMap<string,ReadonlySet<number>>=new Map([...runtimeArrayPrototypeMethods.keys()].map(name=>
     [`native-array:${name}`,new Set(["forEach","map","flatMap","filter","some","every","find","findIndex","findLast","findLastIndex","reduce","reduceRight","sort","toSorted"].includes(name)?[0]:[])]));
+/** Natives that evaluate or load code: their effects are not bounded by
+ * what their receiver and arguments reach. */
+const GLOBAL_EFFECT_OPERATIONS:ReadonlySet<string>=new Set(["eval","eval-script","agent-start","native-require"]);
+/** Names the Test262 host installs on the global object beside the runtime's
+ * own global bindings. */
+const TEST262_HOST_NAMES:ReadonlySet<string>=new Set(["print","$262","globalThis","eval","Function","undefined","NaN","Infinity"]);
 /** Global builtins without [[Construct]] (ES2026 19.2 function properties)
  * and the namespace objects (not callable at all). */
 const NON_CONSTRUCTOR_BUILTINS:ReadonlySet<string>=new Set(["eval","isFinite","isNaN","parseFloat","parseInt","decodeURI","decodeURIComponent","encodeURI","encodeURIComponent","escape","unescape","Math","JSON","Reflect","Atomics","Intl","globalThis","undefined","NaN","Infinity"]);
@@ -753,8 +764,10 @@ class SourceValueFlow {
     private readonly intrinsicOwners = new Map<Atom, ObjectOwner>();
     private readonly checker: ts.TypeChecker;
     private readonly invalidEvaluations = new Set<string>();
+    private readonly test262Host:boolean;
     constructor(private readonly program: ts.Program, entries: SourceValueGraphEntries, private readonly domain?:string, sources?:ReadonlySet<ts.SourceFile>) {
         this.checker = program.getTypeChecker();
+        this.test262Host=entries.host==="test262";
         this.publish(this.currentRealmCell,this.currentRealm.record);
         for (const [index,filename] of (entries.roots??[]).entries()) {
             const file=program.getSourceFile(sourceUnitFileName(program,path.resolve(filename),"script"));
@@ -1106,8 +1119,11 @@ class SourceValueFlow {
             // makes the branch reachable for good. Waiting for the pending
             // rest would deadlock a branch whose result feeds its own guard
             // (a field read as the condition and written by the branch).
+            // A value from a source that a later solve compiles may satisfy
+            // the guard; the branch runs with the pending mark so its result
+            // stays pending instead of sealing as unknown.
             if (state.pending) {
-                if (this.guardSatisfiedByKnownValue(guard)) continue;
+                if (state.pendingSource || this.guardSatisfiedByKnownValue(guard)) continue;
                 return false;
             }
             if (state.proof.primitiveComplete && !state.proof.values.some(value => !!value === guard.truthy)) return false;
@@ -3921,6 +3937,20 @@ class SourceValueFlow {
         }
         return cell;
     }
+    /** Under the Test262 host a name outside the runtime's global bindings,
+     * the host's own names and the analysed scripts' declarations has no
+     * binding; a property the program may have created on the global
+     * object keeps the name resolvable. */
+    private unresolvableHostName(name:string):boolean {
+        if(!this.test262Host||runtimeGlobalBindings.has(name)||TEST262_HOST_NAMES.has(name))return false;
+        const owner=this.ordinaryOwner(this.currentRealm.global);
+        if(!owner)return true;
+        // Every referenced global name has a field on the global object
+        // owner (its binding cell); only a field with facts, an accessor or a
+        // written unknown-key location is evidence of a property.
+        const location=this.unknownPropertyLocations.get(owner),field=owner.fields.get(name);
+        return !(field&&this.field(owner,name).values.nonempty)&&!owner.accessors.has(name)&&!owner.accessors.has(null)&&!(location&&location.value.values.nonempty);
+    }
     private isAmbientIdentifier(node: ts.Identifier): boolean {
         if(this.implicitArgumentsOwner(node))return false;
         if(this.evaluationGlobalTargets.has(node))return true;
@@ -4605,7 +4635,11 @@ class SourceValueFlow {
             if(atom.tag==="function"){const definition=atom.owner.definition;this.publish(result,this.primitive(ts.isClassLike(definition)||atom.owner.kind==="ordinary"&&(ts.isFunctionDeclaration(definition)||ts.isFunctionExpression(definition))));}
             else if(atom.tag==="builtin"){const descriptor=runtimePrimitiveDescriptors.get(atom.name);this.publish(result,this.primitive(descriptor?descriptor.constructible:runtimeGlobalBindings.get(atom.name)?.kind==="intrinsic"&&atom.normalResult!=="not-callable"));}
             else if(atom.tag==="intrinsic")this.publish(result,this.primitive(atom.domain==="constructor"));
-            else if(atom.tag==="unknown"||atom.tag==="opaque-object"||atom.tag==="pending-source"){this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));this.activateOpaqueEffect(context);}
+            // A value from a source that a later solve compiles is not yet a
+            // constructor verdict: forward the pending mark instead of the
+            // opaque effect, which would make that source itself unknown.
+            else if(atom.tag==="pending-source")this.publish(result,atom);
+            else if(atom.tag==="unknown"||atom.tag==="opaque-object"){this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));this.activateOpaqueEffect(context);}
             else this.publish(result,this.primitive(false));
         }}});
         return result;
@@ -4699,7 +4733,10 @@ class SourceValueFlow {
                 else this.publish(result,this.unknown);
             }else if(atom.tag==="unknown"||atom.tag==="opaque-object"){
                 this.publish(result,this.unknown);fail();
-                if(!selected.has(atom)){selected.add(atom);this.opaqueEffect(context);}
+                // A getPrototypeOf trap is user code reachable only through
+                // the argument: it escapes as a callee rather than widening
+                // every global binding.
+                if(!selected.has(atom)){selected.add(atom);this.onActive(context,()=>this.escapeCallableArgument(objects,context));}
             }else fail();
         }});return result;
     }
@@ -7061,12 +7098,18 @@ class SourceValueFlow {
                         // Provenance distinguishes captured reads. After an
                         // opaque callee is selected its invocation effects
                         // share one signature, independent of origin count.
-                        // A native in the direct-callee table writes only its receiver and
-                        // arguments and runs user code only through the callables it reaches,
-                        // each modelled by its own invocation; it never rewrites a global
-                        // binding or an unrelated object, so the global opaque effect is
-                        // reserved for unknown code.
-                        const directCallees=atom.tag==="operation"?NATIVE_DIRECT_CALLEE_POSITIONS.get(atom.operation):undefined;
+                        // A known native writes only its receiver and arguments and runs
+                        // user code only through the callables it reaches (every argument
+                        // position outside the direct-callee table), each modelled by its
+                        // own invocation; it never rewrites a global binding or an
+                        // unrelated object, so the global opaque effect is reserved for
+                        // unknown code and the natives that evaluate or load code.
+                        // An unmodelled member of a builtin (`Iterator.from`, a static the
+                        // model has no operation for) is a native too: its receiver holds
+                        // only builtin values, so it cannot be user code.
+                        const builtinMember=atom.tag==="unknown"&&!proxy&&invocation.receiver!==this.empty&&invocation.receiver.values.nonempty&&
+                            [...invocation.receiver.values].every(value=>value.tag==="builtin"||value.tag==="intrinsic"||value.tag==="operation");
+                        const directCallees:ReadonlySet<number>|"all"|undefined=atom.tag==="operation"&&!GLOBAL_EFFECT_OPERATIONS.has(atom.operation)?NATIVE_DIRECT_CALLEE_POSITIONS.get(atom.operation)??"all":builtinMember?"all":undefined;
                         if (!handled(this.unknown,signature)) this.onActive(node,()=>{
                             if(!directCallees)this.opaqueEffect(node);
                             if(atom.tag==="unknown"||atom.tag==="opaque-object"||proxy){
@@ -7079,7 +7122,7 @@ class SourceValueFlow {
                             const argumentsEscaping = invocation.args ?? (invocation.sequence ? [this.allArgumentValues(invocation.sequence)] : []);
                             for (const [index,argument] of argumentsEscaping.entries()) {
                                 this.writeProperty(argument,null,this.empty,false,"set",node);
-                                this.escapeCallableArgument(argument,node,false,!directCallees||directCallees.has(index));
+                                this.escapeCallableArgument(argument,node,false,!directCallees||directCallees==="all"||directCallees.has(index));
                             }
                         });
                         continue;
@@ -8098,7 +8141,19 @@ class SourceValueFlow {
                     const origins=this.sourceOrigins.get(this.sourceFile(node));
                     if(origins&&!origins.values.nonempty)continue;
                     const binding=this.binding(node);
-                    if(!binding.values.nonempty&&!this.writtenAmbientBindings.has(binding)){this.publish(binding,this.unknown);changed=true;}
+                    if(binding.values.nonempty||this.writtenAmbientBindings.has(binding))continue;
+                    // A reference inside evaluated or generated code resolves
+                    // through its environment's callers (the caller's realm
+                    // supplies the global); it is not an external input.
+                    if(this.evaluationDeclarationBindings.has(binding))continue;
+                    if(this.unresolvableHostName(node.text)){
+                        // ResolveBinding finds no binding: GetValue throws
+                        // ReferenceError, and typeof answers "undefined".
+                        if(ts.isTypeOfExpression(node.parent))this.publish(cell,this.primitive(undefined));
+                        else{this.publish(cell,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node,"ReferenceError"));}
+                        changed=true;continue;
+                    }
+                    this.publish(binding,this.unknown);changed=true;
                 }
                 if(changed)continue;
                 this.presenceClosed=true;for(const rule of this.presenceRules)this.schedule(rule);continue;
