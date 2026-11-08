@@ -31,6 +31,16 @@ export function requestedSanitizers(value = process.env.TSC2C_SANITIZE): string[
     return requested;
 }
 
+// Opt-in collector stress profile (TSC2C_GC_STRESS=n) for tests: the runtime
+// collects before every n-th allocation. A malformed request fails closed.
+export function requestedGcStressFlags(value = process.env.TSC2C_GC_STRESS): string[] {
+    if (value === undefined || value.trim() === "") return [];
+    if (!/^[1-9][0-9]{0,5}$/.test(value.trim())) {
+        throw new Error(`TSC2C_GC_STRESS: expected a positive allocation interval below 1000000, got ${JSON.stringify(value)}`);
+    }
+    return [`-DTSC_GC_STRESS=${value.trim()}`];
+}
+
 function sanitizerMitigation(sanitizers: readonly string[]): Mitigation {
     const flag = `-fsanitize=${sanitizers.join(",")}`;
     return {
@@ -72,15 +82,17 @@ function candidateMitigations(sanitizers: readonly string[]): Mitigation[] {
 
 const cache = new Map<string, Promise<HardeningFlags>>();
 
-export function hardeningFlags(compiler: string): Promise<HardeningFlags> {
+export async function hardeningFlags(compiler: string): Promise<HardeningFlags> {
     const sanitizers = requestedSanitizers();
+    const stress = requestedGcStressFlags();
     const key = `${compiler}\0${sanitizers.join(",")}`;
     let flags = cache.get(key);
     if (!flags) {
         flags = probeHardening(compiler, sanitizers);
         cache.set(key, flags);
     }
-    return flags;
+    const probed = await flags;
+    return stress.length === 0 ? probed : { compile: [...probed.compile, ...stress], link: probed.link };
 }
 
 async function probeHardening(compiler: string, sanitizers: readonly string[]): Promise<HardeningFlags> {

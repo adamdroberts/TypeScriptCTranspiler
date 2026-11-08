@@ -4,6 +4,7 @@
 #include "tsc_internal.h"
 #include <pthread.h>
 #include <sched.h>
+#include <setjmp.h>
 
 /* The function identity registry maps (code, environment, ...) to the one
  * function object for that pair. It lives in pointer-free memory and each
@@ -123,7 +124,19 @@ void* tsc_gc_try_malloc_traced(size_t size) {
     (void)pthread_once(&tsc_boxed_storage_once, tsc_boxed_storage_install);
     return GC_generic_malloc(size, tsc_boxed_storage_kind);
 }
+#ifdef TSC_GC_STRESS
+void tsc_gc_stress_tick(void) {
+    static TSC_TLS unsigned long allocations;
+    static TSC_TLS bool collecting;
+    /* Finalizers and collection callbacks may allocate. */
+    if (collecting || ++allocations % (unsigned long)(TSC_GC_STRESS) != 0) return;
+    collecting = true;
+    GC_gcollect();
+    collecting = false;
+}
+#endif
 void* tsc_gc_malloc_traced(size_t size) {
+    TSC_GC_STRESS_TICK();
     void* value = tsc_gc_try_malloc_traced(size);
     if (!value) tsc_panic("out of memory allocating traced storage");
     return value;
@@ -1622,9 +1635,13 @@ void tsc_dynamic_stat_hit(tsc_dynamic_stat_kind_t kind) {
     g_dynamic_stats[kind]++;
 }
 
+#ifndef TSC_NO_GC
+static void boxed_stack_roots_install(void);
+#endif
 void tsc_bootstrap(int argc, char** argv) {
     TSC_GC_INIT();
 #ifndef TSC_NO_GC
+    boxed_stack_roots_install();
     /* Failed heap expansion is a catchable RangeError for the operations
      * that permit it; the collector's own warnings never reach stderr. */
     if (!getenv("TSC_GC_WARNINGS")) GC_set_warn_proc(GC_ignore_warn_proc);
@@ -2747,6 +2764,7 @@ void tsc_run_event_loop(void) {
  * stack floor plus a margin for the deepest generated frame plus the
  * unwinding runtime. */
 static __thread char* g_stack_floor_limit;
+static __thread char* g_stack_high;
 static __thread bool g_stack_floor_known;
 #define TSC_STACK_RESERVE (1024u * 1024u)
 static void stack_floor_resolve(void) {
@@ -2758,8 +2776,47 @@ static void stack_floor_resolve(void) {
     size_t size = 0;
     if (pthread_attr_getstack(&attributes, &address, &size) == 0 && address && size > 2 * TSC_STACK_RESERVE)
         g_stack_floor_limit = (char*)address + TSC_STACK_RESERVE;
+    if (address && size) g_stack_high = (char*)address + size;
     pthread_attr_destroy(&attributes);
 }
+
+#ifndef TSC_NO_GC
+/* The conservative stack scan recognises raw pointers only, so a NaN-boxed
+ * value held in a register or stack slot across an allocation (a call result
+ * passed beside an allocating argument, a runtime local such as a freshly
+ * created function) would not keep its target alive. With the world stopped
+ * the collecting thread's own stack, registers spilled, is walked once more
+ * and every boxed word is decoded and marked. Other threads' stacks keep the
+ * collector's raw scan plus their explicit roots. */
+static GC_push_other_roots_proc g_previous_push_other_roots;
+static void push_boxed_words(char* low, char* high) {
+    void* decoded[256];
+    size_t count = 0;
+    for (char* cursor = (char*)(((uintptr_t)low + sizeof(tsc_value_t) - 1) & ~(uintptr_t)(sizeof(tsc_value_t) - 1));
+         cursor + sizeof(tsc_value_t) <= high; cursor += sizeof(tsc_value_t)) {
+        tsc_value_t word;
+        memcpy(&word, cursor, sizeof word);
+        void* target = value_is_box(word) ? tsc_value_gc_root(word) : NULL;
+        if (!target) continue;
+        decoded[count++] = target;
+        if (count == sizeof decoded / sizeof decoded[0]) { GC_push_all_eager(decoded, decoded + count); count = 0; }
+    }
+    if (count) GC_push_all_eager(decoded, decoded + count);
+}
+static void GC_CALLBACK push_boxed_stack(void) {
+    if (g_previous_push_other_roots) g_previous_push_other_roots();
+    if (!g_stack_high) return;
+    jmp_buf registers;
+    (void)setjmp(registers);
+    char* low = (char*)&registers;
+    if (low < g_stack_high) push_boxed_words(low, g_stack_high);
+}
+static void boxed_stack_roots_install(void) {
+    if (!g_stack_floor_known) stack_floor_resolve();
+    g_previous_push_other_roots = GC_get_push_other_roots();
+    GC_set_push_other_roots(push_boxed_stack);
+}
+#endif
 void tsc_stack_depth_check(void) {
     if (!g_stack_floor_known) stack_floor_resolve();
     char marker;

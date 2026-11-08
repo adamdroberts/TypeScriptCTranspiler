@@ -52,10 +52,20 @@ static inline size_t tsc_alloc_size(size_t count, size_t size) {
     if (__builtin_expect(__builtin_mul_overflow(count, size, &total), 0)) tsc_alloc_failure(SIZE_MAX);
     return total;
 }
-static inline void* tsc_gc_malloc(size_t n) { return tsc_alloc_checked(TSC_GC_TRY_MALLOC(n), n); }
-static inline void* tsc_gc_malloc_uninit(size_t n) { return tsc_alloc_checked(TSC_GC_TRY_MALLOC_UNINIT(n), n); }
-static inline void* tsc_gc_malloc_atomic(size_t n) { return tsc_alloc_checked(TSC_GC_TRY_MALLOC_ATOMIC(n), n); }
-static inline void* tsc_gc_realloc(void* p, size_t n) { return tsc_alloc_checked(TSC_GC_TRY_REALLOC(p, n), n); }
+/* Test-only collector stress profile (TSC2C_GC_STRESS=n compiles with
+ * -DTSC_GC_STRESS=n): a full collection before every n-th allocation, so a
+ * value held only as a NaN-boxed word in a register or stack slot across an
+ * allocation is reclaimed deterministically instead of by chance. */
+#if defined(TSC_GC_STRESS) && !defined(TSC_NO_GC)
+void tsc_gc_stress_tick(void);
+#  define TSC_GC_STRESS_TICK() tsc_gc_stress_tick()
+#else
+#  define TSC_GC_STRESS_TICK() ((void)0)
+#endif
+static inline void* tsc_gc_malloc(size_t n) { TSC_GC_STRESS_TICK(); return tsc_alloc_checked(TSC_GC_TRY_MALLOC(n), n); }
+static inline void* tsc_gc_malloc_uninit(size_t n) { TSC_GC_STRESS_TICK(); return tsc_alloc_checked(TSC_GC_TRY_MALLOC_UNINIT(n), n); }
+static inline void* tsc_gc_malloc_atomic(size_t n) { TSC_GC_STRESS_TICK(); return tsc_alloc_checked(TSC_GC_TRY_MALLOC_ATOMIC(n), n); }
+static inline void* tsc_gc_realloc(void* p, size_t n) { TSC_GC_STRESS_TICK(); return tsc_alloc_checked(TSC_GC_TRY_REALLOC(p, n), n); }
 #define TSC_GC_MALLOC(n)         tsc_gc_malloc((size_t)(n))
 /* Zeroed GC allocation whose NaN-boxed tsc_value_t words are traced as
  * pointers, for emitted environments, states and cells. */

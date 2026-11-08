@@ -797,6 +797,15 @@ class Emitter {
     private test262AnnexBFunctionReferences =
         new WeakMap<ts.FunctionDeclaration, string>();
 
+    /** A literal property's key is a fresh string allocation and C leaves the
+     * order of a call's arguments unspecified, so a value computed first would
+     * live only as a NaN-boxed word, invisible to the conservative collector,
+     * across that allocation. The value is evaluated and rooted before the
+     * definition call. */
+    private rootedLiteralDefinition(value: string, define: (rooted: string) => string): string {
+        const temp = this.freshTemp("_literal_value"), root = this.freshTemp("_literal_value_root");
+        return `({ tsc_value_t ${temp} = ${value}; void* volatile ${root} = tsc_value_gc_root(${temp}); (void)${root}; ${define(temp)}; })`;
+    }
     private freshTemp(prefix = "_t"): string {
         return `${prefix}${this.tempCounter++}`;
     }
@@ -39849,9 +39858,10 @@ class Emitter {
                     const define = ts.isGetAccessorDeclaration(prop)
                         ? "tsc_value_object_define_getter"
                         : "tsc_value_object_define_setter";
-                    pieces.push(
-                        `${define}(tsc_value_object(${obj}), tsc_str_from_lit("${escapeCString(staticName)}", ${utf8ByteLen(staticName)}), ${this.coerce(value, T_VALUE, prop)})`,
-                    );
+                    pieces.push(this.rootedLiteralDefinition(
+                        this.coerce(value, T_VALUE, prop),
+                        (rooted) => `${define}(tsc_value_object(${obj}), tsc_str_from_lit("${escapeCString(staticName)}", ${utf8ByteLen(staticName)}), ${rooted})`,
+                    ));
                     continue;
                 } else {
                     unsupported(prop, `object literal property kind ${ts.SyntaxKind[(prop as ts.Node).kind]}`);
@@ -39871,9 +39881,10 @@ class Emitter {
                     );
                     continue;
                 }
-                pieces.push(
-                    `if (!tsc_object_define(${obj}, ${key}, ${this.coerce(value, T_VALUE, expr)}, true, true, true)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("object literal property definition failed"))`,
-                );
+                pieces.push(this.rootedLiteralDefinition(
+                    this.coerce(value, T_VALUE, expr),
+                    (rooted) => `if (!tsc_object_define(${obj}, ${key}, ${rooted}, true, true, true)) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("object literal property definition failed"))`,
+                ));
             }
             pieces.push(`tsc_value_object(${obj})`);
             return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
