@@ -76,10 +76,14 @@ test('opaque arguments writes cannot prove a finite mapped source',()=>{
  }
 });
 
-test('the public combined CLI input remains a valid Node program and a known source-admission gap',async()=>{
- const source=await readFile(new URL('../e2e/cases/source_arguments_public_callback_diagnostic/in.ts',import.meta.url),'utf8');
+test('the public combined CLI input admits every source Node evaluates',async()=>{
+ const source=await readFile(new URL('../e2e/cases/source_arguments_public_callback/in.ts',import.meta.url),'utf8');
  expect(reference(source,'console={log:print};')).toBe('19\n23\n17\n47\narguments-source-complete\n');
- expect(finiteEvalScriptSourceGraph([{path:'subject.js',source}]).error).toContain('source is not a finite static string expression');
+ // Array.prototype.forEach.call over the mapped arguments object runs the
+ // replacement callback through the one iteration model, so the sources are
+ // finite and include each value Node evaluates.
+ const graph=finiteEvalScriptSourceGraph([{path:'subject.js',source}]);expect(graph.error).toBeNull();
+ expect(graph.directEvalSources.map(record=>record.source)).toEqual(expect.arrayContaining(['19;','23;','17;','47;']));
 });
 
 test('opaque owner traversal observes replacement callbacks through mapped properties',()=>{

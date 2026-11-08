@@ -75,9 +75,15 @@ export interface FiniteEvalScriptSourceGraph {
 /** Eval and dynamic Function construction consume the same source-owned
  * value/location/List graph. Extend its exact-source records to a fixed point;
  * source bindings remain isolated exactly as in native Script compilation. */
+/** `hostNames` selects how a name outside the runtime's global bindings and
+ * the scripts' declarations resolves: under "open" it is an unknown value
+ * some embedding host may provide; under "test262" (every request the native
+ * host prepares) it is an unresolvable reference, as no Test262 host
+ * provides it. */
 export function finiteEvalScriptSourceGraph(
     roots: readonly { readonly path: string; readonly source: string; readonly goal?: EcmaParseGoal }[],
     moduleSources: readonly { readonly path: string; readonly source: string; readonly goal?: EcmaParseGoal }[] = [],
+    hostNames: "test262" | "open" = "open",
 ): FiniteEvalScriptSourceGraph {
     const requests = new Map<string, EvalSourceRequest>();
     const records: Array<{path:string;source:string;goal?:EcmaParseGoal;root?:boolean;strictContext?:boolean;evaluation?:boolean;kind?:string;domain?:string}> = [
@@ -116,7 +122,7 @@ export function finiteEvalScriptSourceGraph(
         setSourceAnalysisWarningWriter(() => {});
         let projected: ReturnType<typeof evaluationSourceRequests>;
         try {
-            projected = evaluationSourceRequests(program, {host:"test262",roots:roots.map(root=>path.resolve(root.path)), evaluations: records.filter(record => record.evaluation)
+            projected = evaluationSourceRequests(program, {...(hostNames === "test262" ? {host: "test262" as const} : {}),roots:roots.map(root=>path.resolve(root.path)), evaluations: records.filter(record => record.evaluation)
                 .map(record => ({source:record.source,entry:path.resolve(record.path),kind:record.kind,domain:record.domain})) },
                 new Map(records.filter(record => record.strictContext !== undefined).map(record => [path.resolve(record.path), record.strictContext!])));
         } finally {
@@ -564,6 +570,7 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
     ], request.moduleFiles
             .filter((file) => /\.[cm]?js$/i.test(file.path))
             .map((file) => ({ path: file.path, source: Buffer.from(file.data, "base64").toString("utf8"), goal: "module" as const })),
+        "test262",
     );
     if (evalScriptGraph.error) {
         return {

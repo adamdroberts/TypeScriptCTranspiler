@@ -682,6 +682,17 @@ class SourceValueFlow {
      * calling or constructing through it is bounded the same way and never
      * takes the global opaque effect reserved for unknown code. */
     private readonly nativeUnknown: Atom = { tag: "unknown", native: true };
+    /** A native value may be any object the program created that reached a
+     * native through its receiver and arguments (its escape graph). Writes through
+     * native values feed two shared cells, and each such object links to them
+     * once: the written keys become its unknown-key record, whose value is a
+     * native value (every written value escapes at the store), and the
+     * execution origins of a deletion, definition, prototype change or native
+     * mutation widen its shape. The cost is one edge per write and one link
+     * per object, independent of their product. */
+    private readonly nativeAliasOwners = new Set<ObjectOwner>();
+    private readonly nativeAliasKeys = this.newCell();
+    private readonly nativeAliasMutation = this.newCell();
     private readonly opaqueObject: Atom = { tag: "opaque-object" };
     private readonly abrupt: Atom = {tag:"abrupt"};
     private readonly pendingSource: Atom = {tag:"pending-source"};
@@ -1313,6 +1324,10 @@ class SourceValueFlow {
         const nested:EscapeReachKind=kind==="direct"?"direct":"method";
         const visit=(input:Cell):void=>this.linkEscapeReach(this.escapeCellReach(input,sourceCallbacksOnly,nested),result);
         const owner=this.ordinaryOwner(atom);
+        // Program state a native can hand back: objects the program created
+        // (literals, constructions, functions, collections). Intrinsics stay
+        // outside; their unmodelled members already read as native values.
+        if(owner&&!sourceCallbacksOnly&&(atom.tag==="function"||this.sourceObjectOwners.has(owner)||this.ownerCreations.has(owner)||owner.collections||owner.collectionIterator))this.nativeAlias(owner);
         if(atom.tag==="promise"){visit(atom.value);visit(atom.rejection);}
         if(atom.tag==="generator"){visit(atom.yielded);visit(atom.returned);}
         const transparent=kind==="method"&&atom.tag==="operation"&&TRANSPARENT_CALL_OPERATIONS.has(atom.operation);
@@ -1339,6 +1354,18 @@ class SourceValueFlow {
             }
         });
         return result;
+    }
+    /** Links one represented object to the shared native-alias cells. */
+    private nativeAlias(owner:ObjectOwner):void {
+        if(this.nativeAliasOwners.has(owner))return;this.nativeAliasOwners.add(owner);
+        this.copy(this.nativeAliasMutation,owner.shape);
+        for(const record of owner.collections?.values()??[])this.copy(this.nativeAliasMutation,record.shape);
+        let linked=false;
+        this.rule([this.nativeAliasKeys],()=>{
+            if(linked||!this.nativeAliasKeys.values.nonempty)return;linked=true;
+            const record=this.recordUnknownProperty(owner,"set",undefined,this.nativeAliasKeys);
+            this.publish(record.value,this.nativeUnknown);
+        });
     }
     private escapeCallableArgument(argument:Cell,context:ts.Node,sourceCallbacksOnly=false,directCallee=true):void {
         context=this.escapeContext(context);
@@ -2420,6 +2447,7 @@ class SourceValueFlow {
         const weak=context?this.writeUncertainty(context):this.newCell();
         const proxyEffects=new Set<ObjectOwner>();
         const setterEffects=new Set<Cell>();
+        const unrepresented=new Set<Atom>();
         let rule!:Rule;
         rule=this.rule([base,receiver,...(keys?[keys]:[])],()=>{for(const atom of base.values){
             const owner=this.ordinaryOwner(atom);
@@ -2500,6 +2528,26 @@ class SourceValueFlow {
                     else this.copy(this.executionOrigins(context),this.globalMutation);
                 }
                 else if (typeof key === "string" && !this.immutableGlobalBinding(key)) this.copyWrite(value,this.realmBinding(atom.realm,key),context);
+            }
+            if((atom.tag==="unknown"||atom.tag==="opaque-object")&&context&&!unrepresented.has(atom)){
+                unrepresented.add(atom);const native=atom===this.nativeUnknown;
+                // The analysis cannot follow a value stored into an object it does
+                // not represent: whatever reads it back (a native, unknown code, or
+                // the program through a native value) may call it, so it escapes
+                // there, with native actuals for a native value.
+                if(value!==this.empty&&mode!=="delete")this.onActive(context,()=>this.escapeCallableArgument(value,context,!native));
+                // A native value may be any object that reached a native: the
+                // write (a store, a definition, a deletion, or a native's mutation
+                // of its receiver or arguments) reaches each of them through the
+                // shared alias cells. Written keys hold at every time; a mutation
+                // keeps its execution origins, so earlier reads stay unaffected.
+                if(native){
+                    if(value!==this.empty&&mode!=="delete"){
+                        if(key!==null)this.publish(this.nativeAliasKeys,this.primitive(key));else if(keys)this.copy(keys,this.nativeAliasKeys);else this.publish(this.nativeAliasKeys,this.unknown);
+                    }
+                    if(value===this.empty||mode!=="set"||key==="__proto__"||key===null&&(!keys||this.keyMayContain(keys,"__proto__",rule)))
+                        this.copy(this.executionOrigins(context),this.nativeAliasMutation);
+                }
             }
             if(unknownGlobal&&(atom.tag==="unknown"||atom.tag==="opaque-object")){this.copy(this.executionOrigins(context),this.globalMutation);if(handler)this.publish(handler,this.unknown);}
         }});
@@ -2875,7 +2923,7 @@ class SourceValueFlow {
             const domain = names === null ? this.computedKeyDomain(key) : null;
             if (names === null) {
                 const projection=this.propertyKeyDomain(base,context,rule,domain?"numeric":"all");
-                if(projection.opaque)this.publish(result,this.unknown);
+                if(projection.opaque)this.publish(result,projection.nativeOnly?this.nativeUnknown:this.unknown);
                 else if(!projection.pending)this.publish(result,this.primitive(undefined));
                 for(const name of [...projection.keys,...(domain?.keys??[])])if(!selected.has(name)){
                     selected.add(name);this.copy(this.property(base,name,context,false,receiver),result);
@@ -3852,7 +3900,9 @@ class SourceValueFlow {
         else if(key==="undefined")this.publish(cell,this.primitive(undefined));
         else if(key==="NaN")this.publish(cell,this.primitive(NaN));
         else if(key==="Infinity")this.publish(cell,this.primitive(Infinity));
-        else if(runtimeGlobalBindings.has(key))this.publish(cell,this.unknown);
+        // Another realm's remaining runtime bindings start as that realm's
+        // intrinsics: native values, like an unmodelled builtin member here.
+        else if(runtimeGlobalBindings.has(key))this.publish(cell,this.nativeUnknown);
         if(realm.owner)this.attachField(realm.owner,key,cell);
         return cell;
     }
@@ -4258,7 +4308,7 @@ class SourceValueFlow {
         let calls=this.collectionConstruction.get(context);if(!calls){calls=new Map();this.collectionConstruction.set(context,calls);}
         const signature=kind+":"+input.id+":"+newTarget.id,prior=calls.get(signature);if(prior)return prior;
         const result=this.newCell(),owner=this.owner(context);calls.set(signature,result);owner.collections??=new Map();
-        let record=owner.collections.get(kind);if(!record){record={kind,entries:new Map(),changes:this.newCell(),shape:this.newCell()};owner.collections.set(kind,record);this.copy(this.opaqueMutation,record.shape);this.publish(owner.shape,{tag:"descriptor",identity:record});}
+        let record=owner.collections.get(kind);if(!record){record={kind,entries:new Map(),changes:this.newCell(),shape:this.newCell()};owner.collections.set(kind,record);this.copy(this.opaqueMutation,record.shape);if(this.nativeAliasOwners.has(owner))this.copy(this.nativeAliasMutation,record.shape);this.publish(owner.shape,{tag:"descriptor",identity:record});}
         owner.prototype??=this.newCell();const prototype=this.property(newTarget,"prototype",context),fallback=this.collectionPrototype(kind);
         this.rule([prototype],()=>{for(const atom of prototype.values){if(this.ordinaryOwner(atom)||atom.tag==="unknown"||atom.tag==="opaque-object")this.publish(owner.prototype!,atom);else if(atom.tag!=="abrupt"&&atom.tag!=="pending-source")this.copy(fallback,owner.prototype!);}});
         this.publish(result,{tag:"object",owner});
@@ -5101,10 +5151,14 @@ class SourceValueFlow {
     /** Enumerate represented locations without discarding them when another
      * part of the key/owner domain is opaque. Prototype cycles close on owner
      * identity; shape and binding discoveries wake this same worklist. */
-    private propertyKeyDomain(receiver:Cell,context:ts.Node,rule:Rule,domain:"all"|"index"|"numeric"):{keys:readonly SourcePropertyKey[];locations:readonly Cell[];getters:readonly Cell[];pending:boolean;opaque:boolean;unknownKeys:boolean} {
+    /** `opaque` reports keys the owner graph does not enumerate; `nativeOnly`
+     * says each such key belongs to a native value or to a builtin's own
+     * unmodelled members, whose values are native like a known-key read of
+     * the same member. */
+    private propertyKeyDomain(receiver:Cell,context:ts.Node,rule:Rule,domain:"all"|"index"|"numeric"):{keys:readonly SourcePropertyKey[];locations:readonly Cell[];getters:readonly Cell[];pending:boolean;opaque:boolean;nativeOnly:boolean;unknownKeys:boolean} {
         const activation=this.enclosingActivation(context);if(activation){this.watch(rule,activation.active);this.watch(rule,this.activationTiming(activation));}
         const keys=new Set<SourcePropertyKey>(),locations=new Set<Cell>(),getters=new Set<Cell>(),pending=[...receiver.values],visited=new Set<ObjectOwner>();
-        let unresolved=false,opaque=false,unknownKeys=false;
+        let unresolved=false,opaque=false,generic=false,unknownKeys=false;
         const add=(key:SourcePropertyKey|null)=>{
             if(key===null){unknownKeys=true;return;}
             if(domain==="all"){keys.add(key);return;}
@@ -5121,24 +5175,25 @@ class SourceValueFlow {
             if(atom.tag==="pending-source"){unresolved=true;continue;}
             if(atom.tag==="abrupt"||atom.tag==="primitive"&&(atom.value===null||atom.value===undefined))continue;
             if(atom.tag==="primitive"&&typeof atom.value==="string"){
-                if(domain!=="index")opaque=true;
+                if(domain!=="index"){opaque=true;generic=true;}
                 for(let index=0;index<atom.value.length;index++)add(String(index));
                 if(domain==="all")add("length");
                 continue;
             }
             const owner=this.ordinaryOwner(atom);
-            if(!owner){opaque=true;continue;}
+            if(!owner){opaque=true;if(atom!==this.nativeUnknown)generic=true;continue;}
             if(visited.has(owner))continue;visited.add(owner);
             this.watch(rule,owner.shape);
             if(!this.definitionsReady(owner,rule))unresolved=true;
-            if(this.opaqueShape(owner,context)||atom.tag==="builtin"&&!owner.closedOwn&&(domain==="all"||!owner.closedIndices))opaque=true;
+            if(this.opaqueShape(owner,context)){opaque=true;generic=true;}
+            else if(atom.tag==="builtin"&&!owner.closedOwn&&(domain==="all"||!owner.closedIndices))opaque=true;
             const names=this.ownerKeys(owner,rule);
-            if(names===null)opaque=true;
+            if(names===null){opaque=true;generic=true;}
             else if(names===undefined)unresolved=true;
             for(const key of names??[...owner.fields.keys(),...owner.accessors.keys()])add(key);
             const location=this.unknownPropertyLocations.get(owner);if(location)locations.add(location.value);
             const accessor=owner.accessors.get(null);if(accessor){getters.add(accessor.get);unknownKeys=true;}
-            if(owner.proxy){locations.add(this.proxyReadEffects(owner,null,"get",context));opaque=true;}
+            if(owner.proxy){locations.add(this.proxyReadEffects(owner,null,"get",context));opaque=true;generic=true;}
             if(atom.tag==="global")for(const key of runtimeGlobalBindings.keys())add(key);
             if(owner.prototype){
                 this.watch(rule,owner.prototype);
@@ -5146,7 +5201,7 @@ class SourceValueFlow {
                 for(const prototype of owner.prototype.values)if(prototype!==this.primitive(null))pending.push(prototype);
             }
         }
-        return {keys:[...keys],locations:[...locations],getters:[...getters],pending:unresolved,opaque,unknownKeys};
+        return {keys:[...keys],locations:[...locations],getters:[...getters],pending:unresolved,opaque,nativeOnly:opaque&&!generic,unknownKeys};
     }
     private propertyDomainKeys(receiver:Cell,context:ts.Node,rule:Rule,domain:"index"|"numeric"):readonly string[]|null|undefined {
         const projection=this.propertyKeyDomain(receiver,context,rule,domain);
