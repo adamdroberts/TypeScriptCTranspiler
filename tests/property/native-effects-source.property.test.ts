@@ -20,6 +20,11 @@ import {nodeReferenceSync} from './node-reference';
  *    global bindings, the host's names and the scripts' declarations is
  *    unresolvable: GetValue throws ReferenceError and typeof answers
  *    "undefined"; without that host the name stays an unknown value.
+ * 2b. The unmodelled result of a native call, an unmodelled builtin member
+ *    and an escaped native's actual arguments are native values: reading,
+ *    calling, constructing or converting them stays bounded. Every shape is
+ *    placed before an eval of a mutable global; one long member chain on a
+ *    native result is the stress.
  * 3. A value from a Function-constructor source that a later solve compiles
  *    stays pending through a `!== undefined` guard and a constructor check
  *    instead of becoming unknown; the intrinsic-table program compiles and
@@ -107,4 +112,21 @@ console.log(out.join("\\n"));
   const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120000});
   expect({code:native.exitCode,stderr:native.stderr.toString(),stdout:native.stdout.toString()}).toEqual({code:0,stderr:'',stdout:node.stdout.toString()});
  }finally{await rm(root,{recursive:true,force:true});}
+},600000);
+
+test('operations on native results never widen a global eval source',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'tsc2c-native-results-'));
+ try{
+  const shapes=['Iterator.from([])','Iterator.from([]).drop(0)','Object.getPrototypeOf(Iterator.from([]).drop(0))','new String()[Symbol.iterator]()',
+   'new Map()[Symbol.iterator]()','RegExp.prototype[Symbol.matchAll]("")','Iterator.from({ [Symbol.iterator]() { return {}; } })','new Set().values()',
+   '[].keys().next()','"x".matchAll(/x/g)','Object.getPrototypeOf(new Uint8Array(1))','String(Object.getPrototypeOf(new Int8Array(2)))','new (Object.getPrototypeOf(Iterator.from([])).constructor)()'];
+  for(const [index,shape] of shapes.entries()){
+   const source=`var source = "1;";\nvar executeSource = eval;\nvar result; try { result = ${shape}; } catch (e) {}\nexecuteSource(source);\n`;
+   const entry=join(directory,`shape-${index}.js`);await writeFile(entry,source);
+   expect({shape,choices:choices(entry)}).toEqual({shape,choices:[['1;']]});
+  }
+  let chain='Iterator.from([1, 2, 3])';for(let depth=0;depth<300;depth++)chain+=depth%2?'.drop(0)':'.take(9)';
+  const entry=join(directory,'chain.js');await writeFile(entry,`var source = "1;";\nvar executeSource = eval;\nvar result; try { result = ${chain}.toArray(); } catch (e) {}\nexecuteSource(source);\n`);
+  expect(choices(entry)).toEqual([['1;']]);
+ }finally{await rm(directory,{recursive:true,force:true});}
 },600000);

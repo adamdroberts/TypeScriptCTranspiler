@@ -1181,6 +1181,13 @@ async function main(): Promise<void> {
                 containment,
             );
             process.stdout.write(`${scenario.id}: ${result.status}\n`);
+            // Each scenario's sealed tree is released as soon as its result is
+            // recorded, so a run stopped by its deadline leaves no backlog of
+            // read-only trees in the temporary directory.
+            if (!process.env.TSC2C_KEEP_REQUESTS) {
+                await makeTemporaryTreeRemovable(scenarioRoot);
+                await fs.rm(scenarioRoot, { recursive: true, force: true });
+            }
             return result;
         });
     } finally {
