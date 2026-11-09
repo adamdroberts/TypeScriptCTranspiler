@@ -30,7 +30,8 @@ test("source flow retains declarative and object-record candidates without assum
     // A candidate intrinsic eval with an unresolved actual source still fails
     // closed. Object-record candidates do not erase the fallback operation.
     const file=path.join(directory,"unknown.js");
-    await fs.writeFile(file,'var unknown;with({eval:function(){return 1;}}){eval(unknown);}');
+    // (`var unknown;` alone is provably undefined: eval would evaluate no source.)
+    await fs.writeFile(file,'var unknown=opaque();with({eval:function(){return 1;}}){eval(unknown);}');
     expect(sourceEvaluationInvocations(ts.createProgram([file],{allowJs:true,noLib:true}))[0]!.choices).toBeNull();
     const diagnostics:string[]=[];
     const result=await compile({entry:file,output:path.join(directory,"rejected"),noGc:true,diagnosticWriter:message=>diagnostics.push(message)});

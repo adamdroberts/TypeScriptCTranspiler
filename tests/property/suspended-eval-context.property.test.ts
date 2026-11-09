@@ -41,10 +41,13 @@ test("ordinary and resumed calls retain the direct eval Reference context",async
         const expected=reference.stdout.toString().trimEnd().split("\n");
         expect(expected.every(line=>line.endsWith(":true"))).toBe(true);
         if(program==="caller")expect(expected.at(-1)).toBe("deep-suspended-eval-owner-tree:true");
-        const graph=finiteEvalScriptSourceGraph([{path:"suspended.js",source:programSource}]);expect(graph.error).toBeNull();
         for(const noGc of [false,true]){
             const name=program+(noGc?"-no-gc":"-gc"),entry=path.join(temporary,name+".js"),output=path.join(temporary,name),diagnostics:string[]=[];
-            await fs.writeFile(entry,programSource.replaceAll("NATIVE_GC",String(!noGc)));
+            // The graph describes the program compiled and run under the
+            // Test262 host: the collection flag is a literal there.
+            const compiled=programSource.replaceAll("NATIVE_GC",String(!noGc));
+            const graph=finiteEvalScriptSourceGraph([{path:"suspended.js",source:compiled}],[],"test262");expect(graph.error).toBeNull();
+            await fs.writeFile(entry,compiled);
             const roots:string[]=[];
             const persist=async <Record extends {source:string}>(kind:string,records:readonly Record[])=>{
                 const entries:Array<Record & {entry:string}>=[];

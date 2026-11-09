@@ -47,7 +47,14 @@ test('an unresolved mutable lexical source retains the compiler diagnostic for a
  const directory=await mkdtemp(join(tmpdir(),'tsc2c-global-lexical-source-'));
  try{
   const entry=join(directory,'subject.js'),diagnostics:string[]=[];await writeFile(entry,source);
-  const result=await compile({entry,output:join(directory,'program'),noGc:true,emitCOnly:true,buildDir:join(directory,'build'),isolatedScriptRoots:[entry],initializationEntries:[entry],test262Observation:{kind:'test262-native-observation',scenarioId:'property/global-lexical-source.js#sloppy',setupEntries:[],testEntry:entry,scriptEntries:[entry],async:false},diagnosticWriter:message=>diagnostics.push(message)});
+  // An ordinary program: `external` is a name some embedding host provides
+  // (under the Test262 host it would be an unresolvable reference instead).
+  const result=await compile({entry,output:join(directory,'program'),noGc:true,emitCOnly:true,buildDir:join(directory,'build'),diagnosticWriter:message=>diagnostics.push(message)});
   expect(result.exitCode).toBe(3);expect(diagnostics.join('')).toContain('unknown eval() source requires --runtime-code-manifest allow-list');
+  // No Test262 host provides `external`: the call throws a ReferenceError
+  // before the eval, which therefore needs no source.
+  const hosted:string[]=[];
+  const test262=await compile({entry,output:join(directory,'test262-program'),noGc:true,emitCOnly:true,buildDir:join(directory,'test262-build'),isolatedScriptRoots:[entry],initializationEntries:[entry],test262Observation:{kind:'test262-native-observation',scenarioId:'property/global-lexical-source.js#sloppy',setupEntries:[],testEntry:entry,scriptEntries:[entry],async:false},diagnosticWriter:message=>hosted.push(message)});
+  expect({code:test262.exitCode,diagnostics:hosted.join('')}).toEqual({code:0,diagnostics:''});
  }finally{await rm(directory,{recursive:true,force:true});}
 },60000);

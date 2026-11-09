@@ -647,6 +647,7 @@ class SourceValueFlow {
     private readonly ownerAtoms = new WeakMap<ObjectOwner | FunctionOwner, Map<Atom["tag"], Atom>>();
     private readonly promiseAtoms = new WeakMap<Cell, WeakMap<Cell, Atom>>();
     private readonly restLocations = new Map<ts.ParameterDeclaration, {value: Cell; owner: ObjectOwner}>();
+    private readonly restPatternLocations = new Map<ts.BindingElement, {value: Cell; owner: ObjectOwner}>();
     private readonly moduleNamespaces = new Map<ts.SourceFile, {value: Cell; owner: ObjectOwner}>();
     private readonly moduleMetadata = new Map<ts.SourceFile, Cell>();
     private readonly importTargetCells = new Map<ts.CallExpression,Cell>();
@@ -660,6 +661,10 @@ class SourceValueFlow {
     private readonly callResults = new Map<ts.Node,Map<string,Cell>>();
     private readonly invocations = new Map<Rule, Map<string, { kind: DynamicFunctionKind; args: readonly Cell[] | null }>>();
     private readonly inactiveEvaluationCandidates=new Map<ts.Node,Set<boolean>>();
+    /** Literal `eval("...")` calls inside a function body. An activation the
+     * solver never enters projects no values, yet a call reaching it through
+     * a route the graph does not represent can only evaluate that literal. */
+    private readonly literalEvaluationCandidates=new Map<ts.CallExpression,{direct:boolean;text:string}>();
     private readonly evaluationInvocations = new Map<Rule, Map<string, EvaluationRecord>>();
     // Interned primitive atoms per typeof. Map keys use SameValueZero, so -0
     // keeps its own atom while NaN and BigInt values intern by value.
@@ -760,6 +765,11 @@ class SourceValueFlow {
     private readonly sourceReferences=new WeakMap<SourceReferenceExpression,SourceReference>();
     private readonly assignmentDefaults=new WeakSet<ts.BinaryExpression>();
     private readonly writtenAmbientBindings=new WeakSet<Cell>();
+    /** Global bindings a Script declaration initializes. Another Script's read
+     * of one is not an unresolved external input, even while the declaring
+     * initializer is still pending (a spread or pattern whose List readiness
+     * waits for owner presence to close). */
+    private readonly scriptDeclaredBindings=new WeakSet<Cell>();
     private readonly knownWriteOrigins=new WeakMap<Cell,SourceWriteOrigin>();
     private readonly ownerCreations=new WeakMap<ObjectOwner,ts.Node>();
     private readonly readCaptures = new Map<Cell,Map<SourceCaptureConstraints,Cell>>();
@@ -804,11 +814,22 @@ class SourceValueFlow {
                         const name = pending.pop()!;
                         if (ts.isIdentifier(name)) {
                             if (!this.globalLexicals.has(name.text)) this.globalLexicals.set(name.text,{value:this.newCell(),mutable:!(statement.declarationList.flags&(ts.NodeFlags.Const|ts.NodeFlags.Using))});
+                            this.scriptDeclaredBindings.add(this.globalLexicals.get(name.text)!.value);
                         } else for (const element of name.elements) if (!ts.isOmittedExpression(element)) pending.push(element.name);
+                    }
+                }
+            } else if (ts.isVariableStatement(statement)) {
+                for (const declaration of statement.declarationList.declarations) {
+                    const pending: ts.BindingName[] = [declaration.name];
+                    while (pending.length) {
+                        const name = pending.pop()!;
+                        if (ts.isIdentifier(name)) this.scriptDeclaredBindings.add(this.globalBinding(name.text));
+                        else for (const element of name.elements) if (!ts.isOmittedExpression(element)) pending.push(element.name);
                     }
                 }
             } else if (ts.isClassDeclaration(statement) && statement.name) {
                 if (!this.globalLexicals.has(statement.name.text)) this.globalLexicals.set(statement.name.text,{value:this.newCell(),mutable:true});
+                this.scriptDeclaredBindings.add(this.globalLexicals.get(statement.name.text)!.value);
                 this.copy(this.cell(statement), this.globalLexicals.get(statement.name.text)!.value);
             } else if (ts.isFunctionDeclaration(statement) && statement.name)
                 this.copy(this.cell(statement), this.globalBinding(statement.name.text));
@@ -975,7 +996,10 @@ class SourceValueFlow {
                 }
                 if (ts.isCallExpression(node) || ts.isNewExpression(node) ||
                     (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))&&this.sourceReferences.get(node)?.read!==false || ts.isAwaitExpression(node) ||
-                    ts.isTemplateExpression(node) || ts.isBinaryExpression(node)&&node.operatorToken.kind===ts.SyntaxKind.InstanceOfKeyword || ts.isExpression(node) && conversionOperands(node)) this.cell(node);
+                    ts.isTemplateExpression(node) || ts.isBinaryExpression(node)&&node.operatorToken.kind===ts.SyntaxKind.InstanceOfKeyword || ts.isExpression(node) && conversionOperands(node) ||
+                    // A spread runs the iteration protocol (array) or getters
+                    // (object) whether or not the literal's value is used.
+                    ts.isArrayLiteralExpression(node)&&node.elements.some(ts.isSpreadElement) || ts.isObjectLiteralExpression(node)&&node.properties.some(ts.isSpreadAssignment)) this.cell(node);
                 node.forEachChild(child => { worklist.push({node: child, handler,completion}); });
             }
         }
@@ -1376,7 +1400,14 @@ class SourceValueFlow {
             // A native calls an escaped callable with values reachable from its
             // own receiver and arguments (already escaping here) or created by
             // itself: native values. Unknown code may pass anything.
-            this.publish(actuals,sourceCallbacksOnly?this.unknown:this.nativeUnknown);
+            // At a Script's top level the escape is one execution point: values
+            // the unknown code passes carry its origin, so reads that precede
+            // the escape do not see them. Inside an activation the origins are
+            // every caller's, which would multiply along call chains; those
+            // actuals stay the shared unknown value.
+            if(!sourceCallbacksOnly)this.publish(actuals,this.nativeUnknown);
+            else if(!this.enclosingActivation(context)&&!this.sourceOrigins.has(this.sourceFile(context)))this.copy(this.executionOrigins(context),actuals);
+            else this.publish(actuals,this.unknown);
             // Iterator elements are read through this escaping call's context.
             const sink=this.newEscapeReach({callable:atom=>this.publish(target,atom),iterator:cell=>visit(this.directIteratorElements(cell,context))});
             const visit=(input:Cell,direct=true):void=>{const key=input.id+":"+direct;if(seen.has(key))return;seen.add(key);this.linkEscapeReach(this.escapeCellReach(input,sourceCallbacksOnly,direct?"direct":"argument"),sink);};
@@ -2570,7 +2601,7 @@ class SourceValueFlow {
         if (!conversions) {conversions = new Map(); contexts.set(context, conversions);}
         const previous = conversions.get(hint); if (previous) return previous;
         const result = this.newCell(); conversions.set(hint, result);
-        const selected = new Set<Atom>();
+        const selected = new Set<Atom>(), opaqueConversions = new Set<Atom>();
         let rule!: Rule;
         rule = this.rule([source], () => {
             for (const atom of source.values) {
@@ -2612,7 +2643,25 @@ class SourceValueFlow {
                         }
                     }
                 }
-                if (opaque) { this.publish(result, this.unknown); const handler = this.exceptionHandlers.get(context); if (handler) this.publish(handler, this.unknown); this.activateOpaqueEffect(context); continue; }
+                // A shape an unknown write may have changed can hold either the
+                // replacement (unknown code) or the original members. The result
+                // is unknown either way; the original members that are program
+                // functions still run with this receiver, so their effects stay
+                // in the graph (intrinsic conversion methods run no user code).
+                if (opaque) {
+                    this.publish(result, this.unknown); const handler = this.exceptionHandlers.get(context); if (handler) this.publish(handler, this.unknown); this.activateOpaqueEffect(context);
+                    if (!opaqueConversions.has(atom)) {
+                        opaqueConversions.add(atom);
+                        const receiver = this.newCell(); this.publish(receiver, atom);
+                        const hintValue = this.newCell(); this.publish(hintValue, this.primitive(hint));
+                        for (const key of [this.wellKnownSymbols.get("toPrimitive")!, "toString", "valueOf"] as const) {
+                            const member = this.property(receiver, key, context), callee = this.newCell();
+                            this.rule([member], () => {for (const value of member.values) if (value.tag === "function" || value.tag === "bound") this.publish(callee, value);});
+                            this.invoke(context, callee, receiver, typeof key === "symbol" ? [{cell: hintValue, spread: false}] : [], this.newCell());
+                        }
+                    }
+                    continue;
+                }
                 // An unmodelled builtin prototype contributes builtin conversion
                 // methods: some primitive of the hinted kind, without effects.
                 if (nativeParent) {
@@ -5877,6 +5926,25 @@ class SourceValueFlow {
         });
         return result;
     }
+    /** A rest element collects the remaining iterator values into a new Array. */
+    private restElements(element:ts.BindingElement,value:Cell,offset:number,context:ts.Node):Cell {
+        let location=this.restPatternLocations.get(element);
+        if(!location){const owner=this.arrayOwner(element);location={value:this.newCell(),owner};this.restPatternLocations.set(element,location);this.publish(location.value,{tag:"object",owner});}
+        const {value:rest,owner}=location,seen=new Set<string>();let rule!:Rule,abstract=false;
+        rule=this.rule([value],()=>{
+            this.watchList(rule,value,context);
+            for(const list of this.lists(value,context)){
+                if(!list){
+                    if(abstract)continue;abstract=true;
+                    this.publish(owner.listLength!,this.numberValue());this.writeProperty(rest,null,this.iteratorElements(value,context),true,"define",context);continue;
+                }
+                const key=list.map(cell=>cell.id).join(",");if(seen.has(key))continue;seen.add(key);
+                const remaining=list.slice(offset);remaining.forEach((cell,index)=>this.defineField(owner,String(index),cell,true));
+                this.publish(owner.listLength!,this.primitive(remaining.length));
+            }
+        });
+        return rest;
+    }
     private bind(name: ts.BindingName, value: Cell, references?: ReadonlyMap<ts.Identifier, ts.Expression>, context?: ts.Node): void {
         const worklist = [{ name, value }];
         while (worklist.length) {
@@ -5885,6 +5953,39 @@ class SourceValueFlow {
                 const reference = references?.get(entry.name);
                 if (reference) this.writeTarget(reference, entry.value, context!);
                 else this.writeBinding(entry.name,entry.value,context);
+                continue;
+            }
+            if (ts.isArrayBindingPattern(entry.name)) {
+                // IteratorBindingInitialization steps the value's iterator in
+                // order. An ordinary Array whose iteration is the intrinsic
+                // %Array.prototype.values% runs no user code: its positions are
+                // its index properties. Any other value consumes its iterator
+                // like a spread argument List, so its protocol calls and their
+                // effects run and its values reach the positions.
+                const pattern=entry.name,point=context??pattern,value=entry.value,method=this.iterationMethod(value,point);
+                const slots=pattern.elements.map((element,index)=>ts.isBindingElement(element)?{element,index,selected:this.newCell()}:null).filter(slot=>slot!==null);
+                let indexed=false,iterated=false,rule!:Rule;
+                rule=this.rule([value,method],()=>{
+                    // Unknown values (and members an unknown write may have
+                    // replaced) keep the shared unknown model of a property read.
+                    const opaque=(atom:Atom)=>atom.tag==="unknown"||atom.tag==="opaque-object"||atom.tag==="abrupt"||atom.tag==="pending-source";
+                    const ordinary=[...method.values].every(atom=>atom.tag==="operation"&&atom.operation==="array-values"||opaque(atom))&&
+                        [...value.values].every(atom=>atom.tag==="object"&&!!atom.owner.listLength||opaque(atom));
+                    if(ordinary&&!indexed){
+                        indexed=true;
+                        for(const {element,index,selected} of slots)if(!element.dotDotDotToken)this.copy(this.property(value,String(index),point),selected);
+                    }else if(!ordinary&&!iterated){
+                        iterated=true;const sequence=this.argumentSequence(pattern,[{cell:value,spread:true}]);this.allArgumentValues(sequence);
+                        for(const {element,index,selected} of slots)if(!element.dotDotDotToken)this.copy(this.argumentPosition(sequence,index),selected);
+                    }
+                });
+                for (const {element,index,selected} of slots) {
+                    if (element.dotDotDotToken) {
+                        if (references) this.publish(selected,this.unknown);
+                        else this.copy(this.restElements(element,value,index,point),selected);
+                    }
+                    worklist.push({ name: element.name, value: element.initializer ? this.bindingDefault(selected,this.cell(element.initializer)) : selected });
+                }
                 continue;
             }
             for (const [index, element] of entry.name.elements.entries()) {
@@ -6071,6 +6172,17 @@ class SourceValueFlow {
             }
         }
         return alternatives.includes(null) ? [null] : alternatives;
+    }
+    /** Whether `target` is `from` or one of the Lists `from` spreads, transitively. */
+    private listReaches(from: ObjectOwner, target: ObjectOwner): boolean {
+        const pending = [from], visited = new Set<ObjectOwner>();
+        while (pending.length) {
+            const current = pending.pop()!;
+            if (current === target) return true;
+            if (visited.has(current)) continue; visited.add(current);
+            for (const source of current.listSources ?? []) for (const atom of source.values) if (atom.tag === "object") pending.push(atom.owner);
+        }
+        return false;
     }
     private cyclicListShape(owner: ObjectOwner): boolean {
         const pending = [{ owner, finish: false }];
@@ -6712,6 +6824,14 @@ class SourceValueFlow {
     }
     private initialize(node: ts.Node, result: Cell): void {
         const guards=this.guards(node);
+        if(ts.isCallExpression(node)){
+            // Only a literal eval call looks up its activation: resolving it
+            // creates the enclosing function's owner, which every other call
+            // site must leave to its actual invocation.
+            const target=unwrap(node.expression),argument=node.arguments[0];
+            if(ts.isIdentifier(target)&&target.text==="eval"&&argument&&(ts.isStringLiteral(argument)||ts.isNoSubstitutionTemplateLiteral(argument))&&this.enclosingActivation(node))
+                this.literalEvaluationCandidates.set(node,{direct:!node.questionDotToken,text:argument.text});
+        }
         if(guards.length&&ts.isCallExpression(node)){
             const target=unwrap(node.expression);
             if(ts.isIdentifier(target)&&target.text==="eval")this.inactiveEvaluationCandidates.set(node,new Set([!node.questionDotToken]));
@@ -6777,6 +6897,9 @@ class SourceValueFlow {
             this.publish(result, this.primitive(true)); this.publish(result, this.primitive(false));
             // `key in value` throws TypeError for a non-Object right operand.
             if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.InKeyword) {
+                // ToPropertyKey(left) runs before HasProperty and can call
+                // the key's own toString / valueOf / @@toPrimitive.
+                this.convertList([this.cell(node.left)], node, "string");
                 const right = this.cell(node.right), handler = this.exceptionHandlers.get(node);
                 if (handler) this.rule([right], () => { if ([...right.values].some(atom => atom.tag === "primitive")) this.publish(handler, this.nativeException(node, "TypeError")); });
             }
@@ -6899,7 +7022,7 @@ class SourceValueFlow {
                 this.literalLists.set(owner,{node,parts,holes});
                 owner.listSources = parts.filter(part => part.spread).map(part => part.cell);
                 const seen = new Set<string>();
-                let rule: Rule;
+                let rule: Rule, abstractSpread = false;
                 rule = this.rule(parts.map(part => part.cell), () => {
                     for (const part of parts) if (part.spread) this.watchList(rule, part.cell,node);
                     if (this.cyclicListShape(owner)) {
@@ -6907,7 +7030,25 @@ class SourceValueFlow {
                         return;
                     }
                     for (const list of this.arguments(parts,node)) {
-                        if (!list) continue;
+                        if (!list) {
+                            // ArrayAccumulation steps a spread operand's iterator to
+                            // completion: its calls run here, its values become
+                            // elements at positions the analysis does not represent.
+                            if (!abstractSpread) {
+                                abstractSpread = true;
+                                this.publish(owner.listLength!, this.numberValue());
+                                // An operand that reaches this literal through its own
+                                // spread sources is a cyclic List shape: like the
+                                // represented cycle above, it contributes no elements.
+                                for (const part of parts) if (part.spread) {
+                                    const acyclic = this.newCell();
+                                    this.rule([part.cell], () => {for (const atom of part.cell.values) if (!(atom.tag === "object" && this.listReaches(atom.owner, owner))) this.publish(acyclic, atom);});
+                                    this.writeProperty(result, null, this.iteratorElements(acyclic, node), true, "define", node);
+                                }
+                                for (const part of parts) if (!part.spread && !holes.has(part.cell)) this.writeProperty(result, null, part.cell, true, "define", node);
+                            }
+                            continue;
+                        }
                         const key = list.map(cell => cell.id).join(",");
                         if (seen.has(key)) continue;
                         seen.add(key);
@@ -8255,7 +8396,7 @@ class SourceValueFlow {
                     const origins=this.sourceOrigins.get(this.sourceFile(node));
                     if(origins&&!origins.values.nonempty)continue;
                     const binding=this.binding(node);
-                    if(binding.values.nonempty||this.writtenAmbientBindings.has(binding))continue;
+                    if(binding.values.nonempty||this.writtenAmbientBindings.has(binding)||this.scriptDeclaredBindings.has(binding))continue;
                     // A reference inside evaluated or generated code resolves
                     // through its environment's callers (the caller's realm
                     // supplies the global); it is not an external input.
@@ -8302,6 +8443,9 @@ class SourceValueFlow {
         for(const [node,possibilities]of this.inactiveEvaluationCandidates)if(this.guards(node).some(guard=>{
             const proof=this.primitiveChoiceProof(guard.condition);return proof.primitiveComplete&&!proof.values.some(value=>!!value===guard.truthy);
         }))for(const direct of possibilities)inactiveEvaluations.push({node,operation:"eval",direct,choices:[],...(this.domain?{domain:this.domain}:{})});
+        const recorded=new Set<ts.Node>([...this.evaluationInvocations.values()].flatMap(records=>[...records.values()].map(invocation=>invocation.node)));
+        for(const [node,{direct,text}] of this.literalEvaluationCandidates)
+            if(!recorded.has(node)&&!this.enclosingActivation(node)!.active.values.nonempty)inactiveEvaluations.push({node,operation:"eval",direct,choices:[text],...(this.domain?{domain:this.domain}:{})});
         const arguments_=new Map<Cell,{values:readonly string[];complete:boolean}>();
         const argumentDomain=(input:Cell)=>{
             const prior=arguments_.get(input);if(prior)return prior;

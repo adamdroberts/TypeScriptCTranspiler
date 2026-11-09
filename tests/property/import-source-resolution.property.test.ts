@@ -13,10 +13,14 @@ test('finite missing relative imports reject without inventing callable namespac
   const source=`const owner={body:'17;'};const saved=owner.body;import(${JSON.stringify(specifier)}).catch(()=>{});eval(saved);`;
   expect(graph([{path:'/tmp/tsc2c-missing-import/main.mjs',source,goal:'module'}]).error).toBeNull();
  }
- for(const specifier of ['unknown-package','node:unknown-host']){
-  const source=`import(${JSON.stringify(specifier)}).then(namespace=>{eval(namespace.code)});`;
-  expect(graph([{path:'/tmp/tsc2c-opaque-import/main.mjs',source,goal:'module'}]).error).toContain('direct eval source is not a finite static string expression');
- }
+ // The AOT module set is fixed at build time: a bare specifier outside it
+ // rejects, so the fulfilment callback never runs; only a host module
+ // request (node:) has a namespace the runtime supplies, which stays unknown.
+ const unresolved=`import("unknown-package").then(namespace=>{eval(namespace.code)});`;
+ const rejected=graph([{path:'/tmp/tsc2c-opaque-import/main.mjs',source:unresolved,goal:'module'}]);
+ expect({error:rejected.error,sources:rejected.directEvalSources}).toEqual({error:null,sources:[]});
+ const host=`import("node:unknown-host").then(namespace=>{eval(namespace.code)});`;
+ expect(graph([{path:'/tmp/tsc2c-opaque-import/main.mjs',source:host,goal:'module'}]).error).toContain('direct eval source is not a finite static string expression');
 });
 test('JSON module source records keep namespace shape without checker symbols',async()=>{
  const root=await mkdtemp(join(tmpdir(),'tsc2c-import-source-record-'));

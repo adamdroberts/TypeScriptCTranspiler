@@ -55,10 +55,14 @@ test('boxed abstract primitive results remain non-String eval inputs',()=>{
   const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:boxingSources('eval(boxed)===boxed',initial)}]);
   expect({initial,error:graph.error}).toEqual({initial,error:null});expect(graph.directEvalSources).toEqual([]);
  }
- for(const expression of ['Object(opaque())','Object(value).valueOf()','Object(value).toString()']){
+ for(const expression of ['Object(opaque())','Object(value).toString()']){
   const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:'let value=0;value++;eval('+expression+');'}]);
   expect({expression,error:graph.error}).toMatchObject({error:expect.stringContaining('direct eval source is not a finite static string expression')});
  }
+ // Number.prototype.valueOf unboxes to the Number itself: eval returns a
+ // non-String argument unchanged and evaluates no source.
+ const unboxed=finiteEvalScriptSourceGraph([{path:'main.js',source:'let value=0;value++;eval(Object(value).valueOf());'}]);
+ expect({error:unboxed.error,sources:unboxed.directEvalSources}).toEqual({error:null,sources:[]});
 });
 test('boxing source effects match independent Node and native execution',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'tsc2c-box-effects-'));
