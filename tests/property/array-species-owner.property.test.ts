@@ -67,7 +67,7 @@ test("Array species retain an actual constructor and result property owner",asyn
             }
         }
     }finally{await fs.rm(temporary,{recursive:true,force:true});}
-},600_000);
+},1_800_000); // sixteen compiles; each sloppy-mode compile takes 80-100 s
 
 test("Array species distinguish the active Realm's intrinsic constructor from foreign owners",async()=>{
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-array-species-realm-'));

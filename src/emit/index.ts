@@ -29549,7 +29549,10 @@ class Emitter {
                     return this.staticBooleanValue(unwrapped, seenConsts);
             }
         }
-        if (!this.isJavaScriptSourceFile(unwrapped.getSourceFile())) {
+        // staticBooleanValue folds a call through this function, so a
+        // boolean-typed call (`Reflect.has(o, k)` in a .ts file) would recurse
+        // without end; only the call-specific folds above apply to calls.
+        if (!this.isJavaScriptSourceFile(unwrapped.getSourceFile()) && !ts.isCallExpression(unwrapped)) {
             try {
                 if (this.prepareType(mapType(unwrapped, this.checker)).kind === "boolean") {
                     return this.staticBooleanValue(unwrapped, seenConsts);
