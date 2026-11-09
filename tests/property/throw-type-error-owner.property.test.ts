@@ -23,7 +23,9 @@ check(!Object.isExtensible(thrower)&&Object.isFrozen(thrower)&&Object.getOwnProp
 check(!Reflect.defineProperty(thrower,"extra",{value:17})&&!Reflect.deleteProperty(thrower,"name"),"rejected-mutation");
 let caught;try{thrower.call({marker:17},1,2);}catch(error){caught=error;}check(caught instanceof TypeError,"call-type-error");
 try{new thrower();}catch(error){caught=error;}check(caught instanceof TypeError,"not-constructor");
-if(NATIVE_IDENTITY){for(const name of ["caller","arguments"]){const d=Object.getOwnPropertyDescriptor(Function.prototype,name);check(d.get===thrower&&d.set===thrower&&!d.enumerable&&d.configurable,"prototype-poison-identity");}}
+// Node 26 and Bun give Function.prototype its own caller and arguments accessors
+// (not %ThrowTypeError%, and distinct from each other); the runtime follows them.
+{const caller=Object.getOwnPropertyDescriptor(Function.prototype,"caller"),args=Object.getOwnPropertyDescriptor(Function.prototype,"arguments");check(typeof caller.get==="function"&&caller.get!==thrower&&args.get!==thrower&&caller.get!==args.get&&!caller.enumerable&&caller.configurable&&!args.enumerable&&args.configurable,"prototype-accessors");}
 const foreign=$262.createRealm().global;
 const foreignArgs=foreign.Function('"use strict";return arguments;');
 const foreignThrower=Object.getOwnPropertyDescriptor(foreignArgs(),"callee").get;
@@ -39,11 +41,11 @@ test("restricted accessors share one immutable ThrowTypeError owner per Realm", 
  const root=await mkdtemp(join(tmpdir(),"tsc2c-throw-type-error-owner-"));
  try{
   const erased=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext}}).outputText;
-  const oracle=join(root,"reference.js"),stdout=oracle+".stdout";await writeFile(oracle,erased.replaceAll("NATIVE_IDENTITY","false").replaceAll("NATIVE_GC","false"));
+  const oracle=join(root,"reference.js"),stdout=oracle+".stdout";await writeFile(oracle,erased.replaceAll("NATIVE_GC","false"));
   const reference=Bun.spawnSync([referenceNode(),"-e",'const fs=require("node:fs"),vm=require("node:vm");const context=vm.createContext({print:value=>fs.writeSync(1,String(value)+"\\n"),$262:{createRealm(){return{global:vm.runInNewContext("globalThis")}}}});new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInContext(context);',oracle],{stdout:Bun.file(stdout),stderr:"pipe",timeout:120000});
   expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:""});const expected=await readFile(stdout,"utf8");expect(expected).toBe("throw-type-error-owner-ok\n");
   for(const typed of [true,false])for(const noGc of [false,true]){
-   const entry=join(root,`subject-${typed}-${noGc}.${typed?"ts":"js"}`),output=entry+"-native";await writeFile(entry,(typed?source:erased).replaceAll("NATIVE_IDENTITY","true").replaceAll("NATIVE_GC",String(!noGc)));const diagnostics:string[]=[];
+   const entry=join(root,`subject-${typed}-${noGc}.${typed?"ts":"js"}`),output=entry+"-native";await writeFile(entry,(typed?source:erased).replaceAll("NATIVE_GC",String(!noGc)));const diagnostics:string[]=[];
    const result=await compile({entry,output,noGc,buildDir:output+"-build",initializationEntries:[entry],test262Observation:{kind:"test262-native-observation",scenarioId:"property/throw-type-error-owner.js#sloppy",setupEntries:[],testEntry:entry,async:false},diagnosticWriter:m=>diagnostics.push(m)});
    expect({code:result.exitCode,diagnostics}).toEqual({code:0,diagnostics:[]});const native=Bun.spawnSync([output],{stdout:"pipe",stderr:"pipe",timeout:120000});expect({code:native.exitCode,stderr:native.stderr.toString()}).toEqual({code:0,stderr:""});const observation=parseHostObservation(JSON.parse(native.stdout.toString()));expect(observation.kind).toBe("normal");expect(observation.stdout).toBe(expected);
   }
