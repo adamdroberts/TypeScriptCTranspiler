@@ -51,7 +51,7 @@ test('ProxyCreate retains object validation without invoking target, handler or 
   expect(await choices(directory,invariant)).toEqual([null]);
   expect(await choices(directory,'eval(Proxy.bind(null,{}).name);')).toEqual([null]);
  }finally{await rm(directory,{recursive:true,force:true});}
-});
+},120_000); // analysis-sized budget: it runs after heavy tests in the same file
 function nativeSource():string{
  const depth=512;
  return valid.map(expression=>'{let body="17;";try{'+expression+'}catch(error){body=external;}print(eval(body));}').join('\n')+

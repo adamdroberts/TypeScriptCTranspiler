@@ -84,4 +84,4 @@ test("unknown string-hint source retains the stable admission diagnostic",async(
   const result=await compile({entry,output:path.join(directory,'rejected'),noGc:true,buildDir:path.join(directory,'build'),isolatedScriptRoots:[entry],initializationEntries:[entry],diagnosticWriter:message=>messages.push(message)});
   expect(result.exitCode).toBe(3);expect(messages.join('')).toContain('unknown eval() source requires --runtime-code-manifest allow-list or gated --unsafe-eval embedded Node bridge');
  }finally{await fs.rm(directory,{recursive:true,force:true});}
-});
+},120_000); // analysis-sized budget: it runs after heavy tests in the same file

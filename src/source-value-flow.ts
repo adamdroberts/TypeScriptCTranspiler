@@ -958,6 +958,14 @@ class SourceValueFlow {
                     }
                 }
                 if (ts.isVariableDeclaration(node) && node.initializer){this.recordBindingWrites(node.name,node);this.onActive(node, () => this.bind(node.name,this.cell(node.initializer!),undefined,node));}
+                // A lexical declaration without an initializer (`let x;`) initializes
+                // its binding to undefined when it is evaluated; for-in/of heads bind
+                // through the loop instead.
+                else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && ts.isVariableDeclarationList(node.parent) &&
+                    node.parent.flags & ts.NodeFlags.BlockScoped && !(node.parent.parent && (ts.isForInStatement(node.parent.parent) || ts.isForOfStatement(node.parent.parent)))) {
+                    const name=node.name;this.recordBindingWrites(name,node);
+                    this.onActive(node, () => {const value=this.newCell();this.publish(value,this.primitive(undefined));this.bind(name,value,undefined,node);});
+                }
                 if (ts.isBinaryExpression(node) && !this.assignmentDefaults.has(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment) {
                     this.recordAssignmentWrites(node.left,node);
                     const value = NAME_EVALUATING_ASSIGNMENTS.has(node.operatorToken.kind) ? this.cell(node.right) : this.cell(node);

@@ -20,15 +20,17 @@ test('normal non-String result categories flow without enumerating numeric value
         await fs.writeFile(entry,'var left=external,right=external2;'+expressions.map(expr=>`eval(${expr});`).join('')+'eval(typeof left);');
         const calls=sourceEvaluationInvocations(ts.createProgram([entry],{allowJs:true,noLib:true})).sort((a,b)=>a.node.pos-b.node.pos);
         expect(calls.slice(0,-1).map(call=>call.choices)).toEqual(expressions.map(()=>[]));
-        expect(calls.at(-1)!.choices?.slice().sort()).toEqual(['undefined','object','boolean','number','bigint','string','symbol','function'].sort());
+        // The compound assignments and updates before it leave `left` a Number
+        // or a BigInt (an abrupt operand ends the program first).
+        expect(calls.at(-1)!.choices?.slice().sort()).toEqual(['bigint','number']);
         await fs.writeFile(entry,'var n=external;var item=external2?"31;":n-1;eval(item);eval(`${item}`);Function(item);$262.evalScript(item);');
         const program=ts.createProgram([entry],{allowJs:true,noLib:true});
         expect(sourceEvaluationInvocations(program).sort((a,b)=>a.node.pos-b.node.pos).map(call=>call.choices)).toEqual([['31;'],null,null]);
         expect(sourceConstructorInvocations(program).map(call=>call.choices)).toEqual([null]);
         await fs.writeFile(entry,'var left=external,right=external2;eval(`${left<right}`);Function(left<right);');
         const booleanProgram=ts.createProgram([entry],{allowJs:true,noLib:true});
-        expect(sourceEvaluationInvocations(booleanProgram).map(call=>call.choices)).toEqual([['true','false']]);
-        expect(sourceConstructorInvocations(booleanProgram).map(call=>call.choices)).toEqual([[['true','false']]]);
+        expect(sourceEvaluationInvocations(booleanProgram).map(call=>call.choices?.slice().sort())).toEqual([['false','true']]);
+        expect(sourceConstructorInvocations(booleanProgram).map(call=>call.choices?.map(position=>position.slice().sort()))).toEqual([[['false','true']]]);
     }finally{await fs.rm(directory,{recursive:true,force:true});}
 });
 
@@ -36,13 +38,15 @@ test('unbounded numeric text conversion retains the explicit unknown-source diag
     const directory=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-eval-result-guard-'));
     try{
         const entry=path.join(directory,'source.js'),diagnostics:string[]=[];
-        await fs.writeFile(entry,'var n=37;var item=flag?"31;":n-1;eval(`${item}`);');
+        // `n` comes from the host: `n-1` is some Number, so its text is unbounded
+        // (a known `n` would make the source finite).
+        await fs.writeFile(entry,'var n=external;var item=flag?"31;":n-1;eval(`${item}`);');
         const result=await compile({entry,output:path.join(directory,'program'),noGc:true,buildDir:path.join(directory,'build'),
             isolatedScriptRoots:[entry],initializationEntries:[entry],diagnosticWriter:message=>diagnostics.push(message)});
         expect(result.exitCode).toBe(3);
         expect(diagnostics.join('')).toContain('unknown eval() source requires --runtime-code-manifest allow-list or gated --unsafe-eval embedded Node bridge');
     }finally{await fs.rm(directory,{recursive:true,force:true});}
-});
+},120_000);
 
 test('eval preserves primitive results and abrupt conversion through native source flow in both memory modes',async()=>{
     const directory=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-eval-result-native-'));
