@@ -7,7 +7,7 @@ import {compile} from '../../src/compile';
 import {sourceConstructorInvocations} from '../../src/source-value-flow';
 import {escapedCallbackGraphInput} from '../e2e/generated-cases';
 import {parseHostObservation} from '../test262/protocol';
-import {nodeReferenceSync} from './node-reference';
+import {nodeReferenceSync,referenceNode} from './node-reference';
 
 function facts(source:string){
  const options:ts.CompilerOptions={noLib:true,allowJs:true,noEmit:true,target:ts.ScriptTarget.ESNext},host=ts.createCompilerHost(options);
@@ -40,7 +40,7 @@ test('escaped cyclic callback data uses explicit source closure and matches Node
 {function callback(body:any):void{console.log('iterator callback:',Function(body)())}callback('return 307;');const iterator:any=[callback].values();const methods:any={call(value:any){value.next().value('return 311;')}};const match:any=/.*/.exec('call');const selected:any=methods[match[0]];selected(iterator);}
 `,erased=ts.transpileModule(input,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText;
   const oracle=join(root,`oracle-${typed}-${noGc}.js`),oracleOutput=oracle+'.stdout';await writeFile(oracle,erased);
-  const node=Bun.spawnSync(['node',oracle],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const node=Bun.spawnSync([referenceNode(),oracle],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const entry=join(root,`main-${typed}-${noGc}.${typed?'ts':'js'}`),output=entry+'-native',manifest=entry+'.manifest.json',diagnostics:string[]=[];await writeFile(entry,typed?input:erased);await writeFile(manifest,JSON.stringify({functions:['return 307;','return 311;']}));
   const result=await compile({entry,output,noGc,runtimeCodeManifest:manifest,initializationEntries:[entry],buildDir:output+'-build',test262Observation:{kind:'test262-native-observation',scenarioId:'property/escaped-callback-graph.js#sloppy',setupEntries:[],testEntry:entry,async:false},diagnosticWriter:message=>diagnostics.push(message)});
   expect({typed,noGc,code:result.exitCode,diagnostics}).toEqual({typed,noGc,code:0,diagnostics:[]});

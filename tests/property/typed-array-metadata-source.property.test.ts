@@ -8,6 +8,7 @@ import {runtimeTypedArrayDescriptors} from '../../src/global-bindings';
 import {sourceConstructorInvocations} from '../../src/source-value-flow';
 import {typedArrayMetadataInput} from '../e2e/generated-cases';
 import {parseHostObservation} from '../test262/protocol';
+import {referenceNode} from './node-reference';
 
 function facts(source:string){
  const options:ts.CompilerOptions={noLib:true,allowJs:true,noEmit:true,target:ts.ScriptTarget.ESNext},host=ts.createCompilerHost(options);
@@ -34,7 +35,7 @@ test('TypedArray metadata source owners match independent Node through native in
  try{for(const typed of [true,false])for(const noGc of [false,true]){
   const input=typedArrayMetadataInput(typed&&!noGc?512:3)+[...runtimeTypedArrayDescriptors].map(([name,{width}])=>`{const ctor:any=${name};console.log('${name}:',ctor.BYTES_PER_ELEMENT===${width},ctor.prototype.BYTES_PER_ELEMENT===${width},Function('return '+ctor.BYTES_PER_ELEMENT+';')());}`).join('\n')+`\nconst original:any=Int32Array;let seen=0;const changed:any={get BYTES_PER_ELEMENT(){seen++;return 23}};const selected:any=changed;console.log('getter:',Function('return '+selected.BYTES_PER_ELEMENT+';')(),seen);console.log('captured:',original.BYTES_PER_ELEMENT);`,erased=ts.transpileModule(input,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText;
   const oracle=join(root,`oracle-${typed}-${noGc}.js`),oracleOutput=oracle+'.stdout';await writeFile(oracle,erased);
-  const node=Bun.spawnSync(['node',oracle],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const node=Bun.spawnSync([referenceNode(),oracle],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const entry=join(root,`main-${typed}-${noGc}.${typed?'ts':'js'}`),output=entry+'-native',diagnostics:string[]=[];await writeFile(entry,typed?input:erased);
   const result=await compile({entry,output,noGc,initializationEntries:[entry],buildDir:output+'-build',test262Observation:{kind:'test262-native-observation',scenarioId:'property/typed-array-metadata.js#sloppy',setupEntries:[],testEntry:entry,async:false},diagnosticWriter:message=>diagnostics.push(message)});
   expect({typed,noGc,code:result.exitCode,diagnostics}).toEqual({typed,noGc,code:0,diagnostics:[]});

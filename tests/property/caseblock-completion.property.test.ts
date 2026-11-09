@@ -3,6 +3,7 @@ import {mkdtemp, writeFile, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {compile} from '../../src/compile';
+import {referenceNode} from './node-reference';
 
 type Action = {kind:'value'; value:number} | {kind:'empty' | 'break' | 'throw' | 'continue'};
 type Clause = {selector:number | null; actions:readonly Action[]};
@@ -47,7 +48,7 @@ test('CaseBlock clause Lists preserve selection, fallthrough and UpdateEmpty com
  const root=await mkdtemp(join(tmpdir(),'tsc2c-caseblock-completion-'));
  try {
   const oracle=join(root,'oracle.js'),stdout=oracle+'.stdout';await writeFile(oracle,source);
-  const reference=Bun.spawnSync(['node',oracle],{stdout:Bun.file(stdout),stderr:'pipe',timeout:120000});
+  const reference=Bun.spawnSync([referenceNode(),oracle],{stdout:Bun.file(stdout),stderr:'pipe',timeout:120000});
   expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:''});expect(await readFile(stdout,'utf8')).toBe(expected);
   for(const noGc of [false,true]) {
    const entry=join(root,`main-${noGc}.js`),output=entry+'-native',diagnostics:string[]=[];await writeFile(entry,source);

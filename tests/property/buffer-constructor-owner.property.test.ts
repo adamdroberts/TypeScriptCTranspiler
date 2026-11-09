@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {compile} from '../../src/compile';
 import {bufferStaticDescriptors} from '../../src/buffer-statics';
 import {sourceConstructorInvocations} from '../../src/source-value-flow';
+import {referenceNode} from './node-reference';
 
 test('Buffer coercion effects keep changed runtime Function source outside a stale finite proof', async () => {
  const input = "let body='return 307;';const fill={valueOf(){body='return 311;';return 65}};Buffer.alloc(1,fill);console.log(Function(body)());";
@@ -16,7 +17,7 @@ test('Buffer coercion effects keep changed runtime Function source outside a sta
  expect(facts.some(fact => fact.choices === null || fact.choices.some(tuple => tuple.includes('return 311;')))).toBe(true);
  const root = await mkdtemp(join(tmpdir(), 'tsc2c-buffer-source-effect-'));
  try {
-  const output = join(root, 'node.stdout'), reference = Bun.spawnSync(['node', '-e', input], {stdout:Bun.file(output), stderr:'pipe'});
+  const output = join(root, 'node.stdout'), reference = Bun.spawnSync([referenceNode(), '-e', input], {stdout:Bun.file(output), stderr:'pipe'});
   expect({code:reference.exitCode, stdout:await readFile(output, 'utf8'), stderr:reference.stderr.toString()}).toEqual({code:0, stdout:'311\n', stderr:''});
  } finally { await rm(root, {recursive:true, force:true}); }
 });
@@ -51,7 +52,7 @@ test('Buffer constructor and static operations retain ordinary owners and comple
   const typedSource = source.replace('PLANS', JSON.stringify([...bufferStaticDescriptors].map(([name, {length}]) => ({name, length}))));
   const erased = ts.transpileModule(typedSource, {compilerOptions: {target: ts.ScriptTarget.ESNext}}).outputText;
   const oracle = join(root, 'oracle.js'), oracleOutput = oracle + '.stdout'; await writeFile(oracle, erased);
-  const reference = Bun.spawnSync(['node', oracle], {stdout: Bun.file(oracleOutput), stderr: 'pipe', timeout: 120000});
+  const reference = Bun.spawnSync([referenceNode(), oracle], {stdout: Bun.file(oracleOutput), stderr: 'pipe', timeout: 120000});
   expect({code: reference.exitCode, stderr: reference.stderr.toString()}).toEqual({code: 0, stderr: ''});
   const expected = await readFile(oracleOutput, 'utf8'); expect(expected).toContain('retained-owner-graph:true\n');
   for (const typed of [true, false]) for (const noGc of [false, true]) {

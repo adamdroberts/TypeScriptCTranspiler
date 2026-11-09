@@ -10,6 +10,12 @@ type ReferenceOptions<In extends Bun.SpawnOptions.Writable> =
         ipc?: never;
     };
 
+/** The reference Node executable: TSC2C_NODE_REFERENCE when set, otherwise
+ * `node` on PATH. Oracles spawned directly use it, as nodeReferenceSync does. */
+export function referenceNode(): string {
+    return process.env.TSC2C_NODE_REFERENCE || 'node';
+}
+
 /** Independent Node references keep their original program and process options.
  * A bare `node` command resolves to TSC2C_NODE_REFERENCE when that is set, so
  * one environment variable selects the reference Node for every test.

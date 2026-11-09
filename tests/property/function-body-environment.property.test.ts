@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { compile } from "../../src/compile";
 import { parseHostObservation } from "../test262/protocol";
+import {referenceNode} from './node-reference';
 
 test("named function expressions retain private callable identities", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-named-function-"));
@@ -51,7 +52,7 @@ console.log("named function identities");
                 ? 'const evaluated = function own() { return eval("own"); }; check(evaluated() === evaluated);'
                 : "");
             const oracleOutput = path.join(root, `oracle-${environment}-${strict}.stdout`);
-            const oracle = Bun.spawnSync(["node", "-e", source.replaceAll("NATIVE_GC", "false")], { stdout: Bun.file(oracleOutput), stderr: "pipe" });
+            const oracle = Bun.spawnSync([referenceNode(), "-e", source.replaceAll("NATIVE_GC", "false")], { stdout: Bun.file(oracleOutput), stderr: "pipe" });
             const oracleStdout = await fs.readFile(oracleOutput, "utf8");
             expect(oracleStdout).toBe("named function identities\n");
             expect({ code: oracle.exitCode, stderr: oracle.stderr.toString() }).toEqual({ code: 0, stderr: "" });

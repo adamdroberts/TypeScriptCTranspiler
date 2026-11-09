@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {compile} from '../../src/compile';
 import {resolvePackageRoot} from '../../src/program';
 import {runtimeFsExports,runtimeFsFdOperations} from '../../src/global-bindings';
+import {referenceNode} from './node-reference';
 const source=String.raw`
 import {open} from 'node:fs/promises';
 function local(fs:any):any{return fs.readFileSync('payload');}
@@ -28,7 +29,7 @@ test('filesystem export channels share one admission collection and preserve lex
  const root=await mkdtemp(join(tmpdir(),'tsc2c-fs-admission-'));
  try{
   const erased=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText,oracle=join(root,'oracle.mjs'),stdout=oracle+'.stdout';await writeFile(oracle,erased);
-  const node=Bun.spawnSync(['node',oracle],{stdout:Bun.file(stdout),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});const expected=await readFile(stdout,'utf8');expect(expected).toBe('shadow local:payload nested:nested\ndeep shadow local:deep\nnamed open true\n');
+  const node=Bun.spawnSync([referenceNode(),oracle],{stdout:Bun.file(stdout),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});const expected=await readFile(stdout,'utf8');expect(expected).toBe('shadow local:payload nested:nested\ndeep shadow local:deep\nnamed open true\n');
   for(const typed of [true,false])for(const noGc of [false,true]){
    const entry=join(root,`main-${typed}-${noGc}.${typed?'ts':'mjs'}`),output=entry+'-native',diagnostics:string[]=[];await writeFile(entry,typed?source:erased);
    const result=await compile({entry,output,noGc,buildDir:output+'-build',diagnosticWriter:m=>diagnostics.push(m)});expect({typed,noGc,code:result.exitCode,diagnostics}).toEqual({typed,noGc,code:0,diagnostics:[]});

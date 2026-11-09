@@ -3,6 +3,7 @@ import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';import {join} from 'node:path';
 import {escapeCString} from '../../src/emit/cbuf';
 import {compile} from '../../src/compile';
+import {referenceNode} from './node-reference';
 
 // Characters that participate in C lexical structure: quotes, escapes, every
 // trigraph introducer/terminator, comment delimiters, line splices, NUL and
@@ -46,7 +47,7 @@ test('source text containing trigraph sequences cannot escape emitted C literals
   for(const noGc of [false,true]){
    const directory=join(root,`gc-${!noGc}`,'dir??=x');await Bun.write(join(directory,'.keep'),'');
    const entry=join(directory,'main??-??(.ts');await writeFile(entry,program);
-   const node=Bun.spawnSync(['node','--experimental-strip-types',entry],{stdout:'pipe',stderr:'pipe'});expect(node.exitCode).toBe(0);
+   const node=Bun.spawnSync([referenceNode(),'--experimental-strip-types',entry],{stdout:'pipe',stderr:'pipe'});expect(node.exitCode).toBe(0);
    const output=join(directory,'native'),diagnostics:string[]=[];
    const result=await compile({entry,output,noGc,buildDir:output+'-build',diagnosticWriter:message=>diagnostics.push(message)});
    expect({noGc,code:result.exitCode,diagnostics}).toEqual({noGc,code:0,diagnostics:[]});

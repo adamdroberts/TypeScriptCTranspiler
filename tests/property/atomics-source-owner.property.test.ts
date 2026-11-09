@@ -8,6 +8,7 @@ import {runtimeAtomicsMethods} from '../../src/global-bindings';
 import {sourceConstructorInvocations} from '../../src/source-value-flow';
 import {atomicsSourceOwnerInput} from '../e2e/generated-cases';
 import {parseHostObservation} from '../test262/protocol';
+import {referenceNode} from './node-reference';
 
 function facts(source:string){
  const options:ts.CompilerOptions={noLib:true,allowJs:true,noEmit:true,target:ts.ScriptTarget.ESNext},host=ts.createCompilerHost(options);
@@ -44,7 +45,7 @@ test('Atomics source owners match independent Node through native invocation',as
  try{for(const typed of [true,false])for(const noGc of [false,true]){
   const input=atomicsSourceOwnerInput(typed&&!noGc?512:3)+[...runtimeAtomicsMethods].map(([name,{length}])=>`{const fn:any=Atomics[${JSON.stringify(name)}];console.log('${name} metadata:',fn.name,fn.length===${length});}`).join('\n')+`\nconst atomicMethods:any=Atomics;const numericView:any=new Int32Array(new SharedArrayBuffer(16)),bigView:any=new BigInt64Array(new SharedArrayBuffer(16));for(const method of ['add','and','exchange','or','store','sub','xor']){console.log(method,typeof atomicMethods[method](numericView,0,1),typeof atomicMethods[method](bigView,0,1n));}console.log('load:',typeof Atomics.load(numericView,0),typeof Atomics.load(bigView,0));console.log('compare:',typeof Atomics.compareExchange(numericView,0,1,2));console.log('notify:',Atomics.notify(numericView,0,0));console.log('wait:',Atomics.wait(numericView,0,99,0));console.log('async:',Atomics.waitAsync(numericView,0,99,0).value);let seen=0;try{atomicMethods.store(numericView,{valueOf(){seen++;throw 'stop'}},{valueOf(){seen+=100;return 1}})}catch(e){console.log('ordered:',seen,e==='stop')}const selected:any={load(){seen++;return 7}};console.log('replacement:',selected.load(),seen);`,erased=ts.transpileModule(input,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText;
   const oracle=join(root,`oracle-${typed}-${noGc}.js`),oracleOutput=oracle+'.stdout';await writeFile(oracle,erased);
-  const node=Bun.spawnSync(['node',oracle],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const node=Bun.spawnSync([referenceNode(),oracle],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const entry=join(root,`main-${typed}-${noGc}.${typed?'ts':'js'}`),output=entry+'-native',diagnostics:string[]=[];await writeFile(entry,typed?input:erased);
   const result=await compile({entry,output,noGc,initializationEntries:[entry],buildDir:output+'-build',test262Observation:{kind:'test262-native-observation',scenarioId:'property/atomics-source-owner.js#sloppy',setupEntries:[],testEntry:entry,async:false},diagnosticWriter:message=>diagnostics.push(message)});
   expect({typed,noGc,code:result.exitCode,diagnostics}).toEqual({typed,noGc,code:0,diagnostics:[]});

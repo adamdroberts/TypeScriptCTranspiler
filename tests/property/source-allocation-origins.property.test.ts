@@ -7,6 +7,7 @@ import {compile} from '../../src/compile';
 import {sourceConstructorInvocations} from '../../src/source-value-flow';
 import {sourceAllocationInput} from '../e2e/generated-cases';
 import {parseHostObservation} from '../test262/protocol';
+import {referenceNode} from './node-reference';
 
 function facts(source:string){
  const options:ts.CompilerOptions={noLib:true,allowJs:true,noEmit:true,target:ts.ScriptTarget.ESNext},host=ts.createCompilerHost(options);
@@ -41,7 +42,7 @@ test('fresh owner source values match independent Node through the native AOT gr
  try{for(const typed of [true,false])for(const noGc of [false,true]){
   const input=sourceAllocationInput(typed&&!noGc?512:3)+`\nconst constructor:any=Function;function prior():void{Math.random()}prior();const owner:any={body:'return 89;'};console.log('prior:',constructor(owner.body)());\nMath.random();function fresh():any{const local:any={body:'return 97;'};return constructor(local.body)}console.log('activation:',fresh()());\nconst mutable:any={value:0};let getterReads=0;Object.defineProperty(mutable,'value',{get(){getterReads++;return 101}});const unused=mutable.value;console.log('getter:',getterReads);const abruptOwner:any={value:0};Object.defineProperty(abruptOwner,'value',{get(){throw 'read'}});try{const ignored=abruptOwner.value}catch(error){console.log('abrupt:',error==='read')}\n`,erased=ts.transpileModule(input,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText;
   const oracle=join(root,`oracle-${typed}-${noGc}.js`);await writeFile(oracle,erased);
-  const oracleOutput=oracle+'.stdout',node=Bun.spawnSync(['node',oracle],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const oracleOutput=oracle+'.stdout',node=Bun.spawnSync([referenceNode(),oracle],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const entry=join(root,`main-${typed}-${noGc}.${typed?'ts':'js'}`),output=entry+'-native',diagnostics:string[]=[];await writeFile(entry,typed?input:erased);
   const result=await compile({entry,output,noGc,initializationEntries:[entry],buildDir:output+'-build',test262Observation:{kind:'test262-native-observation',scenarioId:'property/source-allocation-origins.js#sloppy',setupEntries:[],testEntry:entry,async:false},diagnosticWriter:message=>diagnostics.push(message)});
   expect({typed,noGc,code:result.exitCode,diagnostics}).toEqual({typed,noGc,code:0,diagnostics:[]});

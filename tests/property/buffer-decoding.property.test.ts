@@ -4,6 +4,7 @@ import {mkdtemp, writeFile, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {compile} from '../../src/compile';
+import {referenceNode} from './node-reference';
 
 const source = String.raw`
 function verifyBufferDecoding(): void {
@@ -35,7 +36,7 @@ test('Buffer decoding scans permissive hex/base64 while byteLength estimates ind
  try {
   const erased = ts.transpileModule(source, {compilerOptions: {target: ts.ScriptTarget.ESNext}}).outputText;
   const oracle = join(root, 'oracle.js'), oracleOutput = oracle + '.stdout'; await writeFile(oracle, erased);
-  const reference = Bun.spawnSync(['node', oracle], {stdout: Bun.file(oracleOutput), stderr: 'pipe', timeout: 120000});
+  const reference = Bun.spawnSync([referenceNode(), oracle], {stdout: Bun.file(oracleOutput), stderr: 'pipe', timeout: 120000});
   expect({code: reference.exitCode, stderr: reference.stderr.toString()}).toEqual({code: 0, stderr: ''});
   const expected = await readFile(oracleOutput, 'utf8'); expect(expected).toContain('stress 98304 65 67 true\n');
   for (const typed of [true, false]) for (const noGc of [false, true]) {

@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { compile } from "../../src/compile";
+import {referenceNode} from './node-reference';
 
 function nestedSwitchFixture(depth: number): string {
     const lines: string[] = ["var nestedWitness;"];
@@ -578,7 +579,7 @@ test("CaseBlock class definitions use the canonical member and lexical-owner pla
     try {
         const reference = path.join(temporary, "reference.js"), stdout = path.join(temporary, "reference.stdout");
         await fs.writeFile(reference, source);
-        const oracle = Bun.spawnSync(["node", reference], { stdout: Bun.file(stdout), stderr: "pipe", timeout: 120_000 });
+        const oracle = Bun.spawnSync([referenceNode(), reference], { stdout: Bun.file(stdout), stderr: "pipe", timeout: 120_000 });
         expect({ code: oracle.exitCode, stderr: oracle.stderr.toString() }).toEqual({ code: 0, stderr: "" });
         const expected = await fs.readFile(stdout, "utf8");
         expect(expected).toBe("switch-class-definition-ok\n");

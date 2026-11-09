@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compile } from "../../src/compile";
 import { parseHostObservation } from "../test262/protocol";
+import {referenceNode} from './node-reference';
 
 const source = `// @ts-nocheck
 function check(value,label){if(!value)throw new Error(label);}
@@ -39,7 +40,7 @@ test("restricted accessors share one immutable ThrowTypeError owner per Realm", 
  try{
   const erased=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext}}).outputText;
   const oracle=join(root,"reference.js"),stdout=oracle+".stdout";await writeFile(oracle,erased.replaceAll("NATIVE_IDENTITY","false").replaceAll("NATIVE_GC","false"));
-  const reference=Bun.spawnSync(["node","-e",'const fs=require("node:fs"),vm=require("node:vm");const context=vm.createContext({print:value=>fs.writeSync(1,String(value)+"\\n"),$262:{createRealm(){return{global:vm.runInNewContext("globalThis")}}}});new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInContext(context);',oracle],{stdout:Bun.file(stdout),stderr:"pipe",timeout:120000});
+  const reference=Bun.spawnSync([referenceNode(),"-e",'const fs=require("node:fs"),vm=require("node:vm");const context=vm.createContext({print:value=>fs.writeSync(1,String(value)+"\\n"),$262:{createRealm(){return{global:vm.runInNewContext("globalThis")}}}});new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInContext(context);',oracle],{stdout:Bun.file(stdout),stderr:"pipe",timeout:120000});
   expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:""});const expected=await readFile(stdout,"utf8");expect(expected).toBe("throw-type-error-owner-ok\n");
   for(const typed of [true,false])for(const noGc of [false,true]){
    const entry=join(root,`subject-${typed}-${noGc}.${typed?"ts":"js"}`),output=entry+"-native";await writeFile(entry,(typed?source:erased).replaceAll("NATIVE_IDENTITY","true").replaceAll("NATIVE_GC",String(!noGc)));const diagnostics:string[]=[];

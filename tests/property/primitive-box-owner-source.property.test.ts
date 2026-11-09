@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {compile} from '../../src/compile';
 import {finiteEvalScriptSourceGraph} from '../test262/native-host';
+import {referenceNode} from './node-reference';
 
 const boxingRoutes=[
  'Object(value)', 'new Object(value)', 'Reflect.construct(Object,[value])',
@@ -69,7 +70,7 @@ test('boxing source effects match independent Node and native execution',async()
  try{
   const subject=boxingSources()+'\n'+['0','0n'].map(initial=>boxingSources('eval(boxed)===boxed',initial)).join('\n')+'\nconst hooks={get [Symbol.toPrimitive](){throw "coercion";},get valueOf(){throw "coercion";},get toString(){throw "coercion";}};console.log("coercion-free",Object(hooks)===hooks);';
   const entry=join(directory,'main.js'),stdout=join(directory,'node.stdout');await writeFile(entry,subject);
-  const node=Bun.spawnSync(['node',entry],{stdout:Bun.file(stdout),stderr:'pipe',timeout:120000});
+  const node=Bun.spawnSync([referenceNode(),entry],{stdout:Bun.file(stdout),stderr:'pipe',timeout:120000});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const expected=await readFile(stdout,'utf8');expect(expected).toContain('boxing 5 17 object true\n');expect(expected).toContain('boxing 5 true object true\n');expect(expected).toEndWith('coercion-free true\n');
   for(const noGc of [false,true]){
@@ -92,7 +93,7 @@ test('primitive wrapper actual-input views preserve Node identity, immutable UTF
  const root=await mkdtemp(join(tmpdir(),'tsc2c-box-owner-source-'));
  try{
   const erased=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext}}).outputText,oracle=join(root,'oracle.cjs'),stdout=oracle+'.stdout';await writeFile(oracle,erased);
-  const node=Bun.spawnSync(['node',oracle],{stdout:Bun.file(stdout),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});const expected=await readFile(stdout,'utf8');expect(expected).toContain('retained true\n');
+  const node=Bun.spawnSync([referenceNode(),oracle],{stdout:Bun.file(stdout),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});const expected=await readFile(stdout,'utf8');expect(expected).toContain('retained true\n');
   for(const typed of [true,false])for(const noGc of [false,true]){
    const entry=join(root,`main-${typed}-${noGc}.${typed?'ts':'js'}`),output=entry+'-native',diagnostics:string[]=[];await writeFile(entry,typed?source:erased);
    const built=await compile({entry,output,noGc,buildDir:output+'-build',diagnosticWriter:m=>diagnostics.push(m)});expect({typed,noGc,code:built.exitCode,diagnostics}).toEqual({typed,noGc,code:0,diagnostics:[]});

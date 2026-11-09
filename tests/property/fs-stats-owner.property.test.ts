@@ -4,6 +4,7 @@ import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {compile} from '../../src/compile';
+import {referenceNode} from './node-reference';
 const subject=String.raw`
 const stat=fs.statSync('package.json');
 console.log('tag',stat.toString(),stat.toLocaleString(),String(stat),stat.valueOf()===stat);
@@ -28,7 +29,7 @@ test('Stats typed and erased consumers share ordinary mutable fields, methods an
  const root=await mkdtemp(join(tmpdir(),'tsc2c-stats-owner-'));
  try{
   const erased=ts.transpileModule(subject,{compilerOptions:{target:ts.ScriptTarget.ESNext}}).outputText,oracle=join(root,'oracle.cjs'),stdout=oracle+'.stdout';await writeFile(oracle,"const fs=require('node:fs');\n"+erased);
-  const node=Bun.spawnSync(['node',oracle],{stdout:Bun.file(stdout),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});const expected=await readFile(stdout,'utf8');expect(expected).toContain('fields 17 0 false 0 true\n');expect(expected).toContain('abrupt true\n');
+  const node=Bun.spawnSync([referenceNode(),oracle],{stdout:Bun.file(stdout),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});const expected=await readFile(stdout,'utf8');expect(expected).toContain('fields 17 0 false 0 true\n');expect(expected).toContain('abrupt true\n');
   for(const typed of [true,false])for(const noGc of [false,true]){
    const entry=join(root,`main-${typed}-${noGc}.${typed?'ts':'js'}`),output=entry+'-native',diagnostics:string[]=[];await writeFile(entry,typed?subject:erased);
    const result=await compile({entry,output,noGc,buildDir:output+'-build',diagnosticWriter:m=>diagnostics.push(m)});expect({typed,noGc,code:result.exitCode,diagnostics}).toEqual({typed,noGc,code:0,diagnostics:[]});

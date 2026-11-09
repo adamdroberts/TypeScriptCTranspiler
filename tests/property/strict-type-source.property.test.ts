@@ -7,6 +7,7 @@ import {compile} from '../../src/compile';
 import {sourceConstructorInvocations} from '../../src/source-value-flow';
 import {strictTypeSourceInput} from '../e2e/generated-cases';
 import {parseHostObservation} from '../test262/protocol';
+import {referenceNode} from './node-reference';
 
 function facts(source:string){
  const options:ts.CompilerOptions={noLib:true,allowJs:true,noEmit:true,target:ts.ScriptTarget.ESNext},host=ts.createCompilerHost(options);
@@ -31,7 +32,7 @@ test('Strict type source owners match independent Node through native invocation
  try{for(const typed of [true,false])for(const noGc of [false,true])for(const partition of ['source','conversion'] as const){
   const input=partition==='source'?strictTypeSourceInput(typed&&!noGc?512:3)+`\nconst values:any[]=[undefined,null,false,0,0n,'',Symbol(),{},function(){}];for(const left of values)for(const right of values)console.log('types:',typeof left,typeof right,left===right,left!==right);`:`let seen=0;const owner:any={valueOf(){seen++;return 1}};console.log('strict:',owner===1,seen);console.log('abstract:',owner==1,seen);`,erased=ts.transpileModule(input,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText;
   const oracle=join(root,`oracle-${typed}-${noGc}-${partition}.js`),oracleOutput=oracle+'.stdout';await writeFile(oracle,erased);
-  const node=Bun.spawnSync(['node',oracle],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const node=Bun.spawnSync([referenceNode(),oracle],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const entry=join(root,`main-${typed}-${noGc}-${partition}.${typed?'ts':'js'}`),output=entry+'-native',diagnostics:string[]=[];await writeFile(entry,typed?input:erased);
   const result=await compile({entry,output,noGc,initializationEntries:[entry],buildDir:output+'-build',test262Observation:{kind:'test262-native-observation',scenarioId:'property/strict-type-source.js#sloppy',setupEntries:[],testEntry:entry,async:false},diagnosticWriter:message=>diagnostics.push(message)});
   expect({typed,noGc,code:result.exitCode,diagnostics}).toEqual({typed,noGc,code:0,diagnostics:[]});

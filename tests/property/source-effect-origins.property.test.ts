@@ -1,4 +1,4 @@
-import {nodeReferenceSync} from './node-reference';
+import {nodeReferenceSync,referenceNode} from './node-reference';
 import {expect,test} from 'bun:test';
 import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -60,7 +60,7 @@ test('activation origins close over the call graph and declared Script order ind
    const functions=Array.from({length:depth},(_,index)=>`function f${index}(){return ${index+1<depth?'f'+(index+1)+'()':'(0,eval)("Math.random();")'};}`).join('\n');
    const sources=[`globalThis.setting={body:'return "saved";'};`,functions+'\nconst body=globalThis.setting.body;f0();console.log(Function(body)());',`Math.random();{const owner={body:'return "loop";'};const saved=owner.body;for(let index=0;index<3;index++)Math.random();console.log(Function(saved)());}`,`{const create=Function;const opaque=new Proxy(function(){},{});for(let index=0;index<3;index++)opaque();const owner={body:'return "created";'};console.log(create(owner.body)());}`];
    const reference=join(directory,'reference.js');await writeFile(reference,sources.join('\n'));
-   const oracleOutput=reference+'.stdout';const node=Bun.spawnSync(['node',reference],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120_000});const oracleText=await readFile(oracleOutput,'utf8');expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(oracleText).toBe('saved\nloop\ncreated\n');
+   const oracleOutput=reference+'.stdout';const node=Bun.spawnSync([referenceNode(),reference],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120_000});const oracleText=await readFile(oracleOutput,'utf8');expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(oracleText).toBe('saved\nloop\ncreated\n');
    const entries:string[]=[];
    for(const [index,source] of sources.entries()){const entry=join(directory,index===1&&typed?'main.ts':'script-'+index+'.js');await writeFile(entry,(typed?'// @ts-nocheck\n':'')+source);entries.push(entry);}
    const entry=entries[1]!,output=join(directory,'program'),diagnostics:string[]=[];

@@ -3,6 +3,7 @@ import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';import {join} from 'node:path';
 import {compile} from '../../src/compile';
+import {referenceNode} from './node-reference';
 
 // Every native C-string boundary rejects embedded NUL instead of truncating.
 // Node-validated APIs are compared with independent Node; APIs that Node
@@ -39,7 +40,7 @@ function inspectString(value:string):string{
 async function runBoth(root:string,name:string,source:string,noGc:boolean,withNode:boolean){
  const directory=join(root,`${name}-${noGc}`);await Bun.write(join(directory,'target.txt'),'secret\n');
  const entry=join(directory,'main.ts');await writeFile(entry,source);
- const node=withNode?Bun.spawnSync(['node',entry],{cwd:directory,stdout:'pipe',stderr:'pipe'}):null;
+ const node=withNode?Bun.spawnSync([referenceNode(),entry],{cwd:directory,stdout:'pipe',stderr:'pipe'}):null;
  for(const file of ['r','c','x'])if(existsSync(join(directory,file)))await rm(join(directory,file),{recursive:true,force:true});
  const output=join(directory,'native'),diagnostics:string[]=[];
  const result=await compile({entry,output,noGc,buildDir:output+'-build',diagnosticWriter:message=>diagnostics.push(message)});

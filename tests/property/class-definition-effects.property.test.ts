@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {compile} from '../../src/compile';
 import {parseHostObservation} from '../test262/protocol';
+import {referenceNode} from './node-reference';
 
 function subject(stress: boolean): string {
     const fields = stress ? Array.from({length: 512}, (_, index) =>
@@ -78,7 +79,7 @@ test('class definition effects retain live heritage, ordered elements and Script
             const oracle = join(root, `oracle-${goal}-${typed}-${noGc}.mjs`), stdout = oracle + '.stdout';
             await writeFile(oracle, goal === 'module' ? erased : JSON.stringify([erased, observer]));
             const prelude = 'const fs=require("node:fs");const console={log(...values){fs.writeSync(1,values.map(String).join(" ")+"\\n")}};';
-            const node = Bun.spawnSync(['node', '-e', prelude + (goal === 'module'
+            const node = Bun.spawnSync([referenceNode(), '-e', prelude + (goal === 'module'
                 ? 'globalThis.console=console;import(process.argv[1]);'
                 : 'const vm=require("node:vm"),context=vm.createContext({console});for(const source of JSON.parse(fs.readFileSync(process.argv[1],"utf8")))new vm.Script(source).runInContext(context);'), oracle],
                 {stdout: Bun.file(stdout), stderr: 'pipe', timeout: 120000});

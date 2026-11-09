@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { compile } from "../../src/compile";
 import { parseHostObservation } from "../test262/protocol";
+import {referenceNode} from './node-reference';
 
 const plans = ["", "g", "gu", "gv", "gy", "y"].flatMap(flags =>
     ["", ".", "(a)?b", "(?<part>a)|(?<part>b)"].flatMap(pattern =>
@@ -112,7 +113,7 @@ test("RegExp replacement shares RegExpExec results, capture Lists and GetSubstit
     try {
         const oracle=path.join(temporary,"oracle.cjs"), stdout=oracle+".stdout";
         await fs.writeFile(oracle,'globalThis.print=value=>require("node:fs").writeSync(1,String(value)+"\\n");\n'+source);
-        const reference=Bun.spawnSync(["node",oracle],{stdout:Bun.file(stdout),stderr:"pipe",timeout:120_000});
+        const reference=Bun.spawnSync([referenceNode(),oracle],{stdout:Bun.file(stdout),stderr:"pipe",timeout:120_000});
         expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:""});
         const expected=(await fs.readFile(stdout,"utf8")).trimEnd().split("\n");
         expect(expected.at(-1)).toBe("large-list:true:first-capture");

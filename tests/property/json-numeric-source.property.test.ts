@@ -7,6 +7,7 @@ import {compile} from '../../src/compile';
 import {sourceConstructorInvocations} from '../../src/source-value-flow';
 import {jsonNumericSourceInput} from '../e2e/generated-cases';
 import {parseHostObservation} from '../test262/protocol';
+import {referenceNode} from './node-reference';
 
 function facts(source:string){
  const options:ts.CompilerOptions={noLib:true,allowJs:true,noEmit:true,target:ts.ScriptTarget.ESNext},host=ts.createCompilerHost(options);
@@ -28,7 +29,7 @@ test('JSON primitive numeric source owners match independent Node through native
  try{for(const typed of [true,false])for(const noGc of [false,true])for(const partition of ['source','hooks'] as const){
   const input=partition==='source'?jsonNumericSourceInput(typed&&!noGc?512:3):`\nconst view:any=new BigInt64Array(1),prototype:any=BigInt.prototype;let seen=0;try{JSON.stringify(Atomics.load(view,0))}catch(error){console.log('abrupt:',error instanceof TypeError)}Object.defineProperty(prototype,'toJSON',{configurable:true,value:function(this:any){seen++;return 'hook'}});console.log('method:',JSON.stringify(Atomics.load(view,0)),seen);Object.defineProperty(prototype,'toJSON',{configurable:true,get(){seen++;return undefined}});try{JSON.stringify(1n)}catch(error){console.log('getter:',seen,error instanceof TypeError)}delete prototype.toJSON;console.log('number:',typeof JSON.stringify(Atomics.load(new Int32Array(1),0)));`,erased=ts.transpileModule(input,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.None}}).outputText;
   const oracle=join(root,`oracle-${typed}-${noGc}-${partition}.js`),oracleOutput=oracle+'.stdout';await writeFile(oracle,erased);
-  const node=Bun.spawnSync(['node',oracle],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const node=Bun.spawnSync([referenceNode(),oracle],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const entry=join(root,`main-${typed}-${noGc}-${partition}.${typed?'ts':'js'}`),output=entry+'-native',diagnostics:string[]=[];await writeFile(entry,typed?input:erased);
   const result=await compile({entry,output,noGc,initializationEntries:[entry],buildDir:output+'-build',test262Observation:{kind:'test262-native-observation',scenarioId:'property/json-numeric-source.js#sloppy',setupEntries:[],testEntry:entry,async:false},diagnosticWriter:message=>diagnostics.push(message)});
   expect({typed,noGc,code:result.exitCode,diagnostics}).toEqual({typed,noGc,code:0,diagnostics:[]});

@@ -669,8 +669,9 @@ static tsc_buffer_t* crypto_pbkdf2_bytes(const void* password_data, size_t passw
 
     const EVP_MD* md = crypto_digest_lookup(digest);
 
-    /* Node derives through OpenSSL's KDF API, which rejects empty output. */
-    if (keylen == 0) tsc_throw_error(TSC_ERROR_ERROR, tsc_str_from_cstr("Deriving bits failed"));
+    /* Node derives through OpenSSL's KDF API, which rejects empty output
+     * (Node 26's message; Bun returns an empty Buffer instead). */
+    if (keylen == 0) tsc_throw_error(TSC_ERROR_ERROR, tsc_str_from_cstr("PBKDF2 derivation failed"));
     tsc_buffer_t* out = tsc_buffer_alloc(keylen, 0.0);
 
     int res = PKCS5_PBKDF2_HMAC(

@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {compile} from '../../src/compile';
 import {nativePromiseArrayInput} from '../e2e/generated-cases';
 import {parseHostObservation} from '../test262/protocol';
+import {referenceNode} from './node-reference';
 
 test('native Promise array settlement preserves element representation and owner mutation',async()=>{
  const root=await mkdtemp(join(tmpdir(),'tsc2c-native-promise-array-'));
@@ -18,7 +19,7 @@ async function verifyBoxedRecords():Promise<void>{const records:any=await dns.lo
   const oracleInput=input.replace("import * as dns from 'node:dns/promises';","import {lookup} from 'node:dns/promises';const dns={lookup,resolve4:async()=> (await lookup('127.0.0.1',{family:4,all:true})).map(record=>record.address)};");
   expect(oracleInput).not.toBe(input);
   const oracle=join(root,`oracle-${typed}-${noGc}.mjs`),oracleOutput=oracle+'.stdout';await writeFile(oracle,oracleInput);
-  const node=Bun.spawnSync(['node',oracle],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
+  const node=Bun.spawnSync([referenceNode(),oracle],{stdout:Bun.file(oracleOutput),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const entry=join(root,`main-${typed}-${noGc}.ts`),output=entry+'-native',diagnostics:string[]=[];const erasedScript=input.replace("import * as dns from 'node:dns/promises';",'').replaceAll('dns.resolve4(', 'dns.promises.resolve4(').replaceAll('dns.lookup(', 'dns.promises.lookup(');await writeFile(entry,typed?source:erasedScript);
   const result=await compile({entry,output,noGc,...(typed?{moduleRoots:[entry]}:{}),initializationEntries:[entry],buildDir:output+'-build',...(typed?{test262Observation:{kind:'test262-native-observation',scenarioId:'property/native-promise-array.js#module',setupEntries:[],testEntry:entry,async:false}}:{}),diagnosticWriter:message=>diagnostics.push(message)});
   expect({typed,noGc,code:result.exitCode,diagnostics}).toEqual({typed,noGc,code:0,diagnostics:[]});

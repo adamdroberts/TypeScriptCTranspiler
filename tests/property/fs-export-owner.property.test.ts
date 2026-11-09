@@ -4,6 +4,7 @@ import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {compile} from '../../src/compile';
+import {referenceNode} from './node-reference';
 const subject=String.raw`
 import fs from 'node:fs';import * as namespace from 'node:fs';
 import promises from 'node:fs/promises';import * as promiseNamespace from 'node:fs/promises';
@@ -50,7 +51,7 @@ test('filesystem export owners preserve ordinary lookup, complete actual Lists a
  const root=await mkdtemp(join(tmpdir(),'tsc2c-fs-export-owner-'));
  try{
   const source=subject.replace('ROOT',join(root,'work')),erased=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ESNext,module:ts.ModuleKind.ESNext}}).outputText,oracle=join(root,'oracle.mjs'),stdout=oracle+'.stdout';await writeFile(oracle,erased);
-  const node=Bun.spawnSync(['node',oracle],{stdout:Bun.file(stdout),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});const expected=await readFile(stdout,'utf8');expect(expected).toContain('await betagamma PDOXYR\n');expect(expected).toContain('reject true\n');
+  const node=Bun.spawnSync([referenceNode(),oracle],{stdout:Bun.file(stdout),stderr:'pipe',timeout:120000});expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});const expected=await readFile(stdout,'utf8');expect(expected).toContain('await betagamma PDOXYR\n');expect(expected).toContain('reject true\n');
   for(const typed of [true,false])for(const noGc of [false,true]){
    const entry=join(root,`main-${typed}-${noGc}.${typed?'ts':'mjs'}`),output=entry+'-native',diagnostics:string[]=[];await writeFile(entry,typed?source:erased);
    const result=await compile({entry,output,noGc,buildDir:output+'-build',diagnosticWriter:m=>diagnostics.push(m)});expect({typed,noGc,code:result.exitCode,diagnostics}).toEqual({typed,noGc,code:0,diagnostics:[]});

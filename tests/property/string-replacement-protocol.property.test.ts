@@ -1,4 +1,5 @@
 import{expect,test}from'bun:test';
+import {referenceNode} from './node-reference';
 import*as fs from'node:fs/promises';
 import*as os from'node:os';
 import*as path from'node:path';
@@ -38,7 +39,7 @@ test('String replacement retains actual symbol protocol and ordered literal matc
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-string-replace-protocol-'));
  try{
   const oracle=path.join(temporary,'oracle.cjs'),stdout=oracle+'.stdout';await fs.writeFile(oracle,'globalThis.print=value=>require("node:fs").writeSync(1,String(value)+"\\n");\n'+script);
-  const reference=Bun.spawnSync(['node',oracle],{stdout:Bun.file(stdout),stderr:'pipe',timeout:120000});expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:''});const expected=await fs.readFile(stdout,'utf8');expect(expected.endsWith('string-replacement-protocol-ok\n')).toBe(true);
+  const reference=Bun.spawnSync([referenceNode(),oracle],{stdout:Bun.file(stdout),stderr:'pipe',timeout:120000});expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:''});const expected=await fs.readFile(stdout,'utf8');expect(expected.endsWith('string-replacement-protocol-ok\n')).toBe(true);
   const entry=path.join(temporary,'subject.js');await fs.writeFile(entry,script);
   for(const noGc of [false,true]){const output=path.join(temporary,noGc?'no-gc':'gc'),diagnostics:string[]=[];const result=await compile({entry,output,initializationEntries:[entry],noGc,buildDir:output+'-build',test262Observation:{kind:'test262-native-observation',scenarioId:'property/string-replacement-protocol.js#sloppy',setupEntries:[],testEntry:entry,async:false},diagnosticWriter:m=>diagnostics.push(m)});expect({code:result.exitCode,diagnostics}).toEqual({code:0,diagnostics:[]});const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',env:{...process.env,GC_FREE_SPACE_DIVISOR:'100'},timeout:120000});expect({code:native.exitCode,stderr:native.stderr.toString()}).toEqual({code:0,stderr:''});const observed=parseHostObservation(JSON.parse(native.stdout.toString()));expect(observed.kind).toBe('normal');expect(observed.stdout??'').toBe(expected);}
  }finally{await fs.rm(temporary,{recursive:true,force:true})}

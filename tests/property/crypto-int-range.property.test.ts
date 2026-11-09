@@ -2,6 +2,7 @@ import {expect,test} from 'bun:test';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';import {join} from 'node:path';
 import {compile} from '../../src/compile';
+import {referenceNode} from './node-reference';
 
 // Crypto counts and sizes reach OpenSSL int parameters. Every domain
 // partition (in range, both bounds, just outside, non-integer, non-finite and
@@ -26,7 +27,7 @@ test('crypto int32 counts and sizes match Node range validation',async()=>{
   for(const noGc of [false,true]){
    const directory=join(root,`gc-${!noGc}`);await Bun.write(join(directory,'.keep'),'');
    const entry=join(directory,'main.ts');await writeFile(entry,source);
-   const node=Bun.spawnSync(['node',entry],{stdout:'pipe',stderr:'pipe'});
+   const node=Bun.spawnSync([referenceNode(),entry],{stdout:'pipe',stderr:'pipe'});
    expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
    expect(node.stdout.toString()).toContain('ERR_OUT_OF_RANGE');
    const output=join(directory,'native'),diagnostics:string[]=[];
