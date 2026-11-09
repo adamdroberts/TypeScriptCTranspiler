@@ -43,8 +43,10 @@ test("field declarations, constructor writes and delegation share owner cells",(
   const calls=sourceEvaluationInvocations(program(source));
   expect({source,complete:calls.length>0&&calls.every(call=>call.choices!==null&&expected[index]!.every(value=>call.choices!.includes(value)))}).toEqual({source,complete:true});
  }
- for(const source of ['class C {method=external;}eval(new C().method.toString());','class C extends external {method=()=>67;}eval(new C().method.toString());','class C {#method=()=>71;read(){return this.#method;}}eval(new C().read().toString());','class C {method=()=>73;}external();eval(new C().method.toString());'])expect({source,incomplete:sourceEvaluationInvocations(program(source)).some(call=>call.choices===null)}).toEqual({source,incomplete:true});
+ for(const source of ['class C {method=external;}eval(new C().method.toString());','class C extends external {method=()=>67;}eval(new C().method.toString());','class C {method=()=>73;}external();eval(new C().method.toString());'])expect({source,incomplete:sourceEvaluationInvocations(program(source)).some(call=>call.choices===null)}).toEqual({source,incomplete:true});
  for(const source of ['class C {}eval(String(C()));','eval(String(Function.prototype.toString.call(undefined)));'])expect(sourceEvaluationInvocations(program(source)).map(call=>call.choices)).toEqual([[]]);
+ // A private field's initializer is a represented closure: its source text is exact.
+ expect(sourceEvaluationInvocations(program('class C {#method=()=>71;read(){return this.#method;}}eval(new C().read().toString());')).map(call=>call.choices)).toEqual([['()=>71']]);
 });
 test("pending AOT source expansion cannot become a prototype effect or a completed source proof",()=>{
  const source='class C {read(){return 107;}}var Copy=eval("("+C.toString()+")");new Copy().read();eval(C.toString());eval(eval("1;"));';

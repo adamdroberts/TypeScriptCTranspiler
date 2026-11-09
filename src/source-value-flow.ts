@@ -1475,7 +1475,11 @@ class SourceValueFlow {
             if (known !== undefined) {dynamic = known; break;}
             pending.push(current);
             const roots=ts.isSourceFile(current)?this.scriptOrder.get(current):undefined;
-            if (this.invocationTimings.has(current) || roots&&roots.first!==roots.last || ts.isFunctionLike(current) || ts.isIterationStatement(current, false)) {dynamic = true; break;}
+            // An instance field initializer runs inside every construction
+            // (after super() returns in a derived class), not at its position
+            // in the class body.
+            const instanceField=ts.isPropertyDeclaration(current)&&current.initializer!==undefined&&!(ts.getModifiers(current)??[]).some(modifier=>modifier.kind===ts.SyntaxKind.StaticKeyword);
+            if (this.invocationTimings.has(current) || roots&&roots.first!==roots.last || ts.isFunctionLike(current) || ts.isIterationStatement(current, false) || instanceField) {dynamic = true; break;}
             current = current.parent;
         }
         for (const visited of pending) this.dynamicContexts.set(visited, dynamic);

@@ -21,7 +21,12 @@ test('TypedArray metadata source owners project native widths and preserve prope
  for(const [name,{width}]of runtimeTypedArrayDescriptors)for(const member of ['BYTES_PER_ELEMENT','prototype.BYTES_PER_ELEMENT']){
   expect({name,member,facts:facts(`const selected=${name};Function('return '+selected.${member}+';');`)}).toEqual({name,member,facts:[{kind:'ordinary',choices:[[`return ${width};`]]}]});
  }
- expect(facts("const captured=Int32Array;Int32Array={BYTES_PER_ELEMENT:17};Function('return '+captured.BYTES_PER_ELEMENT+';');Function('return '+Int32Array.BYTES_PER_ELEMENT+';');")).toEqual([{kind:'ordinary',choices:[['return 4;','return 17;']]},{kind:'ordinary',choices:[['return 4;','return 17;']]}]);
+ // The captured constructor's BYTES_PER_ELEMENT is non-writable and
+ // non-configurable: it stays 4 after the global binding is replaced. The
+ // replaced binding's read must include the new owner's value.
+ const replaced=facts("const captured=Int32Array;Int32Array={BYTES_PER_ELEMENT:17};Function('return '+captured.BYTES_PER_ELEMENT+';');Function('return '+Int32Array.BYTES_PER_ELEMENT+';');");
+ expect(replaced[0]).toEqual({kind:'ordinary',choices:[['return 4;']]});
+ expect(replaced[1]!.choices?.[0]).toEqual(expect.arrayContaining(['return 17;']));
  expect(facts("const owner={get BYTES_PER_ELEMENT(){return 19}};Function('return '+owner.BYTES_PER_ELEMENT+';');")).toEqual([{kind:'ordinary',choices:[['return 19;']]}]);
  for(const source of [
   "const owner={get BYTES_PER_ELEMENT(){return runtimeInput}};Function('return '+owner.BYTES_PER_ELEMENT+';');",

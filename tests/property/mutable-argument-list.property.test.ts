@@ -50,6 +50,11 @@ test("actual Lists project mutable length and index locations across every call 
     for (let index = 1; index <= 512; index++) deep += `var list${index}=[...list${index - 1}];`;
     deep += 'list512[0]="return 71;";Function.apply(null,list512);';
     expect(includesActual(deep)).toBe(true);
-    const cycle = 'var args=["return 73;"];args=["x",...args];Function(...args);';
+    // A reassignment that spreads the binding's earlier List reads that List:
+    // the call receives exactly ("x", "return 73;").
+    const reassigned = 'var args=["return 73;"];args=["x",...args];Function(...args);';
+    expect(sourceConstructorInvocations(program(reassigned)).map(call => call.choices)).toEqual([[["x"], ["return 73;"]]]);
+    // Repeated self-spreading grows the List without a represented bound.
+    const cycle = 'var args=["return 73;"];for(let index=0;index<2;index++)args=["x",...args];Function(...args);';
     expect(sourceConstructorInvocations(program(cycle)).every(call => call.choices === null)).toBe(true);
 });
