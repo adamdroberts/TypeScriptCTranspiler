@@ -697,6 +697,11 @@ class SourceValueFlow {
      * mutation widen its shape. The cost is one edge per write and one link
      * per object, independent of their product. */
     private readonly nativeAliasOwners = new Set<ObjectOwner>();
+    /** The values a realm gives a global binding when it creates it: its
+     * intrinsics under their own names. */
+    private readonly initialGlobalValues=new Map<Cell,ReadonlySet<Atom>>();
+    /** A global field's values other than the realm-created ones. */
+    private readonly writtenGlobalValues=new Map<Cell,Cell>();
     private readonly nativeAliasKeys = this.newCell();
     private readonly nativeAliasMutation = this.newCell();
     private readonly opaqueObject: Atom = { tag: "opaque-object" };
@@ -1373,7 +1378,20 @@ class SourceValueFlow {
             for(const accessor of owner.accessors.values())if(this.accessorDefinitions.has(accessor.get)){visit(accessor.get);visit(accessor.set);}
             const stored=this.unknownPropertyLocations.get(owner);if(stored)visit(stored.value);
             if(!sourceCallbacksOnly&&atom.tag!=="function"&&!this.sourceObjectOwners.has(owner)&&!this.ownerCreations.has(owner)&&!this.ownerRealms.has(owner)&&!owner.collections&&!owner.collectionIterator)return;
-            for(const key of owner.fields.keys())if(!skipped(key))visit(this.dataProperty(owner,key));
+            const realm=sourceCallbacksOnly?undefined:this.ownerRealms.get(owner);
+            for(const key of owner.fields.keys())if(!skipped(key)){
+                const field=this.dataProperty(owner,key),initial=realm?this.initialGlobalValues.get(field):undefined;
+                if(!initial?.size){visit(field);continue;}
+                // A native calls a member of a value only under a protocol key
+                // (toString, then, @@iterator, a getter, ...) or as a callback
+                // it is handed, and no key a realm gives its global object is a
+                // protocol key. The realm's own value under its own name is
+                // therefore reached for the callables stored on it, never
+                // invoked itself, as the members of every other intrinsic are;
+                // a value the program writes there stays a possible callee.
+                for(const value of initial)this.linkEscapeReach(this.escapeAtomReach(value,field,sourceCallbacksOnly,"argument"),result);
+                visit(this.writtenGlobalField(field,initial));
+            }
             for(const accessor of owner.accessors.values()){visit(accessor.get);visit(accessor.set);}
             if(owner.prototype)visit(owner.prototype);
             if(owner.proxy){visit(owner.proxy.target);visit(owner.proxy.handler);}
@@ -1387,6 +1405,12 @@ class SourceValueFlow {
             }
         });
         return result;
+    }
+    private writtenGlobalField(field:Cell,initial:ReadonlySet<Atom>):Cell {
+        let written=this.writtenGlobalValues.get(field);if(written)return written;
+        const target=this.newCell();this.writtenGlobalValues.set(field,target);
+        this.rule([field],()=>{for(const atom of field.values)if(!initial.has(atom))this.publish(target,atom);});
+        return target;
     }
     /** Links one represented object to the shared native-alias cells. */
     private nativeAlias(owner:ObjectOwner):void {
@@ -3968,6 +3992,7 @@ class SourceValueFlow {
         // Another realm's remaining runtime bindings start as that realm's
         // intrinsics: native values, like an unmodelled builtin member here.
         else if(runtimeGlobalBindings.has(key))this.publish(cell,this.nativeUnknown);
+        this.initialGlobalValues.set(cell,new Set(cell.values.ownValues()));
         if(realm.owner)this.attachField(realm.owner,key,cell);
         return cell;
     }
@@ -4068,6 +4093,7 @@ class SourceValueFlow {
                 }
                 this.publish(cell, {tag:"builtin", name:key, normalResult:descriptor.normalResult,fields});
             }
+            this.initialGlobalValues.set(cell,new Set(cell.values.ownValues()));
         }
         if(this.currentRealm.owner)this.attachField(this.currentRealm.owner,key,cell);
         return cell;
