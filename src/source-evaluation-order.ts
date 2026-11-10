@@ -71,7 +71,7 @@ export class SourceEvaluationOrder {
     }
     private path(node:ts.Node):readonly (Region|{definition:Definition})[] {
         const prior=this.paths.get(node);if(prior)return prior;
-        this.index(node.getSourceFile());
+        this.index(this.sourceFile(node));
         const regions=new Map<Definition,Region>(),path:(Region|{definition:Definition})[]=[];
         for(let current:ts.Node|undefined=node;current;current=current.parent){
             const region=this.regions.get(current);if(region&&!regions.has(region.definition))regions.set(region.definition,region);
@@ -79,8 +79,13 @@ export class SourceEvaluationOrder {
         }
         path.reverse();this.paths.set(node,path);return path;
     }
+    private readonly sourceFiles=new WeakMap<ts.Node,ts.SourceFile>();
+    private sourceFile(node:ts.Node):ts.SourceFile {
+        let source=this.sourceFiles.get(node);if(!source){source=node.getSourceFile();this.sourceFiles.set(node,source);}return source;
+    }
     before(left:ts.Node,right:ts.Node):boolean {
-        if(left===right||left.getSourceFile()!==right.getSourceFile())return false;
+        const source=this.sourceFile(left);
+        if(left===right||source!==this.sourceFile(right))return false;
         const before=this.path(left),after=this.path(right);
         for(let index=0;index<Math.min(before.length,after.length);index++){
             const a=before[index]!,b=after[index]!;
@@ -88,9 +93,9 @@ export class SourceEvaluationOrder {
             if(!('domain' in a)||!('domain' in b)||a.domain!==b.domain)return false;
             if(a.index!==b.index)return a.index<b.index;
         }
-        const end=left.getEnd(),start=right.getStart();
+        const end=left.getEnd(),start=right.getStart(source);
         // Coincident completion points carry no order unless their region
         // stages establish one. In particular, before is irreflexive.
-        return end<start||end===start&&(left.getStart()!==end||right.getEnd()!==start);
+        return end<start||end===start&&(left.getStart(source)!==end||right.getEnd()!==start);
     }
 }

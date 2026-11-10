@@ -312,7 +312,7 @@ class SourceFacts implements Iterable<Atom> {
     get nonempty():boolean{if(this.knownNonempty)return true;for(const _ of this){this.knownNonempty=true;return true;}return false;}
     get size(): number {let size=0; for (const _ of this) size++; return size;}
 }
-interface PrimitiveCellCache {proof?:PrimitiveChoiceProof;kind?:number;readiness?:PrimitiveReadiness;}
+interface PrimitiveCellCache {proof?:PrimitiveChoiceProof;kind?:number;readiness?:PrimitiveReadiness;empty?:true;}
 interface Cell { ownRevision:number;primitiveCache?:PrimitiveCellCache;readonly id: number; readonly values: SourceFacts; readonly users: Set<Rule>; }
 /** One lazy record retains cache storage while invalidation releases stale
  * proof/readiness values immediately. Undefined is a miss; a zero kind mask
@@ -758,6 +758,10 @@ class SourceValueFlow {
     private readonly activationCapturePhases=new Map<FunctionOwner,SourceCapturePhase>();
     private readonly scalarCapturePhases=new Map<FunctionOwner,Map<Cell,Map<string,SourceCapturePhase>>>();
     private readonly normalizedCapturePhases=new WeakMap<SourceCapturePhase,SourceCapturePhase>();
+    /** Answers that depend only on facts, valid while no fact set grows:
+     * capture phases that normalize to themselves, and activations whose
+     * cyclic timing is still empty. Pairwise phase comparisons repeat them. */
+    private factEpochAnswers={epoch:-1,unfiltered:new Set<SourceCapturePhase>()};
     private readonly capturePhases=new Map<ts.Node,Map<boolean,Map<Cell|undefined,SourceCapturePhase>>>();
     private readonly propertyLocations=new Set<Cell>();
     private readonly privateAccesses=new Map<ts.Node,Map<string,Cell>>();
@@ -1223,7 +1227,7 @@ class SourceValueFlow {
             const value = pending.pop()!;
             if (visited.has(value)) continue; visited.add(value);
             const cache=value.primitiveCache;
-            if(cache){cache.proof=undefined;cache.kind=undefined;cache.readiness=undefined;}
+            if(cache){cache.proof=undefined;cache.kind=undefined;cache.readiness=undefined;cache.empty=undefined;}
             for (const user of value.users) this.schedule(user);
             for (const parent of this.primitiveProofParents.get(value) ?? []) pending.push(parent);
         }
@@ -1504,6 +1508,20 @@ class SourceValueFlow {
     private activationTiming(owner:SourceActivation):Cell {
         let timing=this.cyclicActivationTiming.get(owner);if(!timing){timing=this.newCell();this.cyclicActivationTiming.set(owner,timing);}return timing;
     }
+    private currentFactEpochAnswers():typeof this.factEpochAnswers {
+        if(this.factEpochAnswers.epoch!==sourceFactsEpoch)this.factEpochAnswers={epoch:sourceFactsEpoch,unfiltered:new Set()};
+        return this.factEpochAnswers;
+    }
+    /** Whether an activation's cyclic timing has any fact. Timing copies
+     * along call chains, so an empty answer is cached on the cell until the
+     * change flush reaches it through its copy edges. */
+    private activationTimed(owner:SourceActivation):boolean {
+        const timing=this.activationTiming(owner);
+        this.flushPrimitiveChanges();
+        if(timing.primitiveCache?.empty)return false;
+        if(timing.values.nonempty)return true;
+        (timing.primitiveCache??={}).empty=true;return false;
+    }
     private dynamicContext(node: ts.Node): boolean {
         const pending: ts.Node[] = [];
         let current: ts.Node | undefined = node, dynamic = false;
@@ -1539,7 +1557,7 @@ class SourceValueFlow {
         const roots=this.scriptOrder.get(this.sourceFile(context));
         if(this.sourceFile(effect)===this.sourceFile(context)&&roots&&roots.first!==roots.last)return true;
         const activation=this.enclosingActivation(context);
-        if(activation&&activation.kind==="ordinary"&&!this.activationTiming(activation).values.nonempty&&!this.repeatedActivationContext(context)&&!this.dynamicContext(effect)){
+        if(activation&&activation.kind==="ordinary"&&!this.activationTimed(activation)&&!this.repeatedActivationContext(context)&&!this.dynamicContext(effect)){
             const origins=[...activation.active.values];
             if(origins.length&&origins.every(origin=>origin.tag==="unknown"&&origin.origin&&origin.origin!==effect&&
                 (!this.dynamicContext(origin.origin)||ts.isCallExpression(origin.origin)&&!this.enclosingActivation(origin.origin))&&
@@ -1622,7 +1640,7 @@ class SourceValueFlow {
             (before.activationOnly??this.enclosingActivation(before.context))===after.activationOnly;
         if(before.location!==after.location||before.argumentsRead!==after.argumentsRead||this.sourceFile(before.context)!==this.sourceFile(after.context)||!this.evaluationOrder.before(before.context,after.context))return false;
         const left=this.enclosingActivation(before.context),right=this.enclosingActivation(after.context);
-        return left===right&&!this.repeatedActivationContext(before.context)&&!this.repeatedActivationContext(after.context)&&(!left||!this.activationTiming(left).values.nonempty);
+        return left===right&&!this.repeatedActivationContext(before.context)&&!this.repeatedActivationContext(after.context)&&(!left||!this.activationTimed(left));
     }
     private readBeforeWrite(read:ts.Node,write:ts.Node,reference?:ts.Identifier):boolean {
         if(this.sourceFile(read)!==this.sourceFile(write))return false;
@@ -1641,7 +1659,7 @@ class SourceValueFlow {
     }
     private unfilteredCaptureActivation(context:ts.Node):FunctionOwner|null {
         const activation=this.enclosingActivation(context);
-        return activation&&this.dynamicContext(context)&&(activation.kind!=="ordinary"||this.repeatedActivationContext(context)||this.activationTiming(activation).values.nonempty)?activation:null;
+        return activation&&this.dynamicContext(context)&&(activation.kind!=="ordinary"||this.repeatedActivationContext(context)||this.activationTimed(activation))?activation:null;
     }
     private scalarCapturePhase(context:ts.Node,activation:FunctionOwner,location:Cell,excluded:ReadonlySet<SourceLexicalWrite>,universe:ReadonlySet<SourceLexicalWrite>):SourceCapturePhase {
         let locations=this.scalarCapturePhases.get(activation);if(!locations){locations=new Map();this.scalarCapturePhases.set(activation,locations);}
@@ -1657,11 +1675,13 @@ class SourceValueFlow {
     private normalizeCapturePhase(phase:SourceCapturePhase):SourceCapturePhase {
         if(phase.activationOnly||phase.scalar)return phase;
         const prior=this.normalizedCapturePhases.get(phase);if(prior)return prior;
-        const activation=this.unfilteredCaptureActivation(phase.context);if(!activation)return phase;
+        const answers=this.currentFactEpochAnswers();if(answers.unfiltered.has(phase))return phase;
+        const activation=this.unfilteredCaptureActivation(phase.context);if(!activation){answers.unfiltered.add(phase);return phase;}
         let normalized:SourceCapturePhase;
         if(phase.location){
-            if(!ts.isIdentifier(phase.context))return phase;
-            const symbol=this.bindingSymbol(phase.context);if(!symbol)return phase;
+            // A filtered activation stays filtered, and these are syntactic.
+            if(!ts.isIdentifier(phase.context)){this.normalizedCapturePhases.set(phase,phase);return phase;}
+            const symbol=this.bindingSymbol(phase.context);if(!symbol){this.normalizedCapturePhases.set(phase,phase);return phase;}
             const excluded=new Set<SourceLexicalWrite>(),universe=new Set<SourceLexicalWrite>();
             for(const[origin,events]of this.bindingWriteSites.get(symbol)??[]){
                 if(this.enclosingActivation(origin)!==activation||this.repeatedActivationContext(origin))continue;
@@ -1701,18 +1721,30 @@ class SourceValueFlow {
         }
         for(const locations of scalar.values())for(const {phase,excluded}of locations.values())
             normalized.add(this.scalarCapturePhase(phase.context,phase.scalar!.activation,phase.location!,excluded,phase.scalar!.universe));
-        let effective:SourceCapturePhase[]=[];
+        // Only phases of one activation can precede each other, so dominance
+        // is reduced within each activation's phases.
+        const groups=new Map<FunctionOwner|undefined,SourceCapturePhase[]>();
         for(const phase of [...normalized].sort((left,right)=>left.id-right.id)){
-            if(effective.some(prior=>this.capturePrecedes(prior,phase)))continue;
-            effective=effective.filter(prior=>!this.capturePrecedes(phase,prior));effective.push(phase);
+            const group=this.capturePhaseActivation(phase),members=groups.get(group)??[];
+            if(members.some(prior=>this.capturePrecedes(prior,phase)))continue;
+            const kept=members.filter(prior=>!this.capturePrecedes(phase,prior));kept.push(phase);groups.set(group,kept);
         }
+        const effective=[...groups.values()].flat();
         const key=effective.sort((left,right)=>left.id-right.id).map(phase=>phase.id).join(",");
         let constraints=this.captureConstraints.get(key);
         if(!constraints){constraints={kind:"capture-constraints",phases:effective};this.captureConstraints.set(key,constraints);}
         return constraints;
     }
     private captureSatisfied(inherited:ReadonlySet<SourceProjectionPhase>|undefined,constraints:SourceCaptureConstraints):boolean {
-        return constraints.phases.every(phase=>[...inherited??[]].some(prior=>prior.kind==="capture"&&this.capturePrecedes(prior,phase)));
+        if(!constraints.phases.length)return true;
+        const groups=new Map<FunctionOwner|undefined,SourceCapturePhase[]>();
+        for(const prior of inherited??[])if(prior.kind==="capture"){const group=this.capturePhaseActivation(prior);let members=groups.get(group);if(!members){members=[];groups.set(group,members);}members.push(prior);}
+        return constraints.phases.every(phase=>(groups.get(this.capturePhaseActivation(phase))??[]).some(prior=>this.capturePrecedes(prior,phase)));
+    }
+    /** The activation a capture phase belongs to. Normalization keeps it, and
+     * capturePrecedes holds only between phases of one activation. */
+    private capturePhaseActivation(phase:SourceCapturePhase):FunctionOwner|undefined {
+        return phase.scalar?.activation??phase.activationOnly??this.enclosingActivation(phase.context)??undefined;
     }
     private captureAtom(atom:Extract<Atom,{tag:"text-operation"}>,constraints:SourceCaptureConstraints):Atom {
         if(this.captureSatisfied(this.projectedAtomPhases.get(atom),constraints))return atom;
@@ -2246,7 +2278,7 @@ class SourceValueFlow {
         if(!creation||this.repeatedActivationContext(creation)){this.copy(this.opaqueMutation,owner.shape);return;}
         this.rule([this.opaqueMutation,...(activation?[activation.active,this.activationTiming(activation)]:[])],()=>{
             for(const atom of this.opaqueMutation.values){
-                if(creation&&(!activation||!this.activationTiming(activation).values.nonempty)&&atom.tag==="unknown"&&atom.origin&&!this.enclosingActivation(atom.origin)&&!this.repeatedActivationContext(creation)){
+                if(creation&&(!activation||!this.activationTimed(activation))&&atom.tag==="unknown"&&atom.origin&&!this.enclosingActivation(atom.origin)&&!this.repeatedActivationContext(creation)){
                     const points=activation?.kind==="ordinary"?[...activation.active.values].map(origin=>origin.tag==="unknown"?origin.origin:undefined):activation?[undefined]:[creation];
                     if(points.length&&points.every(point=>{
                         if(!point||this.dynamicContext(point))return false;
