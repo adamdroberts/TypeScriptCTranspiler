@@ -442,7 +442,8 @@ function conversionOperands(node: ts.Node): readonly ts.Expression[] | null {
     if (operation) return ts.isBinaryExpression(node) ? [node.left, node.right] : [(node as ts.PrefixUnaryExpression | ts.PostfixUnaryExpression).operand];
     // `key in object` converts only its left operand (ToPropertyKey); the
     // right operand is required to be an Object and is never coerced.
-    if (ts.isBinaryExpression(node) && node.operatorToken.kind===ts.SyntaxKind.InKeyword)return [node.left];
+    // `#x in object` is a brand check: its private name is never converted.
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind===ts.SyntaxKind.InKeyword)return ts.isPrivateIdentifier(node.left)?null:[node.left];
     return null;
 }
 
@@ -2519,6 +2520,9 @@ class SourceValueFlow {
                         const data=key===null?undefined:current.fields.get(key);if(data)this.watch(rule,data);
                         const readonly=key===null?undefined:this.ownPresence(current,key).readonlyWrite;
                         if(readonly){this.watch(rule,readonly);if(readonly.values.has(this.primitive(true)))this.publish(weak,this.primitive(true));}
+                        // A non-writable, non-configurable global (undefined, NaN,
+                        // Infinity) rejects every [[Set]]: nothing is stored for any receiver.
+                        if(typeof key==="string"&&this.ownerRealms.has(current)&&this.immutableGlobalBinding(key)&&mode==="set"){this.publish(weak,this.primitive(true));continue;}
                         if(key!==null && current.accessors.has(key) && presence?.values.has(this.primitive(true)) && !presence.values.has(this.primitive(false)) && !data?.values.nonempty)continue;
                         if(presence?.values.has(this.primitive(true)) && !presence.values.has(this.primitive(false))){store=true;continue;}
                         if(!current.prototype){store=true;continue;}
@@ -5648,6 +5652,9 @@ class SourceValueFlow {
             if(!atom.realm.owner){
                 atom.realm.owner={fields:new Map(),accessors:new Map(),shape:this.newCell()};
                 this.ownerRealms.set(atom.realm.owner,atom.realm);
+                // The global object is an ordinary object: an unknown-key write
+                // stores a property, it does not hand the object to native code.
+                this.markPropertyAlgorithm(atom.realm.owner,"ordinary");
                 atom.realm.owner.prototype=this.realmObjectPrototype(atom.realm);
                 this.copy(this.globalMutation,atom.realm.owner.shape);
                 for(const[key,binding]of atom.realm.bindings)this.attachField(atom.realm.owner,key,binding);
