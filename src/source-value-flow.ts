@@ -572,6 +572,10 @@ class SourceValueFlow {
     private readonly bindings = new Map<ts.Symbol, Cell>();
     private readonly evaluationVarBindings=new Map<FunctionOwner,Map<string,Cell>>();
     private readonly evaluationDeclarationBindings=new Map<Cell,{origins:Set<ts.Node>;fallback?:Cell}>();
+    /** An undeclared name inside a function reads a binding a direct eval in
+     * that function may declare; without such a declaration it is this
+     * global binding. */
+    private readonly activationGlobalFallbacks=new Map<Cell,Cell>();
     private readonly utilModules = new Map<boolean,{value:Cell;owner:ObjectOwner}>();
     private readonly utilExportValues = new Map<string,Cell>();
     private readonly fsModules = new Map<string,{value:Cell;owner:ObjectOwner}>();
@@ -1971,7 +1975,10 @@ class SourceValueFlow {
             const owner=this.enclosingActivation(node);
             if(owner){
                 let names=this.evaluationVarBindings.get(owner);if(!names){names=new Map();this.evaluationVarBindings.set(owner,names);}
-                let binding=names.get(node.text);if(!binding){binding=this.newCell();names.set(node.text,binding);this.evaluationDeclarationBindings.set(binding,{origins:new Set(),fallback:this.globalLexicals.get(node.text)?.value??this.globalBinding(node.text)});}
+                let binding=names.get(node.text);if(!binding){
+                    binding=this.newCell();names.set(node.text,binding);const fallback=this.globalLexicals.get(node.text)?.value??this.globalBinding(node.text);
+                    this.evaluationDeclarationBindings.set(binding,{origins:new Set(),fallback});this.activationGlobalFallbacks.set(binding,fallback);
+                }
                 return binding;
             }
             return this.globalLexicals.get(node.text)?.value ?? this.globalBinding(node.text);
@@ -8392,7 +8399,9 @@ class SourceValueFlow {
             return [expression,this.choices(target??cells[index]!)];
         }));
     }
-    private sealSourceValue(node:ts.Node,cell:Cell):boolean {
+    /** guardedOnly seals only expressions whose guards prove they never run
+     * (an operand after an abrupt-only one, an unselected branch). */
+    private sealSourceValue(node:ts.Node,cell:Cell,guardedOnly=false):boolean {
         if(cell.values.nonempty)return false;
         const activation=this.enclosingActivation(node);
         if(activation&&!activation.active.values.nonempty)return false;
@@ -8402,6 +8411,7 @@ class SourceValueFlow {
             const proof=this.primitiveChoiceProof(guard.condition);
             return proof.primitiveComplete&&!proof.values.some(value=>!!value===guard.truthy);
         })){this.publish(cell,this.abrupt);return true;}
+        if(guardedOnly)return false;
         this.publish(cell,this.normalResults.get(cell)??(ts.isNewExpression(node)?this.opaqueObject:this.unknown));return true;
     }
     solve(): { constructors: ConstructorSourceFacts[]; evaluations: EvaluationInvocation[] } {
@@ -8440,7 +8450,12 @@ class SourceValueFlow {
                 for(const [node,cell]of this.cells)if(ts.isIdentifier(node)&&!cell.values.nonempty&&this.isAmbientIdentifier(node)){
                     const origins=this.sourceOrigins.get(this.sourceFile(node));
                     if(origins&&!origins.values.nonempty)continue;
-                    const binding=this.binding(node);
+                    let binding=this.binding(node);
+                    // Inside a function the name reads the global binding unless
+                    // a direct eval there declares it: that global binding is
+                    // the external input.
+                    const global=this.activationGlobalFallbacks.get(binding);
+                    if(global&&!this.evaluationDeclarationBindings.get(binding)?.origins.size)binding=global;
                     if(binding.values.nonempty||this.writtenAmbientBindings.has(binding)||this.scriptDeclaredBindings.has(binding))continue;
                     // A reference inside evaluated or generated code resolves
                     // through its environment's callers (the caller's realm
@@ -8461,6 +8476,12 @@ class SourceValueFlow {
             for (const cell of this.exceptionCells) if (!cell.values.nonempty) {this.publish(cell, this.abrupt); changed = true;}
             for (const cell of this.accessorSlots) if (!cell.values.nonempty) {this.publish(cell, this.primitive(undefined)); changed = true;}
             if (changed) continue;
+            // An expression its guards prove unreachable completes abruptly.
+            // Propagate those completions before any empty fact becomes
+            // unknown, so a consumer of one (`(abrupt, "x")`) is not sealed
+            // as unknown in the same pass.
+            for(const [node,cell]of this.cells)changed=this.sealSourceValue(node,cell,true)||changed;
+            if(changed)continue;
             // Close canonical invocation locations before their expression
             // consumers, so native normal categories cannot become top at an
             // otherwise empty forwarding edge.
