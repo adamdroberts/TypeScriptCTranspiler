@@ -86,8 +86,14 @@ type EscapeReach={readonly callables:Set<Atom>;readonly iterators:Set<Cell>;read
  * getters and stored functions a native may invoke on such a value; the
  * transparent Function.prototype call/apply/bind operations, a function's
  * own `prototype` and a `constructor` property are not consulted, since a
- * native never calls those on a value it was not given as a callback. */
-type EscapeReachKind="direct"|"argument"|"method";
+ * native never calls those on a value it was not given as a callback.
+ * elements: the receiver of an Array.prototype native, never invoked itself;
+ * its accessors run (method), its stored values (elements, "length",
+ * "constructor") are only read, compared, moved or converted, so each is an
+ * argument whose own methods and accessors may run (ToString in sort,
+ * toLocaleString, the @@species of "constructor"); its prototype chain is
+ * reached the same way. */
+type EscapeReachKind="direct"|"argument"|"method"|"elements";
 const TRANSPARENT_CALL_OPERATIONS:ReadonlySet<string>=new Set(["call","apply","bind"]);
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
@@ -112,6 +118,22 @@ const SOURCE_OBJECT_PROTOTYPE_OPERATIONS:ReadonlyMap<string,Operation>=new Map([
  * itself. Natives outside this table keep every position callable. */
 const NATIVE_DIRECT_CALLEE_POSITIONS:ReadonlyMap<string,ReadonlySet<number>>=new Map([...runtimeArrayPrototypeMethods.keys()].map(name=>
     [`native-array:${name}`,new Set(["forEach","map","flatMap","filter","some","every","find","findIndex","findLast","findLastIndex","reduce","reduceRight","sort","toSorted"].includes(name)?[0]:[])]));
+/** What an Array.prototype native stores into its receiver (after ToObject):
+ * the mutating methods Set elements at integer indices, delete integer
+ * indices and Set "length", each only where its algorithm does
+ * (sec-properties-of-the-array-prototype-object); every other method leaves
+ * the receiver unchanged, and no Array.prototype method writes an argument.
+ * copyWithin, fill, reverse and sort return that receiver ("Return O").
+ * A user callback, getter, setter or species constructor these natives run
+ * is modelled by its own escaped invocation. */
+type NativeArrayReceiverEffect={readonly set:boolean;readonly remove:boolean;readonly length:boolean;readonly receiverResult:boolean};
+const NATIVE_ARRAY_RECEIVER_EFFECTS:ReadonlyMap<string,NativeArrayReceiverEffect>=new Map([...runtimeArrayPrototypeMethods.keys()].map(name=>
+    [`native-array:${name}`,{
+        set:["copyWithin","fill","push","reverse","shift","sort","splice","unshift"].includes(name),
+        remove:["copyWithin","pop","reverse","shift","sort","splice","unshift"].includes(name),
+        length:["pop","push","shift","splice","unshift"].includes(name),
+        receiverResult:["copyWithin","fill","reverse","sort"].includes(name),
+    }]));
 /** Natives that evaluate or load code: their effects are not bounded by
  * what their receiver and arguments reach. */
 const GLOBAL_EFFECT_OPERATIONS:ReadonlySet<string>=new Set(["eval","eval-script","agent-start","native-require"]);
@@ -142,14 +164,18 @@ const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operati
  * fixed and which run no user code on a primitive receiver with primitive
  * arguments: a String method converts any non-nullish, non-Symbol primitive
  * receiver with ToString; a Number/BigInt method accepts only its own kind
- * (thisNumberValue / thisBigIntValue throw otherwise). The RegExp protocol
- * methods (match, matchAll, replace, replaceAll, search, split) resolve
- * @@match-style members through String.prototype / RegExp.prototype and
- * stay opaque. */
-type PrimitiveMemberResult={string?:true;number?:true;boolean?:true;undefined?:true};
+ * (thisNumberValue / thisBigIntValue throw otherwise). Of the RegExp
+ * protocol methods, split, replace and replaceAll ask only an Object
+ * argument for its @@-method (sec-string.prototype.split: "If separator is
+ * an Object"), so with primitive arguments they are string operations (split
+ * returns a fresh Array of Strings); match, matchAll and search create a
+ * RegExp from a primitive argument and invoke its %RegExp.prototype%
+ * @@-method, which the program may replace, so they stay opaque. */
+type PrimitiveMemberResult={string?:true;number?:true;boolean?:true;undefined?:true;strings?:true};
 const PRIMITIVE_MEMBER_RESULTS:ReadonlyMap<string,PrimitiveMemberResult>=new Map<string,PrimitiveMemberResult>([
     ...["charAt","concat","repeat","padStart","padEnd","slice","substring","substr","trim","trimStart","trimEnd","toLowerCase","toUpperCase","toLocaleLowerCase","toLocaleUpperCase","normalize","toWellFormed","anchor","big","blink","bold","fixed","fontcolor","fontsize","italics","link","small","strike","sub","sup"].map(name=>["string:"+name,{string:true as const}] as const),
     ["string:at",{string:true,undefined:true}],
+    ["string:replace",{string:true}],["string:replaceAll",{string:true}],["string:split",{strings:true}],
     ...["charCodeAt","indexOf","lastIndexOf","localeCompare"].map(name=>["string:"+name,{number:true as const}] as const),
     ["string:codePointAt",{number:true,undefined:true}],
     ...["includes","startsWith","endsWith","isWellFormed"].map(name=>["string:"+name,{boolean:true as const}] as const),
@@ -540,7 +566,7 @@ class SourceValueFlow {
     private readonly asyncIteratorPrototypes=new WeakMap<SourceRealmRecord,Cell>();
     private readonly sourceObjectOwners=new WeakSet<ObjectOwner>();
     private readonly opaqueCaptureCalls=new Map<ts.Node,Set<Cell>>();
-    private readonly escapedCallableCalls=new Map<ts.Node,Map<boolean,{visit:(input:Cell,direct?:boolean)=>void}>>();
+    private readonly escapedCallableCalls=new Map<ts.Node,Map<boolean,{visit:(input:Cell,as?:EscapeReachKind)=>void}>>();
     private readonly escapeReaches=new Map<string,{cells:Map<Cell,EscapeReach>;atoms:Map<Atom,EscapeReach>}>();
     private readonly escapedInvocationOrigins=new WeakMap<ts.Node,ts.Node>();
     /** Opaque code invokes an async callee with unknown actuals, so all such
@@ -1368,7 +1394,9 @@ class SourceValueFlow {
         let record=reach.atoms.get(atom);if(record)return record;
         const result=this.newEscapeReach();reach.atoms.set(atom,result);
         const nested:EscapeReachKind=kind==="direct"?"direct":"method";
-        const visit=(input:Cell):void=>this.linkEscapeReach(this.escapeCellReach(input,sourceCallbacksOnly,nested),result);
+        // Stored values; accessors and conversion targets are reached as nested.
+        const stored:EscapeReachKind=kind==="elements"?"argument":nested;
+        const visit=(input:Cell,as:EscapeReachKind=stored):void=>this.linkEscapeReach(this.escapeCellReach(input,sourceCallbacksOnly,as),result);
         const owner=this.ordinaryOwner(atom);
         // Program state a native can hand back: objects the program created
         // (literals, constructions, functions, collections). Intrinsics stay
@@ -1377,13 +1405,13 @@ class SourceValueFlow {
         if(atom.tag==="promise"){visit(atom.value);visit(atom.rejection);}
         if(atom.tag==="generator"){visit(atom.yielded);visit(atom.returned);}
         const transparent=kind==="method"&&atom.tag==="operation"&&TRANSPARENT_CALL_OPERATIONS.has(atom.operation);
-        if(kind!=="argument"&&!transparent&&(atom.tag==="function"||atom.tag==="bound"||atom.tag==="promise-resolver"||owner?.proxy||!sourceCallbacksOnly&&(atom.tag==="intrinsic"||atom.tag==="operation"||atom.tag==="builtin"&&atom.normalResult!=="not-callable")))this.pushEscapeReach(result,atom);
+        if(kind!=="argument"&&kind!=="elements"&&!transparent&&(atom.tag==="function"||atom.tag==="bound"||atom.tag==="promise-resolver"||owner?.proxy||!sourceCallbacksOnly&&(atom.tag==="intrinsic"||atom.tag==="operation"||atom.tag==="builtin"&&atom.normalResult!=="not-callable")))this.pushEscapeReach(result,atom);
         if(!owner)return result;
-        const skipped=(key:SourcePropertyKey):boolean=>kind!=="direct"&&(key==="constructor"||key==="prototype"&&atom.tag==="function");
+        const skipped=(key:SourcePropertyKey):boolean=>kind!=="direct"&&kind!=="elements"&&(key==="constructor"||key==="prototype"&&atom.tag==="function");
         let inspect!:Rule;
         inspect=this.rule([owner.shape],()=>{
             for(const [key,property] of owner.own?.entries()??[])if(!skipped(key))for(const write of property.writes.values())visit(write.values);
-            for(const accessor of owner.accessors.values())if(this.accessorDefinitions.has(accessor.get)){visit(accessor.get);visit(accessor.set);}
+            for(const accessor of owner.accessors.values())if(this.accessorDefinitions.has(accessor.get)){visit(accessor.get,nested);visit(accessor.set,nested);}
             const stored=this.unknownPropertyLocations.get(owner);if(stored)visit(stored.value);
             if(!sourceCallbacksOnly&&atom.tag!=="function"&&!this.sourceObjectOwners.has(owner)&&!this.ownerCreations.has(owner)&&!this.ownerRealms.has(owner)&&!owner.collections&&!owner.collectionIterator)return;
             const realm=sourceCallbacksOnly?undefined:this.ownerRealms.get(owner);
@@ -1400,8 +1428,8 @@ class SourceValueFlow {
                 for(const value of initial)this.linkEscapeReach(this.escapeAtomReach(value,field,sourceCallbacksOnly,"argument"),result);
                 visit(this.writtenGlobalField(field,initial));
             }
-            for(const accessor of owner.accessors.values()){visit(accessor.get);visit(accessor.set);}
-            if(owner.prototype)visit(owner.prototype);
+            for(const accessor of owner.accessors.values()){visit(accessor.get,nested);visit(accessor.set,nested);}
+            if(owner.prototype)visit(owner.prototype,kind==="elements"?"elements":nested);
             if(owner.proxy){visit(owner.proxy.target);visit(owner.proxy.handler);}
             for(const record of owner.collections?.values()??[]){
                 this.watch(inspect,record.changes);this.watch(inspect,record.shape);
@@ -1432,7 +1460,33 @@ class SourceValueFlow {
             this.publish(record.value,this.nativeUnknown);
         });
     }
-    private escapeCallableArgument(argument:Cell,context:ts.Node,sourceCallbacksOnly=false,directCallee=true):void {
+    /** The receiver writes of an Array.prototype native the model leaves
+     * opaque. On an ordinary object they are its algorithm's: elements it
+     * read from the receiver or was handed, Set at some integer index;
+     * integer indices it may delete; and a Number "length". Every other own
+     * key keeps its value, so a later read of a method (`seen.push`) still
+     * finds the inherited one. Any other receiver (exotic, unrepresented or
+     * primitive) keeps the unbounded shape mutation of a native. */
+    private nativeArrayReceiverWrites(receiver:Cell,effect:NativeArrayReceiverEffect,inputs:readonly Cell[],context:ts.Node):void {
+        const ordinary=this.newCell(),other=this.newCell(),algorithms=new Set<Cell>();
+        let rule!:Rule;
+        rule=this.rule([receiver],()=>{for(const atom of receiver.values){
+            const algorithm=this.ordinaryOwner(atom)?.propertyAlgorithm;
+            if(algorithm&&!algorithms.has(algorithm)){algorithms.add(algorithm);this.watch(rule,algorithm);}
+            if(algorithm?.values.has(this.primitive("ordinary"))&&!algorithm.values.has(this.primitive("opaque")))this.publish(ordinary,atom);
+            else this.publish(other,atom);
+        }});
+        this.writeProperty(other,null,this.empty,false,"set",context);
+        const indices=this.newCell();this.publish(indices,this.numberValue());
+        if(effect.set){
+            const values=this.newCell();this.copy(this.computedProperty(ordinary,indices,context),values);
+            for(const input of inputs)this.copy(input,values);
+            this.writeProperty(ordinary,null,values,false,"set",context,ordinary,indices);
+        }
+        if(effect.remove){const removed=this.newCell();this.publish(removed,this.primitive(undefined));this.writeProperty(ordinary,null,removed,false,"delete",context,ordinary,indices);}
+        if(effect.length){const length=this.newCell();this.publish(length,this.numberValue());this.writeProperty(ordinary,"length",length,false,"set",context);}
+    }
+    private escapeCallableArgument(argument:Cell,context:ts.Node,sourceCallbacksOnly=false,kind:EscapeReachKind="direct"):void {
         context=this.escapeContext(context);
         let modes=this.escapedCallableCalls.get(context);if(!modes){modes=new Map();this.escapedCallableCalls.set(context,modes);}
         let graph=modes.get(sourceCallbacksOnly);
@@ -1451,7 +1505,7 @@ class SourceValueFlow {
             else this.publish(actuals,this.unknown);
             // Iterator elements are read through this escaping call's context.
             const sink=this.newEscapeReach({callable:atom=>this.publish(target,atom),iterator:cell=>visit(this.directIteratorElements(cell,context))});
-            const visit=(input:Cell,direct=true):void=>{const key=input.id+":"+direct;if(seen.has(key))return;seen.add(key);this.linkEscapeReach(this.escapeCellReach(input,sourceCallbacksOnly,direct?"direct":"argument"),sink);};
+            const visit=(input:Cell,as:EscapeReachKind="direct"):void=>{const key=input.id+":"+as;if(seen.has(key))return;seen.add(key);this.linkEscapeReach(this.escapeCellReach(input,sourceCallbacksOnly,as),sink);};
             graph={visit};modes.set(sourceCallbacksOnly,graph);
             const invocation=this.invocationContext(context);
             this.escapedInvocationOrigins.set(invocation,context);
@@ -1464,7 +1518,7 @@ class SourceValueFlow {
             this.invoke(invocation,target,actuals,parts,returned);
             this.invoke(invocation,target,constructed,parts,returned,true);
         }
-        graph.visit(argument,directCallee);
+        graph.visit(argument,kind);
     }
     /** Synthetic protocol calls retain their scheduling boundary independently
      * of the source position at which the protocol was requested. */
@@ -7461,7 +7515,9 @@ class SourceValueFlow {
                         const builtinMember=atom===this.nativeUnknown||atom.tag==="unknown"&&!proxy&&invocation.receiver!==this.empty&&invocation.receiver.values.nonempty&&
                             [...invocation.receiver.values].every(value=>value.tag==="builtin"||value.tag==="intrinsic"||value.tag==="operation"||value===this.nativeUnknown);
                         const directCallees:ReadonlySet<number>|"all"|undefined=atom.tag==="operation"&&!GLOBAL_EFFECT_OPERATIONS.has(atom.operation)?NATIVE_DIRECT_CALLEE_POSITIONS.get(atom.operation)??"all":builtinMember?"all":undefined;
+                        const arrayEffect=atom.tag==="operation"?NATIVE_ARRAY_RECEIVER_EFFECTS.get(atom.operation):undefined;
                         if(invocation.construct)this.publish(result!,this.opaqueObject);
+                        else if(arrayEffect?.receiverResult)this.copy(this.toObject(invocation.receiver,node),result!);
                         else if(directCallees)this.publish(result!,this.nativeUnknown);
                         else this.copy(this.executionOrigins(node),result!);
                         if (!handled(this.unknown,signature)) this.onActive(node,()=>{
@@ -7473,12 +7529,15 @@ class SourceValueFlow {
                                 this.escapeCallableArgument(this.globalReceiver,node,true);
                                 for(const binding of this.globalLexicals.values())this.escapeCallableArgument(binding.value,node,true);
                             }
-                            this.writeProperty(invocation.receiver,null,this.empty,false,"set",node);
-                            this.escapeCallableArgument(invocation.receiver,node);
                             const argumentsEscaping = invocation.args ?? (invocation.sequence ? [this.allArgumentValues(invocation.sequence)] : []);
+                            if(arrayEffect)this.nativeArrayReceiverWrites(invocation.receiver,arrayEffect,argumentsEscaping,node);
+                            else this.writeProperty(invocation.receiver,null,this.empty,false,"set",node);
+                            // An Array.prototype native never calls its receiver or the
+                            // values it stores; their accessors and methods may run.
+                            this.escapeCallableArgument(invocation.receiver,node,false,arrayEffect?"elements":"direct");
                             for (const [index,argument] of argumentsEscaping.entries()) {
-                                this.writeProperty(argument,null,this.empty,false,"set",node);
-                                this.escapeCallableArgument(argument,node,false,!directCallees||directCallees==="all"||directCallees.has(index));
+                                if(!arrayEffect)this.writeProperty(argument,null,this.empty,false,"set",node);
+                                this.escapeCallableArgument(argument,node,false,!directCallees||directCallees==="all"||directCallees.has(index)?"direct":"argument");
                             }
                         });
                         continue;
@@ -7631,6 +7690,7 @@ class SourceValueFlow {
                                 if(kind.number){let value=this.numericValues.get(KIND_NUMBER);if(!value){value={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,value);}this.publish(result,value);}
                                 if(kind.boolean){this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));}
                                 if(kind.undefined)this.publish(result,this.primitive(undefined));
+                                if(kind.strings)this.copy(this.regexpStringArray(node,"split"),result);
                             }
                             continue;
                         }
