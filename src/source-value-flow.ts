@@ -75,7 +75,7 @@ type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpressio
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
 type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-integrity:${"preventExtensions"|"seal"|"freeze"}` | `object-integrity-test:${"isExtensible"|"isSealed"|"isFrozen"}` | `regexp-flag:${string}` | `regexp-member:${string}` | `object-enumerable:${"keys"|"values"|"entries"}` | `object-has-own:${"static"|"prototype"}` | `array-iteration:${ArrayIterationMode}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `legacy-function-accessor:${"caller"|"arguments"}:${"get"|"set"}` | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "promise-species" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
+    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "species-getter" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
 type Primitive = SourcePrimitive;
 /** Callables and collection-iterator cells reachable from one escaping value;
  * a sink forwards them into one escaping call. */
@@ -540,6 +540,7 @@ class SourceValueFlow {
     private readonly prototypeWrites = new Map<ts.Node,Map<string,Cell>>();
     private readonly writablePrototypes = new Map<ObjectOwner,Cell>();
     private readonly arrayIterations=new Map<ts.Node,Map<string,Cell>>();
+    private readonly arraySpeciesResults=new Map<ts.Node,Map<string,Cell>>();
     private readonly freshArrays=new Map<ts.Node,Map<string,Cell>>();
     private readonly invocationTimings=new WeakMap<ts.Node,{readonly repeated:boolean;readonly deferred:boolean}>();
     private readonly arrayPushes=new Map<ts.Node,Map<string,Cell>>();
@@ -4162,12 +4163,17 @@ class SourceValueFlow {
                 if (descriptor.normalResult !== "not-callable") fields.prototype = this.callablePrototype("ordinary");
                 if(runtimeErrorKinds.has(key)){this.defineField(fields,"prototype",this.errorPrototype(key));if(key!=="Error")fields.prototype=this.intrinsicErrorConstructor();}
                 if(key==="Object")this.defineField(fields,"prototype",this.objectPrototype());
-                if(key==="Array")this.defineField(fields,"prototype",this.arrayPrototype());
+                if(key==="Array"){
+                    this.defineField(fields,"prototype",this.arrayPrototype());
+                    const getter=this.newCell();this.publish(getter,this.operation("species-getter"));
+                    this.defineAccessor(fields,this.wellKnownSymbols.get("species")!,"get",getter);
+                    this.ownPresence(fields,this.wellKnownSymbols.get("species")!).initial=true;
+                }
                 if(key==="Map"||key==="Set")this.defineField(fields,"prototype",this.collectionPrototype(key));
                 if(key==="Promise"){
                     this.defineField(fields,"prototype",this.promisePrototype());
                     for(const [name,member]of runtimePromiseMethods)if(member.static){const value=this.newCell();this.publish(value,this.operation(`promise-member:${name}`));this.defineField(fields,name,value,false);}
-                    const getter=this.newCell();this.publish(getter,this.operation("promise-species"));
+                    const getter=this.newCell();this.publish(getter,this.operation("species-getter"));
                     this.defineAccessor(fields,this.wellKnownSymbols.get("species")!,"get",getter);
                     this.ownPresence(fields,this.wellKnownSymbols.get("species")!).initial=true;
                 }
@@ -5156,6 +5162,58 @@ class SourceValueFlow {
      * findLast, a number for findIndex and findLastIndex, a fresh array of
      * the returned values (map), of the elements (filter) or of the returned
      * values and their elements (flatMap), and the accumulator for reduce. */
+    /** ArraySpeciesCreate (sec-arrayspeciescreate) for a native that collects
+     * elements into a new array. A receiver that may be an Array (an array
+     * owner, a builtin construction such as an Array subclass instance, a
+     * Proxy) has its "constructor" read, so a getter there runs; a constructor
+     * that is an Object has its @@species read (%Array%'s own getter answers
+     * %Array%). undefined, null or an %Array% give the fresh Array; any other
+     * object is constructed with a Number length and receives the elements as
+     * data properties at integer indices; a primitive throws TypeError. A
+     * receiver that is not an Array gives the fresh Array without reads, and
+     * an unrepresented receiver already makes the iteration opaque. */
+    private arraySpeciesCreate(objects:Cell,fresh:Cell,elements:Cell,context:ts.Node):Cell {
+        let calls=this.arraySpeciesResults.get(context);if(!calls){calls=new Map();this.arraySpeciesResults.set(context,calls);}
+        const key=objects.id+":"+fresh.id+":"+elements.id,prior=calls.get(key);if(prior)return prior;
+        const result=this.newCell(),arrays=this.newCell(),candidates=this.newCell(),species=this.newCell();calls.set(key,result);
+        const caught=this.exceptionHandlers.get(context);
+        const step=this.invocationContext(context);if(caught)this.exceptionHandlers.set(step,caught);
+        const throwType=():void=>{this.publish(result,this.abrupt);if(caught)this.publish(caught,this.nativeException(context,"TypeError"));};
+        let defaulted=false;const fallback=():void=>{if(!defaulted){defaulted=true;this.copy(fresh,result);}};
+        const algorithms=new Set<Cell>();
+        let select!:Rule;
+        select=this.rule([objects],()=>{for(const atom of objects.values){
+            if(atom.tag==="abrupt"||atom.tag==="pending-source")continue;
+            const owner=this.ordinaryOwner(atom),algorithm=owner?.propertyAlgorithm;
+            if(algorithm&&!algorithms.has(algorithm)){algorithms.add(algorithm);this.watch(select,algorithm);}
+            if(owner&&!owner.listLength&&!owner.proxy&&!algorithm?.values.has(this.primitive("opaque")))fallback();
+            else this.publish(arrays,atom);
+        }});
+        const constructors=this.property(arrays,"constructor",context);
+        this.rule([constructors],()=>{for(const atom of constructors.values){
+            if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
+            if(atom===this.primitive(undefined))fallback();
+            else if(atom.tag==="primitive"||atom.tag==="text-operation"||atom.tag==="non-string"||atom.tag==="unknown-string")throwType();
+            else this.publish(candidates,atom);
+        }});
+        const read=this.property(candidates,this.wellKnownSymbols.get("species")!,context);
+        this.rule([read],()=>{for(const atom of read.values){
+            if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
+            if(atom===this.primitive(undefined)||atom===this.primitive(null)||atom.tag==="builtin"&&atom.name==="Array")fallback();
+            else if(atom.tag==="primitive"||atom.tag==="text-operation"||atom.tag==="non-string"||atom.tag==="unknown-string")throwType();
+            else this.publish(species,atom);
+        }});
+        const receiver=this.newCell(),length=this.newCell(),constructed=this.newCell(),indices=this.newCell();
+        this.publish(receiver,{tag:"object",owner:this.owner(step)});this.publish(length,this.numberValue());this.publish(indices,this.numberValue());
+        let started=false;
+        this.rule([species],()=>{
+            if(started||!species.values.nonempty)return;started=true;
+            this.invoke(step,species,receiver,[{cell:length,spread:false}],constructed,true);
+            this.writeProperty(constructed,null,elements,false,"define",step,constructed,indices);
+            this.copy(constructed,result);
+        });
+        return result;
+    }
     private arrayIteration(mode:ArrayIterationMode,receiver:Cell,callback:Cell,extra:Cell|null,context:ts.Node):Cell {
         let calls=this.arrayIterations.get(context);if(!calls){calls=new Map();this.arrayIterations.set(context,calls);}
         const key=mode+":"+receiver.id+":"+callback.id+":"+(extra?extra.id:"-"),previous=calls.get(key);if(previous)return previous;
@@ -5184,7 +5242,7 @@ class SourceValueFlow {
             this.rule([normalReturns],()=>{for(const atom of normalReturns.values)if(this.ordinaryOwner(atom)?.listLength)this.publish(arrays,atom);else this.publish(elements,atom);});
             this.copy(this.computedProperty(arrays,indices,step),elements);
         }
-        const collected=collecting?this.arrayOfValues(context,"iteration:"+key,elements):null;
+        const collected=collecting?this.arraySpeciesCreate(objects,this.arrayOfValues(context,"iteration:"+key,elements),elements,context):null;
         const emptyResult=():void=>{
             if(mode==="some")this.publish(result,this.primitive(false));
             else if(mode==="every")this.publish(result,this.primitive(true));
@@ -7763,7 +7821,7 @@ class SourceValueFlow {
                         const [,kind,completion]=atom.operation.split(":");
                         this.copy(this.generatorReaction(invocation.receiver,kind!,completion!,argument(0)??omittedArgument,node),result);continue;
                     }
-                    if(atom.tag==="operation"&&atom.operation==="promise-species"){this.copy(invocation.receiver,result);continue;}
+                    if(atom.tag==="operation"&&atom.operation==="species-getter"){this.copy(invocation.receiver,result);continue;}
                     if(atom.tag==="operation"&&atom.operation==="promise-finally-forward") {
                         this.copy(this.promiseFinallyForward(argument(0)??omittedArgument,argument(2)??omittedArgument,argument(1)??omittedArgument,node),result);continue;
                     }
