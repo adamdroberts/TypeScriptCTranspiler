@@ -1892,6 +1892,9 @@ class SourceValueFlow {
         return graph.reaching(context);
     }
     private bindingSymbol(node: ts.Identifier): ts.Symbol | undefined {
+        // A Realm global reference of indirectly evaluated code has no lexical
+        // declaration around its caller.
+        if(this.evaluationGlobalTargets.has(node))return undefined;
         // Ordinary checker lookup stops at with. Resolve the declarative
         // fallback separately; object-record candidates remain graph edges.
         return sourceBindingTarget(this.checker, declarativeSourceBindingSymbol(this.checker, node)).symbol;
@@ -1914,7 +1917,7 @@ class SourceValueFlow {
             !isAmbientSourceDeclaration(declaration)&&sourceDeclarationIntroducesBinding(declaration))?undefined:environment;
     }
     private implicitArgumentsOwner(node:ts.Identifier):FunctionOwner|null {
-        if(node.text!=="arguments")return null;
+        if(node.text!=="arguments"||this.evaluationGlobalTargets.has(node))return null;
         const symbol=this.bindingSymbol(node);
         // A parameter, lexical or function declaration shadows the implicit
         // binding. A plain var repeats the existing binding instead.
@@ -2034,7 +2037,10 @@ class SourceValueFlow {
         // Contextual identifiers re-enter the same binding/with/property graph.
         // Intern them by caller and name so nested or recursive source edges
         // join canonical locations rather than extending an invocation path.
-        const context=environment.direct?caller:caller.getSourceFile();
+        // An indirect eval's names resolve in its Realm's global scope, but
+        // they are read when that call runs: each caller keeps its own
+        // position and activation.
+        const context=caller;
         let targets:Map<string,ts.Identifier>|undefined;
         if(environment.direct){targets=this.evaluationReferenceTargets.get(context);if(!targets){targets=new Map();this.evaluationReferenceTargets.set(context,targets);}}
         else {let realms=this.evaluationRealmTargets.get(context);if(!realms){realms=new Map();this.evaluationRealmTargets.set(context,realms);}targets=realms.get(realm);if(!targets){targets=new Map();realms.set(realm,targets);}}
@@ -2045,7 +2051,11 @@ class SourceValueFlow {
             else this.evaluationCallerTargets.add(target);
             const handler=this.exceptionHandlers.get(node);if(handler)this.exceptionHandlers.set(target,handler);}
         this.copy(this.cell(target),reference.value);
-        this.rule([reference.writes],()=>this.writeBinding(target,reference.writes));
+        // Only a reference the evaluated code writes creates or assigns the
+        // caller's binding; a read alone leaves an undeclared name unresolved
+        // (a host value, or a ReferenceError under the Test262 host).
+        let written=false;
+        this.rule([reference.writes],()=>{if(written||!reference.writes.values.nonempty)return;written=true;this.writeBinding(target,reference.writes);});
     }
     private executionRealms(node:ts.Node):Cell {
         const environment=this.evaluationEnvironments.get(this.sourceFile(node));
@@ -2175,6 +2185,7 @@ class SourceValueFlow {
         return false;
     }
     private withBindingObjects(node: ts.Identifier): Cell[] {
+        if (this.evaluationGlobalTargets.has(node)) return [];
         const symbol = this.bindingSymbol(node);
         let declaration = symbol?.valueDeclaration && sourceDeclarationIntroducesBinding(symbol.valueDeclaration)
             ? symbol.valueDeclaration : symbol?.declarations?.find(sourceDeclarationIntroducesBinding);
@@ -4161,9 +4172,11 @@ class SourceValueFlow {
      * the host's own names and the analysed scripts' declarations has no
      * binding; a property the program may have created on the global
      * object keeps the name resolvable. */
-    private unresolvableHostName(name:string):boolean {
+    private unresolvableHostName(name:string,realm=this.currentRealm):boolean {
         if(!this.test262Host||runtimeGlobalBindings.has(name)||TEST262_HOST_NAMES.has(name))return false;
-        const owner=this.ordinaryOwner(this.currentRealm.global);
+        // Each Realm has its own global object: another Realm's properties
+        // and declarations do not resolve the name.
+        const owner=this.ordinaryOwner(realm.global);
         if(!owner)return true;
         // Every referenced global name has a field on the global object
         // owner (its binding cell); only a field with facts, an accessor or a
@@ -8493,7 +8506,7 @@ class SourceValueFlow {
                     // through its environment's callers (the caller's realm
                     // supplies the global); it is not an external input.
                     if(this.evaluationDeclarationBindings.has(binding))continue;
-                    if(this.unresolvableHostName(node.text)){
+                    if(this.unresolvableHostName(node.text,this.evaluationGlobalTargets.get(node))){
                         // ResolveBinding finds no binding: GetValue throws
                         // ReferenceError, and typeof answers "undefined".
                         if(ts.isTypeOfExpression(node.parent))this.publish(cell,this.primitive(undefined));
