@@ -1796,14 +1796,18 @@ class SourceValueFlow {
                 const normalized=this.captureConstraintSet(constraints.phases);
                 if(normalized!==constraints){this.copy(this.captureProjection(source,normalized),target);return;}
                 if(constraints.phases.every(phase=>!!phase.activationOnly)){this.copy(source,target);return;}
-                const worklist=[{source,origins:false}],visited=new Map<Cell,number>();
+                // Growth anywhere in a watched cell's copy closure reaches the
+                // rule through the change flush, so only the walk's roots (the
+                // source, capture inputs and transform replays, which are not
+                // copy edges) are watched, not every cell the walk visits.
+                const worklist=[{source,origins:false,root:true}],visited=new Map<Cell,number>();
                 while(worklist.length){
-                    const {source,origins}=worklist.pop()!,bit=origins?1:2;
-                    if((visited.get(source)??0)&bit)continue;visited.set(source,(visited.get(source)??0)|bit);this.watch(read,source);
+                    const {source,origins,root}=worklist.pop()!,bit=origins?1:2;
+                    if((visited.get(source)??0)&bit)continue;visited.set(source,(visited.get(source)??0)|bit);if(root)this.watch(read,source);
                     const prior=this.captureInputs.get(source);
                     if(prior){
                         const combined=this.captureConstraintSet([...constraints.phases,...prior.constraints.phases]);
-                        if(combined===constraints){worklist.push({source:prior.source,origins});continue;}
+                        if(combined===constraints){worklist.push({source:prior.source,origins,root:true});continue;}
                         const projected=this.captureProjection(prior.source,combined);this.watch(read,projected);
                         if(projected!==target)for(const atom of projected.values)if(!origins||atom.tag==="unknown")this.publish(target,atom);
                         continue;
@@ -1833,7 +1837,7 @@ class SourceValueFlow {
                         const transform=this.returnTransforms.get(source);
                         if(transform?.kind==="projection"){
                             const replay=transform.evaluate(transform.inputs.map(part=>project(part,constraints)));
-                            if(replay!==source){worklist.push({source:replay,origins:false});continue;}
+                            if(replay!==source){worklist.push({source:replay,origins:false,root:true});continue;}
                         }
                     }
                     for(const atom of source.values.ownValues()){
@@ -1843,7 +1847,7 @@ class SourceValueFlow {
                         if(origins&&atom.tag!=="unknown"||constraints.phases.some(phase=>!phase.activationOnly&&!this.effectVisible(atom,phase.context,phase.argumentsRead)))continue;
                         this.publish(target,atom.tag==="text-operation"?this.captureAtom(atom,constraints):atom);
                     }
-                    for(const [facts,kind]of source.values.sources)worklist.push({source:this.sourceCells.get(facts)!,origins:origins||kind==="origin"});
+                    for(const [facts,kind]of source.values.sources)worklist.push({source:this.sourceCells.get(facts)!,origins:origins||kind==="origin",root:false});
                 }
                 extend();
             });
