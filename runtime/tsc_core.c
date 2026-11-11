@@ -1147,7 +1147,15 @@ static size_t g_cross_cap = 0;
 static size_t g_dispatch_outstanding = 0;
 
 static _Thread_local size_t g_runtime_lock_depth;
-void tsc_runtime_lock(void) { pthread_mutex_lock(&g_runtime_mutex);++g_runtime_lock_depth; }
+#ifndef TSC_NO_GC
+static void boxed_stack_thread_register(void);
+#endif
+void tsc_runtime_lock(void) {
+#ifndef TSC_NO_GC
+    boxed_stack_thread_register();
+#endif
+    pthread_mutex_lock(&g_runtime_mutex);++g_runtime_lock_depth;
+}
 void tsc_runtime_unlock(void) { --g_runtime_lock_depth;pthread_mutex_unlock(&g_runtime_mutex); }
 size_t tsc_runtime_suspend(void){size_t depth=g_runtime_lock_depth;while(g_runtime_lock_depth)tsc_runtime_unlock();return depth;}
 void tsc_runtime_resume(size_t depth){while(depth--)tsc_runtime_lock();}
@@ -2786,8 +2794,14 @@ static void stack_floor_resolve(void) {
  * passed beside an allocating argument, a runtime local such as a freshly
  * created function) would not keep its target alive. With the world stopped
  * the collecting thread's own stack, registers spilled, is walked once more
- * and every boxed word is decoded and marked. Other threads' stacks keep the
- * collector's raw scan plus their explicit roots. */
+ * and every boxed word is decoded and marked. Every other thread that runs
+ * program code (it took the runtime lock: a Test262 agent, a thread parked in
+ * Atomics.wait, agent.start or receiveBroadcast while another thread
+ * allocates) is walked the same way from the stack pointer the collector
+ * captured when it stopped that thread (its registers are saved below that
+ * point by the suspend handler) up to the thread's stack top; without it a
+ * value such a thread holds only boxed was reclaimed and later called through
+ * reused memory. */
 static GC_push_other_roots_proc g_previous_push_other_roots;
 static void push_boxed_words(char* low, char* high) {
     void* decoded[256];
@@ -2811,10 +2825,83 @@ static void GC_CALLBACK push_boxed_stack(void) {
     char* low = (char*)&registers;
     if (low < g_stack_high) push_boxed_words(low, g_stack_high);
 }
+#ifdef TSC_THREADS
+/* Registered program threads by pthread identity. Entries change only under
+ * the collector's lock, which the stack corrector also holds, so the table
+ * is read consistently with the world stopped; a thread's entry is released
+ * by a key destructor when it exits, before its identity can be reused. */
+typedef struct {pthread_t thread;char* high;bool used;} boxed_stack_thread_t;
+static boxed_stack_thread_t* g_boxed_threads;
+static size_t g_boxed_thread_count,g_boxed_thread_capacity;
+static pthread_key_t g_boxed_thread_key;
+static pthread_once_t g_boxed_thread_once=PTHREAD_ONCE_INIT;
+static bool g_boxed_thread_key_ready,g_boxed_corrector_installed;
+static _Thread_local bool g_boxed_thread_registered;
+static GC_sp_corrector_proc g_previous_sp_corrector;
+static void* GC_CALLBACK boxed_thread_add_locked(void* high) {
+    boxed_stack_thread_t entry={pthread_self(),(char*)high,true};
+    for (size_t i = 0; i < g_boxed_thread_count; i++)
+        if (!g_boxed_threads[i].used) { g_boxed_threads[i] = entry; return high; }
+    if (g_boxed_thread_count == g_boxed_thread_capacity) {
+        size_t next = g_boxed_thread_capacity ? g_boxed_thread_capacity * 2 : 8;
+        boxed_stack_thread_t* threads = (boxed_stack_thread_t*)realloc(g_boxed_threads, next * sizeof(*threads));
+        if (!threads) return NULL;
+        g_boxed_threads = threads;
+        g_boxed_thread_capacity = next;
+    }
+    g_boxed_threads[g_boxed_thread_count++] = entry;
+    return high;
+}
+static void* GC_CALLBACK boxed_thread_remove_locked(void* unused) {
+    (void)unused;
+    pthread_t self = pthread_self();
+    for (size_t i = 0; i < g_boxed_thread_count; i++)
+        if (g_boxed_threads[i].used && pthread_equal(g_boxed_threads[i].thread, self)) g_boxed_threads[i].used = false;
+    return NULL;
+}
+static void boxed_thread_exit(void* value) { (void)value; (void)GC_call_with_alloc_lock(boxed_thread_remove_locked, NULL); }
+static void boxed_thread_key_create(void) { g_boxed_thread_key_ready = pthread_key_create(&g_boxed_thread_key, boxed_thread_exit) == 0; }
+static void GC_CALLBACK boxed_stack_sp_corrector(void** sp, void* id) {
+    if (g_previous_sp_corrector) g_previous_sp_corrector(sp, id);
+    pthread_t thread = (pthread_t)(uintptr_t)id;
+    for (size_t i = 0; i < g_boxed_thread_count; i++) {
+        boxed_stack_thread_t* entry = &g_boxed_threads[i];
+        if (!entry->used || !pthread_equal(entry->thread, thread)) continue;
+        char* low = (char*)*sp;
+        if (low && low < entry->high) push_boxed_words(low, entry->high);
+        return;
+    }
+}
+/* Fails closed: a second thread whose stack the collector cannot decode
+ * must not run program code beside the main one. The main thread alone is
+ * the collecting thread whenever it allocates, so it needs no entry then. */
+static void boxed_stack_thread_register(void) {
+    if (g_boxed_thread_registered) return;
+    if (!g_stack_floor_known) stack_floor_resolve();
+    if (!g_stack_high || !g_boxed_corrector_installed) {
+        if (tsc_is_main_thread()) { g_boxed_thread_registered = true; return; }
+        tsc_panic("runtime thread stack cannot be scanned for boxed values");
+    }
+    (void)pthread_once(&g_boxed_thread_once, boxed_thread_key_create);
+    if (!g_boxed_thread_key_ready) tsc_panic("runtime thread stack cannot be registered");
+    if (!GC_call_with_alloc_lock(boxed_thread_add_locked, g_stack_high)) tsc_panic("runtime thread stack cannot be registered");
+    if (pthread_setspecific(g_boxed_thread_key, (void*)1) != 0) {
+        (void)GC_call_with_alloc_lock(boxed_thread_remove_locked, NULL);
+        tsc_panic("runtime thread stack cannot be registered");
+    }
+    g_boxed_thread_registered = true;
+}
+#endif
 static void boxed_stack_roots_install(void) {
     if (!g_stack_floor_known) stack_floor_resolve();
     g_previous_push_other_roots = GC_get_push_other_roots();
     GC_set_push_other_roots(push_boxed_stack);
+#ifdef TSC_THREADS
+    g_previous_sp_corrector = GC_get_sp_corrector();
+    GC_set_sp_corrector(boxed_stack_sp_corrector);
+    g_boxed_corrector_installed = GC_get_sp_corrector() == boxed_stack_sp_corrector;
+    boxed_stack_thread_register();
+#endif
 }
 #endif
 void tsc_stack_depth_check(void) {
