@@ -95,6 +95,93 @@ type EscapeReach={readonly callables:Set<Atom>;readonly iterators:Set<Cell>;read
  * reached the same way. */
 type EscapeReachKind="direct"|"argument"|"method"|"elements";
 const TRANSPARENT_CALL_OPERATIONS:ReadonlySet<string>=new Set(["call","apply","bind"]);
+/** Every Proxy handler trap and the operands it receives after the target
+ * (sec-proxy-object-internal-methods-and-internal-slots). */
+const PROXY_TRAP_OPERANDS:ReadonlyMap<string,number>=new Map([["getPrototypeOf",0],["setPrototypeOf",1],["isExtensible",0],["preventExtensions",0],["getOwnPropertyDescriptor",1],["defineProperty",2],["has",1],["get",2],["set",3],["deleteProperty",1],["ownKeys",0],["apply",2],["construct",2]]);
+const PROXY_TRAPS:readonly string[]=[...PROXY_TRAP_OPERANDS.keys()];
+/** Natives that call or construct their target through the invocation
+ * worklist, where a Proxy target's apply/construct trap is already kept, and
+ * Reflect.get/Reflect.set, whose target is read or written through the
+ * Proxy-aware property graph and whose receiver is only a getter's or
+ * setter's `this` (Reflect.set's receiver is still asked for and given its
+ * own property, below). */
+const PROXY_FORWARDING_OPERATIONS:ReadonlySet<string>=new Set(["call","apply","reflect-apply","construct","bind","reflect-get","set-property"]);
+/** A Proxy's internal method checks its result against the target's own
+ * [[GetOwnProperty]], [[IsExtensible]] and [[GetPrototypeOf]]
+ * (sec-proxy-object-internal-methods-and-internal-slots), so a target that
+ * is itself a Proxy receives those besides the forwarded method. */
+const PROXY_INVARIANT_TRAPS:readonly string[]=["getOwnPropertyDescriptor","isExtensible","getPrototypeOf"];
+/** The internal methods a native performs on its operands where the model
+ * knows its steps: each entry names an operand (the receiver or an argument
+ * index), the traps a Proxy there runs, and whether the walk continues
+ * through each reached object's prototype. An operand no entry names is never
+ * asked. A key operand is converted by ToPropertyKey, whose ToPrimitive reads
+ * (get) through the chain; a descriptor operand is read by
+ * ToPropertyDescriptor (has, then get, through the chain); a Get of a key
+ * an earlier getter may have deleted reaches the chain too. Builtins are
+ * keyed "builtin:" + name. Every other native may perform any internal method
+ * on any operand and the objects it inherits from. */
+type NativeProxyOperand={readonly operand:"receiver"|number;readonly traps:readonly string[];readonly chain:boolean};
+const PROXY_KEY_CONVERSION:NativeProxyOperand["traps"]=["get"];
+const PROXY_DESCRIPTOR_READ:NativeProxyOperand["traps"]=["has","get"];
+const PROXY_OWN_READ:NativeProxyOperand["traps"]=["ownKeys","getOwnPropertyDescriptor","get"];
+const NATIVE_PROXY_INTERNAL_METHODS:ReadonlyMap<string,readonly NativeProxyOperand[]>=new Map<string,readonly NativeProxyOperand[]>([
+    // SameValue compares identities; ToObject and OrdinaryObjectCreate ask
+    // nothing; Object.prototype.valueOf is ToObject(this); a species getter
+    // returns its receiver; the legacy Function.prototype caller/arguments
+    // accessors only inspect the function they are given.
+    ["object-is",[]],
+    ["builtin:Object",[]],
+    ["builtin:valueOf",[]],
+    ["species-getter",[]],
+    ["legacy-function-accessor:caller:get",[]],
+    ["legacy-function-accessor:caller:set",[]],
+    ["legacy-function-accessor:arguments:get",[]],
+    ["legacy-function-accessor:arguments:set",[]],
+    // __defineGetter__/__defineSetter__(P, f): ToPropertyKey(P), then
+    // this.[[DefineOwnProperty]]; __lookupGetter__/__lookupSetter__(P):
+    // ToPropertyKey(P), then [[GetOwnProperty]] down this's chain.
+    ["builtin:__defineGetter__",[{operand:"receiver",traps:["defineProperty"],chain:false},{operand:0,traps:PROXY_KEY_CONVERSION,chain:true}]],
+    ["builtin:__defineSetter__",[{operand:"receiver",traps:["defineProperty"],chain:false},{operand:0,traps:PROXY_KEY_CONVERSION,chain:true}]],
+    ["builtin:__lookupGetter__",[{operand:"receiver",traps:["getOwnPropertyDescriptor","getPrototypeOf"],chain:true},{operand:0,traps:PROXY_KEY_CONVERSION,chain:true}]],
+    ["builtin:__lookupSetter__",[{operand:"receiver",traps:["getOwnPropertyDescriptor","getPrototypeOf"],chain:true},{operand:0,traps:PROXY_KEY_CONVERSION,chain:true}]],
+    // HasOwnProperty(ToObject(O), ToPropertyKey(P)): [[GetOwnProperty]] only.
+    ["object-has-own:static",[{operand:0,traps:["getOwnPropertyDescriptor"],chain:false},{operand:1,traps:PROXY_KEY_CONVERSION,chain:true}]],
+    ["object-has-own:prototype",[{operand:"receiver",traps:["getOwnPropertyDescriptor"],chain:false},{operand:0,traps:PROXY_KEY_CONVERSION,chain:true}]],
+    // propertyIsEnumerable(V): ToPropertyKey(V), then this.[[GetOwnProperty]].
+    ["builtin:propertyIsEnumerable",[{operand:"receiver",traps:["getOwnPropertyDescriptor"],chain:false},{operand:0,traps:PROXY_KEY_CONVERSION,chain:true}]],
+    // isPrototypeOf(V): V.[[GetPrototypeOf]]() down V's chain.
+    ["builtin:isPrototypeOf",[{operand:0,traps:["getPrototypeOf"],chain:true}]],
+    // Object/Reflect.getPrototypeOf and setPrototypeOf: the target's own method.
+    ["object-get-prototype",[{operand:0,traps:["getPrototypeOf"],chain:false}]],
+    ["reflect-get-prototype",[{operand:0,traps:["getPrototypeOf"],chain:false}]],
+    ["set-prototype:object",[{operand:0,traps:["setPrototypeOf"],chain:false}]],
+    ["set-prototype:reflect",[{operand:0,traps:["setPrototypeOf"],chain:false}]],
+    // Object/Reflect.defineProperty(O, P, Attributes) and
+    // Object/Reflect.getOwnPropertyDescriptor(O, P), Reflect.deleteProperty(O, P).
+    ["define-property",[{operand:0,traps:["defineProperty"],chain:false},{operand:1,traps:PROXY_KEY_CONVERSION,chain:true},{operand:2,traps:PROXY_DESCRIPTOR_READ,chain:true}]],
+    ["own-descriptor",[{operand:0,traps:["getOwnPropertyDescriptor"],chain:false},{operand:1,traps:PROXY_KEY_CONVERSION,chain:true}]],
+    ["delete-property",[{operand:0,traps:["deleteProperty"],chain:false},{operand:1,traps:PROXY_KEY_CONVERSION,chain:true}]],
+    // ObjectDefineProperties(O, Properties): Properties' own keys, descriptors
+    // and enumerable values; each value's descriptor fields; O's definitions.
+    ["define-properties",[{operand:0,traps:["defineProperty"],chain:false},{operand:1,traps:PROXY_OWN_READ,chain:false},{operand:1,traps:["get"],chain:true}]],
+    ["create-object",[{operand:1,traps:PROXY_OWN_READ,chain:false},{operand:1,traps:["get"],chain:true}]],
+    // Own keys and descriptors.
+    ["own-descriptors",[{operand:0,traps:["ownKeys","getOwnPropertyDescriptor"],chain:false}]],
+    ["object-own-keys:string",[{operand:0,traps:["ownKeys"],chain:false}]],
+    ["object-own-keys:symbol",[{operand:0,traps:["ownKeys"],chain:false}]],
+    ["reflect-own-keys",[{operand:0,traps:["ownKeys"],chain:false}]],
+    ["object-enumerable:keys",[{operand:0,traps:["ownKeys","getOwnPropertyDescriptor"],chain:false}]],
+    ["object-enumerable:values",[{operand:0,traps:PROXY_OWN_READ,chain:false},{operand:0,traps:["get"],chain:true}]],
+    ["object-enumerable:entries",[{operand:0,traps:PROXY_OWN_READ,chain:false},{operand:0,traps:["get"],chain:true}]],
+    // Integrity levels (SetIntegrityLevel, TestIntegrityLevel).
+    ["object-integrity:preventExtensions",[{operand:0,traps:["preventExtensions"],chain:false}]],
+    ["object-integrity:seal",[{operand:0,traps:["preventExtensions","ownKeys","defineProperty"],chain:false}]],
+    ["object-integrity:freeze",[{operand:0,traps:["preventExtensions","ownKeys","getOwnPropertyDescriptor","defineProperty"],chain:false}]],
+    ["object-integrity-test:isExtensible",[{operand:0,traps:["isExtensible"],chain:false}]],
+    ["object-integrity-test:isSealed",[{operand:0,traps:["isExtensible","ownKeys","getOwnPropertyDescriptor"],chain:false}]],
+    ["object-integrity-test:isFrozen",[{operand:0,traps:["isExtensible","ownKeys","getOwnPropertyDescriptor"],chain:false}]],
+]);
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
 const ORDINARY_PRIMITIVE_METHODS: ReadonlyMap<PrimitiveHint, readonly string[]> = new Map([
@@ -826,6 +913,10 @@ class SourceValueFlow {
     private readonly scriptDeclaredBindings=new WeakSet<Cell>();
     private readonly knownWriteOrigins=new WeakMap<Cell,SourceWriteOrigin>();
     private readonly ownerCreations=new WeakMap<ObjectOwner,ts.Node>();
+    private proxyCreated=false;
+    private readonly pendingProxyMethods:{objects:Cell;traps:readonly string[];context:ts.Node;chain:boolean}[]=[];
+    private readonly proxyInternalCalls=new Map<ts.Node,Set<string>>();
+    private readonly proxyTrapCalls=new Map<ts.Node,Map<string,Cell>>();
     private readonly arrayLengthWrites=new WeakMap<ObjectOwner,Map<string,Cell>>();
     private readonly templateObjects=new Map<ts.TaggedTemplateExpression,Cell>();
     private readonly confinedLiterals=new WeakMap<ts.Node,boolean>();
@@ -1043,6 +1134,7 @@ class SourceValueFlow {
                     else this.recordAssignmentWrites(node.initializer,node);
                     this.onActive(node, () => {
                         const iterable=ts.isForOfStatement(node)&&!node.awaitModifier;
+                        if(ts.isForInStatement(node))this.proxyInternalMethod(this.cell(node.expression),["ownKeys","getOwnPropertyDescriptor","getPrototypeOf"],node,true);
                         const value=iterable?this.iteratorElements(this.cell(node.expression),node):this.newCell();
                         if(!iterable)this.publish(value,this.unknown);
                         else this.iteratorCloseEffects(value,node);
@@ -1059,6 +1151,10 @@ class SourceValueFlow {
                         completion:child === node.body || ts.isParameter(child)?owner.completion:completion}); });
                     continue;
                 }
+                // A name inside a with body is resolved through the object
+                // environment (HasProperty, @@unscopables) whether or not
+                // its value is used.
+                if (ts.isIdentifier(node) && !this.propertyNamePosition(node) && this.withBindingObjects(node).length) this.cell(node);
                 if (ts.isCallExpression(node) || ts.isNewExpression(node) || ts.isTaggedTemplateExpression(node) ||
                     (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))&&this.sourceReferences.get(node)?.read!==false || ts.isAwaitExpression(node) ||
                     ts.isTemplateExpression(node) || ts.isBinaryExpression(node)&&node.operatorToken.kind===ts.SyntaxKind.InstanceOfKeyword || ts.isExpression(node) && conversionOperands(node) ||
@@ -2293,7 +2389,10 @@ class SourceValueFlow {
         const objects: Cell[] = [];
         let child: ts.Node = node;
         for (let current: ts.Node | undefined = node.parent; current && current !== owner; current = current.parent) {
-            if (ts.isWithStatement(current) && current.statement === child) objects.push(this.cell(current.expression));
+            if (ts.isWithStatement(current) && current.statement === child) {
+                const object=this.cell(current.expression);objects.push(object);
+                this.proxyInternalMethod(object,["has","get"],node,true);
+            }
             child = current;
         }
         return objects;
@@ -2786,6 +2885,7 @@ class SourceValueFlow {
         const signature=base.id+":"+this.keyIdentity(key)+":"+value.id+":"+unknownGlobal+":"+mode+":"+(context?this.cell(context).id:"none")+":"+receiver.id+":"+keys?.id;
         if(this.propertyWrites.has(signature))return;
         this.propertyWrites.add(signature);
+        if(context&&mode!=="set")this.proxyInternalMethod(base,[mode==="delete"?"deleteProperty":"defineProperty"],context);
         if(mode==="set"&&context){
             const primitives=this.newCell();let opened=false;
             this.rule([base],()=>{
@@ -3761,6 +3861,74 @@ class SourceValueFlow {
             }
         }});
     }
+    /** A Proxy's [[HasProperty]], [[Delete]], [[OwnPropertyKeys]],
+     * [[GetOwnProperty]], [[DefineOwnProperty]], [[GetPrototypeOf]],
+     * [[SetPrototypeOf]], [[IsExtensible]] and [[PreventExtensions]], and the
+     * [[Get]]/[[Set]] a native performs itself, call the handler's trap at
+     * this operation: the trap is invoked here with the target and operands
+     * the analysis does not track (a key, a descriptor, a value), so its body,
+     * effects and exceptions are those of an ordinary call. A handler without
+     * the trap forwards the internal method to the target; a handler with it
+     * has its result checked against the target's own [[GetOwnProperty]],
+     * [[IsExtensible]] and [[GetPrototypeOf]]; the target receives whichever
+     * the handler may select. `chain` also
+     * follows each reached object's prototype, as [[HasProperty]], a for-in
+     * walk and the natives that read through the chain do. Until a Proxy
+     * exists nothing is installed. */
+    private proxyInternalMethod(objects:Cell,traps:readonly string[],context:ts.Node,chain=false):void {
+        if(!this.proxyCreated){this.pendingProxyMethods.push({objects,traps,context,chain});return;}
+        this.installProxyInternalMethod(objects,traps,context,chain);
+    }
+    /** Invoke `handler[trap]` (when it is neither undefined nor null) with
+     * the target and unknown operands; the result is the operation's own.
+     * Returns the trap read, which selects forwarding or the invariant checks. */
+    private proxyTrapCall(owner:ObjectOwner,trap:string,context:ts.Node):Cell {
+        const proxy=owner.proxy!;
+        let calls=this.proxyTrapCalls.get(context);if(!calls){calls=new Map();this.proxyTrapCalls.set(context,calls);}
+        const key=owner.shape.id+":"+trap,prior=calls.get(key);if(prior)return prior;
+        const method=this.property(proxy.handler,trap,context),callee=this.newCell(),operand=this.newCell();calls.set(key,method);
+        this.rule([method],()=>{for(const atom of method.values)if(atom!==this.primitive(undefined)&&atom!==this.primitive(null))this.publish(callee,atom);});
+        this.publish(operand,this.nativeUnknown);
+        const operands:ListPart[]=[{cell:proxy.target,spread:false}];
+        for(let index=0;index<(PROXY_TRAP_OPERANDS.get(trap)??0);index++)operands.push({cell:operand,spread:false});
+        this.invoke(context,callee,proxy.handler,operands,this.newCell());
+        return method;
+    }
+    /** Run a Proxy's traps and hand its target what the handler selects: an
+     * absent trap (undefined or null) forwards that internal method, a
+     * present one has its result checked (PROXY_INVARIANT_TRAPS), and a trap
+     * the analysis cannot see may do either. */
+    private proxyTargetMethods(owner:ObjectOwner,traps:readonly string[],context:ts.Node,chain:boolean):void {
+        const proxy=owner.proxy!,methods=traps.map(trap=>[trap,this.proxyTrapCall(owner,trap,context)] as const),selected=new Set<string>();
+        this.rule(methods.map(([,method])=>method),()=>{
+            const before=selected.size;
+            for(const [trap,method] of methods)for(const atom of method.values){
+                const absent=atom===this.primitive(undefined)||atom===this.primitive(null),present=this.ordinaryOwner(atom)!==null||atom.tag==="bound"||atom.tag==="operation"||atom.tag==="builtin"||atom.tag==="intrinsic";
+                if(!present)selected.add(trap);
+                if(!absent)for(const check of PROXY_INVARIANT_TRAPS)selected.add(check);
+            }
+            if(selected.size!==before)this.installProxyInternalMethod(proxy.target,PROXY_TRAPS.filter(trap=>selected.has(trap)),context,chain);
+        });
+    }
+    private installProxyInternalMethod(objects:Cell,traps:readonly string[],context:ts.Node,chain:boolean):void {
+        let calls=this.proxyInternalCalls.get(context);if(!calls){calls=new Set();this.proxyInternalCalls.set(context,calls);}
+        const key=objects.id+":"+traps.join(",")+":"+chain;if(calls.has(key))return;calls.add(key);
+        const owners=new Set<ObjectOwner>(),inputs=new Set<Cell>([objects]);
+        let rule!:Rule;
+        rule=this.rule([objects],()=>{
+            const pending=[...inputs];
+            while(pending.length){
+                const input=pending.pop()!;
+                for(const atom of input.values){
+                    const owner=this.ordinaryOwner(atom);if(!owner||owners.has(owner))continue;owners.add(owner);
+                    const next:Cell[]=[];
+                    if(owner.proxy)this.proxyTargetMethods(owner,traps,context,chain);
+                    else if(chain&&owner.prototype)next.push(owner.prototype);
+                    for(const cell of next)if(!inputs.has(cell)){inputs.add(cell);this.watch(rule,cell);pending.push(cell);}
+                }
+            }
+        });
+    }
     /** ProxyCreate validates object domains without reading properties or
      * invoking either operand. Later Proxy operations own their trap effects. */
     private proxyCreate(target:Cell,handler:Cell,context:ts.Node):Cell {
@@ -3768,6 +3936,7 @@ class SourceValueFlow {
         const key=target.id+":"+handler.id,previous=calls.get(key);if(previous)return previous;
         const result=this.newCell(),owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),proxy:{target,handler,context}};
         calls.set(key,result);this.ownerCreations.set(owner,context);this.sourceObjectOwners.add(owner);this.ownerMutation(owner);this.markPropertyAlgorithm(owner,"opaque");
+        if(!this.proxyCreated){this.proxyCreated=true;for(const pending of this.pendingProxyMethods.splice(0))this.installProxyInternalMethod(pending.objects,pending.traps,pending.context,pending.chain);}
         this.returnTransforms.set(result,{kind:"allocation",inputs:[target,handler],evaluate:inputs=>this.proxyCreate(inputs[0]!,inputs[1]!,context)});
         const fail=()=>{this.publish(result,this.abrupt);const caught=this.exceptionHandlers.get(context);if(caught)this.publish(caught,this.nativeException(context,"TypeError"));};
         const operands=[target,handler].map(input=>{
@@ -6417,6 +6586,7 @@ class SourceValueFlow {
                 if (!ts.isBindingElement(element)) continue;
                 const computed = ts.isObjectBindingPattern(entry.name) && element.propertyName && ts.isComputedPropertyName(element.propertyName) ? element.propertyName.expression : null;
                 const key = computed ? null : ts.isObjectBindingPattern(entry.name) ? propertyName(element.propertyName ?? element.name) : String(index);
+                if(element.dotDotDotToken&&ts.isObjectBindingPattern(entry.name))this.proxyInternalMethod(entry.value,["ownKeys","getOwnPropertyDescriptor","get"],context??entry.name);
                 const selected = element.dotDotDotToken ? references ? this.newCell() : entry.value : computed ? this.computedProperty(entry.value, this.cell(computed), context ?? entry.name) : key === null ? this.newCell() : this.property(entry.value, key, entry.name);
                 if (!computed && key === null || element.dotDotDotToken && references) this.publish(selected, this.unknown);
                 worklist.push({ name: element.name, value: element.initializer ? this.bindingDefault(selected,this.cell(element.initializer)) : selected });
@@ -7329,6 +7499,7 @@ class SourceValueFlow {
                 // the key's own toString / valueOf / @@toPrimitive.
                 this.convertList([this.cell(node.left)], node, "string");
                 const right = this.cell(node.right), handler = this.exceptionHandlers.get(node);
+                this.proxyInternalMethod(right,["has"],node,true);
                 if (handler) this.rule([right], () => { if ([...right.values].some(atom => atom.tag === "primitive")) this.publish(handler, this.nativeException(node, "TypeError")); });
             }
             return;
@@ -7777,6 +7948,21 @@ class SourceValueFlow {
                                 this.opaqueCallableCaptures(trap,node);
                             }
                         }
+                    }
+                    // A native performs internal methods on its receiver and
+                    // arguments (and through their prototypes); ProxyCreate
+                    // only checks that its operands are Objects.
+                    if(atom.tag==="operation"&&!PROXY_FORWARDING_OPERATIONS.has(atom.operation)||atom.tag==="builtin"&&atom.name!=="Proxy"){
+                        const exact=NATIVE_PROXY_INTERNAL_METHODS.get(atom.tag==="operation"?atom.operation:"builtin:"+atom.name);
+                        if(exact)for(const {operand,traps,chain} of exact){
+                            const input=operand==="receiver"?invocation.receiver:invocation.args?invocation.args[operand]:invocation.sequence?this.argumentPosition(invocation.sequence,operand):undefined;
+                            if(input)this.proxyInternalMethod(input,traps,node,chain);
+                        }
+                        else for(const input of [invocation.receiver,...(invocation.args??(invocation.sequence?[this.allArgumentValues(invocation.sequence)]:[]))])this.proxyInternalMethod(input,PROXY_TRAPS,node,true);
+                    }
+                    if(atom.tag==="operation"&&atom.operation==="set-property"){
+                        const setReceiver=invocation.args?invocation.args[3]:invocation.sequence?this.allArgumentValues(invocation.sequence):undefined;
+                        if(setReceiver)this.proxyInternalMethod(setReceiver,["getOwnPropertyDescriptor","defineProperty"],node);
                     }
                     if (atom.tag === "unknown" || atom.tag === "opaque-object" || proxy || atom.tag==="operation"&&SOURCE_NATIVE_METHODS.get(atom.operation)?.opaque&&!invocation.construct) {
                         // A return value belongs to the invocation that
