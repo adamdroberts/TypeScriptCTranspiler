@@ -184,14 +184,46 @@ test("suspended for heads project the same declaration cells onto CFG entry and 
     } finally { await fs.rm(temporary, { recursive: true, force: true }); }
 }, 180_000);
 
-test("unrepresented for-head disposal records fail through the shared completion diagnostic", async () => {
+test("a for head's using declarations dispose once, when the loop completes", async () => {
+    // A using binding is constant, so the iterations share it (no per-iteration
+    // copy) and DisposeResources runs once, on the loop's environment, for every
+    // completion; a closure still reads the disposed resource. Bun gives these
+    // lines; V8 (Node 26) disposes the resource again at each iteration.
+    const source = `
+        const marker: any = {};
+        for (const mode of ["normal", "continue", "break", "return", "throw"]) {
+            const log: string[] = [], readers: any[] = [];
+            function run(): any {
+                for (using resource: any = { tag: "r", [Symbol.dispose]() { log.push("dispose:" + this.tag + readers.length); } }, empty: any = null;
+                    readers.length < 2;) {
+                    readers.push(() => resource.tag + String(empty));
+                    log.push("body:" + readers.length);
+                    if (mode === "continue") continue;
+                    if (mode === "break") break;
+                    if (mode === "return") return marker;
+                    if (mode === "throw") throw marker;
+                }
+                return undefined;
+            }
+            let completion: string;
+            try { completion = String(run() === marker); } catch (error) { completion = "throw:" + (error === marker); }
+            console.log(mode + ":" + completion + ":" + log.join("|") + ":" + readers.map(read => read()).join(","));
+        }
+    `;
+    const expected = [
+        "normal:false:body:1|body:2|dispose:r2:rnull,rnull", "continue:false:body:1|body:2|dispose:r2:rnull,rnull",
+        "break:false:body:1|dispose:r1:rnull", "return:true:body:1|dispose:r1:rnull", "throw:throw:true:body:1|dispose:r1:rnull",
+    ];
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-for-disposal-"));
     try {
-        const entry = path.join(temporary, "subject.ts"), diagnostics: string[] = [];
-        await fs.writeFile(entry, "for (using resource: any = null; false;) {}");
-        const result = await compile({ entry, output: path.join(temporary, "output"),
-            buildDir: path.join(temporary, "build"), diagnosticWriter: message => diagnostics.push(message) });
-        expect(result.exitCode).not.toBe(0);
-        expect(diagnostics.join("")).toContain("synchronous completion cannot represent disposal scopes");
+        for (const noGc of [false, true]) {
+            const entry = path.join(temporary, `subject-${noGc}.ts`), output = path.join(temporary, `program-${noGc}`), diagnostics: string[] = [];
+            await fs.writeFile(entry, source);
+            const result = await compile({ entry, output, noGc, buildDir: path.join(temporary, `build-${noGc}`), diagnosticWriter: message => diagnostics.push(message) });
+            expect({ exitCode: result.exitCode, diagnostics: diagnostics.join("") }).toEqual({ exitCode: 0, diagnostics: "" });
+            const native = Bun.spawnSync([output], { stdout: "pipe", stderr: "pipe", timeout: 30_000 });
+            expect({ exitCode: native.exitCode, stderr: native.stderr.toString() }).toEqual({ exitCode: 0, stderr: "" });
+            expect(native.stdout.toString().trimEnd().split("\n")).toEqual(expected);
+        }
     } finally { await fs.rm(temporary, { recursive: true, force: true }); }
-});
+}, 120_000);
