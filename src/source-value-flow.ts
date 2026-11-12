@@ -75,7 +75,7 @@ type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpressio
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
 type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-integrity:${"preventExtensions"|"seal"|"freeze"}` | `object-integrity-test:${"isExtensible"|"isSealed"|"isFrozen"}` | `regexp-flag:${string}` | `regexp-member:${string}` | `object-enumerable:${"keys"|"values"|"entries"}` | `object-has-own:${"static"|"prototype"}` | `array-iteration:${ArrayIterationMode}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `legacy-function-accessor:${"caller"|"arguments"}:${"get"|"set"}` | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "species-getter" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
+    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "species-getter" | "proto-accessor:get" | "proto-accessor:set" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
 type Primitive = SourcePrimitive;
 /** Callables and collection-iterator cells reachable from one escaping value;
  * a sink forwards them into one escaping call. */
@@ -2879,6 +2879,16 @@ class SourceValueFlow {
         else {if(context&&(ts.isGetAccessorDeclaration(context)||ts.isSetAccessorDeclaration(context))){const location=this.ownPresence(owner,key);location.initial=true;this.publish(location.enumerable,this.primitive(true));}this.publish(this.presence(owner,key),this.primitive(true));}
         if (typeof key === "symbol" && this.freshSymbols.has(key)) this.publish(this.presence(owner,key),this.primitive(false));
     }
+    /** The "__proto__" setter an unknown-key [[Set]] may select: the intrinsic
+     * one's effect is unknownSetPrototype's, which consults the key domain (a
+     * numeric key never names it); a redefined setter is invoked. */
+    private unknownKeySetterCallee(source:Cell): Cell {
+        let callee=this.unknownKeySetterCallees.get(source);
+        if(!callee){callee=this.newCell();this.unknownKeySetterCallees.set(source,callee);const target=callee;
+            this.rule([source],()=>{for(const value of source.values)if(value!==this.primitive(undefined)&&!(value.tag==="operation"&&value.operation==="proto-accessor:set"))this.publish(target,value);});}
+        return callee;
+    }
+    private readonly unknownKeySetterCallees=new Map<Cell,Cell>();
     private accessorCallee(source:Cell): Cell {
         let callee=this.accessorCallees.get(source);
         if(!callee){callee=this.newCell();this.accessorCallees.set(source,callee);const target=callee;
@@ -2926,7 +2936,7 @@ class SourceValueFlow {
                             this.publish(weak,this.primitive(true));
                             if(!setterEffects.has(accessor.set)){
                                 setterEffects.add(accessor.set);
-                                this.invoke(context ?? this.accessorDefinitions.get(accessor.set)!,this.accessorCallee(accessor.set),receiver,[{cell:value,spread:false}],this.newCell());
+                                this.invoke(context ?? this.accessorDefinitions.get(accessor.set)!,key===null&&name==="__proto__"?this.unknownKeySetterCallee(accessor.set):this.accessorCallee(accessor.set),receiver,[{cell:value,spread:false}],this.newCell());
                             }
                         }
                         const presence=key===null?null:this.presence(current,key);
@@ -5483,6 +5493,11 @@ class SourceValueFlow {
             this.copy(this.opaqueMutation,owner.shape);this.publish(owner.prototype!,this.primitive(null));
             this.publish(this.ordinaryObjectPrototype,{tag:"object",owner});
             this.defineField(owner,"constructor",this.globalBinding("Object"));
+            // Object.prototype.__proto__ (sec-object.prototype.__proto__): a
+            // non-enumerable accessor whose getter reports and whose setter
+            // changes the receiver's [[Prototype]].
+            for(const kind of ["get","set"] as const){const accessor=this.newCell();this.publish(accessor,this.operation(`proto-accessor:${kind}`));this.defineAccessor(owner,"__proto__",kind,accessor);}
+            const proto=this.ownPresence(owner,"__proto__");proto.initial=true;this.publish(proto.enumerable,this.primitive(false));
             for(const[name,normalResult]of runtimeObjectPrototypeMethods){
                 const value=this.newCell(),fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};
                 const operation=SOURCE_OBJECT_PROTOTYPE_OPERATIONS.get(name);this.publish(value,operation?this.operation(operation):{tag:"builtin",name,normalResult,fields});this.defineField(owner,name,value);
@@ -8245,6 +8260,20 @@ class SourceValueFlow {
                         this.copy(this.generatorReaction(invocation.receiver,kind!,completion!,argument(0)??omittedArgument,node),result);continue;
                     }
                     if(atom.tag==="operation"&&atom.operation==="species-getter"){this.copy(invocation.receiver,result);continue;}
+                    // get __proto__: ToObject(this).[[GetPrototypeOf]]().
+                    if(atom.tag==="operation"&&atom.operation==="proto-accessor:get"){this.copy(this.getPrototype(invocation.receiver,node,true),result);continue;}
+                    // set __proto__(proto): a proto that is neither an Object nor null
+                    // is ignored; otherwise the receiver's [[SetPrototypeOf]] runs
+                    // and a refusal throws TypeError. The result is undefined.
+                    if(atom.tag==="operation"&&atom.operation==="proto-accessor:set"){
+                        if(!handled(atom,signature)){
+                            const value=argument(0)??omittedArgument,prototype=this.newCell();
+                            this.rule([value],()=>{for(const candidate of value.values)
+                                if(this.ordinaryOwner(candidate)||candidate===this.primitive(null)||candidate.tag==="unknown"||candidate.tag==="opaque-object"||candidate.tag==="pending-source")this.publish(prototype,candidate);});
+                            this.setPrototype(invocation.receiver,prototype,node,false);
+                        }
+                        this.publish(result,this.primitive(undefined));continue;
+                    }
                     if(atom.tag==="operation"&&atom.operation==="promise-finally-forward") {
                         this.copy(this.promiseFinallyForward(argument(0)??omittedArgument,argument(2)??omittedArgument,argument(1)??omittedArgument,node),result);continue;
                     }
