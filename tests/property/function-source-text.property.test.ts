@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodeReferenceSync } from "./node-reference";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -88,12 +89,12 @@ check(remaining === -1 && sum === 4095 * 4096 / 2, "retained-source-graph");
 
 test("callable SourceText is one retained definition span and toString observes internal metadata", async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-function-source-text-"));
-    const expected: string[] = [], vm = await import("node:vm");
-    new vm.Script(source.replaceAll("NATIVE_GC", "false")).runInContext(vm.createContext({
-        print: (value: unknown) => expected.push(String(value)), $262: {
-            gc() {}, createRealm() { return { global: new vm.Script("this").runInContext(vm.createContext({})) }; },
-        },
-    }));
+    // Node 26 is the reference: JavaScriptCore prints a native function's
+    // source over three lines, where the checks expect V8's one line.
+    const reference = nodeReferenceSync(["node", "-e", 'const vm=require("node:vm"),out=[];new vm.Script(process.argv[1]).runInContext(vm.createContext({print:value=>out.push(String(value)),$262:{gc(){},createRealm(){return {global:new vm.Script("this").runInContext(vm.createContext({}))};}}}));process.stdout.write(JSON.stringify(out));',
+        source.replaceAll("NATIVE_GC", "false")], { stdout: "pipe", stderr: "pipe", timeout: 60_000 });
+    expect({ exitCode: reference.exitCode, stderr: reference.stderr.toString() }).toEqual({ exitCode: 0, stderr: "" });
+    const expected: string[] = JSON.parse(reference.stdout.toString());
     try {
         for (const noGc of [false, true]) {
             const name = noGc ? "no-gc" : "gc", entry = path.join(temporary, name + ".js"), output = path.join(temporary, name);
