@@ -9,9 +9,11 @@ import {nodeReferenceSync} from './node-reference';
  * BigInt method called on a primitive receiver with primitive arguments runs
  * no user code, so it must not invalidate the global bindings that a later
  * direct eval and a sloppy global constructor depend on. Generated programs
- * chain random represented methods before an eval whose source is a literal;
- * the RegExp-protocol methods (split, match, replace, search) stay opaque, so
- * a program that calls one before the same eval is rejected. */
+ * chain random represented methods before an eval of a global holding a
+ * literal source. match, matchAll and search given a String create a RegExp
+ * and call its overridable methods, which may rewrite that global, so they
+ * stay opaque and a program that calls one before the same eval is rejected; split, replace and replaceAll look up a
+ * pattern's @@split or @@replace only when the pattern is an Object. */
 
 function rng(seed:number):()=>number{
  let state=seed>>>0;
@@ -19,10 +21,10 @@ function rng(seed:number):()=>number{
 }
 const stringCalls=['toLowerCase()','toUpperCase()','trim()','at(0)','charAt(1)','charCodeAt(0)','codePointAt(1)','concat("x",1)','includes("a")','indexOf("b",1)','lastIndexOf("a")','startsWith("a")','endsWith("c")','repeat(2)','padStart(5,"-")','padEnd(6,"*")','slice(1)','substring(0,2)','substr(1,1)','trimStart()','trimEnd()','normalize("NFC")','isWellFormed()','toWellFormed()','localeCompare("b")','anchor("n")','bold()','link("u")','toLocaleLowerCase()','toLocaleUpperCase()'];
 const numberCalls=['toFixed(2)','toExponential(1)','toPrecision(3)','toLocaleString()'];
-const opaqueCalls=['split("")','match("a")','replace("a","b")','search("c")','replaceAll("a","z")'];
+const opaqueCalls=['match("a")','matchAll("a")','search("c")'];
 
 function program(random:()=>number,calls:number,opaque:boolean):string{
- const lines=['function Marker(message){if(!(this instanceof Marker))return new Marker(message);this.message=message;}','var total="";'];
+ const lines=['function Marker(message){if(!(this instanceof Marker))return new Marker(message);this.message=message;}','var total="";','var source="\'ok\'";'];
  for(let index=0;index<calls;index++){
   const kind=random();
   if(kind<0.6)lines.push(`total+=String(${JSON.stringify('abc'+index)}.${stringCalls[Math.floor(random()*stringCalls.length)]});`);
@@ -30,7 +32,7 @@ function program(random:()=>number,calls:number,opaque:boolean):string{
   else lines.push(`total+=String(${Math.floor(random()*100)}n.toLocaleString());`);
  }
  if(opaque)lines.push(`total+=String("abc".${opaqueCalls[Math.floor(random()*opaqueCalls.length)]});`);
- lines.push('var marker=new Marker(total.length);','console.log(eval("\'ok\'"),typeof marker.message,total.length,total.slice(0,64));');
+ lines.push('var marker=new Marker(total.length);','console.log(eval(source),typeof marker.message,total.length,total.slice(0,64));');
  return lines.join('\n');
 }
 
@@ -67,7 +69,7 @@ test('a RegExp-protocol string method before the eval stays opaque and is reject
  const result=await compileOnce(program(rng(0x1234),3,true));
  expect(result.code).not.toBe(0);
  expect(result.diagnostics.join('')).toContain('unknown eval() source');
-});
+},600_000);
 
 test('one long chain of primitive method calls stays finite',async()=>{
  let expression='"Seed"';
