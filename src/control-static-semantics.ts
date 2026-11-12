@@ -213,7 +213,7 @@ export function earlyControlFlowStaticSemanticsFailure(
             // where the body's IsLabelledFunction early error applies.
             let item: ts.Node = node;
             let labelled = false;
-            while (ts.isLabeledStatement(item.parent) && item.parent.statement === item) { item = item.parent; labelled = true; }
+            while (item.parent && ts.isLabeledStatement(item.parent) && item.parent.statement === item) { item = item.parent; labelled = true; }
             const parent = item.parent;
             const plainFunction = ts.isFunctionDeclaration(node) && !node.asteriskToken &&
                 !(ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) ?? false);
