@@ -1163,6 +1163,11 @@ class SourceValueFlow {
                         if(ts.isForInStatement(node))this.proxyInternalMethod(this.cell(node.expression),["ownKeys","getOwnPropertyDescriptor","getPrototypeOf"],node,true);
                         const value=iterable?this.iteratorElements(this.cell(node.expression),node):this.newCell();
                         if(!iterable)this.publish(value,this.unknown);
+                        // for await calls the operand's @@asyncIterator (else @@iterator),
+                        // the iterator's next and return, and awaits each result (a
+                        // thenable's then runs): the operand escapes as an opaque
+                        // native's argument does, and its values stay unknown.
+                        if(ts.isForOfStatement(node)&&node.awaitModifier)this.escapeCallableArgument(this.cell(node.expression),node,false,"argument");
                         else this.iteratorCloseEffects(value,node);
                         if (ts.isVariableDeclarationList(node.initializer)) for (const declaration of node.initializer.declarations) this.bind(declaration.name, value,undefined,node);
                         else this.writeTarget(node.initializer, value, node);
