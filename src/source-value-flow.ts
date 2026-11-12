@@ -4685,7 +4685,8 @@ class SourceValueFlow {
         const data=this.regexpData.get(owner);
         if(data){this.copy(source,data.source);this.copy(flags,data.flags);}
         else{
-            owner.prototype=this.regexpPrototype();owner.ordinary=true;this.markPropertyAlgorithm(owner,"ordinary");
+            if(!owner.prototype){owner.prototype=this.newCell();this.copy(this.regexpPrototype(),owner.prototype);}
+            owner.ordinary=true;this.markPropertyAlgorithm(owner,"ordinary");
             if(!this.ownerCreations.has(owner))this.ownerCreations.set(owner,context);
             const lastIndex=this.newCell();this.publish(lastIndex,this.numberValue());this.defineField(owner,"lastIndex",lastIndex,false);
             const sourceCell=this.newCell(),flagsCell=this.newCell();this.copy(source,sourceCell);this.copy(flags,flagsCell);
@@ -4871,6 +4872,27 @@ class SourceValueFlow {
             const slash=this.newCell();this.publish(slash,this.primitive("/"));
             const [sourceText,flagsText]=this.convertList([this.property(receiver,"source",context),this.property(receiver,"flags",context)],context,"text");
             this.publish(result,{tag:"text-operation",operation:"template",parts:[slash,sourceText!,slash,flagsText!]});
+        }
+        // RegExpBuiltinExec converts lastIndex (ToLength runs its valueOf);
+        // RegExpExec (test, @@match, @@matchAll, @@replace, @@search) calls the
+        // receiver's own or inherited exec when it is not the intrinsic one and
+        // reads the result it returns; @@match, @@matchAll, @@replace and
+        // @@split read flags; @@split constructs through the receiver's
+        // constructor and @@species. An exec the analysis cannot see (an
+        // unknown receiver's, or one an unknown effect may have replaced) is
+        // not run here: reading it after this call's own unknown effect would
+        // feed that effect back and widen every source. docs/todo.md records it.
+        if(name!=="toString"&&name!=="compile"){
+            this.coerceCell(this.property(receiver,"lastIndex",context),context,"length");
+            if(name!=="exec"&&name!=="split"){
+                const exec=this.property(receiver,"exec",context),callee=this.newCell(),returned=this.newCell();
+                this.rule([exec],()=>{for(const atom of exec.values)
+                    if(!(atom.tag==="operation"&&atom.operation==="regexp-member:exec")&&atom.tag!=="primitive"&&atom.tag!=="non-string"&&atom.tag!=="unknown-string"&&atom.tag!=="text-operation"&&atom.tag!=="unknown")this.publish(callee,atom);});
+                this.invoke(context,callee,receiver,[{cell:text??omitted,spread:false}],returned);
+                this.onActive(context,()=>this.escapeCallableArgument(returned,context,false,"argument"));
+            }
+            if(name==="match"||name==="matchAll"||name==="replace"||name==="split")this.property(receiver,"flags",context);
+            if(name==="split")this.onActive(context,()=>this.escapeCallableArgument(receiver,context));
         }
         this.rule([receiver],()=>{for(const atom of receiver.values){
             if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
