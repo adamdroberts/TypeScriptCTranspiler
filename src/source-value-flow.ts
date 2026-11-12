@@ -919,6 +919,7 @@ class SourceValueFlow {
     private readonly scriptDeclaredBindings=new WeakSet<Cell>();
     private readonly knownWriteOrigins=new WeakMap<Cell,SourceWriteOrigin>();
     private readonly ownerCreations=new WeakMap<ObjectOwner,ts.Node>();
+    private readonly thisBindings=new Map<ts.Node,Cell>();
     private proxyCreated=false;
     private readonly pendingProxyMethods:{objects:Cell;traps:readonly string[];context:ts.Node;chain:boolean}[]=[];
     private readonly proxyInternalCalls=new Map<ts.Node,Set<string>>();
@@ -3729,14 +3730,50 @@ class SourceValueFlow {
         if(ts.isPropertyAccessExpression(target)||ts.isElementAccessExpression(target))return;
         const {binding,references}=this.assignmentTarget(target);if(binding)this.recordBindingWrites(binding,context,references);
     }
+    /** The `this` binding a `this` (or super reference) at `node` reads:
+     * the nearest non-arrow function's receiver, a class element's class
+     * (static) or instance receiver, or the Script/module/eval `this`. */
+    private thisBinding(node:ts.Node):Cell {
+        const prior=this.thisBindings.get(node);if(prior)return prior;
+        const result=this.newCell();this.thisBindings.set(node,result);
+        let parent: ts.Node | undefined = node.parent;
+        let member: ts.Node = node;
+        while (parent && !ts.isClassLike(parent) && (!functionNode(parent) || ts.isArrowFunction(parent))) {member=parent;parent = parent.parent;}
+        if (parent && functionNode(parent)) this.copy(this.function(parent).receiver, result);
+        else if (parent && ts.isClassLike(parent)) {
+            const isStatic = ts.isClassStaticBlockDeclaration(member) || (ts.canHaveModifiers(member) ? ts.getModifiers(member) ?? [] : []).some(modifier=>modifier.kind===ts.SyntaxKind.StaticKeyword);
+            if (isStatic) this.copy(this.cell(parent),result);
+            else this.copy(this.function(parent).receiver,result);
+        }
+        else {const environment=this.evaluationEnvironments.get(this.sourceFile(node));
+            if(environment?.direct)this.copy(this.evaluationThis(environment),result);
+            else this.publish(result,ecmaParseGoal(node.getSourceFile())==="module"?this.primitive(undefined):this.global);
+        }
+        return result;
+    }
+    /** The [[HomeObject]] of the method, accessor, constructor or class
+     * element around `node` (arrows inherit it): a class's prototype, the
+     * class itself for a static element, or an object literal. */
+    private homeObject(node:ts.Node):Cell|null {
+        let parent: ts.Node | undefined = node.parent;
+        let member: ts.Node = node;
+        while (parent && !ts.isClassLike(parent) && (!functionNode(parent) || ts.isArrowFunction(parent))) {member=parent;parent = parent.parent;}
+        if(!parent)return null;
+        const element=functionNode(parent)?parent:member,container=functionNode(parent)?parent.parent:parent;
+        if(ts.isObjectLiteralExpression(container))return this.cell(container);
+        if(!ts.isClassLike(container))return null;
+        const isStatic=ts.isClassStaticBlockDeclaration(element)||(ts.canHaveModifiers(element)?ts.getModifiers(element)??[]:[]).some(modifier=>modifier.kind===ts.SyntaxKind.StaticKeyword);
+        return isStatic?this.cell(container):this.property(this.cell(container),"prototype",node);
+    }
     private writeTarget(raw: ts.Expression, value: Cell, context: ts.Node, mode: "set"|"delete" = "set"): void {
         const target = unwrap(raw);
         if (ts.isIdentifier(target)) { this.writeBinding(target,value,context); return; }
         if (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target)) {
             const reference=this.sourceReference(target),base=reference.base!,point=reference.writeContext!;
             if (ts.isPropertyAccessExpression(target) && ts.isPrivateIdentifier(target.name)) {this.privateAccess(base,target.name,point,"set",value);return;}
-            if (ts.isElementAccessExpression(target)) this.writeComputedProperty(base,reference.key!,value,mode,point);
-            else this.writeProperty(base,target.name.text,value,true,mode,point);
+            const receiver=target.expression.kind===ts.SyntaxKind.SuperKeyword?this.thisBinding(target.expression):base;
+            if (ts.isElementAccessExpression(target)) this.writeComputedProperty(base,reference.key!,value,mode,point,receiver);
+            else this.writeProperty(base,target.name.text,value,true,mode,point,receiver);
             return;
         }
         const {binding,references}=this.assignmentTarget(target);
@@ -7673,19 +7710,12 @@ class SourceValueFlow {
             }
             this.copy(metadata,result);
         } else if (node.kind === ts.SyntaxKind.ThisKeyword) {
-            let parent: ts.Node | undefined = node.parent;
-            let member: ts.Node = node;
-            while (parent && !ts.isClassLike(parent) && (!functionNode(parent) || ts.isArrowFunction(parent))) {member=parent;parent = parent.parent;}
-            if (parent && functionNode(parent)) this.copy(this.function(parent).receiver, result);
-            else if (parent && ts.isClassLike(parent)) {
-                const isStatic = ts.isClassStaticBlockDeclaration(member) || (ts.canHaveModifiers(member) ? ts.getModifiers(member) ?? [] : []).some(modifier=>modifier.kind===ts.SyntaxKind.StaticKeyword);
-                if (isStatic) this.copy(this.cell(parent),result);
-                else this.copy(this.function(parent).receiver,result);
-            }
-            else {const environment=this.evaluationEnvironments.get(this.sourceFile(node));
-                if(environment?.direct)this.copy(this.evaluationThis(environment),result);
-                else this.publish(result,ecmaParseGoal(node.getSourceFile())==="module"?this.primitive(undefined):this.global);
-            }
+            this.copy(this.thisBinding(node),result);
+        } else if (node.kind === ts.SyntaxKind.SuperKeyword && (ts.isPropertyAccessExpression(node.parent) || ts.isElementAccessExpression(node.parent))) {
+            // A super property reference's base is the home object's
+            // [[GetPrototypeOf]]() (sec-getsuperbase); its receiver is `this`.
+            const home=this.homeObject(node);
+            if(home)this.copy(this.getPrototype(home,node,false),result);else this.publish(result,this.unknown);
         } else if (ts.isObjectLiteralExpression(node) || ts.isArrayLiteralExpression(node)) {
             const owner = this.owner(node);
             owner.ordinary=true;
@@ -7756,11 +7786,12 @@ class SourceValueFlow {
             const reference=this.sourceReference(node);
             if(!reference.read){this.publish(result,this.unknown);return;}
             if(ts.isPropertyAccessExpression(node)&&ts.isPrivateIdentifier(node.name)) {this.copy(this.privateAccess(reference.base!,node.name,reference.readContext!,"get"),result);return;}
+            const receiver=node.expression.kind===ts.SyntaxKind.SuperKeyword?this.thisBinding(node.expression):reference.base!;
             if (ts.isElementAccessExpression(node) && node.argumentExpression)
-                this.copy(this.computedProperty(reference.base!,reference.key!,reference.readContext!),result);
+                this.copy(this.computedProperty(reference.base!,reference.key!,reference.readContext!,receiver),result);
             else {
                 const key=propertyName(node);
-                if(key!==null)this.copy(this.property(reference.base!,key,reference.readContext!),result);
+                if(key!==null)this.copy(this.property(reference.base!,key,reference.readContext!,false,receiver),result);
             }
         } else if (ts.isConditionalExpression(node)) {
             const condition = this.cell(node.condition), whenTrue = this.cell(node.whenTrue), whenFalse = this.cell(node.whenFalse);
@@ -7825,7 +7856,7 @@ class SourceValueFlow {
             const constructedReceiver = this.newCell();
             this.publish(constructedReceiver,{tag:"object",owner:this.owner(node)});
             const receiver = superOwner ? superOwner.receiver : ts.isNewExpression(node) ? constructedReceiver : ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target)
-                ? this.cell(target.expression) : objects.length ? this.newCell() : this.empty;
+                ? target.expression.kind===ts.SyntaxKind.SuperKeyword ? this.thisBinding(target.expression) : this.cell(target.expression) : objects.length ? this.newCell() : this.empty;
             for (const object of objects) this.copy(object, receiver);
             const parts = (node.arguments ?? []).map(argument => ({ cell: this.cell(ts.isSpreadElement(argument) ? argument.expression : argument), spread: ts.isSpreadElement(argument) }));
             this.invoke(node,superOwner?.base ?? this.cell(target),receiver,parts,result,ts.isNewExpression(node) || !!superOwner,
