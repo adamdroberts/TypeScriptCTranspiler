@@ -1135,6 +1135,26 @@ class SourceValueFlow {
                         this.onActive(node, () => this.writeTarget(target, value, node, "delete"));
                     }
                 }
+                if (ts.isVariableDeclarationList(node) && (node.flags & ts.NodeFlags.Using) !== 0) {
+                    // DisposeResources: each resource's @@dispose (@@asyncDispose,
+                    // else @@dispose, for await using), read at the declaration,
+                    // runs with the resource as `this` when its scope completes:
+                    // the block, the whole case block of a switch, or one
+                    // iteration of a for-of body.
+                    const asynchronous=(node.flags&ts.NodeFlags.AwaitUsing)===ts.NodeFlags.AwaitUsing;
+                    const forOf=ts.isForOfStatement(node.parent)?node.parent:undefined;
+                    const container=forOf?forOf.statement:node.parent.parent;
+                    const scope=container&&(ts.isCaseClause(container)||ts.isDefaultClause(container))?container.parent:container;
+                    if(scope){
+                        const exit=ts.setTextRange(ts.factory.createEmptyStatement(),{pos:scope.end,end:scope.end});(exit as ts.Node&{parent:ts.Node}).parent=scope;
+                        if(handler)this.exceptionHandlers.set(exit,handler);
+                        const list=node;
+                        this.onActive(node,()=>{
+                            if(forOf)this.disposeResource(this.iteratorElements(this.cell(forOf.expression),forOf),asynchronous,list,exit,handler);
+                            else for(const declaration of list.declarations)if(declaration.initializer)this.disposeResource(this.cell(declaration.initializer),asynchronous,declaration,exit,handler);
+                        });
+                    }
+                }
                 if (ts.isForInStatement(node) || ts.isForOfStatement(node)) {
                     if(ts.isVariableDeclarationList(node.initializer))for(const declaration of node.initializer.declarations)this.recordBindingWrites(declaration.name,node);
                     else this.recordAssignmentWrites(node.initializer,node);
@@ -2773,6 +2793,20 @@ class SourceValueFlow {
             }
         });
         return stored;
+    }
+    /** AddDisposableResource reads the resource's dispose method (a getter
+     * there runs at the declaration; a resource without one throws TypeError
+     * there); DisposeResources calls it with the resource as `this` at
+     * `exit`. null and undefined resources are skipped. */
+    private disposeResource(value:Cell,asynchronous:boolean,declaration:ts.Node,exit:ts.Node,handler:Cell|null):void {
+        const resources=this.newCell();
+        this.rule([value],()=>{for(const atom of value.values)if(atom!==this.primitive(undefined)&&atom!==this.primitive(null)&&atom.tag!=="abrupt"&&atom.tag!=="pending-source")this.publish(resources,atom);});
+        if(handler)this.rule([resources],()=>{if(resources.values.nonempty)this.publish(handler,this.nativeException(declaration,"TypeError"));});
+        for(const name of asynchronous?["asyncDispose","dispose"]:["dispose"]){
+            const method=this.property(resources,this.wellKnownSymbols.get(name)!,declaration),callee=this.newCell();
+            this.rule([method],()=>{for(const atom of method.values)if(atom!==this.primitive(undefined)&&atom!==this.primitive(null))this.publish(callee,atom);});
+            this.invoke(exit,callee,resources,[],this.newCell());
+        }
     }
     private writeUncertainty(context:ts.Node):Cell {
         let state=this.propertyWriteUncertainty.get(context);if(!state){state=this.newCell();this.propertyWriteUncertainty.set(context,state);}return state;
