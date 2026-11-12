@@ -2429,6 +2429,10 @@ class SourceValueFlow {
             if (ts.isWithStatement(current) && current.statement === child) {
                 const object=this.cell(current.expression);objects.push(object);
                 this.proxyInternalMethod(object,["has","get"],node,true);
+                // HasBinding of an object Environment Record reads the object's
+                // @@unscopables and, when it is an Object, the name on it
+                // (sec-object-environment-records-hasbinding-n): getters run.
+                this.property(this.property(object,this.wellKnownSymbols.get("unscopables")!,node),node.text,node);
             }
             child = current;
         }
