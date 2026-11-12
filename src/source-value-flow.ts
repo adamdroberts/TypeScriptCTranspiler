@@ -442,7 +442,7 @@ class SourceFacts implements Iterable<Atom> {
     get nonempty():boolean{if(this.knownNonempty)return true;for(const _ of this){this.knownNonempty=true;return true;}return false;}
     get size(): number {let size=0; for (const _ of this) size++; return size;}
 }
-interface PrimitiveCellCache {proof?:PrimitiveChoiceProof;kind?:number;readiness?:PrimitiveReadiness;empty?:true;}
+interface PrimitiveCellCache {proof?:PrimitiveChoiceProof;kind?:number;readiness?:PrimitiveReadiness;empty?:true;normal?:true;}
 interface Cell { ownRevision:number;primitiveCache?:PrimitiveCellCache;readonly id: number; readonly values: SourceFacts; readonly users: Set<Rule>; }
 /** One lazy record retains cache storage while invalidation releases stale
  * proof/readiness values immediately. Undefined is a miss; a zero kind mask
@@ -513,7 +513,8 @@ const RETURN_PROJECTION_BUDGET = 8;
  * concatenation over many independent choices (24 two-way properties already
  * give 2^24 texts) would exhaust memory before any eval site's own choice
  * limit applies; past the bound the result is a value the analysis does not
- * list, and a boolean result is either boolean. */
+ * list, and a boolean result is either boolean. It also bounds the steps of a
+ * search for one normal completion (primitiveCompletions). */
 const PRIMITIVE_CHOICE_PRODUCT_LIMIT = 65_536;
 /** Solver steps (rule evaluations, initializations, primitive flushes) one
  * source-value solve may perform: a deterministic backstop well above legitimate
@@ -950,6 +951,9 @@ class SourceValueFlow {
     private readonly primitiveKindCache = new SourceCellCache("kind");
     private readonly primitiveProofParents = new Map<Cell, Set<Cell>>();
     private readonly primitiveReadyCache = new SourceCellCache("readiness");
+    // A change flush does not clear it: facts only grow, so a normal
+    // completion found among them stays possible.
+    private readonly primitiveNormalCache = new SourceCellCache("normal");
     private readonly primitiveChanges = new Set<Cell>();
     private readonly hostOwners = new Map<"host" | "agent", ObjectOwner>();
     private readonly intrinsicOwners = new Map<Atom, ObjectOwner>();
@@ -9112,7 +9116,11 @@ class SourceValueFlow {
     }
     /** A completion query consumes the retained value graph lazily. Choice
      * points keep persistent continuations; no operand Cartesian product or
-     * JavaScript recursion is needed to find one possible normal result. */
+     * JavaScript recursion is needed to find one possible normal result.
+     * Proving that none exists still visits every combination, once per path
+     * through a shared operand (a chain of two-way choices over a Symbol
+     * throws at all 2^n of them), so past PRIMITIVE_CHOICE_PRODUCT_LIMIT steps
+     * the query yields an unknown completion, which may be normal. */
     private *primitiveCompletions(root:Cell):IterableIterator<Exclude<PrimitiveOutcome,{kind:"abrupt"}>> {
         type Value=Exclude<PrimitiveOutcome,{kind:"abrupt"}>;
         type Ancestors={cell:Cell;next:Ancestors|null};
@@ -9126,7 +9134,8 @@ class SourceValueFlow {
                 tasks={task:{kind:"atom",atom:next.value,ancestors:choice.ancestors},next:choice.tasks};values=choice.values;return true;
             }return false;
         };
-        for(;;){
+        for(let steps=0;;){
+            if(++steps>PRIMITIVE_CHOICE_PRODUCT_LIMIT){yield {kind:"unknown"};return;}
             if(!tasks){if(values)yield values.value;if(!resume())return;continue;}
             const task:Task=tasks.task;tasks=tasks.next;
             if(task.kind==="cell"){
@@ -9153,7 +9162,22 @@ class SourceValueFlow {
             values={value:outcome,next:values};
         }
     }
-    private primitiveHasNormal(root:Cell):boolean {return !this.primitiveCompletions(root).next().done;}
+    private primitiveHasNormal(root:Cell):boolean {
+        if(this.primitiveNormalCache.has(root))return true;
+        // A complete value proof combines each operand's values once, so it
+        // answers a shared chain without walking its paths.
+        const proof=this.primitiveChoiceProof(root);
+        if(proof.primitiveComplete){
+            if(!proof.values.length)return false;
+            this.primitiveNormalCache.set(root,true);return true;
+        }
+        const first=this.primitiveCompletions(root).next();
+        if(first.done)return false;
+        // Only a normal value is kept: an unknown completion may stand for an
+        // operand still without facts, which may later turn out to throw.
+        if(first.value.kind==="normal")this.primitiveNormalCache.set(root,true);
+        return true;
+    }
     private primitiveChoiceProof(root: Cell): PrimitiveChoiceProof {
         this.flushPrimitiveChanges();
         const incomplete: PrimitiveChoiceProof = { values: [], primitiveComplete: false, textComplete: false };
