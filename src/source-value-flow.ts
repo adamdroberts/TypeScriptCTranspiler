@@ -1187,6 +1187,11 @@ class SourceValueFlow {
                 // environment (HasProperty, @@unscopables) whether or not
                 // its value is used.
                 if (ts.isIdentifier(node) && !this.propertyNamePosition(node) && this.withBindingObjects(node).length) this.cell(node);
+                // A name no declaration binds is a global object property: its
+                // GetValue runs an accessor defined there (Object.defineProperty
+                // on globalThis) whether or not the value is used (`name;`,
+                // `typeof name`, `void name`).
+                else if (ts.isIdentifier(node) && !this.propertyNamePosition(node) && !this.writtenExpression(node) && this.isAmbientIdentifier(node) && this.valueReference(node)) this.cell(node);
                 if (ts.isCallExpression(node) || ts.isNewExpression(node) || ts.isTaggedTemplateExpression(node) ||
                     (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))&&this.sourceReferences.get(node)?.read!==false || ts.isAwaitExpression(node) ||
                     ts.isTemplateExpression(node) || ts.isBinaryExpression(node)&&node.operatorToken.kind===ts.SyntaxKind.InstanceOfKeyword || ts.isExpression(node) && conversionOperands(node) ||
@@ -4687,6 +4692,23 @@ class SourceValueFlow {
         // written unknown-key location is evidence of a property.
         const location=this.unknownPropertyLocations.get(owner),field=owner.fields.get(name);
         return !(field&&this.field(owner,name).values.nonempty)&&!owner.accessors.has(name)&&!owner.accessors.has(null)&&!(location&&location.value.values.nonempty);
+    }
+    /** An identifier the program evaluates and no enclosing forced
+     * expression evaluates for it: neither a label nor a name inside a type
+     * (an annotation, a type query, an implements clause), which is never
+     * looked up at run time, nor a member access's base, which the access
+     * reads itself (running a global getter there); a class's extends
+     * expression is a value. */
+    private valueReference(node: ts.Identifier): boolean {
+        const parent = node.parent;
+        if ((ts.isLabeledStatement(parent) || ts.isBreakOrContinueStatement(parent)) && parent.label === node) return false;
+        if ((ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) && parent.expression === node) return false;
+        for (let current: ts.Node = node; current.parent; current = current.parent) {
+            const above = current.parent;
+            if (ts.isExpressionWithTypeArguments(above) && ts.isHeritageClause(above.parent) && above.parent.token === ts.SyntaxKind.ExtendsKeyword && ts.isClassLike(above.parent.parent)) return true;
+            if (ts.isTypeNode(above)) return false;
+        }
+        return true;
     }
     private isAmbientIdentifier(node: ts.Identifier): boolean {
         if(this.implicitArgumentsOwner(node))return false;
