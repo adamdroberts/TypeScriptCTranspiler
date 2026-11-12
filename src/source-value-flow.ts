@@ -110,6 +110,12 @@ const NUMERIC_CONVERSIONS: ReadonlyMap<string, (value: Primitive) => Primitive> 
         const number=+(value as number);
         return number>0?Math.min(Math.trunc(number),Number.MAX_SAFE_INTEGER):0;
     }],
+    // ArraySetLength: ToUint32 of the value, which must equal its ToNumber.
+    ["array-length", (value: Primitive) => {
+        const number=+(value as number),length=number>>>0;
+        if(length!==number)throw new RangeError("Invalid array length");
+        return length;
+    }],
 ]);
 const SOURCE_OBJECT_PROTOTYPE_OPERATIONS:ReadonlyMap<string,Operation>=new Map([["toString","object-text"],["hasOwnProperty","object-has-own:prototype"]]);
 /** Argument positions an opaque Array.prototype native invokes as functions
@@ -820,6 +826,7 @@ class SourceValueFlow {
     private readonly scriptDeclaredBindings=new WeakSet<Cell>();
     private readonly knownWriteOrigins=new WeakMap<Cell,SourceWriteOrigin>();
     private readonly ownerCreations=new WeakMap<ObjectOwner,ts.Node>();
+    private readonly arrayLengthWrites=new WeakMap<ObjectOwner,Map<string,Cell>>();
     private readonly templateObjects=new Map<ts.TaggedTemplateExpression,Cell>();
     private readonly readCaptures = new Map<Cell,Map<SourceCaptureConstraints,Cell>>();
     private readonly empty = this.newCell();
@@ -2513,6 +2520,45 @@ class SourceValueFlow {
         if(!record.readonlyWrite){record.readonlyWrite=this.newCell();this.publish(owner.shape,{tag:"descriptor",identity:record.readonlyWrite});}
         this.publish(record.readonlyWrite,this.primitive(true));
     }
+    /** ArraySetLength (sec-arraysetlength): the new length is ToUint32 of the
+     * value and must equal its ToNumber, else RangeError (the conversion runs
+     * the value's own methods), and every integer index at or above it is
+     * deleted, so a later read of such an index reaches the prototype chain.
+     * A length the analysis does not know may delete any index. The result
+     * is the stored Number. */
+    private arraySetLength(owner:ObjectOwner,value:Cell,context:ts.Node|undefined):Cell {
+        let writes=this.arrayLengthWrites.get(owner);if(!writes){writes=new Map();this.arrayLengthWrites.set(owner,writes);}
+        const signature=value.id+":"+(context?this.cell(context).id:"none"),prior=writes.get(signature);if(prior)return prior;
+        let stored:Cell;
+        if(context&&value!==this.empty)stored=this.coerceCell(value,context,"array-length");
+        else{stored=this.newCell();this.publish(stored,this.numberValue());}
+        writes.set(signature,stored);
+        const base=this.newCell(),removed=this.newCell();this.publish(base,{tag:"object",owner});this.publish(removed,this.primitive(undefined));
+        const deleted=new Set<SourcePropertyKey>();let anyIndex=false;
+        const deleteAnyIndex=():void=>{
+            if(anyIndex)return;anyIndex=true;
+            const indices=this.newCell();this.publish(indices,this.numberValue());
+            this.writeProperty(base,null,removed,false,"delete",context,base,indices);
+        };
+        let rule!:Rule;
+        rule=this.rule([stored,owner.shape],()=>{
+            const state=this.primitiveState(stored,rule,true);
+            if(state.pending)return;
+            if(state.unresolved||!state.proof.primitiveComplete){deleteAnyIndex();return;}
+            let bound=Infinity;
+            for(const length of state.proof.values)if(typeof length==="number")bound=Math.min(bound,length);
+            if(bound===Infinity)return;
+            // Elements stored at keys the analysis does not know may be at or above it.
+            if(this.unknownPropertyLocations.has(owner))deleteAnyIndex();
+            for(const key of [...owner.fields.keys(),...owner.own?.keys()??[]]){
+                if(typeof key!=="string"||deleted.has(key))continue;
+                const index=Number(key);
+                if(String(index)!==key||!Number.isInteger(index)||index<0||index>=0xffffffff||index<bound)continue;
+                deleted.add(key);this.writeProperty(base,key,removed,false,"delete",context);
+            }
+        });
+        return stored;
+    }
     private writeUncertainty(context:ts.Node):Cell {
         let state=this.propertyWriteUncertainty.get(context);if(!state){state=this.newCell();this.propertyWriteUncertainty.set(context,state);}return state;
     }
@@ -2698,6 +2744,8 @@ class SourceValueFlow {
                     const origins=this.executionOrigins(context);
                     if(value===this.empty)this.copy(origins,owner.shape);else this.recordUnknownProperty(owner,mode,context,keys);
                     if(mode!=="delete")this.copyWrite(value,this.unknownPropertyLocation(owner),context);
+                    // A value-less (opaque) mutation already marks the shape.
+                    if(mode!=="delete"&&value!==this.empty&&owner.listLength&&this.keyMayContain(keys,"length",rule))this.copyWrite(this.arraySetLength(owner,value,context),this.field(owner,"length"),context);
                     if(mode==="set"&&value!==this.empty&&this.keyMayContain(keys,"__proto__",rule))this.unknownSetPrototype(owner,value);
                     for(const record of owner.collections?.values()??[])this.copy(origins,record.shape);
                 }
@@ -2708,7 +2756,7 @@ class SourceValueFlow {
                     if(mode==="delete")this.publish(presence,this.primitive(false));
                     if (!presence.values.nonempty) this.publish(presence,this.primitive(false));
                     this.publish(presence,this.primitive(true));
-                    this.copyWrite(value,this.field(owner,key),context);
+                    this.copyWrite(key==="length"&&owner.listLength&&mode!=="delete"?this.arraySetLength(owner,value,context):value,this.field(owner,key),context);
                     const index = typeof key === "string" ? Number(key) : NaN;
                     if (owner.listLength && String(index) === key && Number.isInteger(index) && index >= 0 && index < 0xffffffff) {
                         const length = owner.listLength;
@@ -2723,7 +2771,7 @@ class SourceValueFlow {
             if(atom.tag==="global"){
                 if(key===null){
                     const domain=keys?this.computedKeyDomain(keys):null;
-                    if(domain){for(const name of domain.keys)if(typeof name==="string"&&!this.immutableGlobalBinding(name))this.copyWrite(value,this.realmBinding(atom.realm,name),context);}
+                    if(domain&&!domain.numeric){for(const name of domain.keys)if(typeof name==="string"&&!this.immutableGlobalBinding(name))this.copyWrite(value,this.realmBinding(atom.realm,name),context);}
                     else this.copy(this.executionOrigins(context),this.globalMutation);
                 }
                 else if (typeof key === "string" && !this.immutableGlobalBinding(key)) this.copyWrite(value,this.realmBinding(atom.realm,key),context);
@@ -3234,7 +3282,7 @@ class SourceValueFlow {
     }
     private primitiveNumericConversionSafe(input: Cell, conversion: string): boolean {
         const kinds=this.primitiveKinds(input);
-        if(conversion==="code-point"||!kinds||kinds&(KIND_SYMBOL|KIND_OBJECT|KIND_FUNCTION))return false;
+        if(conversion==="code-point"||conversion==="array-length"||!kinds||kinds&(KIND_SYMBOL|KIND_OBJECT|KIND_FUNCTION))return false;
         if(conversion==="BigInt")return !(kinds&~(KIND_BIGINT|KIND_BOOLEAN));
         return conversion!=="length"&&conversion!=="number"||!(kinds&KIND_BIGINT);
     }
@@ -3434,7 +3482,9 @@ class SourceValueFlow {
         let rule!: Rule;
         rule=this.rule([key],()=>{
             const names = this.propertyKeys(key, rule, context);
-            if (names === null) this.writeProperty(base,null,value,true,mode,context,receiver);
+            // The converted key bounds which accessors, "length" and
+            // "__proto__" an unknown-key write may reach.
+            if (names === null) this.writeProperty(base,null,value,true,mode,context,receiver,this.primitiveConversion(key,context));
             else for (const name of names ?? []) this.writeProperty(base,name,value,true,mode,context,receiver);
         });
     }
