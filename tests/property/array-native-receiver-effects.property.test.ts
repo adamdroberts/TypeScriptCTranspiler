@@ -20,7 +20,8 @@ import {nodeReferenceSync} from './node-reference';
  * toLocaleString, a length's valueOf, @@isConcatSpreadable, a flattened
  * element's getter, a Proxy trap) and the @@species of its "constructor":
  * a function stored by fill keeps its own argument facts, and every such
- * method must reach later reads. Each generated Script evaluates what it read; the graph must fail
+ * method must reach later reads. A native that calls a callback (sort's
+ * comparator) hands it elements, which it may call or construct. Each generated Script evaluates what it read; the graph must fail
  * closed or contain every source Node evaluates, and the shapes listed as
  * finite must stay finite. A 256-deep chain of arrays, each reversed, sorted
  * and filled from the previous one, is the depth stress. */
@@ -58,6 +59,8 @@ const shapes:Record<string,string>={
  flatElementGetter:'var g="53;";const inner=[1];Object.defineProperty(inner,"0",{get(){g="54;";return 1}});[inner].flat();observe(g);',
  proxyGetTrap:'var g="55;";const p=new Proxy([1,2],{get(t,k,r){g="56;";return Reflect.get(t,k,r)}});Array.prototype.reverse.call(p);observe(g);',
  concatSpreadable:'var g="57;";const a=[1];Object.defineProperty(a,Symbol.isConcatSpreadable,{get(){g="58;";return true}});a.concat([2]);observe(g);',
+ comparatorConstructsElement:'var g="61;";function C(){g="62;"}[C,C].sort(function(a,b){new a();return 0});observe(g);',
+ comparatorCallsElement:'var g="63;";function C(){g="64;"}[C,C].sort(function(a,b){a();return 0});observe(g);',
  inheritedIndexGetter:'var g="59;";class C extends Array{}Object.defineProperty(C.prototype,"0",{get(){g="60;";return 1},configurable:true});const c=new C(2);c.reverse();observe(g);',
 };
 const finite=['loopPushSort','loopSortChain','loopReverseSlice','reverseValues','fillValue','spliceInsert','unshiftInsert','copyWithinMove','shiftMove','popDelete','sortReturnsReceiver','receiverKeysKept','methodKept','splitPrimitive','replacePrimitive','storedFunctionKept'];

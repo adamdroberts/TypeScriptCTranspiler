@@ -126,10 +126,14 @@ const NATIVE_DIRECT_CALLEE_POSITIONS:ReadonlyMap<string,ReadonlySet<number>>=new
  * copyWithin, fill, reverse and sort return that receiver ("Return O").
  * A user callback, getter, setter or species constructor these natives run
  * is modelled by its own escaped invocation. */
-type NativeArrayReceiverEffect={readonly set:boolean;readonly remove:boolean;readonly length:boolean;readonly receiverResult:boolean};
+type NativeArrayReceiverEffect={readonly set:boolean;readonly stores:number;readonly remove:boolean;readonly length:boolean;readonly receiverResult:boolean};
 const NATIVE_ARRAY_RECEIVER_EFFECTS:ReadonlyMap<string,NativeArrayReceiverEffect>=new Map([...runtimeArrayPrototypeMethods.keys()].map(name=>
     [`native-array:${name}`,{
         set:["copyWithin","fill","push","reverse","shift","sort","splice","unshift"].includes(name),
+        // The first argument position whose values the native stores as
+        // elements (fill's value, push's and unshift's items, splice's items
+        // after start and deleteCount); Infinity when it stores none.
+        stores:name==="fill"||name==="push"||name==="unshift"?0:name==="splice"?2:Infinity,
         remove:["copyWithin","pop","reverse","shift","sort","splice","unshift"].includes(name),
         length:["pop","push","shift","splice","unshift"].includes(name),
         receiverResult:["copyWithin","fill","reverse","sort"].includes(name),
@@ -1481,7 +1485,7 @@ class SourceValueFlow {
         const indices=this.newCell();this.publish(indices,this.numberValue());
         if(effect.set){
             const values=this.newCell();this.copy(this.computedProperty(ordinary,indices,context),values);
-            for(const input of inputs)this.copy(input,values);
+            for(const [index,input] of inputs.entries())if(index>=effect.stores)this.copy(input,values);
             this.writeProperty(ordinary,null,values,false,"set",context,ordinary,indices);
         }
         if(effect.remove){const removed=this.newCell();this.publish(removed,this.primitive(undefined));this.writeProperty(ordinary,null,removed,false,"delete",context,ordinary,indices);}
@@ -7591,8 +7595,13 @@ class SourceValueFlow {
                             if(arrayEffect)this.nativeArrayReceiverWrites(invocation.receiver,arrayEffect,argumentsEscaping,node);
                             else this.writeProperty(invocation.receiver,null,this.empty,false,"set",node);
                             // An Array.prototype native never calls its receiver or the
-                            // values it stores; their accessors and methods may run.
-                            this.escapeCallableArgument(invocation.receiver,node,false,arrayEffect?"elements":"direct");
+                            // values it stores; their accessors and methods may run. A
+                            // native that calls a callback (sort's comparator) hands it
+                            // elements, which the callback may call: an escaped callback
+                            // receives unknown native values, so the elements it may be
+                            // handed stay direct callees of the escape.
+                            const callsCallback=directCallees==="all"||!!directCallees&&directCallees.size>0;
+                            this.escapeCallableArgument(invocation.receiver,node,false,arrayEffect&&!callsCallback?"elements":"direct");
                             for (const [index,argument] of argumentsEscaping.entries()) {
                                 if(!arrayEffect)this.writeProperty(argument,null,this.empty,false,"set",node);
                                 this.escapeCallableArgument(argument,node,false,!directCallees||directCallees==="all"||directCallees.has(index)?"direct":"argument");
