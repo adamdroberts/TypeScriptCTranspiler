@@ -18,6 +18,7 @@ import {sourceChoiceTuples} from "./source-choice-tuples";
 import {moduleVarDeclaredNames} from "./module-static-semantics";
 import { ecmaParseGoal, literalPropertyKey } from "./ecmascript-source";
 import { annexBBlockFunctions, annexBFunctionVarScope } from "./annex-b-functions";
+import { functionBindingScope, functionVarBinding, type FunctionBindingScope } from "./function-binding-scopes";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
 import {nativePrimitiveFormat} from "./util-format-source";
@@ -993,8 +994,16 @@ class SourceValueFlow {
                 if (!this.globalLexicals.has(statement.name.text)) this.globalLexicals.set(statement.name.text,{value:this.newCell(),mutable:true});
                 this.scriptDeclaredBindings.add(this.globalLexicals.get(statement.name.text)!.value);
                 this.copy(this.cell(statement), this.globalLexicals.get(statement.name.text)!.value);
-            } else if (ts.isFunctionDeclaration(statement) && statement.name)
+            } else if (ts.isFunctionDeclaration(statement) && statement.name && statement.body &&
+                !source.statements.some(later => later.pos > statement.pos && ts.isFunctionDeclaration(later) && later.body && later.name?.text === statement.name!.text))
+                // GlobalDeclarationInstantiation keeps the last declaration of a name.
                 this.copy(this.cell(statement), this.globalBinding(statement.name.text));
+        }
+        // B.3.2.2: a Script's block-level function is also a global var
+        // binding, read through the global object as well as by name.
+        for (const source of this.scriptOrder.keys()) for (const declaration of annexBBlockFunctions(source)) {
+            const scope = functionVarBinding(source, declaration.name.text);
+            if (scope && scope.kind === "var" && scope.annexB.length) this.functionBindingCell(this.functionScopeSymbol(scope));
         }
         for (const entry of entries.evaluations ?? []) {
             const contextKey=evaluationContextKey(entry.source,entry.kind);
@@ -2123,7 +2132,65 @@ class SourceValueFlow {
         if(this.evaluationGlobalTargets.has(node))return undefined;
         // Ordinary checker lookup stops at with. Resolve the declarative
         // fallback separately; object-record candidates remain graph edges.
-        return sourceBindingTarget(this.checker, declarativeSourceBindingSymbol(this.checker, node)).symbol;
+        return this.functionBindingSymbol(node)??this.parameterScopeSymbol(node,sourceBindingTarget(this.checker, declarativeSourceBindingSymbol(this.checker, node)).symbol);
+    }
+    /** A parameter list's expressions run before the body's declarations
+     * exist (FunctionDeclarationInstantiation gives them their own
+     * Environment Record), so a reference there denotes a parameter or an
+     * outer binding, never a body declaration, which the checker resolves it
+     * to. */
+    private parameterScopeSymbol(node:ts.Identifier,symbol:ts.Symbol|undefined):ts.Symbol|undefined {
+        for(let child:ts.Node=node,scope=node.parent;symbol&&scope;child=scope,scope=scope.parent){
+            if(!ts.isParameter(child)||!ts.isFunctionLike(scope)||!("body" in scope)||!scope.body)continue;
+            const body=scope.body,file=body.getSourceFile();
+            if(!(symbol.declarations??[]).length||!(symbol.declarations??[]).every(declaration=>declaration.getSourceFile()===file&&declaration.pos>=body.pos&&declaration.end<=body.end))continue;
+            const outer=this.checker.resolveName(node.text,scope.parent,ts.SymbolFlags.Value,false);
+            symbol=outer?sourceBindingTarget(this.checker,outer).symbol:undefined;
+        }
+        return symbol;
+    }
+    private readonly functionBindingSymbols=new Map<ts.Node,Map<string,ts.Symbol>>();
+    private readonly functionBindings=new Map<ts.Symbol,FunctionBindingScope>();
+    private readonly functionBindingReferences=new Map<ts.Identifier,ts.Symbol|null>();
+    /** The ECMAScript binding a reference denotes where a function
+     * declaration takes part in it (function-binding-scopes): one symbol per
+     * block or var scope and name, standing for the checker's, whose
+     * declarations are the binding's own. Null where the checker's symbol is
+     * the binding. */
+    private functionBindingSymbol(node:ts.Identifier):ts.Symbol|null {
+        let symbol=this.functionBindingReferences.get(node);
+        if(symbol===undefined){const scope=functionBindingScope(node);symbol=scope?this.functionScopeSymbol(scope):null;this.functionBindingReferences.set(node,symbol);}
+        return symbol;
+    }
+    private functionScopeSymbol(scope:FunctionBindingScope):ts.Symbol {
+        let names=this.functionBindingSymbols.get(scope.scope);if(!names){names=new Map();this.functionBindingSymbols.set(scope.scope,names);}
+        let symbol=names.get(scope.name);
+        if(!symbol){
+            const functions=scope.kind==="var"?[...scope.functions,...scope.annexB]:scope.functions;
+            const declarations:ts.Declaration[]=scope.kind==="var"?[...scope.parameters.map(name=>name.parent as ts.Declaration),...scope.variables.map(name=>name.parent as ts.Declaration),...functions]:[...functions];
+            symbol={flags:ts.SymbolFlags.FunctionScopedVariable,escapedName:scope.name as ts.__String,name:scope.name,declarations,
+                valueDeclaration:scope.kind==="var"?scope.functions.at(-1)??scope.annexB.at(-1):scope.functions.at(-1)} as unknown as ts.Symbol;
+            names.set(scope.name,symbol);this.functionBindings.set(symbol,scope);
+        }
+        return symbol;
+    }
+    /** A block's binding holds its last function declaration. A var scope's
+     * holds its last top-level function declaration, else undefined until a
+     * parameter or var assignment, and receives each B.3.2.1 block
+     * function's block binding when that declaration is evaluated; a
+     * Script's is its global object property. */
+    private functionBindingCell(symbol:ts.Symbol):Cell {
+        const existing=this.bindings.get(symbol);if(existing)return existing;
+        const scope=this.functionBindings.get(symbol)!;
+        const cell=scope.kind==="var"&&ts.isSourceFile(scope.scope)&&this.scriptOrder.has(scope.scope)?this.globalBinding(scope.name):this.newCell();
+        this.bindings.set(symbol,cell);
+        if(scope.kind==="lexical")this.copy(this.cell(scope.functions.at(-1)!),cell);
+        else{
+            const last=scope.functions.at(-1);if(last)this.copy(this.cell(last),cell);
+            else if(!scope.parameters.length)this.publish(cell,this.primitive(undefined));
+            for(const declaration of scope.annexB){const block=functionBindingScope(declaration.name);if(block)this.copy(this.functionBindingCell(this.functionScopeSymbol(block)),cell);}
+        }
+        return cell;
     }
     /** One reference record per identifier occurrence inside generated code,
      * connected to every caller environment; reads and writes share it. */
@@ -2218,7 +2285,9 @@ class SourceValueFlow {
             if(ts.isNamespaceImport(declaration))return descriptor.module(true);
             if(ts.isImportClause(declaration)&&declaration.name)return descriptor.module(false);
         }
-        const projected = sourceBindingTarget(this.checker, origin), symbol = projected.symbol;
+        const scoped = this.functionBindingSymbol(node);
+        if (scoped) return this.functionBindingCell(scoped);
+        const projected = sourceBindingTarget(this.checker, origin), symbol = this.parameterScopeSymbol(node, projected.symbol);
         const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
         if (declaration && ts.isSourceFile(declaration)) {
             if (projected.namespace) return this.moduleNamespace(declaration, symbol!);
