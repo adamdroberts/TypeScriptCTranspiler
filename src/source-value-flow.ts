@@ -572,6 +572,9 @@ class SourceValueFlow {
     private readonly sourceObjectOwners=new WeakSet<ObjectOwner>();
     private readonly opaqueCaptureCalls=new Map<ts.Node,Set<Cell>>();
     private readonly escapedCallableCalls=new Map<ts.Node,Map<boolean,{visit:(input:Cell,as?:EscapeReachKind)=>void}>>();
+    /** One actual List per Script for the values unknown code passes from
+     * its top-level escape points (see escapeCallableArgument). */
+    private readonly topLevelEscapeActuals=new Map<ts.SourceFile,Cell>();
     private readonly escapeReaches=new Map<string,{cells:Map<Cell,EscapeReach>;atoms:Map<Atom,EscapeReach>}>();
     private readonly escapedInvocationOrigins=new WeakMap<ts.Node,ts.Node>();
     /** Opaque code invokes an async callee with unknown actuals, so all such
@@ -1496,7 +1499,7 @@ class SourceValueFlow {
         let modes=this.escapedCallableCalls.get(context);if(!modes){modes=new Map();this.escapedCallableCalls.set(context,modes);}
         let graph=modes.get(sourceCallbacksOnly);
         if(!graph){
-            const target=this.newCell(),actuals=this.newCell(),returned=this.newCell(),seen=new Set<string>();
+            const target=this.newCell(),returned=this.newCell(),seen=new Set<string>();let actuals=this.newCell();
             // A native calls an escaped callable with values reachable from its
             // own receiver and arguments (already escaping here) or created by
             // itself: native values. Unknown code may pass anything.
@@ -1505,8 +1508,19 @@ class SourceValueFlow {
             // the escape do not see them. Inside an activation the origins are
             // every caller's, which would multiply along call chains; those
             // actuals stay the shared unknown value.
+            // Every top-level escape point of a Script reaches the same
+            // callables (those the global object and global lexicals reach),
+            // so each callable already receives the union of their origins.
+            // One List per Script carries that union: each value keeps its own
+            // origin for the timing filters, and an escaped function's
+            // receiver (and its sloppy-mode this boxing) is one cell rather
+            // than one per escape point and function.
             if(!sourceCallbacksOnly)this.publish(actuals,this.nativeUnknown);
-            else if(!this.enclosingActivation(context)&&!this.sourceOrigins.has(this.sourceFile(context)))this.copy(this.executionOrigins(context),actuals);
+            else if(!this.enclosingActivation(context)&&!this.sourceOrigins.has(this.sourceFile(context))){
+                const file=this.sourceFile(context);let shared=this.topLevelEscapeActuals.get(file);
+                if(!shared){shared=this.newCell();this.topLevelEscapeActuals.set(file,shared);}
+                this.copy(this.executionOrigins(context),shared);actuals=shared;
+            }
             else this.publish(actuals,this.unknown);
             // Iterator elements are read through this escaping call's context.
             const sink=this.newEscapeReach({callable:atom=>this.publish(target,atom),iterator:cell=>visit(this.directIteratorElements(cell,context))});
@@ -4701,6 +4715,7 @@ class SourceValueFlow {
         const atoms=new Map<Atom,Cell>();
         this.rule([receiver],()=>{for(const atom of receiver.values){
             if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
+            if(atom.tag==="unknown"){this.publish(result,this.global);this.publish(objects,atom);continue;}
             let value=atoms.get(atom);if(!value){value=this.newCell();atoms.set(atom,value);this.publish(value,atom);}
             const kinds=this.primitiveKinds(value);
             if(kinds&(KIND_NULL|KIND_UNDEFINED))this.publish(result,this.global);
@@ -4851,6 +4866,7 @@ class SourceValueFlow {
                 if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
                 // ToObject of a native value (or its wrapper) is a native value.
                 if(this.ordinaryOwner(atom)||atom.tag==="promise"||atom.tag==="generator"||atom===this.nativeUnknown){this.publish(result,atom);continue;}
+                if(atom.tag==="unknown"){this.publish(result,this.unknown);continue;}
                 const state=this.primitiveState(cell(atom),convert,true);if(state.pending&&!state.unresolved)continue;
                 for(const value of state.proof.values){
                     if(value===null||value===undefined){owner.ordinary=true;owner.unboxed=true;this.publish(plain,this.primitive(true));this.publish(result,{tag:"object",owner});continue;}
