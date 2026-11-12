@@ -6626,6 +6626,9 @@ class SourceValueFlow {
                     }else if(!ordinary&&!iterated){
                         iterated=true;const sequence=this.argumentSequence(pattern,[{cell:value,spread:true}]);this.allArgumentValues(sequence);
                         for(const {element,index,selected} of slots)if(!element.dotDotDotToken)this.copy(this.argumentPosition(sequence,index),selected);
+                        // A pattern without a rest element stops stepping before the
+                        // iterator is done: IteratorClose calls its return method.
+                        if(!slots.some(slot=>slot.element.dotDotDotToken))this.iteratorCloseEffects(this.iteratorElements(value,point),point);
                     }
                 });
                 for (const {element,index,selected} of slots) {
