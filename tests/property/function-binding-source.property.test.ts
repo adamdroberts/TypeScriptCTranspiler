@@ -10,7 +10,8 @@ import {nodeReferenceSync} from './node-reference';
  * top-level function declarations share one binding (the last declaration
  * its initial value), and a sloppy block function also stores its block's
  * binding into the var scope's when it is evaluated (B.3.2.1, and a
- * Script's global object property by B.3.2.2). Each shape computes `s`
+ * Script's global object property by B.3.2.2), even beside another
+ * declaration of its name in the same block, as Node 26 and Bun do. Each shape computes `s`
  * through such a name inside a Script, an ordinary function and a strict
  * function; the graph must fail closed or contain every source Node
  * evaluates, with Script roots and without, and the shapes listed as exact
@@ -34,8 +35,10 @@ const shapes:Record<string,{body:string;sloppy?:true}>={
  parameterBlockInside:{body:'(function(f){{function f(){return "2;"}s=f();}})(function(){return "1;"});'},
  parameterBlockOutside:{body:'(function(f){{function f(){return "2;"}}s=f();})(function(){return "1;"});'},
  parameterDefault:{body:'function f(){return "1;"}(function(a=f()){s=a;function f(){return "2;"}})();'},
+ blockDuplicates:{body:'{function f(){return "1;"}function f(){return "2;"}}s=f();',sloppy:true},
+ caseDuplicates:{body:'switch(1){case 1:function f(){return "1;"}case 2:function f(){return "2;"}}s=f();',sloppy:true},
 };
-const exact=['twoFunctions','twoBlocksInside','letOutside','caseBlock','closure','parameterBlockInside','parameterDefault'];
+const exact=['twoFunctions','twoBlocksInside','letOutside','caseBlock','closure','parameterBlockInside','parameterDefault','blockDuplicates','caseDuplicates'];
 const wrappers:Record<string,(body:string)=>string>={
  script:body=>`var s="0;";${body}OUT(s);`,
  function:body=>`function o(){var s="0;";${body}return s}OUT(o());`,

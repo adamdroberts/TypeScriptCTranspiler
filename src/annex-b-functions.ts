@@ -96,16 +96,23 @@ export function lexicalLoopHeadContainsName(node: ts.Node, name: string): boolea
  * parameter name, `arguments` and a body-level lexical name refuse it. */
 function replacementAllowed(declaration: NamedFunctionDeclaration, root: AnnexBVarScope): boolean {
     const name = declaration.name.text;
+    // In its own Block or CaseBlock, another declaration of the name can only
+    // be a function declaration (anything else is a duplicate early error),
+    // and Node 26 and Bun hoist such duplicates; B.3.2.1 would count them as
+    // conflicts and hoist none. An enclosing block's function declaration
+    // still prevents the replacement, as B.3.2.1 and Bun have it.
+    const container = declarationContainer(declaration);
+    const own = ts.isCaseClause(container) || ts.isDefaultClause(container) ? container.parent : container;
     for (let current: ts.Node | undefined = declaration.parent; current; current = current.parent) {
         if (!ts.isSourceFile(root) && current === root.body) {
             if (name === "arguments") return false;
             if (root.parameters.some(parameter => bindingIdentifiers(parameter.name).some(bound => bound.text === name))) return false;
             return !directLexicalNames((current as ts.Block).statements, declaration, false).has(name);
         }
-        if (ts.isBlock(current) && directLexicalNames(current.statements, declaration).has(name)) return false;
+        if (ts.isBlock(current) && directLexicalNames(current.statements, declaration, current !== own).has(name)) return false;
         if (ts.isCaseBlock(current)) {
             const statements = current.clauses.flatMap((clause) => [...clause.statements]);
-            if (directLexicalNames(statements, declaration).has(name)) return false;
+            if (directLexicalNames(statements, declaration, current !== own).has(name)) return false;
         }
         if (lexicalLoopHeadContainsName(current, name)) return false;
         if (ts.isCatchClause(current) && current.variableDeclaration &&
