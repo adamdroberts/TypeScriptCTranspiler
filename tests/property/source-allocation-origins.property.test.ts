@@ -16,22 +16,34 @@ function facts(source:string){
  return sourceConstructorInvocations(ts.createProgram(['/model.js'],options,host),{roots:['/model.js']});
 }
 
+// Activation timings an opaque call may overlap: unknown code may call a
+// global function during the call, before and after it, from a loop, an
+// async function, a generator or a recursive activation.
+const overlapping=(allocation:string)=>[
+ `opaque();function read(){${allocation}return constructor(owner.body)}read();`,
+ `function read(){${allocation}return constructor(owner.body)}read();opaque();read();`,
+ `opaque();for(let index=0;index<2;index++){${allocation}constructor(owner.body)}`,
+ `opaque();async function read(){${allocation}return constructor(owner.body)}read();`,
+ `opaque();function* read(){${allocation}return constructor(owner.body)}read().next();`,
+ `function read(){${allocation}if(Math.random())read();return constructor(owner.body)}opaque();read();`,
+];
+
 test('owner creation excludes earlier effects and retains overlapping or unrepresented timing',()=>{
  for(const effect of ['opaque();','function prior(){opaque()}prior();'])for(const allocation of ["const owner={body:'return 17;'};constructor(owner.body);","const owner=['return 17;'];constructor(owner[0]);"]){
   expect(facts('const constructor=Function;'+effect+allocation)).toEqual([{kind:'ordinary',choices:[['return 17;']]}]);
  }
- expect(facts("const constructor=Function;opaque();function read(){const owner={body:'return 17;'};return constructor(owner.body)}read();")).toEqual([{kind:'ordinary',choices:[['return 17;']]}]);
+ // A block-scoped literal whose binding is only a property-access base is
+ // unreachable to unknown code under every timing.
+ for(const source of overlapping("const owner={body:'return 17;'};"))
+  expect({source,facts:facts('const constructor=Function;'+source)}).toEqual({source,facts:[{kind:'ordinary',choices:[['return 17;']]}]});
+ // Once the binding is used otherwise, the overlapping timing is retained.
  for(const source of [
+  ...overlapping("const owner={body:'return 17;'};void [owner];"),
   "const owner={body:'return 17;'};opaque(owner);constructor(owner.body);",
   "function prior(){opaque()}const owner={body:'return 17;',ignored:prior()};constructor(owner.body);",
   "function read(){const owner={body:'return 17;'};opaque(owner);return constructor(owner.body)}read();",
-  "function read(){const owner={body:'return 17;'};return constructor(owner.body)}read();opaque();read();",
-  "opaque();for(let index=0;index<2;index++){const owner={body:'return 17;'};constructor(owner.body)}",
-  "opaque();async function read(){const owner={body:'return 17;'};return constructor(owner.body)}read();",
-  "opaque();function* read(){const owner={body:'return 17;'};return constructor(owner.body)}read().next();",
-  "function read(){const owner={body:'return 17;'};if(Math.random())read();return constructor(owner.body)}opaque();read();",
   "opaque();function owner(){}constructor(owner.body);",
- ])expect(facts('const constructor=Function;'+source).some(invocation=>invocation.choices===null)).toBe(true);
+ ])expect({source,unknown:facts('const constructor=Function;'+source).some(invocation=>invocation.choices===null)}).toEqual({source,unknown:true});
  // An earlier operation can replace an inherited callable even though it
  // cannot mutate an own element that has not yet been allocated.
  expect(facts("opaque();const owner=['return 17;'];Function.apply(null,owner);").some(invocation=>invocation.choices===null)).toBe(true);

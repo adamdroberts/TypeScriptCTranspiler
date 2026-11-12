@@ -828,6 +828,7 @@ class SourceValueFlow {
     private readonly ownerCreations=new WeakMap<ObjectOwner,ts.Node>();
     private readonly arrayLengthWrites=new WeakMap<ObjectOwner,Map<string,Cell>>();
     private readonly templateObjects=new Map<ts.TaggedTemplateExpression,Cell>();
+    private readonly confinedLiterals=new WeakMap<ts.Node,boolean>();
     private readonly readCaptures = new Map<Cell,Map<SourceCaptureConstraints,Cell>>();
     private readonly empty = this.newCell();
     private readonly globalMutation = this.newCell();
@@ -2368,6 +2369,7 @@ class SourceValueFlow {
      * suspended and unrepresented creation timing stays open. */
     private ownerMutation(owner:ObjectOwner):void {
         const creation=this.ownerCreations.get(owner);
+        if(creation&&this.confinedLiteral(creation))return;
         const activation=creation?this.enclosingActivation(creation):undefined;
         // These owners have no represented acyclic creation boundary. Every
         // opaque origin is admissible, so retain the canonical graph directly.
@@ -2388,6 +2390,114 @@ class SourceValueFlow {
                 this.publish(owner.shape,atom);
             }
         });
+    }
+    /** An object or array literal that initializes a block-scoped `const`
+     * is reachable only through that binding. When every reference to the
+     * binding is a property access at a key the literal itself defines as a
+     * data property (a read or call target never, a write only on an object
+     * literal, a delete never), the object never becomes a `this` value, an
+     * argument, a returned or stored value or a prototype-chain receiver, so
+     * no code other than those accesses can observe or mutate any instance of
+     * it, and no opaque effect, whenever it runs, reaches its fields. A Script's
+     * top-level `const` is excluded (unknown code names global lexicals), as
+     * is a scope that contains a direct eval or a with statement. */
+    private confinedLiteral(node:ts.Node):boolean {
+        let known=this.confinedLiterals.get(node);if(known!==undefined)return known;
+        known=this.computeConfinedLiteral(node);this.confinedLiterals.set(node,known);return known;
+    }
+    private computeConfinedLiteral(node:ts.Node):boolean {
+        const array=ts.isArrayLiteralExpression(node);
+        if(!array&&!ts.isObjectLiteralExpression(node))return false;
+        let top:ts.Node=node;
+        while(ts.isParenthesizedExpression(top.parent)||ts.isAsExpression(top.parent)||ts.isSatisfiesExpression(top.parent)||ts.isTypeAssertionExpression(top.parent)||ts.isNonNullExpression(top.parent))top=top.parent;
+        const declaration=top.parent;
+        if(!ts.isVariableDeclaration(declaration)||declaration.initializer!==top||!ts.isIdentifier(declaration.name))return false;
+        const list=declaration.parent;
+        if(!ts.isVariableDeclarationList(list)||!(list.flags&ts.NodeFlags.Const)||!ts.isVariableStatement(list.parent))return false;
+        const container=list.parent.parent;
+        const scope=ts.isBlock(container)?container:ts.isCaseClause(container)||ts.isDefaultClause(container)?container.parent:undefined;
+        if(!scope)return false;
+        const symbol=this.bindingSymbol(declaration.name);if(!symbol)return false;
+        // Keys the literal defines as data properties.
+        const keys=new Set<string>();
+        if(array){
+            for(const [index,element] of node.elements.entries()){if(ts.isOmittedExpression(element)||ts.isSpreadElement(element))break;keys.add(String(index));}
+            keys.add("length");
+        }else{
+            const accessors=new Set<string>();
+            for(const property of node.properties){
+                if(ts.isSpreadAssignment(property))continue;
+                const name=property.name;
+                if(ts.isGetAccessorDeclaration(property)||ts.isSetAccessorDeclaration(property)){
+                    if(!name||ts.isComputedPropertyName(name)||ts.isPrivateIdentifier(name))return false;
+                    accessors.add(name.text);continue;
+                }
+                if(!name||ts.isComputedPropertyName(name)||ts.isPrivateIdentifier(name)||ts.isNumericLiteral(name)||ts.isBigIntLiteral(name))continue;
+                if(name.text==="__proto__")continue;
+                if(ts.isPropertyAssignment(property)||ts.isShorthandPropertyAssignment(property)||ts.isMethodDeclaration(property))keys.add(name.text);
+            }
+            for(const key of accessors)keys.delete(key);
+        }
+        const name=declaration.name.text;
+        const key=(access:ts.Expression):string|undefined=>{
+            if(ts.isPropertyAccessExpression(access))return ts.isIdentifier(access.name)?access.name.text:undefined;
+            if(ts.isElementAccessExpression(access)){
+                const argument=access.argumentExpression;
+                if(ts.isStringLiteral(argument))return argument.text;
+                if(ts.isNumericLiteral(argument)&&/^(?:0|[1-9][0-9]*)$/.test(argument.text))return argument.text;
+            }
+            return undefined;
+        };
+        const confinedUse=(reference:ts.Identifier):boolean=>{
+            const access=reference.parent;
+            if(!(ts.isPropertyAccessExpression(access)||ts.isElementAccessExpression(access))||access.expression!==reference)return false;
+            const accessed=key(access);if(accessed===undefined||!keys.has(accessed))return false;
+            let use:ts.Node=access;while(ts.isParenthesizedExpression(use.parent))use=use.parent;
+            const parent=use.parent;
+            if((ts.isCallExpression(parent)||ts.isNewExpression(parent))&&parent.expression===use||ts.isTaggedTemplateExpression(parent)&&parent.tag===use||ts.isDeleteExpression(parent))return false;
+            if(this.writtenExpression(access))return !array;
+            return true;
+        };
+        let confined=true;
+        const visit=(current:ts.Node):void=>{
+            if(!confined)return;
+            if(ts.isWithStatement(current)){confined=false;return;}
+            if(ts.isCallExpression(current)){let callee:ts.Expression=current.expression;while(ts.isParenthesizedExpression(callee))callee=callee.expression;if(ts.isIdentifier(callee)&&callee.text==="eval"){confined=false;return;}}
+            if(ts.isIdentifier(current)&&current.text===name&&current!==declaration.name&&!this.propertyNamePosition(current)){
+                if(ts.isShorthandPropertyAssignment(current.parent)&&current.parent.name===current){confined=false;return;}
+                const target=this.bindingSymbol(current);
+                if(target===symbol){if(!confinedUse(current)){confined=false;return;}}
+                else if(target===undefined){confined=false;return;}
+            }
+            current.forEachChild(visit);
+        };
+        visit(scope);
+        return confined;
+    }
+    /** Identifier positions that name a property, label or declaration
+     * member rather than referencing a binding. */
+    private propertyNamePosition(node:ts.Identifier):boolean {
+        const parent=node.parent;
+        return ts.isPropertyAccessExpression(parent)&&parent.name===node||ts.isQualifiedName(parent)&&parent.right===node||
+            (ts.isPropertyAssignment(parent)||ts.isMethodDeclaration(parent)||ts.isPropertyDeclaration(parent)||ts.isGetAccessorDeclaration(parent)||ts.isSetAccessorDeclaration(parent)||
+             ts.isPropertySignature(parent)||ts.isMethodSignature(parent)||ts.isEnumMember(parent)||ts.isBindingElement(parent)&&parent.propertyName===node||ts.isImportSpecifier(parent)&&parent.propertyName===node||ts.isExportSpecifier(parent)&&parent.propertyName===node)&&(parent as {name?:ts.Node}).name===node||
+            ts.isBindingElement(parent)&&parent.propertyName===node||
+            ts.isLabeledStatement(parent)||ts.isBreakStatement(parent)||ts.isContinueStatement(parent);
+    }
+    /** Whether an expression is written by an assignment, update, compound
+     * assignment or destructuring assignment, or as a for-in/of target. */
+    private writtenExpression(node:ts.Node):boolean {
+        let current=node;
+        for(;;){
+            const parent=current.parent;
+            if(ts.isParenthesizedExpression(parent)||ts.isNonNullExpression(parent)||ts.isAsExpression(parent)||ts.isSatisfiesExpression(parent)||ts.isTypeAssertionExpression(parent)){current=parent;continue;}
+            if(ts.isBinaryExpression(parent))return parent.left===current&&parent.operatorToken.kind>=ts.SyntaxKind.FirstAssignment&&parent.operatorToken.kind<=ts.SyntaxKind.LastAssignment;
+            if(ts.isPrefixUnaryExpression(parent)||ts.isPostfixUnaryExpression(parent))return parent.operator===ts.SyntaxKind.PlusPlusToken||parent.operator===ts.SyntaxKind.MinusMinusToken;
+            if((ts.isForInStatement(parent)||ts.isForOfStatement(parent))&&parent.initializer===current)return true;
+            if(ts.isArrayLiteralExpression(parent)||ts.isSpreadElement(parent)||ts.isSpreadAssignment(parent)||ts.isShorthandPropertyAssignment(parent)||ts.isObjectLiteralExpression(parent)){current=parent;continue;}
+            if(ts.isPropertyAssignment(parent)){if(parent.initializer!==current)return false;current=parent;continue;}
+            return false;
+        }
     }
     /** String exotics keep one actual-input graph. Project a field only when
      * a read or complete own-key operation observes it. */

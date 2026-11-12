@@ -104,9 +104,16 @@ test('completed root effects precede later owner creation',()=>{
  }
  const scripts=finiteEvalScriptSourceGraph([{path:'before.js',goal:'script',source:effects[0]!},{path:'after.js',goal:'script',source:'const owner={body:"var created=17;"};$262.evalScript(owner.body);'}]);
  expect(scripts.error).toBeNull();expect(scripts.sources).toEqual(['var created=17;']);
+ // A block's or an activation's owner that no opaque call can reach keeps its
+ // field; a global lexical owner (another Script's code may name it) and an
+ // owner handed to the opaque call fail closed.
  for(const source of [
-  'const owner={body:"17;"};for(let index=0;index<3;index++)opaque();$262.evalScript(owner.body);',
   'for(let index=0;index<3;index++){const owner={body:"17;"};opaque();$262.evalScript(owner.body);}',
   'function run(){const owner={body:"17;"};opaque();$262.evalScript(owner.body);}for(let index=0;index<3;index++)run();',
+ ]){const graph=finiteEvalScriptSourceGraph([{path:'subject.js',source}]);expect({source,error:graph.error,sources:graph.sources}).toEqual({source,error:null,sources:['17;']});}
+ for(const source of [
+  'const owner={body:"17;"};for(let index=0;index<3;index++)opaque();$262.evalScript(owner.body);',
+  'for(let index=0;index<3;index++){const owner={body:"17;"};opaque(owner);$262.evalScript(owner.body);}',
+  'function run(){const owner={body:"17;"};opaque(owner);$262.evalScript(owner.body);}for(let index=0;index<3;index++)run();',
  ])expect(finiteEvalScriptSourceGraph([{path:'subject.js',source}]).error).toContain('evalScript source is not a finite static string expression');
 });

@@ -27,9 +27,15 @@ test('same activation capture composition preserves finite owners and uncertain 
   "function run(){const owner={body:'return 17;'};const saved={body:owner.body};opaque(saved);Function(saved.body)}run();",
   "function run(){const owner={body:'return 17;'};for(let index=0;index<2;index++){const saved={body:owner.body};opaque(owner);Function(saved.body)}}run();",
   "function run(){const owner={body:'return 17;'};const saved={body:owner.body};if(flag)run();opaque(owner);Function(saved.body)}run();",
+  "function read(){const owner={body:'return 17;'};const saved={body:owner.body};void [saved];return Function(saved.body)}read();opaque();read();",
+  "function read(){const owner={body:'return 17;'};const saved={body:owner.body};void [saved];return Function(saved.body)}function one(){if(flag)two();return read()}function two(){return one()}one();opaque();",
+ ])expect(facts(source).some(invocation=>invocation.choices===null)).toBe(true);
+ // Literals only their own block names, read only at their own keys, are
+ // unreachable to the opaque call whatever the activation timing.
+ for(const source of [
   "function read(){const owner={body:'return 17;'};const saved={body:owner.body};return Function(saved.body)}read();opaque();read();",
   "function read(){const owner={body:'return 17;'};const saved={body:owner.body};return Function(saved.body)}function one(){if(flag)two();return read()}function two(){return one()}one();opaque();",
- ])expect(facts(source).some(invocation=>invocation.choices===null)).toBe(true);
+ ])expect(facts(source)).toEqual([{kind:'ordinary',choices:[['return 17;']]}]);
 });
 
 test('activation capture owner graph matches independent Node through native suspension',async()=>{
