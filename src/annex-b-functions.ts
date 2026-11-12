@@ -38,9 +38,19 @@ export function annexBFunctionVarScope(node: ts.Node): AnnexBVarScope {
     return node.getSourceFile();
 }
 
+/** The node whose statement list holds a declaration: its parent, past the
+ * LabelledStatements wrapping it. A label on a function declaration (B.3.1)
+ * changes no scope: LexicallyScopedDeclarations, VarScopedDeclarations and
+ * B.3.2 all see the labelled item. */
+export function declarationContainer(node: ts.Node): ts.Node {
+    let parent = node.parent;
+    while (ts.isLabeledStatement(parent)) parent = parent.parent;
+    return parent;
+}
+
 /** A Block, CaseClause, DefaultClause or (B.3.3) IfStatement clause. */
 function hasCandidateParent(declaration: ts.FunctionDeclaration): boolean {
-    const parent = declaration.parent;
+    const parent = declarationContainer(declaration);
     return ts.isBlock(parent) || ts.isCaseClause(parent) || ts.isDefaultClause(parent) ||
         (ts.isIfStatement(parent) && (parent.thenStatement === declaration || parent.elseStatement === declaration));
 }
@@ -127,7 +137,7 @@ export function annexBBlockFunctions(root: AnnexBVarScope): readonly NamedFuncti
             if (ts.isFunctionDeclaration(current)) {
                 if (current.name && !current.asteriskToken &&
                     !ts.getModifiers(current)?.some(modifier => modifier.kind === ts.SyntaxKind.AsyncKeyword) &&
-                    current.parent !== body && hasCandidateParent(current)) out.push(current as NamedFunctionDeclaration);
+                    declarationContainer(current) !== body && hasCandidateParent(current)) out.push(current as NamedFunctionDeclaration);
                 continue;
             }
             if (ts.isFunctionLike(current) || ts.isClassLike(current) || ts.isClassStaticBlockDeclaration(current)) continue;

@@ -7,7 +7,7 @@ import { moduleRequestFromDeclaration, moduleRequestKey, type ModuleRequest } fr
 import { exportedModuleNames, moduleNamespaceBinding, resolveModuleExport, type ModuleExportRecord } from "../module-export-resolution";
 import { definitionEvaluationChildren, moduleHasTopLevelAwait } from "./module-evaluation";
 import {classDefinitionPlan, classConstructorMember, isClassConstructor} from './class-definition';
-import {annexBBlockFunctions, annexBFunctionVarScope, bindingIdentifiers, type NamedFunctionDeclaration} from '../annex-b-functions';
+import {annexBBlockFunctions, annexBFunctionVarScope, bindingIdentifiers, declarationContainer, type NamedFunctionDeclaration} from '../annex-b-functions';
 import { directEvalContext } from "../eval-context";
 import ts from "typescript";
 import {moduleLinkRecord} from "../module-source-record";
@@ -12704,7 +12704,11 @@ class Emitter {
                 this.flattenNamespaceBody(inner, visit);
                 return;
             }
-            out.push(inner);
+            // A labelled function declaration (B.3.1) is the function
+            // declaration: no break or continue can target its label.
+            let item: ts.Statement = inner;
+            while (ts.isLabeledStatement(item)) item = item.statement;
+            out.push(ts.isFunctionDeclaration(item) ? item : inner);
         };
         for (const stmt of statements) visit(stmt);
         return out;
@@ -12756,7 +12760,7 @@ class Emitter {
             const container = list.parent.parent;
             return !!container && (ts.isSourceFile(container) || ts.isModuleBlock(container)) ? container : null;
         }
-        const container = declaration.parent;
+        const container = ts.isFunctionDeclaration(declaration) ? declarationContainer(declaration) : declaration.parent;
         return !!container && (ts.isSourceFile(container) || ts.isModuleBlock(container)) ? container : null;
     }
 
@@ -19161,8 +19165,8 @@ class Emitter {
         declaration: ts.Declaration,
     ): declaration is ScopeLexicalDeclaration {
         if (ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration)) {
-            return !!declaration.name &&
-                (ts.isCaseClause(declaration.parent) || ts.isDefaultClause(declaration.parent));
+            const container = declarationContainer(declaration);
+            return !!declaration.name && (ts.isCaseClause(container) || ts.isDefaultClause(container));
         }
         if (!ts.isVariableDeclaration(declaration)) return false;
         if (!ts.isVariableDeclarationList(declaration.parent) ||
@@ -19186,7 +19190,7 @@ class Emitter {
             ts.isVariableStatement(declaration.parent.parent)
             ? declaration.parent.parent.parent
             : (ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration)) && declaration.name
-                ? declaration.parent
+                ? declarationContainer(declaration)
                 : null;
         // B.3.3: a FunctionDeclaration as an IfStatement clause is the sole
         // declaration of a Block of its own.
@@ -20299,7 +20303,7 @@ class Emitter {
         return ts.isFunctionDeclaration(decl) &&
             !this.isAmbientDeclaration(decl) &&
             !!decl.name &&
-            ts.isSourceFile(decl.parent) &&
+            ts.isSourceFile(declarationContainer(decl)) &&
             this.isTest262ScriptSourceFile(decl.getSourceFile());
     }
 
@@ -22110,9 +22114,11 @@ class Emitter {
         if (ts.isParameter(declaration)) return false;
         if (ts.isVariableDeclaration(declaration)) return !ts.isVariableDeclarationList(declaration.parent) ||
             (declaration.parent.flags & ts.NodeFlags.BlockScoped) !== 0;
-        if (ts.isFunctionDeclaration(declaration)) return !ts.isBlock(declaration.parent) ||
-            !ts.isFunctionLike(declaration.parent.parent) || !("body" in declaration.parent.parent) ||
-            declaration.parent.parent.body !== declaration.parent;
+        if (ts.isFunctionDeclaration(declaration)) {
+            const container = declarationContainer(declaration);
+            return !ts.isBlock(container) || !ts.isFunctionLike(container.parent) || !("body" in container.parent) ||
+                container.parent.body !== container;
+        }
         return true;
     }
 
@@ -30119,7 +30125,7 @@ class Emitter {
      * or CaseBlock, or (B.3.3) the declaration itself when it is the sole
      * member of an IfStatement clause's implicit Block. */
     private scopeFunctionOwner(declaration: ts.FunctionDeclaration): ts.Block | ts.CaseBlock | ts.FunctionDeclaration | null {
-        const parent = declaration.parent;
+        const parent = declarationContainer(declaration);
         return ts.isBlock(parent) ? parent :
             ts.isCaseClause(parent) || ts.isDefaultClause(parent) ? parent.parent :
             ts.isIfStatement(parent) && (parent.thenStatement === declaration || parent.elseStatement === declaration) ? declaration : null;
@@ -30197,7 +30203,7 @@ class Emitter {
                             "captured lexical binding requires a canonical value/TDZ cell",
                         );
                     }
-                    const owner = ts.isFunctionDeclaration(declaration) ? declaration.parent.parent : null;
+                    const owner = ts.isFunctionDeclaration(declaration) ? declarationContainer(declaration).parent : null;
                     const parameter = owner && ts.isFunctionLike(owner) ? owner.parameters.find(parameter =>
                         ts.isIdentifier(parameter.name) && parameter.name.text === identifier.text) : undefined;
                     const sharedParameter = parameter &&

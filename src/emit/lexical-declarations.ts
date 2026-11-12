@@ -16,7 +16,9 @@ export function lexicalDeclarationsFromList(list: ts.VariableDeclarationList): r
  * including resumable scope-entry states. Nested scopes own their own list. */
 export function directLexicalDeclarations(statements: readonly ts.Statement[]): ScopeLexicalDeclaration[] {
     const declarations: ScopeLexicalDeclaration[] = [];
-    for (const statement of statements) {
+    for (const source of statements) {
+        let statement = source;
+        while (ts.isLabeledStatement(statement)) statement = statement.statement;
         if (ts.isVariableStatement(statement)) {
             declarations.push(...lexicalDeclarationsFromList(statement.declarationList));
         } else if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) && statement.name) {
