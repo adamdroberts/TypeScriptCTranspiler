@@ -182,6 +182,12 @@ const NATIVE_PROXY_INTERNAL_METHODS:ReadonlyMap<string,readonly NativeProxyOpera
     ["object-integrity-test:isSealed",[{operand:0,traps:["isExtensible","ownKeys","getOwnPropertyDescriptor"],chain:false}]],
     ["object-integrity-test:isFrozen",[{operand:0,traps:["isExtensible","ownKeys","getOwnPropertyDescriptor"],chain:false}]],
 ]);
+/** Builtins whose arguments are only inspected: isPrototypeOf walks its
+ * argument's prototypes (the internal methods above) and invokes nothing it
+ * reaches; propertyIsEnumerable converts its key, so only that argument's
+ * conversion methods and getters may run. Every other builtin may invoke
+ * whatever its arguments reach. */
+const BUILTIN_ARGUMENT_ESCAPE:ReadonlyMap<string,EscapeReachKind|null>=new Map([["isPrototypeOf",null],["propertyIsEnumerable","argument"]]);
 type SourcePropertyKey = string | symbol;
 type PrimitiveHint = "string" | "number" | "default";
 const ORDINARY_PRIMITIVE_METHODS: ReadonlyMap<PrimitiveHint, readonly string[]> = new Map([
@@ -8398,6 +8404,19 @@ class SourceValueFlow {
                                 this.publish(result, this.primitive(symbol));
                             }
                             continue;
+                        }
+                        // Every other builtin converts, iterates or reads its Object
+                        // arguments (ToPrimitive in new Date(value), GetIterator in new
+                        // AggregateError(errors), an options bag's getters in new
+                        // Error(message, options) or new ArrayBuffer(length, options))
+                        // or calls a callable one later (a FinalizationRegistry
+                        // cleanup), so whatever its arguments reach may run here.
+                        // String-hint builtins model their single conversion exactly;
+                        // BUILTIN_ARGUMENT_ESCAPE names the builtins that only inspect.
+                        const argumentKind = BUILTIN_ARGUMENT_ESCAPE.has(atom.name) ? BUILTIN_ARGUMENT_ESCAPE.get(atom.name)! : "direct";
+                        if (argumentKind && atom.normalResult !== "primitive-string" && !handled(atom, signature + ":arguments")) {
+                            const escaping = argv ?? (invocation.sequence ? [this.allArgumentValues(invocation.sequence)] : []);
+                            if (escaping.length) this.onActive(node, () => {for (const argument of escaping) this.escapeCallableArgument(argument, node, false, argumentKind);});
                         }
                         const stringValue = atom.normalResult === "primitive-string" && argv?.[0]
                             ? this.stringHintCell(argv[0], node, !invocation.construct) : undefined;
