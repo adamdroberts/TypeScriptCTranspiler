@@ -507,6 +507,13 @@ const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
 ]);
 const PROPERTY_MUTATIONS = new Set<Operation>(["define-property", "define-properties", "set-property", "delete-property"]);
 const RETURN_PROJECTION_BUDGET = 8;
+/** Operand combinations one text operation's value proof may enumerate. Each
+ * combination is evaluated and its result interned, so a JSON text, join or
+ * concatenation over many independent choices (24 two-way properties already
+ * give 2^24 texts) would exhaust memory before any eval site's own choice
+ * limit applies; past the bound the result is a value the analysis does not
+ * list, and a boolean result is either boolean. */
+const PRIMITIVE_CHOICE_PRODUCT_LIMIT = 65_536;
 /** Solver steps (rule evaluations, initializations, primitive flushes) one
  * source-value solve may perform: a deterministic backstop well above legitimate
  * analyses (ordinary programs use under 50k, the largest property suites
@@ -9116,7 +9123,13 @@ class SourceValueFlow {
                         // collection. Enumerating partial cyclic choices can
                         // manufacture an unbounded String language here.
                         if (!complete) continue;
-                        for(const tuple of sourceChoiceTuples(atom.parts.map(part=>proofs.get(part)?.values??[]))){
+                        const operands=atom.parts.map(part=>proofs.get(part)?.values??[]);
+                        if(operands.reduce((product,values)=>product*values.length,1)>PRIMITIVE_CHOICE_PRODUCT_LIMIT){
+                            if(booleanPrefix||atom.operation==="numeric"&&atom.numeric!.result==="boolean"){add(false);add(true);}
+                            else {primitiveComplete=false;textComplete=false;}
+                            continue;
+                        }
+                        for(const tuple of sourceChoiceTuples(operands)){
                             const outcome=this.evaluatePrimitiveTuple(atom,tuple);
                             if(outcome.kind==="normal")add(outcome.value);
                             else if(outcome.kind==="unknown"){primitiveComplete=false;textComplete=false;}
