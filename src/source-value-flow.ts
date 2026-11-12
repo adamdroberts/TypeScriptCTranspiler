@@ -820,6 +820,7 @@ class SourceValueFlow {
     private readonly scriptDeclaredBindings=new WeakSet<Cell>();
     private readonly knownWriteOrigins=new WeakMap<Cell,SourceWriteOrigin>();
     private readonly ownerCreations=new WeakMap<ObjectOwner,ts.Node>();
+    private readonly templateObjects=new Map<ts.TaggedTemplateExpression,Cell>();
     private readonly readCaptures = new Map<Cell,Map<SourceCaptureConstraints,Cell>>();
     private readonly empty = this.newCell();
     private readonly globalMutation = this.newCell();
@@ -1050,7 +1051,7 @@ class SourceValueFlow {
                         completion:child === node.body || ts.isParameter(child)?owner.completion:completion}); });
                     continue;
                 }
-                if (ts.isCallExpression(node) || ts.isNewExpression(node) ||
+                if (ts.isCallExpression(node) || ts.isNewExpression(node) || ts.isTaggedTemplateExpression(node) ||
                     (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))&&this.sourceReferences.get(node)?.read!==false || ts.isAwaitExpression(node) ||
                     ts.isTemplateExpression(node) || ts.isBinaryExpression(node)&&node.operatorToken.kind===ts.SyntaxKind.InstanceOfKeyword || ts.isExpression(node) && conversionOperands(node) ||
                     // A spread runs the iteration protocol (array) or getters
@@ -4421,6 +4422,37 @@ class SourceValueFlow {
     /** A fresh Array whose indexed elements are the values of one cell and
      * whose length is an unknown number: the result of a native that builds
      * an array from values the model already holds. */
+    /** GetTemplateObject (sec-gettemplateobject): one frozen Array per site
+     * whose elements are the cooked strings (undefined where an escape is
+     * invalid) and whose non-enumerable, non-writable `raw` is a frozen Array
+     * of the raw strings, CR and CRLF read as LF. Neither is ever mutated, so
+     * no opaque effect reaches their fields. */
+    private templateObject(node:ts.TaggedTemplateExpression):Cell {
+        const prior=this.templateObjects.get(node);if(prior)return prior;
+        const template=node.template;
+        const parts:readonly ts.TemplateLiteralLikeNode[]=ts.isNoSubstitutionTemplateLiteral(template)?[template]:[template.head,...template.templateSpans.map(span=>span.literal)];
+        const invalidEscape=(ts.TokenFlags as unknown as Readonly<Record<string,number|undefined>>).ContainsInvalidEscape;
+        const valueCell=(...atoms:Atom[]):Cell=>{const cell=this.newCell();for(const atom of atoms)this.publish(cell,atom);return cell;};
+        const frozenArray=(values:readonly Cell[]):{owner:ObjectOwner;cell:Cell}=>{
+            const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell()};
+            this.ownerCreations.set(owner,node);this.arrayOwner(node,owner);
+            values.forEach((value,index)=>this.defineField(owner,String(index),value,true));
+            this.publish(owner.listLength!,this.primitive(values.length));
+            return {owner,cell:valueCell({tag:"object",owner})};
+        };
+        const cooked=parts.map(part=>{
+            const flags=(part as ts.TemplateLiteralLikeNode&{readonly templateFlags?:number}).templateFlags;
+            // Without the parser's escape flags the cooked value may be either.
+            if(invalidEscape===undefined||flags===undefined)return valueCell(this.text(part.text),this.primitive(undefined));
+            return valueCell(flags&invalidEscape?this.primitive(undefined):this.text(part.text));
+        });
+        const raw=parts.map(part=>part.rawText===undefined?valueCell(this.unknownString):valueCell(this.text(part.rawText.replace(/\r\n?/g,"\n"))));
+        const strings=frozenArray(cooked),rawStrings=frozenArray(raw);
+        this.defineField(strings.owner,"raw",rawStrings.cell,false);
+        for(const owner of [strings.owner,rawStrings.owner]){for(const key of owner.fields.keys())this.markReadonly(owner,key);owner.immutableOwn=true;}
+        this.templateObjects.set(node,strings.cell);
+        return strings.cell;
+    }
     private arrayOfValues(context:ts.Node,key:string,elements:Cell):Cell {
         let calls=this.freshArrays.get(context);if(!calls){calls=new Map();this.freshArrays.set(context,calls);}
         const prior=calls.get(key);if(prior)return prior;
@@ -7355,6 +7387,17 @@ class SourceValueFlow {
             if(owner)this.copy(owner.yieldReceives,result);else this.publish(result,this.unknown);
         } else if (ts.isAwaitExpression(node)) {
             this.copy(this.promiseAwait(this.cell(node.expression),node),result);
+        } else if (ts.isTaggedTemplateExpression(node)) {
+            // EvaluateCall of the tag with the site's template object and the
+            // substitution values (sec-tagged-templates-runtime-semantics-
+            // evaluation); a member tag passes its base as `this`, and a name
+            // a with object supplies passes that object, as a call does.
+            const target=unwrap(node.tag);
+            const objects=ts.isIdentifier(target)?this.withBindingObjects(target):[];
+            const receiver=ts.isPropertyAccessExpression(target)||ts.isElementAccessExpression(target)?this.cell(target.expression):objects.length?this.newCell():this.empty;
+            for(const object of objects)this.copy(object,receiver);
+            const substitutions=ts.isTemplateExpression(node.template)?node.template.templateSpans.map(span=>({cell:this.cell(span.expression),spread:false})):[];
+            this.invoke(node,this.cell(target),receiver,[{cell:this.templateObject(node),spread:false},...substitutions],result);
         } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
             this.dynamicImportEffects(node,result);
         } else if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
