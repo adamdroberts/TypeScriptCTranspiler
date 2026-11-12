@@ -23,6 +23,7 @@ const partitions=[
  {name:'primitive-receiver',source:'print(eval(Array.prototype.toString.call(17)==="[object Number]"?"53;":unknownSource));',choices:['53;'],stdout:'53\n'},
  {name:'invalid-callable',source:'const owner={join:class C{}};try{eval(Array.prototype.toString.call(owner));}catch(error){print(error instanceof TypeError);}',choices:[],stdout:'true\n'},
  {name:'noncallable-proxy',source:'const marker={};const owner={join:new Proxy({},{get(){throw marker;}})};print(eval(Array.prototype.toString.call(owner)==="[object Object]"?"59;":unknownSource));',choices:['59;'],stdout:'59\n'},
+ {name:'callback-arguments',source:'function read(body){print(eval(body));}read("17;");["19;"].forEach(read);',choices:['17;','19;'],stdout:'17\n19\n'},
  {name:'boxed-getter',source:"Object.defineProperty(Number.prototype,\"join\",{configurable:true,get:function(){\"use strict\";if(typeof this!==\"object\")throw \"getter receiver\";if(typeof NATIVE_GC!==\"undefined\"&&NATIVE_GC)$262.gc();return function(){\"use strict\";if(typeof this!==\"object\")throw \"call receiver\";return \"67;\";};}});\nconst result=Array.prototype.toString.call(17);\ndelete Number.prototype.join;\nprint(eval(result===\"67;\"?\"67;\":\"71;\"));",choices:['67;'],stdout:'67\n'},
 ];
 function reference(source:string):string {
@@ -44,10 +45,10 @@ test('native Array profiles preserve absence, callable metadata and actual join 
 test('unrepresented native callback arguments and Proxy calls retain stable source uncertainty',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'tsc2c-native-array-opaque-'));
  try{for(const source of [
-  'function read(body){print(eval(body));}read("17;");["19;"].forEach(read);',
+  'function read(a,b){print(eval(a));return 0}read("17;","");["19;","23;"].sort(read);',
   'const owner={join:new Proxy(function(){return "53;"},{})};print(eval(Array.prototype.toString.call(owner)));',
  ]){
-  expect(reference(source)).toBe(source.includes('forEach')?'17\n19\n':'53\n');
+  expect(reference(source)).toBe(source.includes('sort')?'17\n23\n':'53\n');
   const calls=await graph(directory,'opaque',source);expect(calls.some(call=>call.choices===null)).toBe(true);
   const entry=join(directory,'opaque.js'),diagnostics:string[]=[];
   const built=await compile({entry,output:join(directory,'rejected'),buildDir:join(directory,'rejected-build'),isolatedScriptRoots:[entry],initializationEntries:[entry],diagnosticWriter:message=>diagnostics.push(message)});

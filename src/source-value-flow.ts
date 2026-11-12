@@ -6664,8 +6664,11 @@ class SourceValueFlow {
                         for(const size of extent.proof.values){const length=Number(size);if(!Number.isSafeInteger(length)||length<0){fail(output);continue;}const keys=positions.filter(index=>index<length).map(String);
                             if(plan.callee!==this.empty&&keys.length!==length){fail(output);continue;}selections.push({keys,length});}
                     }else {
+                        // SerializeJSONObject: K is the replacer's PropertyList
+                        // in its own order, else EnumerableOwnProperties order.
                         const ownKeys=plan.keys??this.ownerKeys(owner,outputRule);if(ownKeys===undefined)continue;if(ownKeys===null){fail(output);continue;}
-                        const names=ownKeys.filter((key):key is string=>typeof key==="string").sort((a,b)=>{const ai=Number(a),bi=Number(b),ia=String(ai)===a&&Number.isInteger(ai)&&ai>=0&&ai<0xffffffff,ib=String(bi)===b&&Number.isInteger(bi)&&bi>=0&&bi<0xffffffff;return ia&&ib?ai-bi:ia?-1:ib?1:0;});
+                        const strings=ownKeys.filter((key):key is string=>typeof key==="string");
+                        const names=plan.keys?strings:strings.sort((a,b)=>{const ai=Number(a),bi=Number(b),ia=String(ai)===a&&Number.isInteger(ai)&&ai>=0&&ai<0xffffffff,ib=String(bi)===b&&Number.isInteger(bi)&&bi>=0&&bi<0xffffffff;return ia&&ib?ai-bi:ia?-1:ib?1:0;});
                         selections=[{keys:names,length:null}];
                     }
                     for(const selection of selections){

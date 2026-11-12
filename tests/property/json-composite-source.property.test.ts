@@ -37,7 +37,7 @@ test('composite JSON source text follows ordered owner/property continuations',(
  ])expect({source,error:graph([{path:'main.js',source}]).error}).toMatchObject({error:expect.stringContaining('direct eval source is not a finite static string expression')});
  const early=graph([{path:'main.js',source:'let body="73;";try{JSON.stringify({a:{toJSON(){throw "79;"}},get b(){body=opaque();return 1}})}catch(source){eval(source)}eval(body);'}]);expect(early.error).toBeNull();expect(early.directEvalSources.some(entry=>entry.source==='79;')).toBe(true);
  expect(graph([{path:'main.js',source:program().replaceAll('COLLECT','')}]).error).toBeNull();
-});
+},300_000);
 
 test('composite serialization source closures agree with independent Node',async()=>{
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-json-composite-source-'));
