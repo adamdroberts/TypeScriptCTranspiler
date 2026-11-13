@@ -518,7 +518,7 @@ interface SourceCapturePhase {readonly id:number;readonly kind:"capture";readonl
 interface SourceCaptureConstraints {readonly kind:"capture-constraints";readonly phases:readonly SourceCapturePhase[];}
 /** Interned constraint sets, keyed by their phase ids in ascending order. */
 interface SourceCaptureConstraintIndex {next?:Map<number,SourceCaptureConstraintIndex>;constraints?:SourceCaptureConstraints;}
-type SourceProjectionPhase = SourceCapturePhase | {readonly kind:"return"};
+type SourceProjectionPhase = SourceCapturePhase | {readonly kind:"return";readonly root:Cell};
 /** The projection phases a cell or atom inherits, as an interned persistent
  * list: a node holds its parent's phases plus one more. A projection nested n
  * deep extends its input's phases with one node instead of copying n of them
@@ -526,6 +526,12 @@ type SourceProjectionPhase = SourceCapturePhase | {readonly kind:"return"};
 interface SourcePhaseSet {readonly parent:SourcePhaseSet|undefined;readonly phase:SourceProjectionPhase;extensions?:Map<SourceProjectionPhase,SourcePhaseSet>;}
 function phaseSetHas(set:SourcePhaseSet|undefined,phase:SourceProjectionPhase):boolean {
     for(let node=set;node;node=node.parent)if(node.phase===phase)return true;
+    return false;
+}
+/** Whether a set holds a return projection of `root`: such a cell belongs to
+ * another activation of the same function. */
+function phaseSetProjects(set:SourcePhaseSet|undefined,root:Cell):boolean {
+    for(let node=set;node;node=node.parent)if(node.phase.kind==="return"&&node.phase.root===root)return true;
     return false;
 }
 
@@ -1287,14 +1293,20 @@ class SourceValueFlow {
             }
         }
         this.returnProjectionCounts.set(root,projections+1);
-        let phase=this.returnProjectionPhases.get(key);if(!phase){phase={kind:"return"};this.returnProjectionPhases.set(key,phase);}
+        let phase=this.returnProjectionPhases.get(key);if(!phase){phase={kind:"return",root};this.returnProjectionPhases.set(key,phase);}
         const projected=new Map<Cell,Cell>(),atoms=new Map<Atom,Atom>(),pending:Cell[]=[];
         // A projection may flow back into the source through a captured
         // location or recursive call. Its own targets are already projected;
         // registering that identity closes the copy graph instead of cloning
         // the same substitution through itself indefinitely.
         const project=(source:Cell):Cell=>{
-            const inherited=this.projectedCellPhases.get(source);if(phaseSetHas(inherited,phase!))return source;
+            // A cell of another projection of this root belongs to a nested
+            // activation of the same function (a recursive call, direct or
+            // through other functions): its formal reads are that
+            // activation's, so it keeps its own inputs. Substituting this
+            // projection's actuals there would give every depth this
+            // activation's arguments.
+            const inherited=this.projectedCellPhases.get(source);if(phaseSetHas(inherited,phase!)||phaseSetProjects(inherited,root))return source;
             let cell=projected.get(source);
             // A capture's image is the capture of its projected input under
             // the same constraints. Returning that view itself, rather than a
