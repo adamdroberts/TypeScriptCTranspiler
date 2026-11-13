@@ -50,3 +50,41 @@ test('private values, brands and reflection agree with Node in native execution'
  }}finally{await rm(directory,{recursive:true,force:true});}
  }
 },600000);
+// `#x in o` evaluates only its right operand. Each placement of a brand check
+// and each conversion of its result keeps the program's eval sources finite.
+const brandPlacements:Record<string,{member:string;call:string}>={
+ instance:{member:'has(r){return #v in r;}',call:'new Guard().has(ARG)'},
+ static:{member:'static has(r){return #v in r;}',call:'Guard.has(ARG)'},
+ arrow:{member:'has(r){const test=()=>#v in r;return test();}',call:'new Guard().has(ARG)'},
+ logical:{member:'has(r){return r!==null&&#v in r;}',call:'new Guard().has(ARG)'},
+ conditional:{member:'has(r){return (#v in r)?true:false;}',call:'new Guard().has(ARG)'},
+};
+const brandConsumers:Record<string,(value:string)=>string>={
+ string:value=>`String(${value})`,plus:value=>`${value}+""`,template:value=>'`${'+value+'}`',condition:value=>`(${value}?"t":"f")`,
+};
+function brandProgram(placement:string,consumer:string,argument:string):string{
+ const {member,call}=brandPlacements[placement]!;
+ return prelude+`class Guard{#v="s";${member}}const result=${brandConsumers[consumer]!(call.replace('ARG',argument))};print(result);new C(result==="true"||result==="t"?"19;":"23;");`;
+}
+test('private brand checks keep eval sources finite in every placement and conversion',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'tsc2c-private-brand-source-'));
+ try{for(const placement of Object.keys(brandPlacements))for(const consumer of Object.keys(brandConsumers))for(const [argument,branded] of [['new Guard()',true],['{}',false]] as const){
+  const source=brandProgram(placement,consumer,argument);
+  expect(reference(source)).toBe(`17\n${consumer==='condition'?(branded?'t':'f'):String(branded)}\n${branded?19:23}\n`);
+  const entry=join(directory,`${placement}-${consumer}-${branded}.js`);await writeFile(entry,source);
+  const calls=sourceEvaluationInvocations(buildProgram({entry,packageRoot:process.cwd(),retainModuleFailures:true,isolatedScriptRoots:[entry],initializationEntries:[entry]}).program,{roots:[entry]});
+  expect({placement,consumer,branded,choices:[...new Set(calls.flatMap(call=>call.choices??['<unknown>']))].sort()}).toEqual({placement,consumer,branded,choices:['17;','19;','23;']});
+ }
+ // One stress: 64 guard classes whose converted brand results feed one
+ // another's arguments.
+ const depth=64;let source=prelude;
+ for(let index=0;index<depth;index++)source+=`class G${index}{#v${index}=${index};static has(r){return String(#v${index} in r);}}`;
+ source+='let text="";';for(let index=0;index<depth;index++)source+=`text+=G${index}.has(${index%2?'{}':`new G${index}()`});`;
+ source+=`print(text.length);new C(text.length===${depth/2*('true'.length+'false'.length)}?"19;":"23;");`;
+ expect(reference(source)).toBe(`17\n${depth/2*9}\n19\n`);
+ const entry=join(directory,'stress.js');await writeFile(entry,source);
+ const calls=sourceEvaluationInvocations(buildProgram({entry,packageRoot:process.cwd(),retainModuleFailures:true,isolatedScriptRoots:[entry],initializationEntries:[entry]}).program,{roots:[entry]});
+ expect(calls.every(call=>call.choices!==null)).toBe(true);
+ expect(new Set(calls.flatMap(call=>call.choices??[]))).toEqual(new Set(['17;','19;','23;']));
+ }finally{await rm(directory,{recursive:true,force:true});}
+},600000);

@@ -1384,7 +1384,9 @@ class SourceValueFlow {
         for (let child = node, parent = node.parent; parent; child = parent, parent = parent.parent) {
             if (functionNode(parent) && (child === parent.body || ts.isParameter(child))) break;
             if (ts.isPropertyDeclaration(parent) && child === parent.initializer && !(ts.getModifiers(parent) ?? []).some(modifier => modifier.kind === ts.SyntaxKind.StaticKeyword)) break;
-            if(ts.isBinaryExpression(parent)&&child===parent.right&&parent.operatorToken.kind!==ts.SyntaxKind.EqualsToken)
+            // `#x in o` evaluates only its right operand: a private name is
+            // not an expression and never completes.
+            if(ts.isBinaryExpression(parent)&&child===parent.right&&parent.operatorToken.kind!==ts.SyntaxKind.EqualsToken&&!ts.isPrivateIdentifier(parent.left))
                 guards.push({condition:this.normalCompletion(this.cell(parent.left)),truthy:true});
             if (ts.isIfStatement(parent) && child !== parent.expression)
                 guards.push({condition:this.cell(parent.expression),truthy:child === parent.thenStatement});
