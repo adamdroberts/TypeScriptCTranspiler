@@ -9,7 +9,7 @@ import {buildProgram,resolvePackageRoot} from '../../src/program';
 import {sourceEvaluationInvocations} from '../../src/source-value-flow';
 import {sourceProjectionProvenanceInput} from '../e2e/generated-cases';
 
-test('projection provenance closes composition while preserving actual sources and opaque alternatives',async()=>{
+test('projection provenance keeps each invocation\'s actual source exact',async()=>{
  const root=await mkdtemp(join(tmpdir(),'tsc2c-projection-provenance-facts-'));
  try{for(const operation of ['value','String(value)','`${value}`']){
   for(const opaque of [false,true]){
@@ -18,9 +18,9 @@ test('projection provenance closes composition while preserving actual sources a
    const built=buildProgram({entry,packageRoot:resolvePackageRoot()});
    const calls=sourceEvaluationInvocations(built.program,{roots:[entry]}).filter(call=>call.operation==='eval');
    expect(calls).toHaveLength(1);
-   if(operation==='value')expect(calls[0]!.choices).toEqual(['17;']);
-   else if(opaque)expect(calls[0]!.choices).toBeNull();
-   else expect(calls[0]!.choices).toEqual(expect.arrayContaining(['17;']));
+   // The later argument reaches only the later invocation, whose conversion
+   // runs after `saved` holds "17;", so every operation is exact.
+   expect(calls[0]!.choices).toEqual(['17;']);
   }
  }
  const entry=join(root,'unknown.ts');await writeFile(entry,"function project(value:any):any{return String(value)}function twice(fn:(value:any)=>any,value:any):any{return fn(fn(value))}eval(twice(project,opaque()));declare function opaque():any;");
