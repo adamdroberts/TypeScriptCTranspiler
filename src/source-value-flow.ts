@@ -5404,6 +5404,17 @@ class SourceValueFlow {
         if(descriptor.kind==="symbol"||descriptor.kind==="bigint"){const tag=this.newCell();this.publish(tag,this.primitive(name));this.defineField(owner,this.wellKnownSymbols.get("toStringTag")!,tag,false);}
         return value;
     }
+    /** The intrinsic prototypes of the primitive kinds in a mask. ToObject
+     * (sec-toobject) wraps a Boolean, Number, BigInt, String or Symbol in an
+     * object whose prototype is its kind's. */
+    private kindPrototypes(kinds:number):Cell[] {
+        const prototypes:Cell[]=[];
+        for(const [name,descriptor] of runtimePrimitiveDescriptors){
+            const mask=({boolean:KIND_BOOLEAN,number:KIND_NUMBER,bigint:KIND_BIGINT,string:KIND_STRING,symbol:KIND_SYMBOL} as Record<string,number>)[descriptor.kind]??0;
+            if(kinds&mask)prototypes.push(this.primitivePrototype(name));
+        }
+        return prototypes;
+    }
     private readonly atomCells=new Map<Atom,Cell>();
     private atomCell(atom:Atom):Cell {let cell=this.atomCells.get(atom);if(!cell){cell=this.newCell();this.atomCells.set(atom,cell);this.publish(cell,atom);}return cell;}
     private primitiveDefault(kind:string):Cell {let value=this.primitiveDefaults.get(kind);if(!value){value=this.newCell();this.primitiveDefaults.set(kind,value);this.publish(value,this.primitive(kind==="number"?0:kind==="string"?"":false));}return value;}
@@ -6045,6 +6056,18 @@ class SourceValueFlow {
                 if(domain==="all")add("length");
                 continue;
             }
+            // A Boolean, Number, BigInt or Symbol wrapper has no own
+            // properties: its keys are its kind's prototype chain's. A derived
+            // primitive's kinds grow with its parts, whose changes wake the
+            // receiver's rule; one that may be a String keeps unknown indices.
+            const kinds=atom.tag==="primitive"?({boolean:KIND_BOOLEAN,number:KIND_NUMBER,bigint:KIND_BIGINT,symbol:KIND_SYMBOL} as Record<string,number>)[typeof atom.value]??0:
+                atom.tag==="non-string"?atom.kinds??(KIND_PRIMITIVE&~KIND_STRING):atom.tag==="text-operation"?this.primitiveKinds(this.atomCell(atom)):0;
+            if(kinds&&!(kinds&KIND_STRING)){
+                for(const prototype of this.kindPrototypes(kinds)){
+                    this.watch(rule,prototype);for(const parent of prototype.values)pending.push(parent);
+                }
+                continue;
+            }
             const owner=this.ordinaryOwner(atom);
             if(!owner){opaque=true;if(atom!==this.nativeUnknown)generic=true;continue;}
             if(visited.has(owner))continue;visited.add(owner);
@@ -6645,10 +6668,8 @@ class SourceValueFlow {
                 if(key==="length"){let number=this.numericValues.get(KIND_NUMBER);if(!number){number={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,number);}this.publish(result,number);}
                 else if(Number.isSafeInteger(Number(key))&&Number(key)>=0&&String(Number(key))===key){this.publish(result,this.unknownString);this.publish(result,this.primitive(undefined));}
             }
-            for(const [name,descriptor] of runtimePrimitiveDescriptors){
-                const mask=({boolean:KIND_BOOLEAN,number:KIND_NUMBER,bigint:KIND_BIGINT,string:KIND_STRING,symbol:KIND_SYMBOL} as Record<string,number>)[descriptor.kind]??0;
-                if(!(kinds&mask))continue;
-                const prototype=this.primitivePrototype(name);if(rule)this.watch(rule,prototype);
+            for(const prototype of this.kindPrototypes(kinds)){
+                if(rule)this.watch(rule,prototype);
                 for(const parent of prototype.values)this.read(parent,base,key,result,handler,rule,context,false);
             }
             return;
