@@ -4662,11 +4662,40 @@ class SourceValueFlow {
             if(!escaping){escaping=true;this.onActive(context,()=>this.escapeCallableArgument(opaqueBases,context));}
         };
         const escapeOpaqueBases=()=>{for(const atom of base.values){const owner=this.ordinaryOwner(atom);if(atom.tag==="unknown"||atom.tag==="opaque-object"||owner?.proxy)incomplete(atom);}};
-        let rule!:Rule;
+        let rule!:Rule,extra:{value:Cell;accessor:Cell}|undefined;
         rule=this.rule(key?[base,key]:[base],()=>{
-            const keys=key?this.propertyKeys(key,rule,context):undefined;
+            let keys=key?this.propertyKeys(key,rule,context):undefined;
             if(key && keys===undefined)return;
-            if(key && keys===null){escapeOpaqueBases();incomplete();return;}
+            if(key && keys===null){
+                // [[GetOwnProperty]] of a represented owner that is not a
+                // Proxy runs no code: an unknown key gives undefined or a fresh
+                // descriptor holding one of the owner's own values. Only
+                // unrepresented or Proxy bases leave the result unknown.
+                const represented=[...base.values].every(atom=>{
+                    if(atom.tag==="abrupt"||atom.tag==="pending-source")return true;
+                    const owner=this.ordinaryOwner(atom);return !!owner&&!owner.proxy;
+                });
+                if(!represented){escapeOpaqueBases();incomplete();return;}
+                const projection=this.propertyKeyDomain(base,context,rule,"all");
+                if(projection.pending)return;
+                if(projection.getters.length||projection.opaque&&!projection.nativeOnly){incomplete();return;}
+                this.publish(result,this.primitive(undefined));
+                if(projection.opaque||projection.locations.length){
+                    // Native members and values stored under unknown keys
+                    // share one descriptor: a native value may be a data or
+                    // an accessor property.
+                    if(!extra){
+                        const descriptor=this.descriptorOwner(context),object=this.newCell(),value=this.newCell(),accessor=this.newCell();
+                        this.publish(object,{tag:"object",owner:descriptor});this.publish(accessor,this.primitive(undefined));
+                        this.defineField(descriptor,"value",value);this.defineField(descriptor,"get",accessor);this.defineField(descriptor,"set",accessor);
+                        for(const attribute of ["writable","enumerable","configurable"])this.defineBooleanField(descriptor,attribute);
+                        extra={value,accessor};this.copy(object,result);
+                    }
+                    if(projection.opaque){this.publish(extra.value,this.nativeUnknown);this.publish(extra.accessor,this.nativeUnknown);}
+                    for(const location of projection.locations)this.copyRead(location,extra.value,context);
+                }
+                keys=projection.keys;
+            }
             for(const atom of base.values){
                 if(atom.tag==="pending-source"||atom.tag==="abrupt"){this.publish(result,atom);continue;}
                 if(atom.tag==="primitive"&&(atom.value===null||atom.value===undefined)){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.nativeException(context!));continue;}
