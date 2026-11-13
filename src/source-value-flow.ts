@@ -508,7 +508,18 @@ interface SourceReference {readonly target:SourceReferenceExpression;readonly op
 interface SourceWriteOrigin {readonly tag:"unknown";readonly origin:ts.Node;readonly location:Cell;readonly lexical:boolean;readonly reference?:ts.Identifier;readonly event?:SourceLexicalWrite;}
 interface SourceCapturePhase {readonly id:number;readonly kind:"capture";readonly context:ts.Node;readonly argumentsRead:boolean;readonly location?:Cell;readonly activationOnly?:FunctionOwner;readonly scalar?:{readonly activation:FunctionOwner;readonly excluded:ReadonlySet<SourceLexicalWrite>;readonly universe:ReadonlySet<SourceLexicalWrite>;readonly universeKey:string};}
 interface SourceCaptureConstraints {readonly kind:"capture-constraints";readonly phases:readonly SourceCapturePhase[];}
+/** Interned constraint sets, keyed by their phase ids in ascending order. */
+interface SourceCaptureConstraintIndex {next?:Map<number,SourceCaptureConstraintIndex>;constraints?:SourceCaptureConstraints;}
 type SourceProjectionPhase = SourceCapturePhase | {readonly kind:"return"};
+/** The projection phases a cell or atom inherits, as an interned persistent
+ * list: a node holds its parent's phases plus one more. A projection nested n
+ * deep extends its input's phases with one node instead of copying n of them
+ * into each projected cell. */
+interface SourcePhaseSet {readonly parent:SourcePhaseSet|undefined;readonly phase:SourceProjectionPhase;extensions?:Map<SourceProjectionPhase,SourcePhaseSet>;}
+function phaseSetHas(set:SourcePhaseSet|undefined,phase:SourceProjectionPhase):boolean {
+    for(let node=set;node;node=node.parent)if(node.phase===phase)return true;
+    return false;
+}
 
 const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
     ts.SyntaxKind.InKeyword, ts.SyntaxKind.InstanceOfKeyword,
@@ -711,8 +722,9 @@ class SourceValueFlow {
     private readonly returnProjectionCounts = new Map<Cell,number>();
     private readonly mergedReturnProjections = new Map<Cell,{formals:ReadonlyMap<Cell,Cell>;result:Cell}>();
     private readonly returnProjectionPhases = new Map<string,SourceProjectionPhase>();
-    private readonly projectedCellPhases = new WeakMap<Cell,ReadonlySet<SourceProjectionPhase>>();
-    private readonly projectedAtomPhases = new WeakMap<Atom,ReadonlySet<SourceProjectionPhase>>();
+    private readonly projectedCellPhases = new WeakMap<Cell,SourcePhaseSet>();
+    private readonly projectedAtomPhases = new WeakMap<Atom,SourcePhaseSet>();
+    private readonly phaseSetRoots = new Map<SourceProjectionPhase,SourcePhaseSet>();
     private readonly bindingDefaults = new Map<Cell,Map<Cell,Cell>>();
     private readonly returnTransforms = new Map<Cell,{kind:"projection"|"allocation"|"binding-read"|"conversion";inputs:readonly Cell[];evaluate:(inputs:readonly Cell[])=>Cell}>();
     private readonly normalResults = new Map<Cell, Atom>();
@@ -900,7 +912,7 @@ class SourceValueFlow {
     private readonly normalCompletions=new WeakMap<Cell,Cell>();
     private readonly executionGuards = new WeakMap<ts.Node, readonly {condition: Cell; truthy: boolean}[]>();
     private readonly captureInputs=new WeakMap<Cell,{source:Cell;constraints:SourceCaptureConstraints}>();
-    private readonly captureConstraints=new Map<string,SourceCaptureConstraints>();
+    private readonly captureConstraints:SourceCaptureConstraintIndex={};
     private readonly capturedAtoms=new WeakMap<Atom,Map<SourceCaptureConstraints,Atom>>();
     private readonly capturedAtomInputs=new WeakMap<Atom,{source:Atom;constraints:SourceCaptureConstraints}>();
     private failedCapture?:Cell;
@@ -1258,9 +1270,17 @@ class SourceValueFlow {
         // registering that identity closes the copy graph instead of cloning
         // the same substitution through itself indefinitely.
         const project=(source:Cell):Cell=>{
-            const inherited=this.projectedCellPhases.get(source);if(inherited?.has(phase!))return source;
-            let cell=projected.get(source);if(!cell){cell=this.newCell();projected.set(source,cell);projected.set(cell,cell);
-                this.projectedCellPhases.set(cell,new Set([...(inherited??[]),phase!]));
+            const inherited=this.projectedCellPhases.get(source);if(phaseSetHas(inherited,phase!))return source;
+            let cell=projected.get(source);
+            // A capture's image is the capture of its projected input under
+            // the same constraints. Returning that view itself, rather than a
+            // cell copying from it, keeps a capture projected through k
+            // nested returns one view instead of a chain of k copies that
+            // every enclosing capture walk would cross.
+            const capture=cell?undefined:this.captureInputs.get(source);
+            if(capture){cell=this.captureProjection(project(capture.source),capture.constraints);projected.set(source,cell);projected.set(cell,cell);return cell;}
+            if(!cell){cell=this.newCell();projected.set(source,cell);projected.set(cell,cell);
+                this.projectedCellPhases.set(cell,this.extendPhase(inherited,phase!));
                 const written=this.knownWriteOrigins.get(source);if(written)this.knownWriteOrigins.set(cell,written);
                 pending.push(source);}return cell;
         };
@@ -1273,8 +1293,8 @@ class SourceValueFlow {
                 if(transform){this.copy(transform.evaluate(transform.inputs.map(project)),target);extend();return;}
                 for(const atom of source.values.ownValues()){
                     let value=atom;
-                    if(atom.tag==="text-operation"&&!this.projectedAtomPhases.get(atom)?.has(phase!)) {let previous=atoms.get(atom);if(!previous){previous={...atom,parts:atom.parts.map(project)};atoms.set(atom,previous);
-                        this.projectedAtomPhases.set(previous,new Set([...(this.projectedAtomPhases.get(atom)??[]),phase!]));
+                    if(atom.tag==="text-operation"&&!phaseSetHas(this.projectedAtomPhases.get(atom),phase!)) {let previous=atoms.get(atom);if(!previous){previous={...atom,parts:atom.parts.map(project)};atoms.set(atom,previous);
+                        this.projectedAtomPhases.set(previous,this.extendPhase(this.projectedAtomPhases.get(atom),phase!));
                     }value=previous;}
                     this.publish(target,value);
                 }
@@ -1953,6 +1973,17 @@ class SourceValueFlow {
     /** Conjunctions have one normal form independent of the order in which
      * aliases encounter them. Scalar masks merge across intervening filters. */
     private captureConstraintSet(phases:readonly SourceCapturePhase[]):SourceCaptureConstraints {
+        // Capture walks normalize and compose sets on every run, so the
+        // common case (no scalar phase) works on small arrays.
+        const normalized:SourceCapturePhase[]=[];
+        for(const input of phases){
+            const phase=this.normalizeCapturePhase(input);
+            if(phase.scalar)return this.scalarCaptureConstraintSet(phases);
+            if(!normalized.includes(phase))normalized.push(phase);
+        }
+        return this.reducedCaptureConstraintSet(normalized);
+    }
+    private scalarCaptureConstraintSet(phases:readonly SourceCapturePhase[]):SourceCaptureConstraints {
         const scalar=new Map<FunctionOwner,Map<string,{phase:SourceCapturePhase;excluded:Set<SourceLexicalWrite>}>>(),normalized=new Set<SourceCapturePhase>();
         for(const input of phases){
             const phase=this.normalizeCapturePhase(input);
@@ -1964,25 +1995,49 @@ class SourceValueFlow {
         }
         for(const locations of scalar.values())for(const {phase,excluded}of locations.values())
             normalized.add(this.scalarCapturePhase(phase.context,phase.scalar!.activation,phase.location!,excluded,phase.scalar!.universe));
-        // Only phases of one activation can precede each other, so dominance
-        // is reduced within each activation's phases.
-        const groups=new Map<FunctionOwner|undefined,SourceCapturePhase[]>();
-        for(const phase of [...normalized].sort((left,right)=>left.id-right.id)){
-            const group=this.capturePhaseActivation(phase),members=groups.get(group)??[];
-            if(members.some(prior=>this.capturePrecedes(prior,phase)))continue;
-            const kept=members.filter(prior=>!this.capturePrecedes(phase,prior));kept.push(phase);groups.set(group,kept);
-        }
-        const effective=[...groups.values()].flat();
-        const key=effective.sort((left,right)=>left.id-right.id).map(phase=>phase.id).join(",");
-        let constraints=this.captureConstraints.get(key);
-        if(!constraints){constraints={kind:"capture-constraints",phases:effective};this.captureConstraints.set(key,constraints);}
-        return constraints;
+        return this.reducedCaptureConstraintSet([...normalized]);
     }
-    private captureSatisfied(inherited:ReadonlySet<SourceProjectionPhase>|undefined,constraints:SourceCaptureConstraints):boolean {
-        if(!constraints.phases.length)return true;
-        const groups=new Map<FunctionOwner|undefined,SourceCapturePhase[]>();
-        for(const prior of inherited??[])if(prior.kind==="capture"){const group=this.capturePhaseActivation(prior);let members=groups.get(group);if(!members){members=[];groups.set(group,members);}members.push(prior);}
-        return constraints.phases.every(phase=>(groups.get(this.capturePhaseActivation(phase))??[]).some(prior=>this.capturePrecedes(prior,phase)));
+    /** Only phases of one activation can precede each other, so dominance is
+     * reduced within each activation's phases, visited in id order; the kept
+     * phases stay in ascending id order, which keys the interned set. */
+    private reducedCaptureConstraintSet(normalized:SourceCapturePhase[]):SourceCaptureConstraints {
+        normalized.sort((left,right)=>left.id-right.id);
+        const effective:SourceCapturePhase[]=[],groups:(FunctionOwner|undefined)[]=[];
+        for(const phase of normalized){
+            const group=this.capturePhaseActivation(phase);
+            let dominated=false;
+            for(let index=0;index<effective.length&&!dominated;index++)dominated=groups[index]===group&&this.capturePrecedes(effective[index]!,phase);
+            if(dominated)continue;
+            let kept=0;
+            for(let index=0;index<effective.length;index++){
+                if(groups[index]===group&&this.capturePrecedes(phase,effective[index]!))continue;
+                effective[kept]=effective[index]!;groups[kept]=groups[index];kept++;
+            }
+            effective.length=kept;groups.length=kept;effective.push(phase);groups.push(group);
+        }
+        let node=this.captureConstraints;
+        for(const phase of effective){
+            const next=node.next??=new Map();let child=next.get(phase.id);
+            if(!child){child={};next.set(phase.id,child);}node=child;
+        }
+        return node.constraints??={kind:"capture-constraints",phases:effective};
+    }
+    private captureSatisfied(inherited:SourcePhaseSet|undefined,constraints:SourceCaptureConstraints):boolean {
+        return constraints.phases.every(phase=>{
+            const group=this.capturePhaseActivation(phase);
+            for(let node=inherited;node;node=node.parent){const prior=node.phase;if(prior.kind==="capture"&&this.capturePhaseActivation(prior)===group&&this.capturePrecedes(prior,phase))return true;}
+            return false;
+        });
+    }
+    private extendPhase(set:SourcePhaseSet|undefined,phase:SourceProjectionPhase):SourcePhaseSet {
+        if(set&&phaseSetHas(set,phase))return set;
+        const extensions=set?set.extensions??=new Map():this.phaseSetRoots;
+        let next=extensions.get(phase);if(!next){next={parent:set,phase};extensions.set(phase,next);}
+        return next;
+    }
+    private extendPhases(set:SourcePhaseSet|undefined,phases:readonly SourceProjectionPhase[]):SourcePhaseSet|undefined {
+        for(const phase of phases)set=this.extendPhase(set,phase);
+        return set;
     }
     /** The activation a capture phase belongs to. Normalization keeps it, and
      * capturePrecedes holds only between phases of one activation. */
@@ -2000,7 +2055,7 @@ class SourceValueFlow {
         if(!projected){
             const original=source as Extract<Atom,{tag:"text-operation"}>;
             projected={...original,parts:original.parts.map(part=>this.captureProjection(part,constraints))};views.set(constraints,projected);
-            this.projectedAtomPhases.set(projected,new Set([...(this.projectedAtomPhases.get(source)??[]),...constraints.phases]));
+            const phases=this.extendPhases(this.projectedAtomPhases.get(source),constraints.phases);if(phases)this.projectedAtomPhases.set(projected,phases);
             this.capturedAtomInputs.set(projected,{source,constraints});
         }
         return projected;
@@ -2025,7 +2080,7 @@ class SourceValueFlow {
             if(!target){
                 target=this.newCell();views.set(constraints,target);
                 this.captureInputs.set(target,{source,constraints});
-                this.projectedCellPhases.set(target,new Set([...(inherited??[]),...constraints.phases]));
+                const phases=this.extendPhases(inherited,constraints.phases);if(phases)this.projectedCellPhases.set(target,phases);
                 pending.push({source,target,constraints});
             }
             return target;
