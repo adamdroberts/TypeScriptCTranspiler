@@ -479,6 +479,14 @@ interface SourceDescriptorRecord {readonly normal:Cell;readonly fields:Map<strin
 interface SourceJSONRecord {readonly value:Atom;readonly children:Map<string,SourceJSONRecord>;readonly source:string|null;readonly array:boolean;}
 interface SourceCallArguments {readonly args:readonly Cell[]|null;readonly sequence:ArgumentSequence|null;readonly context:ts.Node;}
 interface SourceArgumentsRecord {readonly value:Cell;readonly length:Cell;readonly owner:ObjectOwner;readonly mapped:Map<string,{binding:Cell;value:Cell}>;readonly seen:Set<SourceCallArguments>;}
+/** One invocation of a function: its call site, that site's execution
+ * origins and the actual cells bound to the function's formals. */
+interface SourceInvocationRecord {readonly node:ts.Node;readonly origins:Cell;readonly formals:ReadonlyMap<Cell,Cell>;}
+/** An activation's invocation records. A conditional effect subscribes to
+ * them (a record pushes itself to each subscriber, rather than every effect
+ * rescanning the list), and one rule per activation reports an origin of
+ * the activation that no record covers, with a null record. */
+interface SourceInvocationRecords {readonly list:SourceInvocationRecord[];readonly keys:WeakMap<ts.Node,Set<string>>;readonly covered:Cell;readonly subscribers:((record:SourceInvocationRecord|null)=>void)[];uncovered:boolean;watched:boolean;}
 interface FunctionOwner {
     readonly parameters:readonly ts.ParameterDeclaration[];readonly actuals:Map<string,SourceCallArguments>;readonly actualChanges:Cell;arguments?:SourceArgumentsRecord;
     readonly definition: CallableDefinition; readonly node: FunctionNode | null; readonly kind: DynamicFunctionKind; readonly fields: ObjectOwner;
@@ -526,6 +534,10 @@ const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
 ]);
 const PROPERTY_MUTATIONS = new Set<Operation>(["define-property", "define-properties", "set-property", "delete-property"]);
 const RETURN_PROJECTION_BUDGET = 8;
+/** Callers through which a conditional effect's trigger is projected. */
+const CONDITIONAL_EFFECT_DEPTH = 8;
+const CONDITIONAL_EFFECT_PROJECTIONS = 16;
+const CONDITIONAL_EFFECT_RECORDS = 16;
 const CAPTURE_COMPOSITION_BOUND = 8;
 /** Operand combinations one text operation's value proof may enumerate. Each
  * combination is evaluated and its result interned, so a JSON text, join or
@@ -698,7 +710,14 @@ class SourceValueFlow {
     private readonly asyncIteratorPrototypes=new WeakMap<SourceRealmRecord,Cell>();
     private readonly sourceObjectOwners=new WeakSet<ObjectOwner>();
     private readonly opaqueCaptureCalls=new Map<ts.Node,Set<Cell>>();
-    private readonly escapedCallableCalls=new Map<ts.Node,Map<boolean,{visit:(input:Cell,as?:EscapeReachKind)=>void}>>();
+    private readonly escapedCallableCalls=new Map<ts.Node,Map<boolean,{visit:(input:Cell,as?:EscapeReachKind)=>void;origins?:Cell;sources:Set<Cell>;invocation:ts.Node}>>();
+    /** The origins of an escape graph's synthetic invocation when a
+     * conditioned opaque call made the graph: the union of the origins of the
+     * effects that escape through it. Any other graph's invocation keeps its
+     * execution origins, a cell it shares with its activation or Script. */
+    private readonly escapeInvocationOrigins=new WeakMap<ts.Node,Cell>();
+    /** The conditional origins of an opaque call inside a function body. */
+    private readonly opaqueCallOrigins=new WeakMap<ts.Node,Cell>();
     /** One actual List per Script for the values unknown code passes from
      * its top-level escape points (see escapeCallableArgument). */
     private readonly topLevelEscapeActuals=new Map<ts.SourceFile,Cell>();
@@ -902,6 +921,11 @@ class SourceValueFlow {
     private readonly opaqueMutation = this.newCell();
     private readonly opaqueEffects = new Map<ts.Node, Atom>();
     private readonly opaqueEffectActivations=new WeakSet<ts.Node>();
+    private readonly invocationRecords=new WeakMap<FunctionOwner,SourceInvocationRecords>();
+    private readonly conditionalEffects=new WeakMap<ts.Node,Set<Cell>>();
+    /** Nonzero while a return projection replays a transform over one
+     * invocation's projected operands. */
+    private replayDepth=0;
     private readonly originCells = new WeakMap<ts.Node, Cell>();
     private readonly unconstrainedOrigins = this.newCell();
     private readonly scriptOrder = new Map<ts.SourceFile,{first:number;last:number}>();
@@ -1290,7 +1314,7 @@ class SourceValueFlow {
                 const capture=this.captureInputs.get(source);
                 if(capture){this.copy(this.captureProjection(project(capture.source),capture.constraints),target);extend();return;}
                 const transform=this.returnTransforms.get(source);
-                if(transform){this.copy(transform.evaluate(transform.inputs.map(project)),target);extend();return;}
+                if(transform){this.replayDepth++;let replayed:Cell;try{replayed=transform.evaluate(transform.inputs.map(project));}finally{this.replayDepth--;}this.copy(replayed,target);extend();return;}
                 for(const atom of source.values.ownValues()){
                     let value=atom;
                     if(atom.tag==="text-operation"&&!phaseSetHas(this.projectedAtomPhases.get(atom),phase!)) {let previous=atoms.get(atom);if(!previous){previous={...atom,parts:atom.parts.map(project)};atoms.set(atom,previous);
@@ -1526,8 +1550,138 @@ class SourceValueFlow {
         this.opaqueEffectActivations.add(context);
         this.onActive(context,()=>this.opaqueEffect(context));
     }
+    private invocationRecordsOf(owner:FunctionOwner):SourceInvocationRecords {
+        let records=this.invocationRecords.get(owner);
+        if(!records){records={list:[],keys:new WeakMap(),covered:this.newCell(),subscribers:[],uncovered:false,watched:false};this.invocationRecords.set(owner,records);}
+        return records;
+    }
+    /** A call's origins reach the function's activation only through its
+     * invocation record (the call site and its actual formals), and the
+     * record is covered before the activation sees them, so an effect's
+     * origins never find an activation origin without its record. */
+    private recordInvocation(owner:FunctionOwner,node:ts.Node,formals:ReadonlyMap<Cell,Cell>):void {
+        const records=this.invocationRecordsOf(owner),key=[...formals].map(([formal,actual])=>formal.id+"="+actual.id).join(",");
+        let keys=records.keys.get(node);if(!keys){keys=new Set();records.keys.set(node,keys);}
+        if(keys.has(key))return;keys.add(key);
+        // onActive reruns its action as the caller's origins grow; the
+        // record and its edges are made once.
+        let recorded=false;
+        this.onActive(node,()=>{
+            if(recorded)return;recorded=true;
+            const origins=this.escapeInvocationOrigins.get(node)??this.executionOrigins(node),record={node,origins,formals};records.list.push(record);this.copy(origins,records.covered);
+            if(!records.uncovered){
+                if(records.list.length>CONDITIONAL_EFFECT_RECORDS){records.uncovered=true;for(const subscriber of [...records.subscribers])subscriber(null);}
+                else{const subscribers=records.subscribers,count=subscribers.length;for(let index=0;index<count;index++)subscribers[index]!(record);}
+            }
+            this.copy(origins,owner.active);
+        });
+    }
+    /** An opaque effect that an invocation performs only when `trigger` holds
+     * an atom `fires` selects. */
+    private activateConditionalEffect(context:ts.Node,trigger:Cell,fires:(atom:Atom)=>boolean):void {
+        let triggers=this.conditionalEffects.get(context);if(!triggers){triggers=new Set();this.conditionalEffects.set(context,triggers);}
+        if(triggers.has(trigger))return;triggers.add(trigger);
+        const origins=this.conditionalEffectOrigins(context,trigger,fires);
+        this.onActive(context,()=>this.opaqueEffectFrom(origins));
+    }
+    /** The execution origins of such an effect. Each recorded invocation's
+     * actuals replace the activation's formals in `trigger` (a return
+     * projection, which keeps every other input), and the result is captured
+     * at the invocation's call site as the call's own result is; only an
+     * invocation whose projection can still fire contributes its origins. An
+     * operand that is unknown because an opaque caller passed an unknown
+     * actual then makes the effect happen in that caller's invocation, not
+     * in an earlier call whose actuals are known. Only a call or new
+     * expression of the source is projected; a protocol or escape
+     * invocation contributes its origins as they are. A call from another
+     * function's body conditions the projected trigger on that function's
+     * invocations in turn, up to CONDITIONAL_EFFECT_DEPTH callers and never
+     * through a function already on the chain; past that, and for a call
+     * past the return projection budget, the call's origins are taken whole.
+     * An origin of the activation that no record covers keeps all of the
+     * activation's origins, and so does an activation with more than
+     * CONDITIONAL_EFFECT_RECORDS records (a harness function that every
+     * opaque site's escape graph invokes has dozens): each conditioned
+     * effect is a cell of its own, and the activation's origins then grow
+     * through one such cell per effect and per opaque call's escape graph,
+     * which multiplies the propagation every new origin costs. */
+    private conditionalEffectOrigins(context:ts.Node,trigger:Cell,fires:(atom:Atom)=>boolean,chain:ReadonlySet<FunctionOwner>=new Set(),budget={projections:CONDITIONAL_EFFECT_PROJECTIONS}):Cell {
+        const activation=this.enclosingActivation(context);
+        if(!activation||!activation.parameters.length)return this.executionOrigins(context);
+        const callers=new Set(chain).add(activation);
+        const records=this.invocationRecordsOf(activation);
+        if(records.uncovered)return activation.active;
+        const origins=this.newCell();
+        // Records push themselves to the effect (see recordInvocation), so
+        // none is examined twice. Calls from one caller share its origins
+        // cell: the group is
+        // projected only once one of those origins is missing from the
+        // effect's, and a call adds nothing otherwise. Past the effect's
+        // projection budget (shared by the whole caller chain, so it cannot
+        // multiply along it) a call's origins are taken whole.
+        const groups=new Map<Cell,{readonly calls:SourceInvocationRecord[];projecting:boolean}>();
+        const project=(record:SourceInvocationRecord):void=>{
+            if(budget.projections<=0){this.copy(record.origins,origins);return;}
+            budget.projections--;
+            // Past the return projection budget a call's actuals share the
+            // merged projection, which no capture makes call-specific.
+            const projection=this.projectReturn(trigger,record.formals),merged=projection===this.mergedReturnProjections.get(trigger)?.result;
+            const projected=merged?projection:this.captureRead(projection,record.node);
+            let fired=false;
+            this.rule([projected],()=>{
+                if(fired||![...projected.values].some(fires))return;
+                fired=true;
+                const caller=this.enclosingActivation(record.node);
+                this.copy(!merged&&caller&&!callers.has(caller)&&callers.size<CONDITIONAL_EFFECT_DEPTH?this.conditionalEffectOrigins(record.node,projected,fires,callers,budget):record.origins,origins);
+            });
+        };
+        const handle=(record:SourceInvocationRecord|null):void=>{
+            if(!record){this.copy(activation.active,origins);return;}
+            // A protocol or escape invocation (a synthetic context) passes
+            // values its native or unknown caller supplies: it is taken as
+            // performing the effect.
+            if(!ts.isCallExpression(record.node)&&!ts.isNewExpression(record.node)){this.copy(record.origins,origins);return;}
+            let group=groups.get(record.origins);
+            if(!group){
+                const created={calls:[] as SourceInvocationRecord[],projecting:false},cell=record.origins;group=created;groups.set(cell,created);
+                this.rule([cell],()=>{
+                    if(created.projecting)return;
+                    for(const atom of cell.values)if(!origins.values.has(atom)){created.projecting=true;for(const call of created.calls)project(call);return;}
+                });
+            }
+            group.calls.push(record);if(group.projecting)project(record);
+        };
+        records.subscribers.push(handle);
+        for(const record of [...records.list])handle(record);
+        this.watchInvocationCoverage(activation,records);
+        return origins;
+    }
+    private watchInvocationCoverage(activation:FunctionOwner,records:SourceInvocationRecords):void {
+        if(records.watched)return;records.watched=true;
+        const seen=new Set<Atom>();
+        this.rule([activation.active,records.covered],()=>{
+            if(records.uncovered)return;
+            for(const atom of activation.active.values){
+                if(seen.has(atom))continue;
+                if(!records.covered.values.has(atom)){records.uncovered=true;for(const subscriber of [...records.subscribers])subscriber(null);return;}
+                seen.add(atom);
+            }
+        });
+    }
+    /** The origins of an opaque call: those of the invocations whose own
+     * callee is unknown. Undefined where they are the call's execution
+     * origins (outside a function with parameters, or past the record
+     * bound), so the call's escape graph shares that cell. */
+    private opaqueCallOriginsOf(node:ts.Node,callee:Cell):Cell|undefined {
+        if(!this.enclosingActivation(node)?.parameters.length)return undefined;
+        let origins=this.opaqueCallOrigins.get(node);
+        if(!origins){origins=this.conditionalEffectOrigins(node,callee,atom=>atom.tag==="unknown"||atom.tag==="opaque-object");this.opaqueCallOrigins.set(node,origins);}
+        return origins===this.executionOrigins(node)?undefined:origins;
+    }
     private opaqueEffect(context?: ts.Node): void {
-        const origins=this.executionOrigins(context);
+        this.opaqueEffectFrom(this.executionOrigins(context));
+    }
+    private opaqueEffectFrom(origins:Cell): void {
         this.copy(origins,this.opaqueMutation);
         this.copy(origins,this.globalMutation);
         for(const binding of this.globalLexicals.values())if(binding.mutable)this.copy(origins,binding.value);
@@ -1684,7 +1838,7 @@ class SourceValueFlow {
         if(effect.remove){const removed=this.newCell();this.publish(removed,this.primitive(undefined));this.writeProperty(ordinary,null,removed,false,"delete",context,ordinary,indices);}
         if(effect.length){const length=this.newCell();this.publish(length,this.numberValue());this.writeProperty(ordinary,"length",length,false,"set",context);}
     }
-    private escapeCallableArgument(argument:Cell,context:ts.Node,sourceCallbacksOnly=false,kind:EscapeReachKind="direct"):void {
+    private escapeCallableArgument(argument:Cell,context:ts.Node,sourceCallbacksOnly=false,kind:EscapeReachKind="direct",origins?:Cell):void {
         context=this.escapeContext(context);
         let modes=this.escapedCallableCalls.get(context);if(!modes){modes=new Map();this.escapedCallableCalls.set(context,modes);}
         let graph=modes.get(sourceCallbacksOnly);
@@ -1715,8 +1869,9 @@ class SourceValueFlow {
             // Iterator elements are read through this escaping call's context.
             const sink=this.newEscapeReach({callable:atom=>this.publish(target,atom),iterator:cell=>visit(this.directIteratorElements(cell,context))});
             const visit=(input:Cell,as:EscapeReachKind="direct"):void=>{const key=input.id+":"+as;if(seen.has(key))return;seen.add(key);this.linkEscapeReach(this.escapeCellReach(input,sourceCallbacksOnly,as),sink);};
-            graph={visit};modes.set(sourceCallbacksOnly,graph);
             const invocation=this.invocationContext(context);
+            graph={visit,sources:new Set(),invocation};modes.set(sourceCallbacksOnly,graph);
+            if(origins){graph.origins=this.newCell();this.escapeInvocationOrigins.set(invocation,graph.origins);}
             this.escapedInvocationOrigins.set(invocation,context);
             const thrown=this.exceptionCell(),constructed=this.newCell();
             this.exceptionHandlers.set(invocation,thrown);
@@ -1727,6 +1882,10 @@ class SourceValueFlow {
             this.invoke(invocation,target,actuals,parts,returned);
             this.invoke(invocation,target,constructed,parts,returned,true);
         }
+        // A graph made without conditioned origins already has its
+        // invocation's execution origins, which include any conditioned ones.
+        const from=origins??this.executionOrigins(graph.invocation);
+        if(graph.origins&&!graph.sources.has(from)){graph.sources.add(from);this.copy(from,graph.origins);}
         graph.visit(argument,kind);
     }
     /** Synthetic protocol calls retain their scheduling boundary independently
@@ -3094,10 +3253,13 @@ class SourceValueFlow {
             this.rule([source],()=>{for(const value of source.values)if(value!==this.primitive(undefined))this.publish(target,value);});}
         return callee;
     }
-    private writeProperty(base: Cell, key: SourcePropertyKey | null, value: Cell, unknownGlobal = true, mode: "set"|"define"|"delete" = "set", context?: ts.Node, receiver = base,keys?:Cell): void {
+    private writeProperty(base: Cell, key: SourcePropertyKey | null, value: Cell, unknownGlobal = true, mode: "set"|"define"|"delete" = "set", context?: ts.Node, receiver = base,keys?:Cell,origins?:Cell): void {
+        // `origins`: the execution origins of an opaque mutation that only
+        // some invocations perform (an opaque call's), rather than every
+        // invocation of the enclosing function.
         const handler=context?this.exceptionHandlers.get(context):undefined;
         if(handler)this.publish(handler,this.nativeException(context!));
-        const signature=base.id+":"+this.keyIdentity(key)+":"+value.id+":"+unknownGlobal+":"+mode+":"+(context?this.cell(context).id:"none")+":"+receiver.id+":"+keys?.id;
+        const signature=base.id+":"+this.keyIdentity(key)+":"+value.id+":"+unknownGlobal+":"+mode+":"+(context?this.cell(context).id:"none")+":"+receiver.id+":"+keys?.id+":"+origins?.id;
         if(this.propertyWrites.has(signature))return;
         this.propertyWrites.add(signature);
         if(context&&mode!=="set")this.proxyInternalMethod(base,[mode==="delete"?"deleteProperty":"defineProperty"],context);
@@ -3108,7 +3270,7 @@ class SourceValueFlow {
                     (atom.tag==="primitive"||atom.tag==="text-operation"||atom.tag==="non-string"||atom.tag==="unknown-string"))this.publish(primitives,atom);
                 if(opened||!primitives.values.nonempty)return;opened=true;
                 const conversion=ts.setTextRange(ts.factory.createEmptyStatement(),context);(conversion as ts.Node&{parent:ts.Node}).parent=context;
-                this.writeProperty(this.objectValue(primitives,conversion),key,value,unknownGlobal,mode,context,receiver,keys);
+                this.writeProperty(this.objectValue(primitives,conversion),key,value,unknownGlobal,mode,context,receiver,keys,origins);
             });
         }
         const weak=context?this.writeUncertainty(context):this.newCell();
@@ -3154,7 +3316,7 @@ class SourceValueFlow {
                             const inherited=this.ordinaryOwner(prototype);
                             if(inherited)pending.push(inherited);
                             else if(prototype===this.primitive(null))store=true;
-                            else if(prototype.tag!=="pending-source"){this.copy(this.executionOrigins(context),owner.shape);if(handler)this.publish(handler,this.unknown);store=true;}
+                            else if(prototype.tag!=="pending-source"){this.copy((origins??this.executionOrigins(context)),owner.shape);if(handler)this.publish(handler,this.unknown);store=true;}
                         }
                     }
                 }
@@ -3163,16 +3325,16 @@ class SourceValueFlow {
                 for(const owner of destinations){
                 if(owner.immutableOwn)continue;
                 if(mode!=="delete"&&owner.arguments)for(const[index,formal]of owner.arguments.mapped)if((key===null||key===index)&&this.keyMayContain(keys,index,rule)){
-                    if(value===this.empty)this.copyWrite(this.executionOrigins(context),formal.binding,context);else this.copyWrite(value,formal.binding,context);
+                    if(value===this.empty)this.copyWrite((origins??this.executionOrigins(context)),formal.binding,context);else this.copyWrite(value,formal.binding,context);
                 }
                 if(key===null){
-                    const origins=this.executionOrigins(context);
-                    if(value===this.empty)this.copy(origins,owner.shape);else this.recordUnknownProperty(owner,mode,context,keys);
+                    const mutation=origins??this.executionOrigins(context);
+                    if(value===this.empty)this.copy(mutation,owner.shape);else this.recordUnknownProperty(owner,mode,context,keys);
                     if(mode!=="delete")this.copyWrite(value,this.unknownPropertyLocation(owner),context);
                     // A value-less (opaque) mutation already marks the shape.
                     if(mode!=="delete"&&value!==this.empty&&owner.listLength&&this.keyMayContain(keys,"length",rule))this.copyWrite(this.arraySetLength(owner,value,context),this.field(owner,"length"),context);
                     if(mode==="set"&&value!==this.empty&&this.keyMayContain(keys,"__proto__",rule))this.unknownSetPrototype(owner,value);
-                    for(const record of owner.collections?.values()??[])this.copy(origins,record.shape);
+                    for(const record of owner.collections?.values()??[])this.copy(mutation,record.shape);
                 }
                 else {
                     const presence=this.presence(owner,key);
@@ -3197,7 +3359,7 @@ class SourceValueFlow {
                 if(key===null){
                     const domain=keys?this.computedKeyDomain(keys):null;
                     if(domain&&!domain.numeric){for(const name of domain.keys)if(typeof name==="string"&&!this.immutableGlobalBinding(name))this.copyWrite(value,this.realmBinding(atom.realm,name),context);}
-                    else this.copy(this.executionOrigins(context),this.globalMutation);
+                    else this.copy((origins??this.executionOrigins(context)),this.globalMutation);
                 }
                 else if (typeof key === "string" && !this.immutableGlobalBinding(key)) this.copyWrite(value,this.realmBinding(atom.realm,key),context);
             }
@@ -3218,10 +3380,10 @@ class SourceValueFlow {
                         if(key!==null)this.publish(this.nativeAliasKeys,this.primitive(key));else if(keys)this.copy(keys,this.nativeAliasKeys);else this.publish(this.nativeAliasKeys,this.unknown);
                     }
                     if(value===this.empty||mode!=="set"||key==="__proto__"||key===null&&(!keys||this.keyMayContain(keys,"__proto__",rule)))
-                        this.copy(this.executionOrigins(context),this.nativeAliasMutation);
+                        this.copy((origins??this.executionOrigins(context)),this.nativeAliasMutation);
                 }
             }
-            if(unknownGlobal&&(atom.tag==="unknown"||atom.tag==="opaque-object")){this.copy(this.executionOrigins(context),this.globalMutation);if(handler)this.publish(handler,this.unknown);}
+            if(unknownGlobal&&(atom.tag==="unknown"||atom.tag==="opaque-object")){this.copy((origins??this.executionOrigins(context)),this.globalMutation);if(handler)this.publish(handler,this.unknown);}
         }});
     }
     /** One hint-driven ToPrimitive worklist uses the keyed property and call
@@ -3235,6 +3397,15 @@ class SourceValueFlow {
         if(!other){other={tag:"non-string",kinds:KIND_PRIMITIVE&~KIND_STRING};this.numericValues.set(KIND_PRIMITIVE&~KIND_STRING,other);}
         this.publish(result,other);
     }
+    /** ToPrimitive runs code only for an operand that is not a primitive, so
+     * a conversion's opaque effect is conditioned on each invocation's
+     * operand: an unresolved result in an invocation needs such an operand
+     * there. A conversion an invocation's return projection replays takes
+     * its effect from the conversion it replays (`replayDepth`). */
+    private conversionEffect(source: Cell, context: ts.Node): void {
+        this.activateConditionalEffect(context, source, atom => atom !== this.nativeUnknown && atom.tag !== "primitive" && atom.tag !== "non-string" && atom.tag !== "unknown-string" &&
+            atom.tag !== "text-operation" && atom.tag !== "abrupt" && atom.tag !== "pending-source");
+    }
     private primitiveConversion(source: Cell, context?: ts.Node, hint: PrimitiveHint = "string"): Cell {
         let contexts = this.hintPrimitives.get(source);
         if (!contexts) { contexts = new Map(); this.hintPrimitives.set(source, contexts); }
@@ -3242,6 +3413,7 @@ class SourceValueFlow {
         if (!conversions) {conversions = new Map(); contexts.set(context, conversions);}
         const previous = conversions.get(hint); if (previous) return previous;
         const result = this.newCell(); conversions.set(hint, result);
+        const replayed = this.replayDepth > 0;
         const selected = new Set<Atom>(), opaqueConversions = new Set<Atom>();
         let rule!: Rule;
         rule = this.rule([source], () => {
@@ -3260,8 +3432,14 @@ class SourceValueFlow {
                     continue;
                 }
                 if (!owner || !context) {
-                    this.publish(result, this.unknown);
-                    if (context) {const handler = this.exceptionHandlers.get(context); if (handler) this.publish(handler, this.unknown); this.activateOpaqueEffect(context);}
+                    // A value that exists only from its origin on converts to
+                    // a value that exists only from there on, so a capture
+                    // that precedes the origin still excludes it.
+                    this.publish(result, atom.tag === "unknown" && atom.origin ? atom : this.unknown);
+                    if (context) {
+                        const handler = this.exceptionHandlers.get(context); if (handler) this.publish(handler, this.unknown);
+                        if (!replayed) this.conversionEffect(source, context);
+                    }
                     continue;
                 }
                 const worklist = [owner], visited = new Set<ObjectOwner>();
@@ -3378,7 +3556,7 @@ class SourceValueFlow {
                 if (state.pending || !state.scalarUnresolved) return;
                 const handler = this.exceptionHandlers.get(context);
                 if (handler) this.publish(handler, this.unknown);
-                this.activateOpaqueEffect(context);
+                if (!replayed) this.conversionEffect(source, context);
             });
         }
         return result;
@@ -3389,14 +3567,14 @@ class SourceValueFlow {
         let conversions = contexts.get(context);
         if (!conversions) {conversions = new Map(); contexts.set(context, conversions);}
         const previous = conversions.get(conversion); if (previous) return previous;
-        const input = this.primitiveConversion(source, context, "number"), result = this.newCell();
+        const input = this.primitiveConversion(source, context, "number"), result = this.newCell(), replayed = this.replayDepth > 0;
         conversions.set(conversion, result);
         this.publish(result, {tag: "text-operation", operation: "coerce", conversion, parts: [input]});
         let rule!: Rule;
         rule = this.rule([input], () => {
             const state = this.primitiveState(input, rule, true), handler = this.exceptionHandlers.get(context);
             if (state.pending) return;
-            if (state.unresolved) {if (handler) this.publish(handler, this.unknown); this.activateOpaqueEffect(context);}
+            if (state.unresolved) {if (handler) this.publish(handler, this.unknown); if (!replayed) this.conversionEffect(source, context);}
             if (!handler) return;
             if (!state.proof.primitiveComplete && !this.primitiveNumericConversionSafe(input, conversion)) this.publish(handler, this.nativeException(context!));
             for (const value of state.proof.values) {
@@ -3557,10 +3735,18 @@ class SourceValueFlow {
         if (!conversions) {conversions = new Map(); contexts.set(context, conversions);}
         const previous = conversions.get(descriptiveSymbols); if (previous) return previous;
         const result = this.newCell(); conversions.set(descriptiveSymbols, result);
+        // A return projection converts the projected operand: the ToString
+        // operand below is published, not copied, so the result is not the
+        // projection of its own atoms.
+        this.returnTransforms.set(result,{kind:"conversion",inputs:[source],evaluate:inputs=>this.stringHintCell(inputs[0]!,context,descriptiveSymbols)});
         const primitive=this.primitiveConversion(source,context),normal=this.newCell();
         const operation:Atom={tag:"text-operation",operation:"to-string",parts:[normal]};
         const filtered=new Map<number,Atom>(),atoms=new Map<Atom,Cell>();
         const convert=(atom:Atom):void=>{
+            // An unknown that exists only from its origin on stays that atom,
+            // so a capture preceding the origin removes the alternative
+            // instead of leaving a ToString over an emptied operand.
+            if(atom.tag==="unknown"&&atom.origin){this.publish(result,atom);return;}
             let value=atoms.get(atom);if(!value){value=this.newCell();atoms.set(atom,value);this.publish(value,atom);}
             // String primitives keep their original graph, so repeated
             // conversions preserve every existing text-domain constraint.
@@ -8311,19 +8497,25 @@ class SourceValueFlow {
                         if(invocation.construct)this.publish(result!,this.opaqueObject);
                         else if(arrayEffect?.receiverResult)this.copy(this.toObject(invocation.receiver,node),result!);
                         else if(directCallees)this.publish(result!,this.nativeUnknown);
-                        else this.copy(this.executionOrigins(node),result!);
+                        // Unknown code runs only in the invocations whose own
+                        // callee is unknown: an opaque call inside a function
+                        // body takes the origins of those invocations, as a
+                        // conversion's effect does.
+                        const conditioned=!directCallees&&!proxy&&invocation.target===callee&&(atom.tag==="unknown"||atom.tag==="opaque-object")?this.opaqueCallOriginsOf(node,callee):undefined;
+                        const origins=conditioned??this.executionOrigins(node);
+                        if(!invocation.construct&&!arrayEffect?.receiverResult&&!directCallees)this.copy(origins,result!,"origin");
                         if (!handled(this.unknown,signature)) this.onActive(node,()=>{
-                            if(!directCallees)this.opaqueEffect(node);
+                            if(!directCallees)this.opaqueEffectFrom(origins);
                             // Unknown code may call anything the global object reaches; a
                             // native (directCallees) reaches only its receiver and arguments.
                             if(!directCallees&&(atom.tag==="unknown"||atom.tag==="opaque-object"||proxy)){
                                 this.publish(this.globalReceiver,this.global);
-                                this.escapeCallableArgument(this.globalReceiver,node,true);
-                                for(const binding of this.globalLexicals.values())this.escapeCallableArgument(binding.value,node,true);
+                                this.escapeCallableArgument(this.globalReceiver,node,true,"direct",conditioned);
+                                for(const binding of this.globalLexicals.values())this.escapeCallableArgument(binding.value,node,true,"direct",conditioned);
                             }
                             const argumentsEscaping = invocation.args ?? (invocation.sequence ? [this.allArgumentValues(invocation.sequence)] : []);
                             if(arrayEffect)this.nativeArrayReceiverWrites(invocation.receiver,arrayEffect,argumentsEscaping,node);
-                            else this.writeProperty(invocation.receiver,null,this.empty,false,"set",node);
+                            else this.writeProperty(invocation.receiver,null,this.empty,false,"set",node,invocation.receiver,undefined,conditioned);
                             // An Array.prototype native never calls its receiver or the
                             // values it stores; their accessors and methods may run. A
                             // native that calls a callback (sort's comparator) hands it
@@ -8331,10 +8523,10 @@ class SourceValueFlow {
                             // receives unknown native values, so the elements it may be
                             // handed stay direct callees of the escape.
                             const callsCallback=directCallees==="all"||!!directCallees&&directCallees.size>0;
-                            this.escapeCallableArgument(invocation.receiver,node,false,arrayEffect&&!callsCallback?"elements":"direct");
+                            this.escapeCallableArgument(invocation.receiver,node,false,arrayEffect&&!callsCallback?"elements":"direct",conditioned);
                             for (const [index,argument] of argumentsEscaping.entries()) {
-                                if(!arrayEffect)this.writeProperty(argument,null,this.empty,false,"set",node);
-                                this.escapeCallableArgument(argument,node,false,!directCallees||directCallees==="all"||directCallees.has(index)?"direct":"argument");
+                                if(!arrayEffect)this.writeProperty(argument,null,this.empty,false,"set",node,argument,undefined,conditioned);
+                                this.escapeCallableArgument(argument,node,false,!directCallees||directCallees==="all"||directCallees.has(index)?"direct":"argument",conditioned);
                             }
                         });
                         continue;
@@ -8783,7 +8975,7 @@ class SourceValueFlow {
                             this.publish(result!,this.abrupt);
                             continue;
                         }
-                        this.onActive(node,()=>{this.connectActivation(this.sourceActivation(node),atom.owner);if(this.hasInvocationTiming(node))this.publish(this.activationTiming(atom.owner),this.primitive(true));this.copy(this.executionOrigins(node),atom.owner.active);this.recordCallArguments(atom.owner,signature,argv,invocation.sequence,node);});
+                        this.onActive(node,()=>{this.connectActivation(this.sourceActivation(node),atom.owner);if(this.hasInvocationTiming(node))this.publish(this.activationTiming(atom.owner),this.primitive(true));this.recordCallArguments(atom.owner,signature,argv,invocation.sequence,node);});
                         if (invocation.construct) {
                             const instance = this.owner(node);
                             this.markPropertyAlgorithm(instance,ts.isClassLike(atom.owner.definition)&&atom.owner.base?"opaque":"ordinary");
@@ -8793,6 +8985,7 @@ class SourceValueFlow {
                         this.copy(invocation.construct?invocation.receiver:this.functionThisBinding(atom.owner,invocation.receiver,node), atom.owner.receiver);
                         if(invocation.construct)this.copy(invocation.newTarget??invocation.target,atom.owner.newTarget);else this.publish(atom.owner.newTarget,this.primitive(undefined));
                         if(invocation.construct && ts.isClassLike(atom.owner.definition) && !atom.owner.node && atom.owner.base){
+                            this.recordInvocation(atom.owner,node,new Map());
                             continue;
                         }
                         const actualFormals=new Map<Cell,Cell>();
@@ -8817,6 +9010,7 @@ class SourceValueFlow {
                                 if(ts.isIdentifier(parameter.name)){const formal=this.binding(parameter.name);let sources=this.formalInputs.get(formal);if(!sources){sources=new Set();this.formalInputs.set(formal,sources);}sources.add(actual);actualFormals.set(formal,actual);}
                             }
                         }
+                        this.recordInvocation(atom.owner,node,actualFormals);
                         if (atom.owner.kind.includes("generator")) this.copy(this.generatorInstance(atom.owner,actualFormals,node),result);
                         else if (atom.owner.kind === "async") {
                             // Async return resolution runs in the callee activation, which
