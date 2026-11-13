@@ -19,6 +19,7 @@ import {
     staticModuleRequestResolutionError,
 } from "../../src/module-request";
 import { evaluationSourceRequests, sourceFileIsStrict, evalSourceIsValid, evalSourceKey, type EvalSourceRequest } from "../../src/eval-source";
+import { setEvalSourceContext } from "../../src/eval-context";
 import { setSourceAnalysisWarningWriter } from "../../src/source-value-flow";
 import {
     earlyModuleStaticSemanticsFailure,
@@ -68,6 +69,11 @@ export interface FiniteEvalScriptSourceGraph {
         readonly strictCaller: boolean;
         readonly strict: boolean;
         readonly domain?: string;
+        /** PerformEval context bits (src/eval-context.ts): one source
+         * evaluated from a method and from a field initializer is two
+         * requests with separate private and super environments. Absent
+         * means 0. */
+        readonly context?: number;
     }[];
     readonly error: string | null;
 }
@@ -136,7 +142,7 @@ export function finiteEvalScriptSourceGraph(
             unresolved ??= `${record.path}:${location.line+1}:${location.character+1}: ${label} source is not a finite static string expression`;
         }
         for (const request of projected.requests) {
-            const {source, strict, strictCaller,domain} = request;
+            const {source, strict, strictCaller,domain,context} = request;
             const key = evalSourceKey(request);
             if (requests.has(key)) continue;
             requests.set(key, request);
@@ -145,8 +151,9 @@ export function finiteEvalScriptSourceGraph(
             } else if (request.kind === "script") {
                 records.push({path:`__tsc2c_eval_script__/${sha256Text(JSON.stringify([source,domain]))}.js`,source,goal:"script",root:true,evaluation:true,kind:"script",domain});
             } else if (request.kind === "direct") {
-                records.push({path:`__tsc2c_direct_eval__/${strictCaller ? "strict" : "sloppy"}/${sha256Text(JSON.stringify([source,domain]))}.js`,source,goal:"script",
-                    strictContext:strict,root:true,evaluation:true,kind:"direct",domain});
+                const record=`__tsc2c_direct_eval__/${strictCaller ? "strict" : "sloppy"}/${directEvalSourceDigest(source,domain,context)}.js`;
+                setEvalSourceContext(record,context);
+                records.push({path:record,source,goal:"script",strictContext:strict,root:true,evaluation:true,kind:"direct",domain});
             } else {
                 records.push({path:`__tsc2c_indirect_eval__/${strict ? "strict" : "sloppy"}/${sha256Text(JSON.stringify([source,domain]))}.js`,source,goal:"script",
                     strictContext:strict,root:true,evaluation:true,kind:"indirect",domain});
@@ -162,7 +169,7 @@ export function finiteEvalScriptSourceGraph(
         sources:[...new Set(values.filter(value=>value.kind==="script").map(value=>value.source))].sort(),
         scriptSources:values.filter(value=>value.kind==="script").map(({source,domain})=>({source,...(domain?{domain}:{})})),
         indirectEvalSources:values.filter(value=>value.kind==="indirect").map(({source,strict,domain})=>({source,strict,...(domain?{domain}:{})})),
-        directEvalSources:values.filter(value=>value.kind==="direct").map(({source,strictCaller,strict,domain})=>({source,strictCaller,strict,...(domain?{domain}:{})})),error:null};
+        directEvalSources:values.filter(value=>value.kind==="direct").map(({source,strictCaller,strict,domain,context})=>({source,strictCaller,strict,...(domain?{domain}:{}),...(context?{context}:{})})),error:null};
 }
 
 function canonicalRelativePath(value: string, label: string): string {
@@ -193,6 +200,12 @@ function safeDestination(root: string, relative: string): string {
         throw new Error(`source path escapes the isolated host tree: ${relative}`);
     }
     return destination;
+}
+
+/** A direct eval entry's file name: requests that differ only in their
+ * PerformEval context need separate files. */
+function directEvalSourceDigest(source:string,domain:string|undefined,context:number|undefined):string{
+    return sha256Text(JSON.stringify(context?[source,domain,context]:[source,domain]));
 }
 
 async function writeExclusive(root: string, relative: string, content: string | Uint8Array): Promise<string> {
@@ -631,7 +644,7 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
         for (const direct of evalScriptGraph.directEvalSources) {
             const relative =
                 `__tsc2c_direct_eval__/${direct.strictCaller ? "strict" : "sloppy"}/` +
-                `${sha256Text(JSON.stringify([direct.source,direct.domain]))}.js`;
+                `${directEvalSourceDigest(direct.source,direct.domain,direct.context)}.js`;
             const failure = parseFailure(direct.source, relative, "parse", "test-source", "script", true);
             if (failure || !evalSourceIsValid({kind:"direct",...direct})) {
                 directEvalEntries.push({ ...direct, entry: null });
