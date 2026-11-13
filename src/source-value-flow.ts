@@ -515,6 +515,7 @@ const BOOLEAN_BINARY_RESULTS = new Set<ts.SyntaxKind>([
 ]);
 const PROPERTY_MUTATIONS = new Set<Operation>(["define-property", "define-properties", "set-property", "delete-property"]);
 const RETURN_PROJECTION_BUDGET = 8;
+const CAPTURE_COMPOSITION_BOUND = 8;
 /** Operand combinations one text operation's value proof may enumerate. Each
  * combination is evaluated and its result interned, so a JSON text, join or
  * concatenation over many independent choices (24 two-way properties already
@@ -2050,7 +2051,14 @@ class SourceValueFlow {
                     if(prior){
                         const combined=this.captureConstraintSet([...constraints.phases,...prior.constraints.phases]);
                         if(combined===constraints){worklist.push({source:prior.source,origins,root:true});continue;}
-                        const projected=this.captureProjection(prior.source,combined);this.watch(read,projected);
+                        // A phase only filters, so an inner capture's own view
+                        // over-approximates it under more phases. Composing
+                        // nested captures of distinct activations adds one
+                        // phase per level; past the bound the inner view is
+                        // read as it is, which keeps the views of a chain of
+                        // n getters each returning the next one's value at
+                        // O(n) instead of one per interval of the chain.
+                        const projected=combined.phases.length>CAPTURE_COMPOSITION_BOUND?source:this.captureProjection(prior.source,combined);this.watch(read,projected);
                         if(projected!==target)for(const atom of projected.values)if(!origins||atom.tag==="unknown")this.publish(target,atom);
                         continue;
                     }
