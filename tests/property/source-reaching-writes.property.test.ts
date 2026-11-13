@@ -38,26 +38,28 @@ test('reaching definitions retain definite stores, binding plans, snapshots and 
     for(const source of opaque){expect(reference(source).endsWith('replacement-complete\n')).toBe(true);expect({source,error:graph([{path:'subject.js',source}]).error}).toEqual({source,error:expect.stringContaining('direct eval source is not a finite static string expression')});}
 });
 
-type Flow={kind:'write';value:string}|{kind:'skip'}|{kind:'branch';left:Flow;right:Flow}|{kind:'sequence';children:readonly Flow[]};
+// `other` is a second binding whose stores interleave with code's: they
+// neither replace nor carry code's definitions.
+type Flow={kind:'write';value:string}|{kind:'other'}|{kind:'skip'}|{kind:'branch';left:Flow;right:Flow}|{kind:'sequence';children:readonly Flow[]};
 function generated(seed:number):Flow {
     let state=seed;const next=()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state;};
-    const leaf=():Flow=>next()%3?{kind:'write',value:next()%2?'17;':'19;'}:{kind:'skip'};
+    const leaf=():Flow=>{const choice=next()%4;return choice>1?{kind:'write',value:next()%2?'17;':'19;'}:choice?{kind:'other'}:{kind:'skip'};};
     const children:Flow[]=[];for(let index=0;index<8;index++)children.push(next()%2?{kind:'branch',left:leaf(),right:leaf()}:leaf());
     return {kind:'sequence',children};
 }
 function model(flow:Flow,input:ReadonlySet<string|null>):Set<string|null> {
-    if(flow.kind==='write')return new Set([flow.value]);if(flow.kind==='skip')return new Set(input);
+    if(flow.kind==='write')return new Set([flow.value]);if(flow.kind==='skip'||flow.kind==='other')return new Set(input);
     if(flow.kind==='branch')return new Set([...model(flow.left,input),...model(flow.right,input)]);
     let values=new Set(input);for(const child of flow.children)values=model(child,values);return values;
 }
 function render(flow:Flow):string {
-    if(flow.kind==='write')return 'code='+JSON.stringify(flow.value)+';';if(flow.kind==='skip')return ';';
+    if(flow.kind==='write')return 'code='+JSON.stringify(flow.value)+';';if(flow.kind==='other')return 'other=String(Math.random());';if(flow.kind==='skip')return ';';
     if(flow.kind==='branch')return 'if(Math.random()>0.5){'+render(flow.left)+'}else{'+render(flow.right)+'}';
     return flow.children.map(render).join('\n');
 }
 test('generated control trees agree with an independent reaching-definition model',()=>{
     for(let seed=1;seed<=16;seed++){
-        const flow=generated(seed),expected=model(flow,new Set([null])),source='{let code=String(Math.random())+";";'+render(flow)+finish+'}';
+        const flow=generated(seed),expected=model(flow,new Set([null])),source='{let code=String(Math.random())+";";let other="";'+render(flow)+finish+'}';
         expect(reference(source).endsWith('replacement-complete\n')).toBe(true);const result=graph([{path:'subject.js',source}]);
         if(expected.has(null))expect(result.error).toContain('direct eval source is not a finite static string expression');
         else{expect({source,error:result.error}).toEqual({source,error:null});expect(result.directEvalSources.map(entry=>entry.source).sort()).toEqual([...expected].sort() as string[]);}

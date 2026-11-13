@@ -396,6 +396,7 @@ let sourceFactsEpoch=0;
 class SourceFactEdges extends Map<SourceFacts,"value"|"origin"> {
     override set(key:SourceFacts,kind:"value"|"origin"):this{sourceFactsEpoch++;return super.set(key,kind);}
 }
+const noAtoms:ReadonlySet<Atom>=new Set();
 /** A fact collection is not a Set subclass: engines fast-path array spread
  * and iteration of Set instances by copying raw entries, which would bypass
  * the transitive traversal below (observed in JavaScriptCore's DFG tier). */
@@ -404,20 +405,26 @@ class SourceFacts implements Iterable<Atom> {
     // One monotone dependency collection distinguishes complete value flow
     // from origin-only effects without copying every origin into each field.
     readonly sources:Map<SourceFacts,"value"|"origin"> = new SourceFactEdges();
+    // The unknown subset of `own`, which is all an origin-only edge carries,
+    // so a walk past a wide owner (a global object's keys) through origin
+    // edges does not visit its every key. Allocated with the first unknown.
+    private ownUnknown:Set<Atom>|undefined;
     private readonly memberships = new Set<Atom>();
     private knownNonempty=false;
     private flattened:readonly Atom[]|undefined;
     private flattenedEpoch=-1;
-    add(atom:Atom):this{sourceFactsEpoch++;this.own.add(atom);return this;}
+    add(atom:Atom):this{sourceFactsEpoch++;this.own.add(atom);if(atom.tag==="unknown")(this.ownUnknown??=new Set()).add(atom);return this;}
     /** Atoms stored here, without the copied sources. */
     ownValues():IterableIterator<Atom>{return this.own.values();}
+    /** The unknown atoms stored here, in insertion order. */
+    ownUnknownValues():IterableIterator<Atom>{return (this.ownUnknown??noAtoms).values();}
     ownHas(atom:Atom):boolean{return this.own.has(atom);}
     *[Symbol.iterator](): IterableIterator<Atom> {
         if(this.flattenedEpoch===sourceFactsEpoch&&this.flattened){yield* this.flattened;return undefined;}
         const epoch=sourceFactsEpoch,collected:Atom[]=[];
         const pending:{facts:SourceFacts;origins:boolean}[]=[{facts:this,origins:false}],visited=new Map<SourceFacts,number>(),values=new Set<Atom>();
         while(pending.length){const {facts,origins}=pending.pop()!,bit=origins?1:2,prior=visited.get(facts)??0;if(prior&bit)continue;visited.set(facts,prior|bit);
-            for(const value of facts.own)if((!origins||value.tag==="unknown")&&!values.has(value)){values.add(value);collected.push(value);yield value;}
+            for(const value of origins?facts.ownUnknownValues():facts.own.values())if(!values.has(value)){values.add(value);collected.push(value);yield value;}
             for(const [source,kind]of facts.sources)pending.push({facts:source,origins:origins||kind==="origin"});
         }
         // Store only a complete traversal during which nothing grew.
@@ -706,7 +713,7 @@ class SourceValueFlow {
     private readonly projectedCellPhases = new WeakMap<Cell,ReadonlySet<SourceProjectionPhase>>();
     private readonly projectedAtomPhases = new WeakMap<Atom,ReadonlySet<SourceProjectionPhase>>();
     private readonly bindingDefaults = new Map<Cell,Map<Cell,Cell>>();
-    private readonly returnTransforms = new Map<Cell,{kind:"projection"|"allocation"|"binding-read";inputs:readonly Cell[];evaluate:(inputs:readonly Cell[])=>Cell}>();
+    private readonly returnTransforms = new Map<Cell,{kind:"projection"|"allocation"|"binding-read"|"conversion";inputs:readonly Cell[];evaluate:(inputs:readonly Cell[])=>Cell}>();
     private readonly normalResults = new Map<Cell, Atom>();
     private readonly exceptionHandlers = new Map<ts.Node, Cell>();
     private readonly exceptionCells = new Set<Cell>();
@@ -2075,7 +2082,7 @@ class SourceValueFlow {
                             if(replay!==source){worklist.push({source:replay,origins:false,root:true});continue;}
                         }
                     }
-                    for(const atom of source.values.ownValues()){
+                    for(const atom of origins?source.values.ownUnknownValues():source.values.ownValues()){
                         // Publishing is idempotent: an untransformed atom already in the
                         // target needs no repeated visibility proof on later reruns.
                         if(atom.tag!=="text-operation"&&target.values.ownHas(atom))continue;
@@ -3396,6 +3403,15 @@ class SourceValueFlow {
             const conversion=modes[index]!,input = this.newCell(), result = conversion === "text" ? this.stringHintCell(input, context)
                 : conversion === "numeric" || conversion === "number" || conversion === "code-point" ? this.coerceCell(input, context, conversion) : this.primitiveConversion(input, context, conversion==="primitive-number"?"number":conversion);
             converted.push(result);
+            // A conversion's rule publishes its result from every input that
+            // ever reached it. A return projection re-runs the same ordered
+            // List over the invocation's projected operands, so
+            // `function f(a, b) { return a + b; }` returns per call what that
+            // call's actuals concatenate to. Captures keep the conversion's
+            // own result: replaying it under every capture constraint set
+            // tripled the analysis time of source-analysis-determinism's
+            // program.
+            this.returnTransforms.set(result,{kind:"conversion",inputs:args,evaluate:inputs=>this.convertList(inputs,context,mode)[index]!});
             if (index === 0) this.copy(argument, input);
             else {
                 const predecessor = converted[index - 1]!;

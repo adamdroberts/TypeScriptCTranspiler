@@ -28,10 +28,12 @@ type Task=NodeTask|BindingTask;
 export class SourceReachingWrites {
     private readonly points:Point[]=[];
     private readonly entries=new Map<ts.Node,number>();
-    private readonly solutions=new Map<ts.Symbol,ReadonlyMap<number,ReadonlySet<SourceLexicalWrite|null>>>();
-    // Points at which each symbol is read. A solution is consulted only at
-    // these points, so it retains nothing else (O(reads), not O(points)).
-    private symbolReads:Map<ts.Symbol,number[]>|undefined;
+    // The graph is complete once the constructor returns; predecessor lists
+    // and entry reachability are derived from it once, on the first query.
+    private predecessors:readonly (readonly number[])[]|undefined;
+    private reachable:Uint8Array|undefined;
+    // Per symbol, the definitions arriving at each point a query resolved.
+    private readonly arriving=new Map<ts.Symbol,Map<number,ReadonlySet<SourceLexicalWrite|null>>>();
     private readonly entry=this.point();
     private readonly exit=this.point();
     constructor(root:ts.Node,
@@ -178,48 +180,61 @@ export class SourceReachingWrites {
         // syntax retain their complete optional event graph, including throws.
         this.opaque([node],entry,exit);
     }
-    private readsOf(symbol:ts.Symbol):readonly number[] {
-        if(!this.symbolReads){
-            this.symbolReads=new Map();
-            for(const [node,index]of this.entries)if(ts.isIdentifier(node)){
-                const read=this.symbolFor(node);if(!read)continue;
-                let indices=this.symbolReads.get(read);if(!indices){indices=[];this.symbolReads.set(read,indices);}indices.push(index);
-            }
+    private prepare():{predecessors:readonly (readonly number[])[];reachable:Uint8Array} {
+        if(!this.predecessors||!this.reachable){
+            const predecessors:number[][]=this.points.map(()=>[]),reachable=new Uint8Array(this.points.length),pending=[this.entry];
+            for(const [index,point]of this.points.entries())for(const next of point.successors)predecessors[next]!.push(index);
+            reachable[this.entry]=1;
+            while(pending.length){const index=pending.pop()!;for(const next of this.points[index]!.successors)if(!reachable[next]){reachable[next]=1;pending.push(next);}}
+            this.predecessors=predecessors;this.reachable=reachable;
         }
-        return this.symbolReads.get(symbol)??[];
+        return {predecessors:this.predecessors,reachable:this.reachable};
+    }
+    /** The definitions of `symbol` arriving at a point: the frame entry's
+     * `null` (prior-invocation values) when the point is the entry, and over
+     * each reachable predecessor either that predecessor's own store of the
+     * symbol, which replaces what arrived there, or whatever arrived there.
+     * This is the may-reach fixpoint of a forward solve from the entry, asked
+     * only where a read needs it: a run of single-predecessor points shares
+     * one answer, so a binding read right after its store costs its distance
+     * from the store, not the frame's size. */
+    private arrivingAt(symbol:ts.Symbol,start:number):ReadonlySet<SourceLexicalWrite|null> {
+        const {predecessors,reachable}=this.prepare();
+        let known=this.arriving.get(symbol);if(!known){known=new Map();this.arriving.set(symbol,known);}
+        const stores=(index:number)=>{const point=this.points[index]!;return point.write!==undefined&&point.symbol===symbol;};
+        const run:number[]=[],inRun=new Set<number>();let at=start,result:ReadonlySet<SourceLexicalWrite|null>|undefined;
+        for(;;){
+            const prior=known.get(at);if(prior){result=prior;break;}
+            run.push(at);inRun.add(at);
+            if(at===this.entry)break;
+            let only=-1,count=0;for(const previous of predecessors[at]!)if(reachable[previous]){only=previous;if(++count>1)break;}
+            if(count!==1)break;
+            if(stores(only)){result=new Set([this.points[only]!.write!]);break;}
+            if(only===this.entry||inRun.has(only))break;
+            at=only;
+        }
+        if(!result){
+            // A join, the entry or a cycle: every path back to a store of the
+            // symbol or to the entry, through points already answered or not.
+            const origin=run[run.length-1]!,collected=new Set<SourceLexicalWrite|null>(),visited=new Set<number>([origin]),pending=[origin];
+            while(pending.length){
+                const index=pending.pop()!;if(index===this.entry)collected.add(null);
+                for(const previous of predecessors[index]!){
+                    if(!reachable[previous]||visited.has(previous))continue;visited.add(previous);
+                    if(stores(previous)){collected.add(this.points[previous]!.write!);continue;}
+                    const answered=known.get(previous);if(answered){for(const value of answered)collected.add(value);continue;}
+                    pending.push(previous);
+                }
+            }
+            result=collected;
+        }
+        for(const index of run)known.set(index,result);
+        return result;
     }
     reaching(reference:ts.Identifier):ReadonlySet<SourceLexicalWrite>|null {
         const at=this.entries.get(reference),symbol=this.symbolFor(reference);if(at===undefined||!symbol)return null;
-        let solution=this.solutions.get(symbol);
-        if(!solution){
-            const facts=new Map<number,Set<SourceLexicalWrite|null>>(),deltas=new Map<number,Set<SourceLexicalWrite|null>>();
-            const pending:number[]=[],queued=new Set<number>(),stored=new Set<number>();
-            const add=(index:number,values:Iterable<SourceLexicalWrite|null>)=>{
-                let known=facts.get(index),delta=deltas.get(index);
-                for(const value of values){
-                    if(known?.has(value))continue;
-                    if(!known){known=new Set();facts.set(index,known);}known.add(value);
-                    if(!delta){delta=new Set();deltas.set(index,delta);}delta.add(value);
-                }
-                if(delta&&!queued.has(index)){queued.add(index);pending.push(index);}
-            };
-            add(this.entry,[null]);
-            while(pending.length){const index=pending.pop()!;queued.delete(index);const point=this.points[index]!;
-                const delta=deltas.get(index)!;deltas.delete(index);
-                // Joins forward each newly arrived definition once per edge.
-                // A reachable store kills its incoming alternatives and emits
-                // its one definition once, regardless of later arrivals.
-                if(point.write&&point.symbol===symbol){
-                    if(stored.has(index))continue;stored.add(index);
-                    for(const next of point.successors)add(next,[point.write]);
-                }else{
-                    for(const next of point.successors)add(next,delta);
-                }
-            }
-            const retained=new Map<number,ReadonlySet<SourceLexicalWrite|null>>();
-            for(const index of this.readsOf(symbol)){const definitions=facts.get(index);if(definitions)retained.set(index,definitions);}
-            solution=retained;this.solutions.set(symbol,solution);
-        }
-        const definitions=solution.get(at);return !definitions||definitions.has(null)?null:definitions as ReadonlySet<SourceLexicalWrite>;
+        // An unreachable read has no arriving definition to prove.
+        if(!this.prepare().reachable[at])return null;
+        const definitions=this.arrivingAt(symbol,at);return definitions.has(null)?null:definitions as ReadonlySet<SourceLexicalWrite>;
     }
 }
