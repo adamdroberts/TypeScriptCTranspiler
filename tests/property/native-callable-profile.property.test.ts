@@ -42,9 +42,9 @@ test('callable and descriptor source projections contain the independently obser
   expect({name:part.name,choices:calls[0]!.choices}).toMatchObject({choices:expect.arrayContaining([expected.trimEnd()+';'])});
  }}finally{await rm(directory,{recursive:true,force:true});}
 });
-// The pinned core profile has one nonextensible %ThrowTypeError% per Realm.
-// Node's legacy callable extensions differ, so these invariants use the pinned
-// algorithm and the actual native profile instead of a legacy Node oracle.
+// Function.prototype's caller and arguments accessors follow Node 26 and Bun
+// (their own getters and setters, as the runtime has had them since
+// a1e80a7af), so Node is the oracle for this profile as for every other.
 const coreProfile=`
 const caller=Object.getOwnPropertyDescriptor(Function.prototype,'caller');
 const args=Object.getOwnPropertyDescriptor(Function.prototype,'arguments');
@@ -56,11 +56,10 @@ let body='97;';try{Object.defineProperty(thrower,'caller',{value:null});}catch(e
 print(eval(body));
 let inherited='103;';try{thrower.caller;}catch(error){inherited='107;';}print(eval(inherited));
 print('callable-profile-complete');`;
-const coreExpected='true\ntrue\ntrue\ntrue\ntrue\n101\n107\ncallable-profile-complete\n';
-test('callable prototypes preserve native completions and pinned core invariants in both memory modes',async()=>{
+test('callable prototypes preserve native completions and the core accessor profile in both memory modes',async()=>{
  const standard=partitions.map(part=>'{'+part.source+'}').join('\n');
  const subjects=[{name:'standard',source:standard,expected:partitions.map(part=>reference(part.source)).join('')},
-  {name:'pinned-core',source:coreProfile,expected:coreExpected}];
+  {name:'core-profile',source:coreProfile,expected:reference(coreProfile)}];
  const directory=await mkdtemp(join(tmpdir(),'tsc2c-native-callable-profile-'));
  try{for(const subject of subjects)for(const noGc of [false,true]){
   const entry=join(directory,subject.name+'.js'),output=join(directory,subject.name+'-'+noGc),diagnostics:string[]=[];
@@ -72,12 +71,20 @@ test('callable prototypes preserve native completions and pinned core invariants
  }}finally{await rm(directory,{recursive:true,force:true});}
 },600_000);
 
+// Every partition's prototype and descriptor changes are known, so the
+// combined program is finite even with no Test262 host. A prototype that
+// opaque code may change, read afterwards through uncaptured reflection,
+// keeps the stable diagnostic.
 test('uncaptured reflection after an opaque prototype change retains the stable source diagnostic',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'tsc2c-native-callable-opaque-'));
  try{
-  const entry=join(directory,'subject.js'),source=partitions.map(part=>'{'+part.source+'}').join('\n')+'\n'+coreProfile;
+  const known=partitions.map(part=>'{'+part.source+'}').join('\n')+'\n'+coreProfile;
+  const knownEntry=join(directory,'known.js');await writeFile(knownEntry,known);
+  const calls=sourceEvaluationInvocations(buildProgram({entry:knownEntry,packageRoot:process.cwd(),retainModuleFailures:true,isolatedScriptRoots:[knownEntry],initializationEntries:[knownEntry]}).program,{roots:[knownEntry]});
+  expect(calls.filter(call=>call.choices===null)).toEqual([]);
+  const entry=join(directory,'subject.js'),source=known+'\n{const owner={};Object.setPrototypeOf(owner,{body:"17;"});opaque(owner);print(eval(Object.getPrototypeOf(owner).body));}';
   await writeFile(entry,source);const diagnostics:string[]=[];
   const built=await compile({entry,output:join(directory,'rejected'),buildDir:join(directory,'build'),isolatedScriptRoots:[entry],initializationEntries:[entry],diagnosticWriter:message=>diagnostics.push(message)});
   expect(built.exitCode).toBe(3);expect(diagnostics.join('')).toContain('unknown eval() source requires --runtime-code-manifest allow-list');
  }finally{await rm(directory,{recursive:true,force:true});}
-});
+},600_000);
