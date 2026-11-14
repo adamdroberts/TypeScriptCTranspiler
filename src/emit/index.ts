@@ -32836,7 +32836,10 @@ class Emitter {
                 if(trackRuntime&&owner.libuv)this.usesLibuv=true;
                 return {c:owner.export(name),ty:T_VALUE};
             }
-            if(name)unsupported(expr,"ambient host export requires an ordinary runtime owner");
+            // A query (trackRuntime false: purity and source-value
+            // predicates, which run before the per-module diagnostic
+            // boundary) admits no owner; emitting the reference reports it.
+            if(name){if(!trackRuntime)return null;unsupported(expr,"ambient host export requires an ordinary runtime owner");}
         }
         if (ts.isPropertyAccessExpression(expr)) {
             const owner = this.importedHostModuleOwner(expr.expression,trackRuntime);
