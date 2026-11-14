@@ -257,10 +257,17 @@ export function createEcmaSourceFile(
     // head inside an array literal there, so `for ([x = 'x' in {}] of xs)`
     // fails to parse. Each such `in` is shadowed by `<=`, an operator of the
     // same length, precedence and associativity, and restored after parsing.
-    const arrayHeadIns = ecmaForHeadArrayInTokens(shadow, literals);
-    if (arrayHeadIns.size) {
+    // A for head's identifier `let` is shadowed by an identifier of the same
+    // length and named back through the contextual-identifier restore below.
+    const {ins: arrayHeadIns, lets: forHeadLets} = ecmaForHeadTokens(shadow, literals);
+    if (arrayHeadIns.size || forHeadLets.size) {
         const characters = shadow.split("");
         for (const start of arrayHeadIns) characters.splice(start, 2, "<", "=");
+        for (const start of forHeadLets) {
+            const scanner = ts.createScanner(ts.ScriptTarget.ESNext, true, ts.LanguageVariant.Standard, shadow, undefined, start);
+            scanner.scan();
+            for (let index = start; index < scanner.getTextPos(); ++index) characters[index] = index === start ? "a" : "_";
+        }
         shadow = characters.join("");
         sourceFile = ts.createSourceFile(filename,shadow,parserOptions,setParentNodes,scriptKind);
     }
@@ -270,7 +277,7 @@ export function createEcmaSourceFile(
     // Reparse to a fixed point because correcting one Statement body can
     // expose another body in the recovered tree. Each source token is added
     // once; the algorithm has no nesting or statement-count bound.
-    const referenceTokens = new Map<number, string>();
+    const referenceTokens = new Map<number, string>([...forHeadLets].map(start => [start, "let"] as const));
     const shadowedIdentifierUnits = new Set<number>();
     const javascript = scriptKind === ts.ScriptKind.JS || scriptKind === ts.ScriptKind.JSX;
     {
@@ -412,9 +419,17 @@ export function createEcmaSourceFile(
  * literals only (every bracket between the head and the token is `[`): the
  * positions TypeScript parses with [~In]. A parenthesis, brace or function
  * body in between restores [+In] in its parser too. A keyword after `.` or
- * `?.` is a property name. */
-function ecmaForHeadArrayInTokens(text: string, literals: ReadonlyMap<number, number>): Set<number> {
-    const tokens = new Set<number>(), scanner = ts.createScanner(ts.ScriptTarget.ESNext, true, ts.LanguageVariant.Standard, text);
+ * `?.` is a property name.
+ *
+ * `lets` holds each `let` that opens a for-statement head but is an
+ * IdentifierReference there: a LexicalDeclaration or ForDeclaration needs a
+ * BindingIdentifier or BindingPattern after it, so `let` followed by any
+ * other token (`;`, `=`, `in`, `.`, ...) is the identifier, as is an escaped
+ * spelling, which is never the keyword. TypeScript reads both as a `let`
+ * declaration. Strict code then rejects the identifier through its own early
+ * error, and a for-of head through its [lookahead ∉ { let }]. */
+function ecmaForHeadTokens(text: string, literals: ReadonlyMap<number, number>): {ins: Set<number>; lets: Set<number>} {
+    const tokens = new Set<number>(), lets = new Set<number>(), scanner = ts.createScanner(ts.ScriptTarget.ESNext, true, ts.LanguageVariant.Standard, text);
     // "head" opens a for-statement head; brackets record their kind.
     const stack: Array<"head" | "[" | "(" | "{"> = [];
     let previous = ts.SyntaxKind.Unknown, pendingFor = false;
@@ -423,7 +438,19 @@ function ecmaForHeadArrayInTokens(text: string, literals: ReadonlyMap<number, nu
         const start = scanner.getTokenPos(), literalEnd = literals.get(start);
         if (literalEnd !== undefined && literalEnd > start) {scanner.setTextPos(literalEnd);previous = ts.SyntaxKind.StringLiteral;pendingFor = false;continue;}
         if (token === ts.SyntaxKind.ForKeyword && previous !== ts.SyntaxKind.DotToken && previous !== ts.SyntaxKind.QuestionDotToken) pendingFor = true;
-        else if (token === ts.SyntaxKind.OpenParenToken) {stack.push(pendingFor ? "head" : "(");pendingFor = false;}
+        else if (token === ts.SyntaxKind.OpenParenToken) {
+            if (pendingFor) {
+                const head = ts.createScanner(ts.ScriptTarget.ESNext, true, ts.LanguageVariant.Standard, text, undefined, scanner.getTextPos());
+                head.scan();
+                if (head.getTokenValue() === "let" && (head.getToken() === ts.SyntaxKind.LetKeyword || head.getToken() === ts.SyntaxKind.Identifier)) {
+                    const letStart = head.getTokenPos(), escaped = head.hasUnicodeEscape(), next = head.scan();
+                    const binding = next === ts.SyntaxKind.OpenBracketToken || next === ts.SyntaxKind.OpenBraceToken || next === ts.SyntaxKind.Identifier ||
+                        next >= ts.SyntaxKind.FirstKeyword && next <= ts.SyntaxKind.LastKeyword && !(next >= ts.SyntaxKind.FirstReservedWord && next <= ts.SyntaxKind.LastReservedWord);
+                    if (escaped || !binding) lets.add(letStart);
+                }
+            }
+            stack.push(pendingFor ? "head" : "(");pendingFor = false;
+        }
         else if (token === ts.SyntaxKind.AwaitKeyword && pendingFor) {/* for await ( */}
         else {
             pendingFor = false;
@@ -438,7 +465,7 @@ function ecmaForHeadArrayInTokens(text: string, literals: ReadonlyMap<number, nu
         }
         previous = token;
     }
-    return tokens;
+    return {ins: tokens, lets};
 }
 
 /** PropName of a LiteralPropertyName (sec-object-initializer-static-semantics-propname):

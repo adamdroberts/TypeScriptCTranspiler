@@ -382,6 +382,13 @@ export function earlyControlFlowStaticSemanticsFailure(
         if (ts.isForOfStatement(node) && !node.awaitModifier && ts.isIdentifier(node.initializer) &&
             node.initializer.getText(sourceFile) === "async")
             return { node: node.initializer, message: "for-of head cannot start with the async token" };
+        // `for ( [lookahead ∉ { let, async of }] LeftHandSideExpression of ...` and
+        // `for await ( [lookahead ≠ let] ...`: the unescaped token only.
+        if (ts.isForOfStatement(node) && !ts.isVariableDeclarationList(node.initializer)) {
+            const first = ts.createScanner(ts.ScriptTarget.ESNext, true, ts.LanguageVariant.Standard, sourceFile.text, undefined, node.initializer.getStart(sourceFile));
+            first.scan();
+            if (first.getTokenText() === "let") return { node: node.initializer, message: "for-of head cannot start with the let token" };
+        }
         if ((ts.isForInStatement(node) || ts.isForOfStatement(node)) && ts.isVariableDeclarationList(node.initializer)) {
             // Only Annex B's non-strict `for (var BindingIdentifier Initializer in ...)` keeps an initializer.
             const annexB = ts.isForInStatement(node) && !context.strict && (node.initializer.flags & ts.NodeFlags.BlockScoped) === 0;
