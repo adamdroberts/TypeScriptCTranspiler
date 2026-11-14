@@ -5651,11 +5651,40 @@ class SourceValueFlow {
         const and = operator === ts.SyntaxKind.AmpersandAmpersandToken, or = operator === ts.SyntaxKind.BarBarToken;
         switch (atom.tag) {
             case "abrupt": case "pending-source": case "unknown": case "text-operation": return true;
-            case "primitive": { const value = atom.value; return and ? !value : or ? !!value : value === null || value === undefined; }
-            case "non-string": { const kinds = atom.kinds ?? (KIND_PRIMITIVE & ~KIND_STRING); return and ? !!(kinds & KIND_PRIMITIVE) : or ? !!(kinds & ~(KIND_UNDEFINED | KIND_NULL)) : !!(kinds & (KIND_UNDEFINED | KIND_NULL)); }
-            case "unknown-string": return and || or;
-            default: return or;
+            // `a ?? b` is `a` unless `a` is null or undefined.
+            case "primitive": { const value = atom.value; return and ? !value : or ? !!value : value !== null && value !== undefined; }
+            case "non-string": { const kinds = atom.kinds ?? (KIND_PRIMITIVE & ~KIND_STRING); return and ? !!(kinds & KIND_PRIMITIVE) : !!(kinds & ~(KIND_UNDEFINED | KIND_NULL)); }
+            case "unknown-string": return true;
+            // Objects and callables are truthy and never nullish.
+            default: return !and;
         }
+    }
+    /** The values of a selected left operand. An abstract primitive passes
+     * && only as one of its falsy values, and every primitive kind has
+     * finitely many of those (+0, -0, NaN, 0n, "", false, null, undefined),
+     * so the selection is exact. A text operation (a comparison, arithmetic,
+     * a template) selects its own falsy values once they are complete; it
+     * waits while they are pending, as a guard does, and stays whole when
+     * they are unbounded. || and ?? keep the whole value. */
+    private logicalLeftSelection(atom: Atom, operator: ts.SyntaxKind, rule: Rule): readonly Atom[] {
+        const and = operator === ts.SyntaxKind.AmpersandAmpersandToken;
+        if (!and) return [atom];
+        if (atom.tag === "text-operation") {
+            const state = this.primitiveState(this.atomCell(atom), rule);
+            if (state.pending && !state.pendingSource) return [];
+            if (!state.proof.primitiveComplete) return [atom];
+            return state.proof.values.filter(value => !value).map(value => this.primitive(value));
+        }
+        const kinds = atom.tag === "non-string" ? atom.kinds ?? (KIND_PRIMITIVE & ~KIND_STRING) : atom.tag === "unknown-string" ? KIND_STRING : null;
+        if (kinds === null) return [atom];
+        const values: Primitive[] = [];
+        if (kinds & KIND_UNDEFINED) values.push(undefined);
+        if (kinds & KIND_NULL) values.push(null);
+        if (kinds & KIND_BOOLEAN) values.push(false);
+        if (kinds & KIND_NUMBER) values.push(0, -0, NaN);
+        if (kinds & KIND_BIGINT) values.push(0n);
+        if (kinds & KIND_STRING) values.push("");
+        return values.map(value => this.primitive(value));
     }
     /** %Error% itself: the [[Prototype]] of every NativeError constructor is
      * the intrinsic object (sec-properties-of-the-nativeerror-constructors),
@@ -8281,11 +8310,12 @@ class SourceValueFlow {
                 this.copy(this.cell(node.left), result); this.copy(this.cell(node.right), result);
             } else if ([ts.SyntaxKind.BarBarToken, ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.QuestionQuestionToken].includes(node.operatorToken.kind)) {
                 // The left operand is the result only when its value selects
-                // it: falsy for &&, truthy for ||, nullish for ??. Objects
+                // it: falsy for &&, truthy for ||, not nullish for ??. Objects
                 // and callables are always truthy, so they never pass &&.
                 const left = this.cell(node.left), operator = node.operatorToken.kind;
                 this.copy(this.cell(node.right), result);
-                this.rule([left], () => { for (const atom of left.values) if (this.logicalLeftSelects(atom, operator)) this.publish(result, atom); });
+                let rule!: Rule;
+                rule = this.rule([left], () => { for (const atom of left.values) if (this.logicalLeftSelects(atom, operator)) for (const selected of this.logicalLeftSelection(atom, operator, rule)) this.publish(result, selected); });
             }
         } else if (ts.isTemplateExpression(node)) {
             const parts: Cell[] = [];
