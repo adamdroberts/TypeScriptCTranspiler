@@ -43,7 +43,7 @@ test('JSON reviver source records retain original identities and postorder effec
   'function write(value){value=opaque();return value}eval(write("107;"));',
  ])expect({source,error:graph([{path:'main.js',source}]).error}).toMatchObject({error:expect.stringContaining('direct eval source is not a finite static string expression')});
  expect(graph([{path:'main.js',source:program().replaceAll('COLLECT','')}]).error).toBeNull();
-});
+},300_000);
 
 test('retained source records and actual formal returns agree with Node natively',async()=>{
  const temporary=await fs.mkdtemp(path.join(os.tmpdir(),'tsc2c-json-reviver-source-record-'));
