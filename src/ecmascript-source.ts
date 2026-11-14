@@ -411,8 +411,49 @@ export function createEcmaSourceFile(
         parsed.parseDiagnostics = parsed.parseDiagnostics.filter(diagnostic => !legacyLiteralCodes.has(diagnostic.code) ||
             diagnostic.start === undefined || !sloppy.some(([start, end]) => diagnostic.start! >= start && diagnostic.start! < end));
     }
+    ecmaRepairTopLevelAwaitReparse(parsed);
     (sourceFile as ts.SourceFile & { ecmaParseGoal: EcmaParseGoal }).ecmaParseGoal = goal;
     return sourceFile;
+}
+
+/** TypeScript parses a module's top-level `await` as an identifier first and
+ * then reparses each statement that contains one in the await context
+ * (reparseTopLevelAwait). After the last reparsed statement it appends the
+ * first parse's remaining statements from an index chosen before that
+ * statement grew, so statements of the discarded parse that lie inside it
+ * (`var b = await { function() {} };` leaves `() {}` and `;`) follow it with
+ * their diagnostics. Top-level statements of one parse never overlap, so a
+ * statement starting before its predecessor ends is such a remnant and is
+ * dropped. A diagnostic between the first remnant and the end of the reparsed
+ * statement covering it is the discarded parse's own unless that statement
+ * holds an error node, in which case every diagnostic there stays (fail
+ * closed). */
+function ecmaRepairTopLevelAwaitReparse(sourceFile: ts.SourceFile & { parseDiagnostics?: readonly ts.DiagnosticWithLocation[] }): void {
+    const kept: ts.Statement[] = [], dropped: Array<{pos: number; end: number; owner: ts.Statement}> = [];
+    for (const statement of sourceFile.statements) {
+        const previous = kept[kept.length - 1];
+        if (previous && statement.pos < previous.end) {
+            // One range per owner: from its first remnant to its end, which
+            // also covers the tokens the discarded parse skipped between remnants.
+            if (dropped[dropped.length - 1]?.owner !== previous) dropped.push({pos: statement.pos, end: previous.end, owner: previous});
+        }
+        else kept.push(statement);
+    }
+    if (!dropped.length) return;
+    const hasErrorNode = (root: ts.Node): boolean => {
+        const pending: ts.Node[] = [root];
+        while (pending.length) {
+            const node = pending.pop()!;
+            if (node.flags & ts.NodeFlags.ThisNodeHasError) return true;
+            node.forEachChild(child => { pending.push(child); });
+        }
+        return false;
+    };
+    const statements = ts.factory.createNodeArray(kept, sourceFile.statements.hasTrailingComma);
+    ts.setTextRange(statements, sourceFile.statements);
+    (sourceFile as { statements: ts.NodeArray<ts.Statement> }).statements = statements;
+    if (sourceFile.parseDiagnostics) sourceFile.parseDiagnostics = sourceFile.parseDiagnostics.filter(diagnostic =>
+        !dropped.some(({pos, end, owner}) => diagnostic.start >= pos && diagnostic.start < end && !hasErrorNode(owner)));
 }
 
 /** The `in` operator tokens of a for-statement head that lie inside array
