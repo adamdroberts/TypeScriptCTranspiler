@@ -18737,7 +18737,7 @@ class Emitter {
         if (name === "default" && info && this.isJavaScriptSourceFile(info.sf)) {
             const defaultExport = info.sf.statements.find(ts.isExportAssignment);
             if (defaultExport) return defaultExport;
-            if (!this.hasCommonJsEsModuleMarker(info.sf)) {
+            if (this.moduleObjectIsDefault(info.sf)) {
                 return info.sf;
             }
         }
@@ -40618,6 +40618,15 @@ class Emitter {
     }
 
 
+    /** The whole-module `default` of CommonJS interop (a module whose
+     * exports object has no __esModule marker) applies to CommonJS sources
+     * only. In an ECMAScript module, `default` is an ExportEntry like any
+     * other name (`export { v as default }` included), resolved through the
+     * module record. */
+    private moduleObjectIsDefault(sf: ts.SourceFile): boolean {
+        return sourceUnitFormat(sf) !== "ecmascript" && !this.hasCommonJsEsModuleMarker(sf);
+    }
+
     private hasCommonJsEsModuleMarker(sf: ts.SourceFile): boolean {
         for (const stmt of this.commonJsExportCandidateStatements(sf)) {
             if (this.commonJsEsModuleMarker(stmt)) return true;
@@ -40713,7 +40722,7 @@ class Emitter {
             return this.isJavaScriptSourceFile(sf) ? null : esmDefault;
         }
         if (this.isCommonJsSourceFile(sf) && !this.hasCommonJsEsModuleMarker(sf)) return sf;
-        if (!this.hasCommonJsEsModuleMarker(sf)) {
+        if (this.moduleObjectIsDefault(sf)) {
             const defaultMember = this.commonJsExportedMemberDeclaration(sf, "default");
             if (defaultMember && !this.isDirectCommonJsDefaultExportAccess(defaultMember)) {
                 return defaultMember;
@@ -40781,7 +40790,7 @@ class Emitter {
         if (decl) return { name: exportName, decl, specifier: specifier.text };
         const starDecl = this.commonJsExportStarMemberDeclaration(sf, exportName);
         if (starDecl) return { name: exportName, decl: starDecl, specifier: specifier.text };
-        if (exportName === "default" && !this.hasCommonJsEsModuleMarker(sf)) {
+        if (exportName === "default" && this.moduleObjectIsDefault(sf)) {
             return { name: "default", decl: sf, specifier: specifier.text };
         }
         if (this.commonJsModuleExportsValueDeclaration(sf)) {
