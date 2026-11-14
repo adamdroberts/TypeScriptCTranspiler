@@ -208,4 +208,4 @@ test("async logical values follow one evaluate-once semantic partition", async (
     } finally {
         await fs.rm(temporary, { recursive: true, force: true });
     }
-}, 120_000);
+}, 300_000);

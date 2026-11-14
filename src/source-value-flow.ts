@@ -9173,11 +9173,18 @@ class SourceValueFlow {
                             }
                         }
                         this.recordInvocation(atom.owner,node,actualFormals);
-                        if (atom.owner.kind.includes("generator")) this.copy(this.generatorInstance(atom.owner,actualFormals,node),result);
+                        // Unknown code and natives call an escaped callable with
+                        // the values they hold, never a call-specific List, so
+                        // projecting its return per escape point refines nothing;
+                        // the shared return (the union over every activation)
+                        // is that result. Each escape point's actual cell would
+                        // otherwise key a projection of every reachable function.
+                        const projectionFormals:ReadonlyMap<Cell,Cell>=this.escapedInvocationOrigins.has(node)?new Map():actualFormals;
+                        if (atom.owner.kind.includes("generator")) this.copy(this.generatorInstance(atom.owner,projectionFormals,node),result);
                         else if (atom.owner.kind === "async") {
                             // Async return resolution runs in the callee activation, which
                             // can resume after the caller's initial source phase.
-                            const returned=this.projectReturn(atom.owner.returns,actualFormals);
+                            const returned=this.projectReturn(atom.owner.returns,projectionFormals);
                             let resolved:SourcePromiseDestination;
                             if(this.escapeContext(node)!==node){
                                 let shared=this.opaqueAsyncResolutions.get(atom.owner);
@@ -9196,7 +9203,7 @@ class SourceValueFlow {
                             // opaque value. Capture with the same ordering
                             // proof used for location reads; dynamic callers
                             // keep the complete conservative union.
-                            } else this.copyRead(this.projectReturn(atom.owner.returns,actualFormals), result!,node);
+                            } else this.copyRead(this.projectReturn(atom.owner.returns,projectionFormals), result!,node);
                             const handler = this.exceptionHandlers.get(node);
                             if (handler) this.copy(atom.owner.throws, handler);
                         }
