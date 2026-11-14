@@ -134,6 +134,10 @@ export function earlyControlFlowStaticSemanticsFailure(
     while (worklist.length > 0) {
         const entry = worklist.pop()!;
         const node = entry.node;
+        // A TypeScript ambient declaration (`declare const x: T;`) is erased
+        // before evaluation: it is not an ECMAScript production, so no early
+        // error applies to it or to anything it contains.
+        if (ts.canHaveModifiers(node) && ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.DeclareKeyword)) continue;
         const body = ts.isFunctionLike(node) ? (node as ts.SignatureDeclaration & {body?:ts.ConciseBody}).body : undefined;
         const strict = entry.context.strict || ts.isClassLike(node) || !!body && ts.isBlock(body) && ecmaDirectivePrologueHasUseStrict(body.statements, sourceFile);
         const context = strict === entry.context.strict ? entry.context : {...entry.context, strict};
