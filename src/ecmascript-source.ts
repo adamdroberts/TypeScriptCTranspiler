@@ -252,6 +252,18 @@ export function createEcmaSourceFile(
         shadow = characters.join("");
         sourceFile = ts.createSourceFile(filename,shadow,parserOptions,setParentNodes,scriptKind);
     }
+    // ArrayLiteral elements are AssignmentExpression[+In]
+    // (sec-array-initializer), but TypeScript keeps the [~In] of a for-statement
+    // head inside an array literal there, so `for ([x = 'x' in {}] of xs)`
+    // fails to parse. Each such `in` is shadowed by `<=`, an operator of the
+    // same length, precedence and associativity, and restored after parsing.
+    const arrayHeadIns = ecmaForHeadArrayInTokens(shadow, literals);
+    if (arrayHeadIns.size) {
+        const characters = shadow.split("");
+        for (const start of arrayHeadIns) characters.splice(start, 2, "<", "=");
+        shadow = characters.join("");
+        sourceFile = ts.createSourceFile(filename,shadow,parserOptions,setParentNodes,scriptKind);
+    }
     goal ??= ts.isExternalModule(sourceFile) || importMetaTokens.size > 0 || /\.m[jt]s$/iu.test(filename) ? "module" : "script";
     if (goal === "script" && scriptKind === ts.ScriptKind.JS && !htmlComments) applyHtmlComments();
     // Contextual identifier tokens share one offset-preserving parser shadow.
@@ -353,6 +365,9 @@ export function createEcmaSourceFile(
     const metaWorklist: ts.Node[] = [sourceFile];
     while (metaWorklist.length) {
         const node = metaWorklist.pop()!;
+        if (arrayHeadIns.size && ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.LessThanEqualsToken &&
+            arrayHeadIns.has(node.operatorToken.getStart(sourceFile)))
+            (node.operatorToken as {kind: ts.SyntaxKind}).kind = ts.SyntaxKind.InKeyword;
         if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) && importMetaTokens.has(node.expression.getStart(sourceFile))) {
             const restored = node as unknown as ts.MetaProperty;
             Object.assign(restored,{kind:ts.SyntaxKind.MetaProperty,keywordToken:ts.SyntaxKind.ImportKeyword});
@@ -391,6 +406,39 @@ export function createEcmaSourceFile(
     }
     (sourceFile as ts.SourceFile & { ecmaParseGoal: EcmaParseGoal }).ecmaParseGoal = goal;
     return sourceFile;
+}
+
+/** The `in` operator tokens of a for-statement head that lie inside array
+ * literals only (every bracket between the head and the token is `[`): the
+ * positions TypeScript parses with [~In]. A parenthesis, brace or function
+ * body in between restores [+In] in its parser too. A keyword after `.` or
+ * `?.` is a property name. */
+function ecmaForHeadArrayInTokens(text: string, literals: ReadonlyMap<number, number>): Set<number> {
+    const tokens = new Set<number>(), scanner = ts.createScanner(ts.ScriptTarget.ESNext, true, ts.LanguageVariant.Standard, text);
+    // "head" opens a for-statement head; brackets record their kind.
+    const stack: Array<"head" | "[" | "(" | "{"> = [];
+    let previous = ts.SyntaxKind.Unknown, pendingFor = false;
+    for (;;) {
+        const token = scanner.scan(); if (token === ts.SyntaxKind.EndOfFileToken) break;
+        const start = scanner.getTokenPos(), literalEnd = literals.get(start);
+        if (literalEnd !== undefined && literalEnd > start) {scanner.setTextPos(literalEnd);previous = ts.SyntaxKind.StringLiteral;pendingFor = false;continue;}
+        if (token === ts.SyntaxKind.ForKeyword && previous !== ts.SyntaxKind.DotToken && previous !== ts.SyntaxKind.QuestionDotToken) pendingFor = true;
+        else if (token === ts.SyntaxKind.OpenParenToken) {stack.push(pendingFor ? "head" : "(");pendingFor = false;}
+        else if (token === ts.SyntaxKind.AwaitKeyword && pendingFor) {/* for await ( */}
+        else {
+            pendingFor = false;
+            if (token === ts.SyntaxKind.OpenBracketToken) stack.push("[");
+            else if (token === ts.SyntaxKind.OpenBraceToken || token === ts.SyntaxKind.TemplateHead) stack.push("{");
+            else if (token === ts.SyntaxKind.CloseBracketToken || token === ts.SyntaxKind.CloseParenToken || token === ts.SyntaxKind.CloseBraceToken) stack.pop();
+            else if (token === ts.SyntaxKind.InKeyword && previous !== ts.SyntaxKind.DotToken && previous !== ts.SyntaxKind.QuestionDotToken) {
+                let index = stack.length - 1;
+                while (index >= 0 && stack[index] === "[") index--;
+                if (index >= 0 && index < stack.length - 1 && stack[index] === "head") tokens.add(start);
+            }
+        }
+        previous = token;
+    }
+    return tokens;
 }
 
 /** PropName of a LiteralPropertyName (sec-object-initializer-static-semantics-propname):

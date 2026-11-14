@@ -33,7 +33,7 @@ static void check_deferred_owner(void) {
     GC_gcollect();
 #endif
     tsc_value_t fn = tsc_callable_owner_get(owner, deferred_body, owner, 0,
-        tsc_str_from_cstr("deferred"), true, tsc_str_from_cstr("function deferred(){}"));
+        tsc_str_from_cstr("deferred"), true, false, tsc_str_from_cstr("function deferred(){}"));
     tsc_function_identity_t* identity = value_ptr(fn);
     if (identity->parse_unit != owner->parse_unit || identity->realm != owner->realm)
         tsc_panic("boxing captured the caller rather than the source owner");
