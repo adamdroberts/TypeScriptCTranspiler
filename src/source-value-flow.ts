@@ -726,6 +726,9 @@ class SourceValueFlow {
     /** One actual List per Script for the values unknown code passes from
      * its top-level escape points (see escapeCallableArgument). */
     private readonly topLevelEscapeActuals=new Map<ts.SourceFile,Cell>();
+    /** One global-reach escape graph per Script for its top-level escape
+     * points (see escapeGlobalReach), with the handlers it already feeds. */
+    private readonly topLevelGlobalEscapes=new Map<ts.SourceFile,{visit:(input:Cell,as?:EscapeReachKind)=>void;active:Cell;thrown:Cell;sources:Set<Cell>;handlers:Set<Cell>}>();
     private readonly escapeReaches=new Map<string,{cells:Map<Cell,EscapeReach>;atoms:Map<Atom,EscapeReach>}>();
     private readonly escapedInvocationOrigins=new WeakMap<ts.Node,ts.Node>();
     /** Opaque code invokes an async callee with unknown actuals, so all such
@@ -1828,49 +1831,90 @@ class SourceValueFlow {
         if(effect.remove){const removed=this.newCell();this.publish(removed,this.primitive(undefined));this.writeProperty(ordinary,null,removed,false,"delete",context,ordinary,indices);}
         if(effect.length){const length=this.newCell();this.publish(length,this.numberValue());this.writeProperty(ordinary,"length",length,false,"set",context);}
     }
+    /** The callables reached from an escape point, invoked by one synthetic
+     * invocation with the values unknown code may pass (a call and a
+     * construction). The invocation's activation, ordering and exception
+     * context are the caller's. */
+    private escapeGraph(context:ts.Node,invocation:ts.Node,sourceCallbacksOnly:boolean):{visit:(input:Cell,as?:EscapeReachKind)=>void;thrown:Cell} {
+        const target=this.newCell(),returned=this.newCell(),seen=new Set<string>();let actuals=this.newCell();
+        // A native calls an escaped callable with values reachable from its
+        // own receiver and arguments (already escaping here) or created by
+        // itself: native values. Unknown code may pass anything.
+        // At a Script's top level the escape is one execution point: values
+        // the unknown code passes carry its origin, so reads that precede
+        // the escape do not see them. Inside an activation the origins are
+        // every caller's, which would multiply along call chains; those
+        // actuals stay the shared unknown value.
+        // Every top-level escape point of a Script reaches the same
+        // callables (those the global object and global lexicals reach),
+        // so each callable already receives the union of their origins.
+        // One List per Script carries that union: each value keeps its own
+        // origin for the timing filters, and an escaped function's
+        // receiver (and its sloppy-mode this boxing) is one cell rather
+        // than one per escape point and function.
+        if(!sourceCallbacksOnly)this.publish(actuals,this.nativeUnknown);
+        else if(!this.enclosingActivation(context)&&!this.sourceOrigins.has(this.sourceFile(context)))actuals=this.topLevelActuals(context);
+        else this.publish(actuals,this.unknown);
+        // Iterator elements are read through this escaping call's context.
+        const sink=this.newEscapeReach({callable:atom=>this.publish(target,atom),iterator:cell=>visit(this.directIteratorElements(cell,context))});
+        const visit=(input:Cell,as:EscapeReachKind="direct"):void=>{const key=input.id+":"+as;if(seen.has(key))return;seen.add(key);this.linkEscapeReach(this.escapeCellReach(input,sourceCallbacksOnly,as),sink);};
+        this.escapedInvocationOrigins.set(invocation,context);
+        const thrown=this.exceptionCell(),constructed=this.newCell();
+        this.exceptionHandlers.set(invocation,thrown);
+        this.publish(constructed,{tag:"object",owner:this.owner(invocation)});
+        visit(returned);visit(thrown);
+        const parts:readonly ListPart[]=[{cell:actuals,spread:true,abstractList:true}];
+        this.invoke(invocation,target,actuals,parts,returned);
+        this.invoke(invocation,target,constructed,parts,returned,true);
+        return {visit,thrown};
+    }
+    /** The Script's shared actual List; each top-level escape point adds its
+     * own execution origins. */
+    private topLevelActuals(context:ts.Node):Cell {
+        const file=this.sourceFile(context);let shared=this.topLevelEscapeActuals.get(file);
+        if(!shared){shared=this.newCell();this.topLevelEscapeActuals.set(file,shared);}
+        this.copy(this.executionOrigins(context),shared);return shared;
+    }
+    /** Unknown code may call anything the global object and the global
+     * lexicals reach. Every top-level escape point of a Script reaches the
+     * same cells, flow-insensitively, so those points share one graph: its
+     * invocation runs in a synthetic activation of the Script whose active
+     * origins are every point's. Reads there and in the callables it invokes
+     * are ordered by those origins (as in any activation), never by the
+     * position of the point that created the graph, and it runs once any
+     * point does. A point inside an activation keeps its own graph. */
+    private escapeGlobalReach(context:ts.Node,origins?:Cell):void {
+        this.publish(this.globalReceiver,this.global);
+        const point=this.escapeContext(context),file=this.sourceFile(point);
+        if(this.enclosingActivation(point)||this.sourceOrigins.has(file)){
+            this.escapeCallableArgument(this.globalReceiver,context,true,"direct",origins);
+            for(const binding of this.globalLexicals.values())this.escapeCallableArgument(binding.value,context,true,"direct",origins);
+            return;
+        }
+        let graph=this.topLevelGlobalEscapes.get(file);
+        if(!graph){
+            const invocation=ts.factory.createEmptyStatement(),body=ts.factory.createBlock([invocation]);
+            const activation=ts.factory.createFunctionExpression(undefined,undefined,undefined,undefined,[],undefined,body);
+            for(const node of [invocation,body,activation])ts.setTextRange(node,{pos:file.getEnd(),end:file.getEnd()});
+            (invocation as ts.Node&{parent:ts.Node}).parent=body;(body as ts.Node&{parent:ts.Node}).parent=activation;(activation as ts.Node&{parent:ts.Node}).parent=file;
+            const active=this.function(activation).active,created=this.escapeGraph(point,invocation,true);
+            graph={visit:created.visit,active,thrown:created.thrown,sources:new Set(),handlers:new Set()};this.topLevelGlobalEscapes.set(file,graph);
+        }
+        const from=origins??this.executionOrigins(context);
+        if(from!==graph.active&&!graph.sources.has(from)){graph.sources.add(from);this.copy(from,graph.active);this.topLevelActuals(context);}
+        const handler=this.exceptionHandlers.get(point);if(handler&&!graph.handlers.has(handler)){graph.handlers.add(handler);this.copy(graph.thrown,handler);}
+        graph.visit(this.globalReceiver);
+        for(const binding of this.globalLexicals.values())graph.visit(binding.value);
+    }
     private escapeCallableArgument(argument:Cell,context:ts.Node,sourceCallbacksOnly=false,kind:EscapeReachKind="direct",origins?:Cell):void {
         context=this.escapeContext(context);
         let modes=this.escapedCallableCalls.get(context);if(!modes){modes=new Map();this.escapedCallableCalls.set(context,modes);}
         let graph=modes.get(sourceCallbacksOnly);
         if(!graph){
-            const target=this.newCell(),returned=this.newCell(),seen=new Set<string>();let actuals=this.newCell();
-            // A native calls an escaped callable with values reachable from its
-            // own receiver and arguments (already escaping here) or created by
-            // itself: native values. Unknown code may pass anything.
-            // At a Script's top level the escape is one execution point: values
-            // the unknown code passes carry its origin, so reads that precede
-            // the escape do not see them. Inside an activation the origins are
-            // every caller's, which would multiply along call chains; those
-            // actuals stay the shared unknown value.
-            // Every top-level escape point of a Script reaches the same
-            // callables (those the global object and global lexicals reach),
-            // so each callable already receives the union of their origins.
-            // One List per Script carries that union: each value keeps its own
-            // origin for the timing filters, and an escaped function's
-            // receiver (and its sloppy-mode this boxing) is one cell rather
-            // than one per escape point and function.
-            if(!sourceCallbacksOnly)this.publish(actuals,this.nativeUnknown);
-            else if(!this.enclosingActivation(context)&&!this.sourceOrigins.has(this.sourceFile(context))){
-                const file=this.sourceFile(context);let shared=this.topLevelEscapeActuals.get(file);
-                if(!shared){shared=this.newCell();this.topLevelEscapeActuals.set(file,shared);}
-                this.copy(this.executionOrigins(context),shared);actuals=shared;
-            }
-            else this.publish(actuals,this.unknown);
-            // Iterator elements are read through this escaping call's context.
-            const sink=this.newEscapeReach({callable:atom=>this.publish(target,atom),iterator:cell=>visit(this.directIteratorElements(cell,context))});
-            const visit=(input:Cell,as:EscapeReachKind="direct"):void=>{const key=input.id+":"+as;if(seen.has(key))return;seen.add(key);this.linkEscapeReach(this.escapeCellReach(input,sourceCallbacksOnly,as),sink);};
-            const invocation=this.invocationContext(context);
-            graph={visit,sources:new Set(),invocation};modes.set(sourceCallbacksOnly,graph);
+            const invocation=this.invocationContext(context),created=this.escapeGraph(context,invocation,sourceCallbacksOnly);
+            graph={visit:created.visit,sources:new Set(),invocation};modes.set(sourceCallbacksOnly,graph);
             if(origins){graph.origins=this.newCell();this.escapeInvocationOrigins.set(invocation,graph.origins);}
-            this.escapedInvocationOrigins.set(invocation,context);
-            const thrown=this.exceptionCell(),constructed=this.newCell();
-            this.exceptionHandlers.set(invocation,thrown);
-            const handler=this.exceptionHandlers.get(context);if(handler)this.copy(thrown,handler);
-            this.publish(constructed,{tag:"object",owner:this.owner(invocation)});
-            visit(returned);visit(thrown);
-            const parts:readonly ListPart[]=[{cell:actuals,spread:true,abstractList:true}];
-            this.invoke(invocation,target,actuals,parts,returned);
-            this.invoke(invocation,target,constructed,parts,returned,true);
+            const handler=this.exceptionHandlers.get(context);if(handler)this.copy(created.thrown,handler);
         }
         // A graph made without conditioned origins already has its
         // invocation's execution origins, which include any conditioned ones.
@@ -8528,9 +8572,7 @@ class SourceValueFlow {
                             // Unknown code may call anything the global object reaches; a
                             // native (directCallees) reaches only its receiver and arguments.
                             if(!directCallees&&(atom.tag==="unknown"||atom.tag==="opaque-object"||proxy)){
-                                this.publish(this.globalReceiver,this.global);
-                                this.escapeCallableArgument(this.globalReceiver,node,true,"direct",conditioned);
-                                for(const binding of this.globalLexicals.values())this.escapeCallableArgument(binding.value,node,true,"direct",conditioned);
+                                this.escapeGlobalReach(node,conditioned);
                             }
                             const argumentsEscaping = invocation.args ?? (invocation.sequence ? [this.allArgumentValues(invocation.sequence)] : []);
                             if(arrayEffect)this.nativeArrayReceiverWrites(invocation.receiver,arrayEffect,argumentsEscaping,node);
