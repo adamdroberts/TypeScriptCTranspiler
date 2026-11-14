@@ -1375,8 +1375,19 @@ class SourceValueFlow {
     private guards(node: ts.Node): readonly {condition: Cell; truthy: boolean}[] {
         const previous = this.executionGuards.get(node); if (previous) return previous;
         const guards: {condition: Cell; truthy: boolean}[] = [];
+        // An inner link of an optional chain, and every key, name and
+        // argument of a link, is evaluated only when the base of each `?.`
+        // link at or below it is neither null nor undefined. The outermost
+        // expression of the chain always completes (undefined when a link
+        // short-circuits).
+        const chain=(link:ts.Node):void=>{
+            for(let current:ts.Node=link;ts.isOptionalChain(current);current=current.expression)
+                if(!ts.isNonNullChain(current)&&current.questionDotToken)guards.push({condition:this.notNullish(this.cell(current.expression)),truthy:true});
+        };
+        if(this.innerOptionalLink(node))chain(node);
         for (let child = node, parent = node.parent; parent; child = parent, parent = parent.parent) {
             if (functionNode(parent) && (child === parent.body || ts.isParameter(child))) break;
+            if (ts.isOptionalChain(parent) && child !== parent.expression) chain(parent);
             if (ts.isPropertyDeclaration(parent) && child === parent.initializer && !(ts.getModifiers(parent) ?? []).some(modifier => modifier.kind === ts.SyntaxKind.StaticKeyword)) break;
             // `#x in o` evaluates only its right operand: a private name is
             // not an expression and never completes.
@@ -4088,11 +4099,60 @@ class SourceValueFlow {
             ts.forEachChild(node,child=>{pending.push(child);});
         }
     }
+    /** An OptionalChain is undefined when the base of any of its `?.` links
+     * is null or undefined; the rest of the chain is not evaluated
+     * (sec-optional-chains). The outermost expression of the chain owns
+     * that result, never an inner link, as it owns the completion of a base
+     * that throws. */
+    private optionalChainShortCircuit(outer:ts.Expression,result:Cell):void {
+        for(let link:ts.Expression=outer;ts.isOptionalChain(link);link=link.expression){
+            if(ts.isNonNullChain(link)||!link.questionDotToken)continue;
+            // A base that throws ends the chain with its completion.
+            const base=this.cell(link.expression);
+            this.rule([base],()=>{
+                for(const atom of base.values){
+                    if(this.mayBeNullish(atom))this.publish(result,this.primitive(undefined));
+                    else if(atom.tag==="abrupt")this.publish(result,atom);
+                }
+            });
+        }
+    }
+    private innerOptionalLink(node:ts.Node):boolean {
+        return ts.isOptionalChain(node)&&!!node.parent&&ts.isOptionalChain(node.parent)&&(node.parent as ts.PropertyAccessExpression|ts.ElementAccessExpression|ts.CallExpression).expression===node;
+    }
+    private mayBeNullish(atom:Atom):boolean {
+        if(atom.tag==="primitive")return atom.value===null||atom.value===undefined;
+        if(atom.tag==="non-string")return !!((atom.kinds??(KIND_PRIMITIVE&~KIND_STRING))&(KIND_UNDEFINED|KIND_NULL));
+        return atom.tag==="unknown"||atom.tag==="pending-source";
+    }
+    /** The values of a `?.` link's base that the link evaluates on. */
+    private nonNullish(input:Cell):Cell {
+        let output=this.nonNullishCells.get(input);if(output)return output;
+        const result=this.newCell();this.nonNullishCells.set(input,result);
+        this.rule([input],()=>{for(const atom of input.values)if(!(atom.tag==="primitive"&&(atom.value===null||atom.value===undefined)))this.publish(result,atom);});
+        return result;
+    }
+    private readonly nonNullishCells=new Map<Cell,Cell>();
+    /** Whether a `?.` link's base is neither null nor undefined: false for
+     * a nullish or abrupt base (the link is not evaluated), true for any
+     * other value, both for a value that may be either. */
+    private notNullish(input:Cell):Cell {
+        let output=this.notNullishCells.get(input);if(output)return output;
+        const result=this.newCell();this.notNullishCells.set(input,result);
+        this.rule([input],()=>{for(const atom of input.values){
+            const nullish=this.mayBeNullish(atom)||atom.tag==="abrupt",present=atom.tag!=="abrupt"&&!(atom.tag==="primitive"&&(atom.value===null||atom.value===undefined))&&
+                !(atom.tag==="non-string"&&!((atom.kinds??(KIND_PRIMITIVE&~KIND_STRING))&~(KIND_UNDEFINED|KIND_NULL)));
+            if(nullish)this.publish(result,this.primitive(false));
+            if(present)this.publish(result,this.primitive(true));
+        }});
+        return result;
+    }
+    private readonly notNullishCells=new Map<Cell,Cell>();
     private sourceReference(target:SourceReferenceExpression):SourceReference {
         let reference=this.sourceReferences.get(target);
         if(!reference){reference={target,operation:target,completion:target,read:true};this.sourceReferences.set(target,reference);}
         if(!reference.base){
-            reference.base=this.cell(target.expression);
+            reference.base=ts.isOptionalChain(target)&&target.questionDotToken?this.nonNullish(this.cell(target.expression)):this.cell(target.expression);
             reference.readContext=this.evaluationOrder.referenceCompletion(target,target);
             reference.writeContext=this.evaluationOrder.referenceCompletion(target,reference.completion);
             const handler=this.exceptionHandlers.get(reference.operation)??this.exceptionHandlers.get(target);
@@ -8037,6 +8097,7 @@ class SourceValueFlow {
     }
     private initialize(node: ts.Node, result: Cell): void {
         const guards=this.guards(node);
+        if(ts.isOptionalChain(node)&&!this.innerOptionalLink(node))this.optionalChainShortCircuit(node,result);
         if(ts.isCallExpression(node)){
             // Only a literal eval call looks up its activation: resolving it
             // creates the enclosing function's owner, which every other call
@@ -8350,10 +8411,11 @@ class SourceValueFlow {
             const constructedReceiver = this.newCell();
             this.publish(constructedReceiver,{tag:"object",owner:this.owner(node)});
             const receiver = superOwner ? superOwner.receiver : ts.isNewExpression(node) ? constructedReceiver : ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target)
-                ? target.expression.kind===ts.SyntaxKind.SuperKeyword ? this.thisBinding(target.expression) : this.cell(target.expression) : objects.length ? this.newCell() : this.empty;
+                ? target.expression.kind===ts.SyntaxKind.SuperKeyword ? this.thisBinding(target.expression) : ts.isOptionalChain(target)&&target.questionDotToken ? this.nonNullish(this.cell(target.expression)) : this.cell(target.expression) : objects.length ? this.newCell() : this.empty;
             for (const object of objects) this.copy(object, receiver);
             const parts = (node.arguments ?? []).map(argument => ({ cell: this.cell(ts.isSpreadElement(argument) ? argument.expression : argument), spread: ts.isSpreadElement(argument) }));
-            this.invoke(node,superOwner?.base ?? this.cell(target),receiver,parts,result,ts.isNewExpression(node) || !!superOwner,
+            const callee = ts.isCallExpression(node) && node.questionDotToken ? this.nonNullish(this.cell(target)) : this.cell(target);
+            this.invoke(node,superOwner?.base ?? callee,receiver,parts,result,ts.isNewExpression(node) || !!superOwner,
                 ts.isCallExpression(node) && !node.questionDotToken && ts.isIdentifier(target) && target.text === "eval");
         }
     }
@@ -9663,7 +9725,12 @@ class SourceValueFlow {
         if(this.guards(node).some(guard=>{
             const proof=this.primitiveChoiceProof(guard.condition);
             return proof.primitiveComplete&&!proof.values.some(value=>!!value===guard.truthy);
-        })){this.publish(cell,this.abrupt);return true;}
+        })){
+            // An inner optional-chain link that is never evaluated has no
+            // value: the chain short-circuits to undefined around it.
+            if(this.innerOptionalLink(node))return false;
+            this.publish(cell,this.abrupt);return true;
+        }
         if(guardedOnly)return false;
         this.publish(cell,this.normalResults.get(cell)??(ts.isNewExpression(node)?this.opaqueObject:this.unknown));return true;
     }
