@@ -15,14 +15,14 @@ function query(source:string):readonly string[]|null{
  throw new Error('missing import');
 }
 test('canonical iterator reads retain dense, hole, inherited and empty source domains',()=>{
- const plans=[['','["./a.mjs","./b.mjs"]'],['','[,"./a.mjs"]'],['Array.prototype[0]="./inherited.mjs";','[,"./a.mjs"]'],['const values=["./a.mjs"];Object.defineProperty(values,0,{get(){return "./getter.mjs"}});','values'],['','[]'],['const values={[Symbol.iterator](){return {next(){return {done:true,value:"./outside.mjs"}}}}};','values']];
+ const plans=[['','["./a.mjs","./b.mjs"]'],['','[,"./a.mjs"]'],['Array.prototype[0]="./inherited.mjs";','[,"./a.mjs"]'],['const values=["./a.mjs"];Object.defineProperty(values,0,{get(){return "./getter.mjs"}});','values'],['','[]'],['const values={[Symbol.iterator](){return {next(){return {done:true,value:"./outside.mjs"}}}}};','values'],['Array.prototype[Symbol.iterator]=function*(){yield "./outside.mjs"};','["./a.mjs"]']];
  for(const [setup,collection]of plans){
   const source=setup+`async function run(){for(const request of ${collection}){await import(request)}}run();`,proof=query(source);
   const node=nodeReferenceSync(['node','-e',setup+`for(const request of ${collection})require('node:fs').writeSync(1,String(request)+'\\n');`],{stdout:'pipe',stderr:'pipe'});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(proof).not.toBeNull();
   const values=node.stdout.toString().trimEnd();if(values)for(const value of values.split('\n'))expect(proof).toContain(value);else expect(proof).toEqual([]);
  }
- for(const setup of ['opaque();','Array.prototype[Symbol.iterator]=function*(){yield "./outside.mjs"};'])expect(query(setup+'async function run(){for(const request of ["./a.mjs"]){await import(request)}}run();')).toBeNull();
+ expect(query('opaque();async function run(){for(const request of ["./a.mjs"]){await import(request)}}run();')).toBeNull();
  for(const value of ['./literal.mjs','', './escaped\0.mjs','./\u03bb.mjs']){
   const literal=JSON.stringify(value),node=nodeReferenceSync(['node','-e',"require('node:fs').writeSync(1,String(JSON.parse(process.argv[1])))",literal],{stdout:'pipe',stderr:'pipe'});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});expect(query('opaque();import('+literal+');')).toEqual([node.stdout.toString()]);
@@ -44,11 +44,22 @@ test('iterator imports and source graph closure match Node in both native memory
   const coercionNode=nodeReferenceSync(['node',entry],{stdout:'pipe',stderr:'pipe',timeout:120000}),coercionDiagnostics:string[]=[],coercion=await compile({entry,output:output+'-coercion',noGc,diagnosticWriter:x=>coercionDiagnostics.push(x)});
   expect({code:coercion.exitCode,diagnostics:coercionDiagnostics}).toEqual({code:0,diagnostics:[]});const coercionNative=Bun.spawnSync([output+'-coercion'],{stdout:'pipe',stderr:'pipe',timeout:120000});
   expect({code:coercionNode.exitCode,stderr:coercionNode.stderr.toString()}).toEqual({code:0,stderr:''});expect({code:coercionNative.exitCode,stderr:coercionNative.stderr.toString(),stdout:coercionNative.stdout.toString()}).toEqual({code:0,stderr:'',stdout:coercionNode.stdout.toString()});
+  // An imported module replaces the iterator, at evaluation or from a
+  // namespace's then: the proof closes over that module and its yield.
   for(const body of ['Array.prototype[Symbol.iterator]=function*(){yield "./b.mjs"};export const value=17;', 'export function then(resolve){Array.prototype[Symbol.iterator]=function*(){yield "./b.mjs"};resolve({})}']){
    await writeFile(join(directory,'a.mjs'),body);
    await writeFile(entry,'async function run(){for(const request of ["./a.mjs"]){await import(request)}}run().then(run);');
    const reference=nodeReferenceSync(['node',entry],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({code:0,stderr:''});
-   const rejected:string[]=[],unsafe=await compile({entry,output:output+'-unsafe',noGc,diagnosticWriter:x=>rejected.push(x)});expect(unsafe.exitCode).toBe(3);expect(rejected.join('')).toContain('dynamic import needs a finite AOT specifier proof');
+   const diagnostics:string[]=[],closed=await compile({entry,output:output+'-closed',noGc,diagnosticWriter:x=>diagnostics.push(x)});expect({body,code:closed.exitCode,diagnostics}).toEqual({body,code:0,diagnostics:[]});
+   const native=Bun.spawnSync([output+'-closed'],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({body,code:native.exitCode,stderr:native.stderr.toString(),stdout:native.stdout.toString()}).toEqual({body,code:0,stderr:'',stdout:reference.stdout.toString()});
   }
+  // A yield with no finite proof leaves the call without candidates: the
+  // build succeeds and no module outside the proven set is ever loaded.
+  await writeFile(join(directory,'a.mjs'),'Array.prototype[Symbol.iterator]=function*(){yield "./"+Math.random()+".mjs"};export const value=17;');
+  await writeFile(entry,'async function run(){for(const request of ["./a.mjs"]){const known=request==="./a.mjs";try{await import(request);console.log(known,"loaded")}catch(error){console.log(known,error instanceof TypeError)}}}run().then(run);');
+  const unproven:string[]=[],open=await compile({entry,output:output+'-open',noGc,diagnosticWriter:x=>unproven.push(x)});expect({code:open.exitCode,diagnostics:unproven}).toEqual({code:0,diagnostics:[]});
+  const opened=Bun.spawnSync([output+'-open'],{stdout:'pipe',stderr:'pipe',timeout:120000});expect({code:opened.exitCode,stderr:opened.stderr.toString()}).toEqual({code:0,stderr:''});
+  const lines=opened.stdout.toString().trimEnd().split('\n');expect(lines.length).toBe(2);
+  for(const line of lines)expect(['true loaded','true true','false true']).toContain(line);
  }}finally{await rm(root,{recursive:true,force:true})}
 },900000);
