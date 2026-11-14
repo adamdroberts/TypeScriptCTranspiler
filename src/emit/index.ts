@@ -12815,7 +12815,7 @@ class Emitter {
     }
 
     private identifierName(id: ts.Identifier): string {
-        const moduleFunction = this.moduleFunctionBindingForSymbol(this.symbolForIdentifier(id));
+        const moduleFunction = this.moduleFunctionBindingForIdentifier(id);
         if (moduleFunction) return moduleFunction.cName;
         const aliasTarget = this.importAliasTargetDeclaration(id);
         const aliasName = aliasTarget ? this.declarationCName(aliasTarget) : null;
@@ -19670,7 +19670,7 @@ class Emitter {
 
     private identifierDeclaredType(id: ts.Identifier): CType | null {
         const sym = this.symbolForIdentifier(id);
-        if (this.moduleFunctionBindingForSymbol(sym)) return T_VALUE;
+        if (this.moduleFunctionBindingForIdentifier(id)) return T_VALUE;
         const activationCell = this.captureCellForSymbol(sym);
         if (activationCell) return activationCell.type;
         const closureBinding = this.closureEnvBindingForSymbol(sym);
@@ -20369,6 +20369,17 @@ class Emitter {
                 this.globalDynamicRoots.set(symbol,binding.gcRoot);
             }
         }
+    }
+
+    /** The module function cell an identifier reads: its own declaration's,
+     * or, for an import binding, the cell of the exporting module's function
+     * declaration (an ImportBinding is an indirect binding to that cell, so a
+     * write inside the exporting module is observed by the importer). */
+    private moduleFunctionBindingForIdentifier(id: ts.Identifier): ModuleFunctionBindingPlan | undefined {
+        const own = this.moduleFunctionBindingForSymbol(this.symbolForIdentifier(id));
+        if (own) return own;
+        const target = this.importAliasTargetDeclaration(id);
+        return target && ts.isFunctionDeclaration(target) ? this.moduleFunctionDeclarations.get(target) : undefined;
     }
 
     private moduleFunctionBindingForSymbol(symbol: ts.Symbol | undefined): ModuleFunctionBindingPlan | undefined {
@@ -31064,6 +31075,10 @@ class Emitter {
                     unsupported(expr, "unsupported CommonJS default import fallback");
                 }
                 if (ts.isFunctionDeclaration(commonJsDefaultImport)) {
+                    // A source module's function binding is a mutable cell
+                    // the default import reads indirectly.
+                    const cell = this.moduleFunctionDeclarations.get(commonJsDefaultImport);
+                    if (cell) return { c: cell.cName, ty: T_VALUE };
                     const type = this.isJavaScriptSourceFile(commonJsDefaultImport.getSourceFile())
                         ? this.sourceFunctionValueType(commonJsDefaultImport)
                         : this.prepareType(mapType(expr, this.checker));
@@ -31165,6 +31180,8 @@ class Emitter {
                 return { c: this.identifierRead(expr), ty: declaredTy };
             }
             if (ty.kind === "function" && this.isDirectFunctionReferenceValue(expr)) {
+                const cell = this.moduleFunctionBindingForIdentifier(expr);
+                if (cell) return { c: cell.cName, ty: T_VALUE };
                 const symbol = this.symbolForIdentifier(expr);
                 const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
                 // A contextual callback signature cannot change a declaration's
@@ -34065,7 +34082,7 @@ class Emitter {
             unsupported(id, "function reference type expected");
         }
         let callee = this.identifierName(id);
-        const moduleBinding = this.moduleFunctionBindingForSymbol(this.symbolForIdentifier(id));
+        const moduleBinding = this.moduleFunctionBindingForIdentifier(id);
         if (moduleBinding) callee = this.functionDeclarationCName(moduleBinding.declaration);
         const genericDecl = this.genericFunctionDeclarationForIdentifier(id);
         if (genericDecl) {
