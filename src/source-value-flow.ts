@@ -2539,19 +2539,7 @@ class SourceValueFlow {
             return binding;
         }
         if(environment)return this.evaluationNodeReference(environment,node).value;
-        for(const declaration of origin?.declarations??[]){
-            let current:ts.Node|undefined=declaration;
-            while(current&&!ts.isImportDeclaration(current)&&!ts.isSourceFile(current))current=current.parent;
-            if(!current||!ts.isImportDeclaration(current)||!ts.isStringLiteralLike(current.moduleSpecifier))continue;
-            const descriptor=this.nativeModuleSource(current.moduleSpecifier.text);if(!descriptor)continue;
-            if(current.importClause?.isTypeOnly||ts.isImportSpecifier(declaration)&&declaration.isTypeOnly)continue;
-            if(ts.isImportSpecifier(declaration)){
-                const name=(declaration.propertyName??declaration.name).text;
-                return name==="default"?descriptor.module(false):descriptor.export(name);
-            }
-            if(ts.isNamespaceImport(declaration))return descriptor.module(true);
-            if(ts.isImportClause(declaration)&&declaration.name)return descriptor.module(false);
-        }
+        const imported=this.nativeImportBinding(origin);if(imported)return imported;
         const scoped = this.functionBindingSymbol(node);
         if (scoped) return this.functionBindingCell(scoped);
         const projected = sourceBindingTarget(this.checker, origin), symbol = this.parameterScopeSymbol(node, projected.symbol);
@@ -5122,10 +5110,31 @@ class SourceValueFlow {
         }
         return true;
     }
+    /** The binding of an import from a native module: its export, default
+     * object or namespace, never a global binding. */
+    private nativeImportBinding(origin:ts.Symbol|undefined):Cell|undefined {
+        for(const declaration of origin?.declarations??[]){
+            let current:ts.Node|undefined=declaration;
+            while(current&&!ts.isImportDeclaration(current)&&!ts.isSourceFile(current))current=current.parent;
+            if(!current||!ts.isImportDeclaration(current)||!ts.isStringLiteralLike(current.moduleSpecifier))continue;
+            const descriptor=this.nativeModuleSource(current.moduleSpecifier.text);if(!descriptor)continue;
+            if(current.importClause?.isTypeOnly||ts.isImportSpecifier(declaration)&&declaration.isTypeOnly)continue;
+            if(ts.isImportSpecifier(declaration)){
+                const name=(declaration.propertyName??declaration.name).text;
+                return name==="default"?descriptor.module(false):descriptor.export(name);
+            }
+            if(ts.isNamespaceImport(declaration))return descriptor.module(true);
+            if(ts.isImportClause(declaration)&&declaration.name)return descriptor.module(false);
+        }
+        return undefined;
+    }
     private isAmbientIdentifier(node: ts.Identifier): boolean {
         if(this.implicitArgumentsOwner(node))return false;
         if(this.evaluationGlobalTargets.has(node))return true;
         if(this.annexBVarBinding(node))return false;
+        // An import binding is a module binding even when its target module
+        // is described only by a declaration file (node:util's types).
+        if(this.nativeImportBinding(declarativeSourceBindingSymbol(this.checker,node)))return false;
         return !(this.bindingSymbol(node)?.declarations ?? []).some(declaration =>
             !isAmbientSourceDeclaration(declaration) && sourceDeclarationIntroducesBinding(declaration));
     }

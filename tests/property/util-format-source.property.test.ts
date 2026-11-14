@@ -29,6 +29,7 @@ test('finite formatter queries follow callable locations, actual Lists and retur
   ["const owner=require('node:util');owner.format=()=> './other';const query=owner.format('./first');",['./first','./other']],
   ["const query=named(...['%s:%s','a\\0b','']);",['a\0b:']],
   ["opaque();const query=namespace.format('./first');",['./first']],
+  ["opaque();const query=named('./first');",['./first']],
   ["opaque();const query=ordinary.format('./first');",null],
   ["const query=named();",['']],
   ["ordinary.format=opaque();const query=ordinary.format('./first');",null],
