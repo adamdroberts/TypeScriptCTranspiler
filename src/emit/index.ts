@@ -20329,7 +20329,9 @@ class Emitter {
     private annexBBlockFunctions(root: ts.SourceFile | ts.FunctionLikeDeclaration): readonly NamedFunctionDeclaration[] {
         const sf = root.getSourceFile();
         const body = ts.isSourceFile(root) ? root : root.body;
-        const eligible = !!body && (ts.isSourceFile(root) ? this.isTest262ScriptSourceFile(sf) : ts.isBlock(body) && this.isJavaScriptSourceFile(sf)) &&
+        // A CommonJS module body is the (JavaScript) wrapper function's body.
+        const eligible = !!body && (ts.isSourceFile(root) ? this.isTest262ScriptSourceFile(sf) ||
+            this.isCommonJsSourceFile(sf) && this.isJavaScriptSourceFile(sf) : ts.isBlock(body) && this.isJavaScriptSourceFile(sf)) &&
             !this.nodeIsInStrictMode(ts.isSourceFile(root) ? root : body);
         return eligible ? annexBBlockFunctions(root) : [];
     }
@@ -20432,6 +20434,10 @@ class Emitter {
                 `{ .previous = tsc_environment_current(), .record = ${environment} };`);
             buffer.line(`(void)tsc_environment_swap(${environment});`);
         }
+        // B.3.2.1 in the CommonJS wrapper body: each candidate's var binding
+        // starts undefined when the body is entered.
+        if (this.isCommonJsSourceFile(sf))
+            for (const declaration of this.annexBBlockFunctions(sf)) this.emitAnnexBFunctionInstantiation(evaluation, declaration, false);
         const references = new Map<string,string>();
         const commonJs = this.commonJsModuleBindings.get(sf);
         const boundNodes: ts.Node[] = [sf];
@@ -20464,6 +20470,32 @@ class Emitter {
         for (const [declaration,binding] of this.moduleFunctionDeclarations)
             if (declaration.getSourceFile() === sf && declaration.name)
                 add(declaration.name.text,binding.cName,binding.gcRoot,"NULL",true,false);
+        if (commonJs && /\b(?:arguments|eval)\b/.test(sf.text)) {
+            // The wrapper's arguments object maps each index to the cell that
+            // holds that parameter's binding: a same-named var or function
+            // declaration of the module body is that binding.
+            const object = this.freshTemp("_cjs_arguments"), root = this.freshTemp("_cjs_arguments_root");
+            const actuals = this.freshTemp("_cjs_arguments_actuals"), cells = this.freshTemp("_cjs_arguments_cells");
+            this.agentStorage.declare("tsc_value_t",object);
+            this.agentStorage.declare("void* volatile",root);
+            const names = ["exports","require","module","__filename","__dirname"];
+            instantiation.line(`tsc_array_t* ${actuals} = tsc_array_new(sizeof(tsc_value_t), ${names.length});`);
+            instantiation.line(`tsc_array_t* ${cells} = tsc_array_new(sizeof(tsc_value_t*), ${names.length});`);
+            for (const name of names) {
+                const formal = commonJs.bindings.get(name)!;
+                const variable = this.collectModuleVarBindings(sf).find(binding => binding.name.text === name);
+                const callable = [...this.moduleFunctionDeclarations].find(([declaration]) =>
+                    declaration.getSourceFile() === sf && declaration.name?.text === name)?.[1];
+                const cell = this.freshTemp("_cjs_arguments_cell");
+                instantiation.line(`tsc_array_push_raw(${actuals}, &${formal.value});`);
+                instantiation.line(`volatile tsc_value_t* ${cell} = &${callable?.cName ?? variable?.cName ?? formal.value};`);
+                instantiation.line(`tsc_array_push_raw(${cells}, &${cell});`);
+            }
+            const strict = ecmaDirectivePrologueHasUseStrict(sf.statements);
+            instantiation.line(`${object} = tsc_commonjs_arguments_object(${actuals}, ${cells}, ${strict ? "true" : "false"});`);
+            instantiation.line(`${root} = tsc_value_gc_root(${object});`);
+            add("arguments",object,root,"NULL",false,false);
+        }
         for (const statement of sf.statements) {
             if (!ts.isImportDeclaration(statement) || !statement.importClause || statement.importClause.isTypeOnly) continue;
             const clause = statement.importClause;
@@ -21520,7 +21552,8 @@ class Emitter {
         for (let current: ts.Node | undefined = identifier.parent; current; current = current.parent) {
             if (ts.isArrowFunction(current)) continue;
             if (ts.isFunctionLike(current)) return true;
-            if (ts.isSourceFile(current)) return false;
+            // A CommonJS module body is the wrapper function's body.
+            if (ts.isSourceFile(current)) return this.isCommonJsSourceFile(current);
         }
         return false;
     }

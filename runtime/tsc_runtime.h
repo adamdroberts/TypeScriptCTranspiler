@@ -742,6 +742,7 @@ void tsc_call_activation_configure(bool strict, tsc_array_t* parameter_cells);
 void tsc_stack_depth_check(void);
 tsc_value_t tsc_call_receiver(void);
 tsc_value_t tsc_call_arguments(void);
+tsc_value_t tsc_commonjs_arguments_object(tsc_array_t* actuals, tsc_array_t* parameter_cells, bool strict);
 tsc_value_t tsc_value_current_callee(void);
 tsc_environment_t* tsc_value_current_constructor_environment(void);
 void tsc_value_class_set_heritage(tsc_value_t constructor, tsc_value_t superclass);

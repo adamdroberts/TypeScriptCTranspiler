@@ -2968,6 +2968,23 @@ tsc_value_t tsc_call_arguments(void) {
     return activation->arguments_object;
 }
 
+/* The CommonJS module wrapper is only reachable as its arguments object's
+ * callee; calling it again would re-enter a module body, so it fails closed. */
+static tsc_value_t commonjs_wrapper_reentry(void* env, tsc_value_t receiver, tsc_array_t* actual) {
+    (void)env; (void)receiver; (void)actual;
+    tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("a CommonJS module wrapper cannot be called again"));
+    return tsc_value_undefined();
+}
+
+/* The arguments object of a CommonJS module wrapper (exports, require,
+ * module, __filename, __dirname): mapped to the wrapper's parameter cells
+ * unless the module body is strict. */
+tsc_value_t tsc_commonjs_arguments_object(tsc_array_t* actuals, tsc_array_t* parameter_cells, bool strict) {
+    tsc_value_t callee = tsc_value_function_generic_named(commonjs_wrapper_reentry, NULL, 5.0, tsc_str_from_lit("", 0));
+    void* volatile callee_root = tsc_value_gc_root(callee); (void)callee_root;
+    return tsc_value_object(arguments_object_new(actuals, strict ? NULL : parameter_cells, callee, strict));
+}
+
 /* One arguments exotic object: mapped when parameter_cells is given,
  * otherwise unmapped; callee is the restricted accessor or the callee. */
 static tsc_object_t* arguments_object_new(tsc_array_t* arguments, tsc_array_t* parameter_cells,

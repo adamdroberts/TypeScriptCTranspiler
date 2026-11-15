@@ -151,10 +151,14 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
         return type;
     };
     // Compile roots follow the same Node module detection as imported files:
-    // .mjs/.mts, or a "type": "module" package scope, selects the Module goal.
+    // .mjs/.mts, or a "type": "module" package scope, selects the Module goal;
+    // a JavaScript root (.cjs, or .js/.jsx outside a module scope) is a
+    // CommonJS candidate that the detection below keeps or turns into a Module
+    // (Node's syntax detection), never a global Script.
     for (const source of new Set([...sourceRoots, ...discoveredRoots])) {
         if (explicitModuleTargets.has(source) || isolatedScriptRoots.has(source) || moduleTargets.has(source)) continue;
-        if (/\.m[jt]s$/i.test(source) || /\.[jt]sx?$/i.test(source) && packageType(source) === "module") moduleTargets.add(source);
+        if (/\.m[jt]s$/i.test(source) || /\.[jt]sx?$/i.test(source) && packageType(source) === "module" ||
+            /\.c?jsx?$/i.test(source)) moduleTargets.add(source);
     }
     const commonJsTargets = new Set<string>();
     for (const source of moduleTargets) {
