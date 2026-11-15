@@ -80,20 +80,30 @@ export function functionConstructorSourceIsValid(source: FunctionConstructorSour
 
 export function finiteFunctionConstructorSources(
     program: ts.Program, manifest: readonly FunctionConstructorSource[], entries: SourceValueGraphEntries = {},
+    /** Receives the files whose calls create each source, by functionConstructorSourceKey. */
+    referrers?: Map<string, Set<string>>,
 ): FunctionConstructorSource[] {
     const sources = new Map(manifest.map(source => [functionConstructorSourceKey(source), source]));
+    const refer = (key: string, node: ts.Node | undefined) => {
+        if (!referrers || !node) return;
+        let files = referrers.get(key);
+        if (!files) { files = new Set(); referrers.set(key, files); }
+        files.add(node.getSourceFile().fileName);
+    };
     for (const invocation of sourceConstructorFacts(program, entries)) {
         const { kind, arguments:choices } = invocation;
         if (!choices) continue;
         for (const tuple of sourceChoiceTuples(choices)) {
             const source = { kind, parameters: tuple.slice(0, -1).join(","), body: tuple.at(-1) ?? "",...(invocation.domain?{domain:invocation.domain}:{}) };
             sources.set(functionConstructorSourceKey(source), source);
+            refer(functionConstructorSourceKey(source), invocation.node);
         }
         if (choices.length && choices.at(-1)!.length === 0) {
             for (const parameterTuple of sourceChoiceTuples(choices.slice(0,-1))) for (const body of manifest) {
                 if (body.parameters !== "" || body.kind && body.kind !== kind) continue;
                 const source = { kind, parameters: parameterTuple.join(","), body: body.body,...(invocation.domain?{domain:invocation.domain}:{}) };
                 sources.set(functionConstructorSourceKey(source), source);
+                refer(functionConstructorSourceKey(source), invocation.node);
             }
         }
     }

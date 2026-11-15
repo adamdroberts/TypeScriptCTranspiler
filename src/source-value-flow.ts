@@ -56,6 +56,8 @@ export interface ConstructorInvocation {
  * of the proof that they exhaust every possible normal input. */
 export interface ConstructorSourceFacts {
     readonly domain?:string;
+    /** The call or construction that creates the function. */
+    readonly node?:ts.Node;
     readonly kind:DynamicFunctionKind;
     readonly arguments:readonly (readonly string[])[]|null;
     readonly complete:boolean;
@@ -847,7 +849,7 @@ class SourceValueFlow {
     private readonly accessorCallees = new Map<Cell,Cell>();
     private readonly accessorSlots = new Set<Cell>();
     private readonly callResults = new Map<ts.Node,Map<string,Cell>>();
-    private readonly invocations = new Map<Rule, Map<string, { kind: DynamicFunctionKind; args: readonly Cell[] | null }>>();
+    private readonly invocations = new Map<Rule, Map<string, { kind: DynamicFunctionKind; args: readonly Cell[] | null; node: ts.Node }>>();
     private readonly inactiveEvaluationCandidates=new Map<ts.Node,Set<boolean>>();
     /** Literal `eval("...")` calls inside a function body. An activation the
      * solver never enters projects no values, yet a call reaching it through
@@ -8979,7 +8981,7 @@ class SourceValueFlow {
                     const constructorArguments = atom.tag === "intrinsic" && atom.domain === "constructor" ? convertArguments(argv) : undefined;
                     if (atom.tag === "intrinsic" && atom.domain === "constructor") {
                         for (const argument of constructorArguments ?? []) this.watchText(rule, argument);
-                        constructors.set(atom.kind + ":" + signature, { kind: atom.kind, args: constructorArguments ?? null });
+                        constructors.set(atom.kind + ":" + signature, { kind: atom.kind, args: constructorArguments ?? null, node });
                     }
                     const noArguments = (constructorArguments === undefined ? argv : constructorArguments)?.some(argument => {
                         this.watchText(rule,argument);
@@ -9821,7 +9823,7 @@ class SourceValueFlow {
             reportSourceAnalysisExhaustion(`tsc2c: warning: source-value analysis stopped after ${runs} steps and ${this.nextCell} cells (limits: ${budget} steps, ${cellBudget} cells, ${Math.round(memoryLimit / 1048576)} MB); dynamic code sources stay unproven (raise TSC2C_SOURCE_ANALYSIS_BUDGET, TSC2C_SOURCE_ANALYSIS_CELLS or TSC2C_SOURCE_ANALYSIS_MEMORY_MB to analyze further)\n`);
             const result = {
                 constructors: [...this.invocations.values()].flatMap(records => [...records.values()]).map(invocation =>
-                    ({kind:invocation.kind,arguments:null,complete:false,...(this.domain?{domain:this.domain}:{})})),
+                    ({kind:invocation.kind,node:invocation.node,arguments:null,complete:false,...(this.domain?{domain:this.domain}:{})})),
                 evaluations: [...this.evaluationInvocations.values()].flatMap(records => [...records.values()]).map(invocation =>
                     ({node:invocation.node,operation:invocation.operation,direct:invocation.direct,choices:null,...(this.domain?{domain:this.domain}:{})})),
             };
@@ -9850,7 +9852,7 @@ class SourceValueFlow {
         return {
             constructors: [...this.invocations.values()].flatMap(records => [...records.values()]).map(invocation => {
                 const domains=invocation.args?.map(argumentDomain);
-                return {kind:invocation.kind,arguments:domains?.map(domain=>domain.values)??null,complete:!this.unresolvedPrivate&&!!domains&&domains.every(domain=>domain.complete),...(this.domain?{domain:this.domain}:{})};
+                return {kind:invocation.kind,node:invocation.node,arguments:domains?.map(domain=>domain.values)??null,complete:!this.unresolvedPrivate&&!!domains&&domains.every(domain=>domain.complete),...(this.domain?{domain:this.domain}:{})};
             }),
             evaluations: [...inactiveEvaluations,...[...this.evaluationInvocations.values()].flatMap(records => [...records.values()]).map(invocation => {
                 const { source, operation, unknown } = invocation;

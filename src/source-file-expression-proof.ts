@@ -4,6 +4,7 @@ import {createEcmaSourceFile,ecmaParseGoal} from './ecmascript-source';
 import {buildProgram,resolvePackageRoot} from './program';
 import {sourceExpressionTexts} from './source-value-flow';
 import {dynamicImportCalls} from './module-request';
+import {dynamicImportReferrer} from './eval-context';
 
 const proofs=new WeakMap<ts.SourceFile,ReadonlyMap<string,readonly string[]|null>>();
 const companionRoots=new Map<string,readonly string[]>();
@@ -64,7 +65,8 @@ export function sourceFileExpressionTexts(expression:ts.Expression):readonly str
                 result=new Map(expressions.map(node=>[key(node),queries.get(node)??null]));
                 let added=false;
                 for(const argument of targetArguments)for(const text of queries.get(argument)??[]){
-                    const resolved=ts.resolveModuleName(text,argument.getSourceFile().fileName,program.getCompilerOptions(),ts.sys).resolvedModule;
+                    const referrer=dynamicImportReferrer(argument.getSourceFile().fileName);
+                    const resolved=referrer===null?undefined:ts.resolveModuleName(text,referrer,program.getCompilerOptions(),ts.sys).resolvedModule;
                     if(resolved&&!roots.has(resolved.resolvedFileName)){roots.add(resolved.resolvedFileName);added=true;}
                 }
                 if(!added)break;

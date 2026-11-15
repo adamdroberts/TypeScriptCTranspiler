@@ -18,6 +18,7 @@ import {
     type DynamicRequireManifest,
 } from "./dynamic-require";
 import { resolveCommonJsRequireModuleName } from "./commonjs-resolve";
+import { dynamicImportReferrer } from "./eval-context";
 import {
     dynamicImportCalls,
     dynamicImportSpecifiersFromCall,
@@ -159,12 +160,13 @@ export function buildModuleGraph(
     for(const [id,info]of modules){
         if(options_.staticRequestsOnly||unavailable.has(id))continue;
         const moduleAliases=commonJsModuleAliases(info.sf),requireAliases=commonJsRequireAliases(info.sf,moduleAliases),dynamicSpecifiers=new Set<string>();
+        const importReferrer=dynamicImportReferrer(info.fileName);
         for(const statement of info.sf.statements){
             for(const call of dynamicImportCalls(statement)){
                 const parsed=dynamicImportSpecifiersFromCall(call);
                 for(const specifier of parsed?.specifiers??[]){
                     dynamicSpecifiers.add(specifier);
-                    const resolved=ts.resolveModuleName(specifier,info.fileName,options,ts.sys).resolvedModule;
+                    const resolved=importReferrer===null?undefined:ts.resolveModuleName(specifier,importReferrer,options,ts.sys).resolvedModule;
                     const dependency=resolved?fileToModuleId.get(sourceUnitFileName(program,resolved.resolvedFileName,"module")):undefined;
                     if(dependency)info.resolvedDynamicSpecifiers.set(specifier,dependency);
                 }

@@ -30,7 +30,7 @@ import { invokeCc } from "./link/cc";
 import { emitNetPolicyC, NetPolicyError, parseNetPolicy, type NetPolicy } from "./link/net-policy";
 import { commonJsRequireSpecifierArgument, staticStringExpressionText, staticStringExpressionTexts } from "./module-specifiers";
 import { evaluationSourceRequests, evalSourceIsValid, evalSourceKey, evalSourceRequest, type EvalSourceRequest, type SourceEvalPlan } from "./eval-source";
-import { setEvalSourceContext } from "./eval-context";
+import { addEvalSourceEntry, addEvalSourceReferrer, setEvalSourceContext } from "./eval-context";
 import { setSourceAnalysisWarningWriter, sourceConstructorInvocations, sourceEvaluationInvocations } from "./source-value-flow";
 import { declarativeSourceBindingSymbol, sourceDeclarationIntroducesBinding } from "./source-bindings";
 import {
@@ -817,6 +817,9 @@ async function compileWithDiagnostics(opts: CompileOptions, writeDiagnostic: (me
             const request = evalSourceRequest(kind, entry.source, "strictCaller" in entry ? entry.strictCaller as boolean : false, entry.domain,
                 "context" in entry && typeof entry.context === "number" ? entry.context : 0);
             if (kind === "direct" && entry.entry) setEvalSourceContext(entry.entry, request.context);
+            // Eval code shares its caller's Script or Module; a new Script
+            // ($262.evalScript, an agent) is its own referrer.
+            if ((kind === "direct" || kind === "indirect") && entry.entry) addEvalSourceEntry(entry.entry);
             const admitted=evalSourceIsValid(request);
             if(!admitted && entry.entry)rejectedEvalRoots.add(path.resolve(entry.entry));
             evalEntries.set(evalSourceKey(request), { ...request, entry: admitted ? entry.entry : null });
@@ -846,35 +849,60 @@ async function compileWithDiagnostics(opts: CompileOptions, writeDiagnostic: (me
         const manifestRequests = runtimeCode.eval.flatMap(({source}) => [
             evalSourceRequest("direct", source, false), evalSourceRequest("direct", source, true), evalSourceRequest("indirect", source),
         ]);
+        const manifestKeys = new Set(manifestRequests.map(evalSourceKey));
         for (const request of [...evaluation.requests, ...manifestRequests]) {
             const key = evalSourceKey(request);
-            if (evalEntries.has(key)) continue;
-            let entry: string | null = null;
-            if (evalSourceIsValid(request)) {
-                entry = path.join(buildDir, `eval-source-${createHash("sha256").update(key).digest("hex")}.js`);
-                if (request.kind === "direct") setEvalSourceContext(entry, request.context);
-                await fs.writeFile(entry, Buffer.from("\ufeff" + request.source, "utf16le"));
-                addedRoot = true;
+            if (!evalEntries.has(key)) {
+                let entry: string | null = null;
+                if (evalSourceIsValid(request)) {
+                    entry = path.join(buildDir, `eval-source-${createHash("sha256").update(key).digest("hex")}.js`);
+                    if (request.kind === "direct") setEvalSourceContext(entry, request.context);
+                    if (request.kind === "direct" || request.kind === "indirect") addEvalSourceEntry(entry);
+                    await fs.writeFile(entry, Buffer.from("\ufeff" + request.source, "utf16le"));
+                    addedRoot = true;
+                }
+                evalEntries.set(key, { ...request, entry });
             }
-            evalEntries.set(key, { ...request, entry });
+            // A new referrer changes where the entry's ImportCalls resolve, so
+            // the module graph is rebuilt like for a new root (only text that
+            // can hold an ImportCall needs it).
+            const entry = evalEntries.get(key)!.entry;
+            if (entry && (request.kind === "direct" || request.kind === "indirect")) {
+                let changed = false;
+                for (const referrer of evaluation.referrers.get(key) ?? []) changed = addEvalSourceReferrer(entry, referrer) || changed;
+                if (manifestKeys.has(key)) changed = addEvalSourceReferrer(entry, null) || changed;
+                if (changed && request.source.includes("import")) addedRoot = true;
+            }
         }
         if (sourceEval) sourceEval = refreshEvalPlan();
+        const functionReferrers = new Map<string, Set<string>>();
         const sources = finiteFunctionConstructorSources(built.program, [
             { parameters: "", body: "" }, ...runtimeCode.functions,
-        ], { ...(opts.test262Observation?{host:"test262" as const}:{}), roots:opts.initializationEntries??[opts.entry],functions: [...functionEntries.values()], evaluations: [...evalEntries.values()] });
+        ], { ...(opts.test262Observation?{host:"test262" as const}:{}), roots:opts.initializationEntries??[opts.entry],functions: [...functionEntries.values()], evaluations: [...evalEntries.values()] }, functionReferrers);
+        const manifestFunctionKeys = new Set(runtimeCode.functions.map(functionConstructorSourceKey));
         for (const source of sources) {
             const key = functionConstructorSourceKey(source);
-            if (functionEntries.has(key)) continue;
-            let entry: string | null = null;
-            if (functionConstructorSourceIsValid(source)) {
-                entry = path.join(buildDir, `function-source-${createHash("sha256").update(key).digest("hex")}.js`);
-                // Source strings are ECMAScript UTF-16 sequences, including
-                // isolated surrogates. TypeScript's BOM-aware source reader
-                // preserves them; UTF-8 fs encoding would replace those units.
-                await fs.writeFile(entry, Buffer.from("\ufeff" + functionConstructorExpressionSource(source), "utf16le"));
-                addedRoot = true;
+            if (!functionEntries.has(key)) {
+                let entry: string | null = null;
+                if (functionConstructorSourceIsValid(source)) {
+                    entry = path.join(buildDir, `function-source-${createHash("sha256").update(key).digest("hex")}.js`);
+                    addEvalSourceEntry(entry);
+                    // Source strings are ECMAScript UTF-16 sequences, including
+                    // isolated surrogates. TypeScript's BOM-aware source reader
+                    // preserves them; UTF-8 fs encoding would replace those units.
+                    await fs.writeFile(entry, Buffer.from("\ufeff" + functionConstructorExpressionSource(source), "utf16le"));
+                    addedRoot = true;
+                }
+                functionEntries.set(key, { ...source, entry });
             }
-            functionEntries.set(key, { ...source, entry });
+            // A created function's [[ScriptOrModule]] is its creator's.
+            const entry = functionEntries.get(key)!.entry;
+            if (entry) {
+                let changed = false;
+                for (const referrer of functionReferrers.get(key) ?? []) changed = addEvalSourceReferrer(entry, referrer) || changed;
+                if (manifestFunctionKeys.has(key)) changed = addEvalSourceReferrer(entry, null) || changed;
+                if (changed && functionConstructorExpressionSource(source).includes("import")) addedRoot = true;
+            }
         }
         if (!addedRoot) break;
         const roots = [...functionEntries.values(), ...evalEntries.values()].flatMap(source => source.entry ? [source.entry] : []);

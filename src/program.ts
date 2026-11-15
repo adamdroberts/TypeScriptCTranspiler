@@ -20,6 +20,7 @@ import {
     type DynamicRequireManifest,
 } from "./dynamic-require";
 import { resolveCommonJsRequireModuleName } from "./commonjs-resolve";
+import { dynamicImportReferrer } from "./eval-context";
 import { createEcmaSourceFile, ecmaImportAttributesParserShadow, literalPropertyKey, type EcmaParseGoal } from "./ecmascript-source";
 import {
     dynamicImportCalls,
@@ -337,8 +338,9 @@ function collectStaticRequireRoots(
                     queue.push(resolvedFile);
                 }
             }
-            for (const specifier of deferDynamicImportDiscovery?[]:dynamicModuleSpecifiers(stmt)) {
-                const resolvedFile = resolveTypeScriptModuleName(specifier, fileName, compilerOptions);
+            const importReferrer = deferDynamicImportDiscovery ? null : dynamicImportReferrer(fileName);
+            if (importReferrer !== null) for (const specifier of dynamicModuleSpecifiers(stmt)) {
+                const resolvedFile = resolveTypeScriptModuleName(specifier, importReferrer, compilerOptions);
                 if (resolvedFile) moduleTargets.add(resolvedFile);
                 if (resolvedFile && !seen.has(resolvedFile)) {
                     seen.add(resolvedFile);

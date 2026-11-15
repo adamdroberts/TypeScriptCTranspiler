@@ -25,7 +25,7 @@ test('capture constraints retain inactivity, scalar snapshots and conservative o
  // A selected write can contain a repeated RHS read. Projecting only the
  // outer write event would register later, unreachable constructor source.
  const source='{async function run(body){let code=body;for(let index=0;index<1;index++){code=code;}const saved=code;code="19;";print(saved);return Function(saved)();}run("17;");}';
- expect(reference(source,true)).toBe('17;\noracle-probe-complete\n');expect(sourceConstructorFacts(program(source))).toEqual([{kind:'ordinary',arguments:[['17;']],complete:true}]);
+ expect(reference(source,true)).toBe('17;\noracle-probe-complete\n');expect(sourceConstructorFacts(program(source))).toEqual([{kind:'ordinary',node:expect.anything(),arguments:[['17;']],complete:true}]);
 });
 const conjunctions=["left+right","right+left"].map(expression=>({
  source:'{async function run(a,b){let left=a,right=b;left=right+left;const saved='+expression+';await 0;left=String(Math.random());right=String(Math.random());print(eval(saved));return Function("return("+saved+")")();}run("17","19").then(()=>print("capture-conjunction-complete"));}',
@@ -36,7 +36,7 @@ test('interleaved scalar masks retain their conjunction through RHS operations a
  for(const item of conjunctions){
   expect(reference(item.source,true)).toBe(item.expected+'oracle-probe-complete\n');
   const result=graph([{path:'subject.js',source:item.source}]);expect(result.error).toBeNull();expect(result.directEvalSources.map(value=>value.source)).toContain(item.actual);
-  expect(sourceConstructorFacts(program(item.source))).toContainEqual({kind:'ordinary',arguments:[expect.arrayContaining(['return('+item.actual+')'])],complete:true});
+  expect(sourceConstructorFacts(program(item.source))).toContainEqual({kind:'ordinary',node:expect.anything(),arguments:[expect.arrayContaining(['return('+item.actual+')'])],complete:true});
   const unknown=item.source.replace('const saved='+ (item.source.includes('saved=left+right')?'left+right':'right+left')+';await 0;left=String(Math.random());right=String(Math.random());','left=String(Math.random());right=String(Math.random());const saved=left+right;await 0;');
   expect(reference(unknown,true,'Math.random=()=>19;')).toBe('1919\ncapture-conjunction-complete\noracle-probe-complete\n');
   expect(graph([{path:'subject.js',source:unknown}]).error).toContain('direct eval source is not a finite static string expression');

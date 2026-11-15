@@ -51,9 +51,11 @@ export function evaluationSourceRequests(program: ts.Program, entries: SourceVal
     strictContexts: ReadonlyMap<string, boolean> = new Map()): {
         hasEvaluations: boolean;
         requests: readonly EvalSourceRequest[];
+        /** The files whose calls request each source, by evalSourceKey. */
+        referrers: ReadonlyMap<string, ReadonlySet<string>>;
         unresolved: readonly { node: ts.Node; direct: boolean; operation: "eval" | "eval-script" | "agent-start" }[];
     } {
-    const requests = new Map<string, EvalSourceRequest>(), unresolved = [];
+    const requests = new Map<string, EvalSourceRequest>(), unresolved = [], referrers = new Map<string, Set<string>>();
     const invocations = sourceEvaluationInvocations(program, entries);
     for (const invocation of invocations) {
         if (invocation.choices === null) {
@@ -65,10 +67,14 @@ export function evaluationSourceRequests(program: ts.Program, entries: SourceVal
             const strictCaller = invocation.direct && ts.isCallExpression(invocation.node) && directEvalIsStrict(invocation.node, strictContexts.get(file.fileName) ?? sourceFileIsStrict(file));
             const request = evalSourceRequest(invocation.operation === "agent-start" ? "agent" : invocation.operation === "eval-script" ? "script" : invocation.direct ? "direct" : "indirect",
                 source, strictCaller,invocation.domain, invocation.direct ? directEvalContext(invocation.node) : 0);
-            requests.set(evalSourceKey(request), request);
+            const key = evalSourceKey(request);
+            requests.set(key, request);
+            let files = referrers.get(key);
+            if (!files) { files = new Set(); referrers.set(key, files); }
+            files.add(file.fileName);
         }
     }
-    return { hasEvaluations: invocations.length > 0, requests: [...requests.values()], unresolved };
+    return { hasEvaluations: invocations.length > 0, requests: [...requests.values()], referrers, unresolved };
 }
 
 export function evalSourceIsValid(request: EvalSourceRequest): boolean {
