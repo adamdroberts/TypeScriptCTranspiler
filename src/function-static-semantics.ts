@@ -738,7 +738,9 @@ export function isAssignmentTargetPosition(node: ts.Node): boolean {
     for (;;) {
         const parent: ts.Node | undefined = current.parent;
         if (!parent) return false;
-        if (ts.isParenthesizedExpression(parent)) { current = parent; continue; }
+        // TypeScript's assertion wrappers keep the operand's AssignmentTargetType.
+        if (ts.isParenthesizedExpression(parent) || ts.isAsExpression(parent) || ts.isTypeAssertionExpression(parent) ||
+            ts.isNonNullExpression(parent) || ts.isSatisfiesExpression(parent)) { current = parent; continue; }
         if (ts.isBinaryExpression(parent))
             return parent.left === current && parent.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
                 parent.operatorToken.kind <= ts.SyntaxKind.LastAssignment;

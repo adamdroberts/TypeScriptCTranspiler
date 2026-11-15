@@ -12503,7 +12503,8 @@ class Emitter {
             this.emitModuleDefaultExportDeclarationInstantiation(instantiationBuf, sf);
             this.emitTopLevelLexicalInitializationStateInstantiation(instantiationBuf, sf);
             this.emitCommonJsModuleBinding(instantiationBuf, sf, modId);
-            this.emitSourceModuleEnvironment(instantiationBuf, initBuf, sf);
+            if (this.isSourceModuleEnvironment(sf)) this.emitSourceModuleEnvironment(instantiationBuf, initBuf, sf);
+            else this.emitModuleFunctionCellInstantiation(instantiationBuf, sf);
             // Named source types join the same dependency collection as
             // callable parameter, receiver and result types. All forwards
             // precede every generated struct, independent of emission order.
@@ -20354,10 +20355,17 @@ class Emitter {
         return plan;
     }
 
+    /** A module function declaration's binding is a mutable value cell when
+     * the source module environment owns its bindings, or when the module
+     * writes the binding (an import binding is immutable, so only the
+     * declaring module can). Unwritten bindings keep their direct callee. */
     private collectModuleFunctionBindings(sf: ts.SourceFile): void {
-        if (!this.isSourceModuleEnvironment(sf)) return;
+        const environment = this.isSourceModuleEnvironment(sf);
+        if (!environment && !ts.isExternalModule(sf)) return;
+        const written = environment ? null : this.writtenModuleFunctionDeclarations(sf);
+        if (written?.size === 0) return;
         for (const declaration of sf.statements) {
-            if (!ts.isFunctionDeclaration(declaration) || !declaration.body ||
+            if (!ts.isFunctionDeclaration(declaration) || !declaration.body || written && !written.has(declaration) ||
                 !this.functionDeclarationHasCName(declaration) || this.moduleFunctionDeclarations.has(declaration)) continue;
             const cName = this.freshTemp("_module_function_binding");
             const binding = {declaration,cName,gcRoot:this.freshTemp("_module_function_root")};
@@ -20369,6 +20377,25 @@ class Emitter {
                 this.globalDynamicRoots.set(symbol,binding.gcRoot);
             }
         }
+    }
+
+    private writtenModuleFunctionDeclarations(sf: ts.SourceFile): Set<ts.FunctionDeclaration> {
+        const declarations = new Set<ts.FunctionDeclaration>();
+        for (const statement of sf.statements)
+            if (ts.isFunctionDeclaration(statement) && statement.name && statement.body) declarations.add(statement);
+        const written = new Set<ts.FunctionDeclaration>();
+        if (declarations.size === 0) return written;
+        const worklist: ts.Node[] = [sf];
+        while (worklist.length > 0) {
+            const node = worklist.pop()!;
+            if (ts.isIdentifier(node) && isAssignmentTargetPosition(node)) {
+                const symbol = this.symbolForIdentifier(node);
+                const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+                if (declaration && ts.isFunctionDeclaration(declaration) && declarations.has(declaration)) written.add(declaration);
+            }
+            ts.forEachChild(node, child => { worklist.push(child); });
+        }
+        return written;
     }
 
     /** The module function cell an identifier reads: its own declaration's,
@@ -20433,15 +20460,10 @@ class Emitter {
         for (const binding of this.collectModuleVarBindings(sf)) add(binding.name.text,binding.cName,binding.gcRoot,"NULL",false,false);
         for (const binding of this.collectModuleLexicalBindings(sf))
             add(binding.name.text,binding.cName,binding.gcRoot,`&${binding.initialized}`,true,binding.immutable);
-        for (const [declaration,binding] of this.moduleFunctionDeclarations) {
-            if (declaration.getSourceFile() !== sf) continue;
-            this.agentStorage.declare("tsc_value_t",binding.cName);
-            this.agentStorage.declare("void* volatile",binding.gcRoot);
-            const callable = this.emitFunctionDeclarationReferenceClosure(declaration,this.sourceFunctionValueType(declaration));
-            instantiation.line(`${binding.cName} = ${this.coerce(callable,T_VALUE,declaration)};`);
-            instantiation.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.cName});`);
-            if (declaration.name) add(declaration.name.text,binding.cName,binding.gcRoot,"NULL",true,false);
-        }
+        this.emitModuleFunctionCellInstantiation(instantiation, sf);
+        for (const [declaration,binding] of this.moduleFunctionDeclarations)
+            if (declaration.getSourceFile() === sf && declaration.name)
+                add(declaration.name.text,binding.cName,binding.gcRoot,"NULL",true,false);
         for (const statement of sf.statements) {
             if (!ts.isImportDeclaration(statement) || !statement.importClause || statement.importClause.isTypeOnly) continue;
             const clause = statement.importClause;
@@ -20506,6 +20528,19 @@ class Emitter {
             instantiation.line(`tsc_environment_binding_ref_t ${collection}[] = { ${[...references.values()].join(", ")} };`);
             instantiation.line(`for (size_t index = 0; index < sizeof(${collection}) / sizeof(${collection}[0]); ++index) ` +
                 `tsc_environment_alias(${environment}, &${collection}[index]);`);
+        }
+    }
+
+    /** InstantiateFunctionObject for each module function cell, during
+     * module instantiation (before any module body evaluates). */
+    private emitModuleFunctionCellInstantiation(instantiation: CBuf, sf: ts.SourceFile): void {
+        for (const [declaration,binding] of this.moduleFunctionDeclarations) {
+            if (declaration.getSourceFile() !== sf) continue;
+            this.agentStorage.declare("tsc_value_t",binding.cName);
+            this.agentStorage.declare("void* volatile",binding.gcRoot);
+            const callable = this.emitFunctionDeclarationReferenceClosure(declaration,this.sourceFunctionValueType(declaration));
+            instantiation.line(`${binding.cName} = ${this.coerce(callable,T_VALUE,declaration)};`);
+            instantiation.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.cName});`);
         }
     }
 
