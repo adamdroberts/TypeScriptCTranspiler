@@ -396,7 +396,13 @@ type Atom =
 // cached list can never omit a value or edge added after it was computed.
 let sourceFactsEpoch=0;
 class SourceFactEdges extends Map<SourceFacts,"value"|"origin"> {
-    override set(key:SourceFacts,kind:"value"|"origin"):this{sourceFactsEpoch++;return super.set(key,kind);}
+    constructor(private readonly owner:SourceFacts){super();}
+    override set(key:SourceFacts,kind:"value"|"origin"):this{
+        const prior=super.get(key);if(prior===kind)return this;
+        sourceFactsEpoch++;super.set(key,kind);
+        if(prior===undefined)key.addDependent(this.owner);
+        this.owner.changed();return this;
+    }
 }
 const noAtoms:ReadonlySet<Atom>=new Set();
 /** A fact collection is not a Set subclass: engines fast-path array spread
@@ -406,7 +412,13 @@ class SourceFacts implements Iterable<Atom> {
     private readonly own = new Set<Atom>();
     // One monotone dependency collection distinguishes complete value flow
     // from origin-only effects without copying every origin into each field.
-    readonly sources:Map<SourceFacts,"value"|"origin"> = new SourceFactEdges();
+    readonly sources:Map<SourceFacts,"value"|"origin"> = new SourceFactEdges(this);
+    // Reverse source edges: the collections whose traversal passes here.
+    private dependents:SourceFacts[]|undefined;
+    // Every collection whose traversal passes here has been invalidated since
+    // that traversal; a traversal clears it on each collection it visits.
+    private notified=false;
+    private flattenedValid=false;
     // The unknown subset of `own`, which is all an origin-only edge carries,
     // so a walk past a wide owner (a global object's keys) through origin
     // edges does not visit its every key. Allocated with the first unknown.
@@ -414,23 +426,34 @@ class SourceFacts implements Iterable<Atom> {
     private readonly memberships = new Set<Atom>();
     private knownNonempty=false;
     private flattened:readonly Atom[]|undefined;
-    private flattenedEpoch=-1;
-    add(atom:Atom):this{sourceFactsEpoch++;this.own.add(atom);if(atom.tag==="unknown")(this.ownUnknown??=new Set()).add(atom);return this;}
+    add(atom:Atom):this{if(this.own.has(atom))return this;sourceFactsEpoch++;this.own.add(atom);if(atom.tag==="unknown")(this.ownUnknown??=new Set()).add(atom);this.changed();return this;}
+    addDependent(facts:SourceFacts):void{(this.dependents??=[]).push(facts);}
+    /** Invalidate the flattened traversal of this collection and of every
+     * collection that reaches it. A notified collection's dependents are
+     * already invalid and none has traversed it since, so the walk stops. */
+    changed():void{
+        const pending:SourceFacts[]=[this];
+        while(pending.length){
+            const facts=pending.pop()!;if(facts.notified)continue;
+            facts.notified=true;facts.flattenedValid=false;
+            if(facts.dependents)for(const dependent of facts.dependents)pending.push(dependent);
+        }
+    }
     /** Atoms stored here, without the copied sources. */
     ownValues():IterableIterator<Atom>{return this.own.values();}
     /** The unknown atoms stored here, in insertion order. */
     ownUnknownValues():IterableIterator<Atom>{return (this.ownUnknown??noAtoms).values();}
     ownHas(atom:Atom):boolean{return this.own.has(atom);}
     *[Symbol.iterator](): IterableIterator<Atom> {
-        if(this.flattenedEpoch===sourceFactsEpoch&&this.flattened){yield* this.flattened;return undefined;}
+        if(this.flattenedValid&&this.flattened){yield* this.flattened;return undefined;}
         const epoch=sourceFactsEpoch,collected:Atom[]=[];
         const pending:{facts:SourceFacts;origins:boolean}[]=[{facts:this,origins:false}],visited=new Map<SourceFacts,number>(),values=new Set<Atom>();
-        while(pending.length){const {facts,origins}=pending.pop()!,bit=origins?1:2,prior=visited.get(facts)??0;if(prior&bit)continue;visited.set(facts,prior|bit);
+        while(pending.length){const {facts,origins}=pending.pop()!,bit=origins?1:2,prior=visited.get(facts)??0;if(prior&bit)continue;visited.set(facts,prior|bit);facts.notified=false;
             for(const value of origins?facts.ownUnknownValues():facts.own.values())if(!values.has(value)){values.add(value);collected.push(value);yield value;}
             for(const [source,kind]of facts.sources)pending.push({facts:source,origins:origins||kind==="origin"});
         }
         // Store only a complete traversal during which nothing grew.
-        if(epoch===sourceFactsEpoch){this.flattened=collected;this.flattenedEpoch=epoch;}
+        if(epoch===sourceFactsEpoch){this.flattened=collected;this.flattenedValid=true;}
         return undefined;
     }
     has(atom: Atom): boolean {
