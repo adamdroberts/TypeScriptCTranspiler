@@ -60,7 +60,8 @@ tsc_value_t tsc_test262_direct_eval_call(
     tsc_value_t receiver,
     tsc_value_t args,
     bool strict_caller,
-    unsigned context
+    unsigned context,
+    bool tail_position
 ) {
     if (tsc_value_eq(callee, tsc_eval_intrinsic_value())) {
             tsc_array_t* list = tsc_value_as_array(args);
@@ -69,7 +70,11 @@ tsc_value_t tsc_test262_direct_eval_call(
                 : tsc_value_undefined();
         return tsc_test262_direct_eval(source, strict_caller, context);
     }
-    return tsc_value_apply_function(callee, receiver, args);
+    /* Any other callee is an ordinary EvaluateCall, which keeps the call's
+     * tail position (ECMA-262 13.3.6.1 step 7). */
+    return tail_position
+        ? tsc_value_tail_call(callee, receiver, args)
+        : tsc_value_apply_function(callee, receiver, args);
 }
 
 static void test262_capture_print_args(tsc_array_t* args) {

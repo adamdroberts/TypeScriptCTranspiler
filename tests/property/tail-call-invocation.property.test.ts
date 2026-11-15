@@ -77,3 +77,42 @@ test("tail positions follow the source path and completion obligations", () => {
         expect({body,strict,actual}).toEqual({body,strict,actual:strict&&expected});
     }
 });
+
+// A call written `eval(...)` is direct eval only when the callee is %eval%;
+// any other function reached through a binding named eval is an ordinary
+// EvaluateCall and keeps its tail position. Each binding kind the reference
+// can resolve through is one partition, plus the real %eval% control. The
+// native run drives every partition to the 100000-deep stress.
+test("calls through a non-intrinsic eval binding keep their tail position", async () => {
+    const strictBody = (done: string) => `"use strict";if(n===0)return ${done};return eval(n-1);`;
+    const pieces = [
+        'function check(label,callback){try{print(label+":"+callback());}catch(error){print(label+":"+(error.name||error));}}',
+        `check("function",function(){return (function(){function f(n){${strictBody('"function"')}}var eval=f;return f(TAIL_DEPTH);})();});`,
+        `check("parameter",function(){return (function(eval){function f(n){${strictBody('"parameter"')}}eval=f;return f(TAIL_DEPTH);})(null);});`,
+        `check("global",function(){var saved=eval;function f(n){${strictBody('"global"')}}eval=f;try{return f(TAIL_DEPTH);}finally{eval=saved;}});`,
+        `check("with",function(){var scope={},g;with(scope){g=function(n){${strictBody('"with:"+(this===scope)')}};}scope.eval=g;return g(TAIL_DEPTH);});`,
+        `check("dynamic",function(){return (function(){function f(n){${strictBody('"dynamic"')}}eval("var eval = f;");return f(TAIL_DEPTH);})();});`,
+        'check("intrinsic",function(){return (function(){"use strict";var seven=7;return eval("seven*6");})();});',
+    ];
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-tail-eval-binding-"));
+    try {
+        const entry = path.join(directory, "source.js");
+        await fs.writeFile(entry, pieces.join("\n").replaceAll("TAIL_DEPTH", "17"));
+        const oracle = nodeReferenceSync(["node", "-e", 'const fs=require("node:fs"),vm=require("node:vm");new vm.Script(fs.readFileSync(process.argv[1],"utf8")).runInNewContext({print:value=>fs.writeSync(1,String(value)+"\\n")});', entry], { stdout: "pipe", stderr: "pipe" });
+        expect({ exitCode: oracle.exitCode, stderr: oracle.stderr.toString() }).toEqual({ exitCode: 0, stderr: "" });
+        const expected = oracle.stdout.toString().trimEnd().split("\n");
+        expect(expected).toEqual(["function:function", "parameter:parameter", "global:global", "with:with:true", "dynamic:dynamic", "intrinsic:42"]);
+        await fs.writeFile(entry, pieces.join("\n").replaceAll("TAIL_DEPTH", "100000"));
+        const output = path.join(directory, "program"), diagnostics: string[] = [];
+        const result = await compile({ entry, output, buildDir: path.join(directory, "build"),
+            isolatedScriptRoots: [entry], initializationEntries: [entry],
+            test262Observation: { kind: "test262-native-observation", scenarioId: "property/tail-call-eval-binding.js#sloppy", setupEntries: [], testEntry: entry, async: false, scriptEntries: [entry] },
+            diagnosticWriter: message => diagnostics.push(message) });
+        expect({ exitCode: result.exitCode, diagnostics: diagnostics.join("") }).toEqual({ exitCode: 0, diagnostics: "" });
+        const native = Bun.spawnSync([output], { stdout: "pipe", stderr: "pipe", timeout: 120_000 });
+        expect({ exitCode: native.exitCode, stderr: native.stderr.toString() }).toEqual({ exitCode: 0, stderr: "" });
+        const observation = parseHostObservation(JSON.parse(native.stdout.toString()));
+        expect(observation.kind).toBe("normal");
+        expect(observation.stdout?.trimEnd().split("\n")).toEqual(expected);
+    } finally { await fs.rm(directory, { recursive: true, force: true }); }
+}, 600_000);

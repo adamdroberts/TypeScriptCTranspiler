@@ -33877,7 +33877,7 @@ class Emitter {
             `{ .previous = tsc_environment_current(), .record = tsc_environment_project(${projection}, ${references.length}) }; ` +
             `tsc_environment_private_names_project(${scope}.record, ${privateProjection}, ${privateNames.length}); ` +
             `(void)tsc_environment_swap(${scope}.record); ` +
-            `tsc_test262_direct_eval_call(${callee}, ${receiver}, ${argumentsValue}, ${this.nodeIsInStrictMode(call) ? "true" : "false"}, ${directEvalContext(call)}u); })`;
+            `tsc_test262_direct_eval_call(${callee}, ${receiver}, ${argumentsValue}, ${this.nodeIsInStrictMode(call) ? "true" : "false"}, ${directEvalContext(call)}u, ${isTailPositionCall(call) ? "true" : "false"}); })`;
     }
 
     private cStringLiteral(value: string): string {

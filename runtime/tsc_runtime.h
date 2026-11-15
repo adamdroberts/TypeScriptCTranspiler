@@ -1790,7 +1790,7 @@ void tsc_test262_set_indirect_eval_callback(tsc_test262_indirect_eval_callback_t
 tsc_value_t tsc_test262_direct_eval(tsc_value_t source, bool strict_caller, unsigned context);
 tsc_value_t tsc_eval_indirect(tsc_array_t* args);
 tsc_value_t tsc_eval_intrinsic_value(void);
-tsc_value_t tsc_test262_direct_eval_call(tsc_value_t callee, tsc_value_t receiver, tsc_value_t args, bool strict_caller, unsigned context);
+tsc_value_t tsc_test262_direct_eval_call(tsc_value_t callee, tsc_value_t receiver, tsc_value_t args, bool strict_caller, unsigned context, bool tail_position);
 void tsc_test262_write_normal(const char* scenario_id, bool async_test);
 void tsc_test262_write_throw(const char* scenario_id, const char* origin, tsc_value_t error);
 tsc_str_t* tsc_util_format_values(tsc_array_t* arguments);
