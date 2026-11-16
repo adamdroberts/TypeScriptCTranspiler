@@ -12880,6 +12880,18 @@ class Emitter {
             return name ? this.declaredName(name) : mangleIdent(id.text);
         }
         if (decl && !this.isAmbientDeclaration(decl) && ts.isEnumDeclaration(decl)) this.unsupportedEnumValue(id);
+        // An import binding whose target is only an ambient host declaration,
+        // or that the checker cannot resolve (a host module without a runtime
+        // owner or library declaration, such as node:module), has no
+        // C storage; fail closed rather than naming an undeclared variable.
+        const raw = this.checker.getSymbolAtLocation(id);
+        if (raw && raw.flags & ts.SymbolFlags.Alias) {
+            const target = this.checker.getAliasedSymbol(raw);
+            const declarations = target.declarations ?? [];
+            // No declarations: the checker could not resolve the host module.
+            if (declarations.every(declaration => this.isAmbientDeclaration(declaration) || ts.isSourceFile(declaration) && declaration.isDeclarationFile))
+                unsupported(id, "ambient host export requires an ordinary runtime owner");
+        }
         return mangleIdent(id.text);
     }
 
