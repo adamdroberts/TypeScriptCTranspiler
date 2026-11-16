@@ -648,6 +648,7 @@ class Emitter {
      * independently of the statement that first evaluates a declaration. */
     private moduleVarBindings = new Map<ts.Symbol, ModuleVarBindingPlan>();
     private moduleFunctionDeclarations = new Map<ts.FunctionDeclaration, ModuleFunctionBindingPlan>();
+    private readonly sloppyDirectEvalBodies = new Map<ts.Block, boolean>();
     private moduleVarBindingsBySource = new WeakMap<ts.SourceFile, ModuleVarBindingPlan[]>();
     /** Direct module `let`/`const` declarations share exporter-owned slots.
      * The initialized bit is the canonical TDZ state read by local references,
@@ -22207,9 +22208,36 @@ class Emitter {
             if ((ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) ||
                 ts.isSetAccessorDeclaration(node)) && ts.isComputedPropertyName(node.name) &&
                 this.isNodeWithin(identifier, node.name)) continue;
-            return declaration === node || !this.isNodeWithin(declaration, node) ? identifier.text : null;
+            if (declaration === node || !this.isNodeWithin(declaration, node)) return identifier.text;
+            // FunctionDeclarationInstantiation step 28: with parameter
+            // expressions the body has its own variable environment, where a
+            // sloppy direct eval in the body may declare a var that shadows a
+            // formal for body code (closures in the parameters keep the formal).
+            const body = (node as ts.FunctionLikeDeclaration).body;
+            if (body && ts.isBlock(body) && this.isNodeWithin(identifier, body) &&
+                (node as ts.FunctionLikeDeclaration).parameters.some(parameter => this.isNodeWithin(declaration, parameter)) &&
+                this.parameterListContainsExpression(node as ts.FunctionLikeDeclaration) && this.bodyContainsSloppyDirectEval(body))
+                return identifier.text;
+            return null;
         }
         return null;
+    }
+
+    /** A sloppy direct eval in this function body's own code (not in a nested
+     * function, whose eval declares into that function's environment). */
+    private bodyContainsSloppyDirectEval(body: ts.Block): boolean {
+        const cached = this.sloppyDirectEvalBodies.get(body);
+        if (cached !== undefined) return cached;
+        const worklist: ts.Node[] = [...body.statements];
+        let found = false;
+        while (worklist.length > 0 && !found) {
+            const node = worklist.pop()!;
+            if (ts.isFunctionLike(node) || ts.isClassLike(node)) continue;
+            if (this.isDirectEvalSyntax(node) && !this.nodeIsInStrictMode(node)) found = true;
+            else ts.forEachChild(node, child => { worklist.push(child); });
+        }
+        this.sloppyDirectEvalBodies.set(body, found);
+        return found;
     }
 
     private withEnvironmentReferenceName(identifier: ts.Identifier): string | null {
