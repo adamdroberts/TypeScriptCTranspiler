@@ -10160,6 +10160,7 @@ class Emitter {
     }
 
     private isSideEffectFreeCommonJSPathIdentifier(expr: ts.Identifier): boolean {
+        if (this.isUnboundCommonJsWrapperName(expr)) return false;
         return this.isUnshadowedGlobalIdentifier(expr, "__filename") ||
             this.isUnshadowedGlobalIdentifier(expr, "__dirname");
     }
@@ -11618,9 +11619,20 @@ class Emitter {
         if (runtimeGlobalBindings.has(id.text)) return true;
         // A free JS name has no physical C slot. Resolve its actual property
         // against the Realm global record, including missing-name semantics.
-        if (!this.isJavaScriptSourceFile(id.getSourceFile())) return false;
         const symbol = this.symbolForIdentifier(id);
+        if (!this.isJavaScriptSourceFile(id.getSourceFile())) {
+            // TypeScript resolves a name whose only declarations are JavaScript
+            // global object assignments (`globalThis.name = v`); that property
+            // has no C slot either.
+            const declarations = symbol?.declarations ?? [];
+            return declarations.length > 0 && declarations.every(declaration => this.isGlobalObjectExpandoDeclaration(declaration));
+        }
         return !symbol || !(symbol.declarations ?? []).some(declaration => this.isAmbientDeclaration(declaration));
+    }
+
+    private isGlobalObjectExpandoDeclaration(declaration: ts.Declaration): boolean {
+        return this.isJavaScriptSourceFile(declaration.getSourceFile()) &&
+            (ts.isPropertyAccessExpression(declaration) || ts.isElementAccessExpression(declaration) || ts.isBinaryExpression(declaration));
     }
 
     private isSourceGlobalReference(id: ts.Identifier): boolean {
@@ -12329,6 +12341,25 @@ class Emitter {
                 declaration.name?.text === id.text) return null;
         }
         return id.text;
+    }
+
+    /** A CommonJS wrapper name in an ECMAScript module is not bound by the
+     * module: when the checker knows it only from an ambient host declaration,
+     * it resolves through the global environment like any unbound identifier.
+     * JavaScript modules follow Node 26 (none of the five names); TypeScript
+     * modules keep Bun's `require`, `__filename` and `__dirname` (developer
+     * decision 2026-11-16), so only `module` and `exports` are unbound there. */
+    private isUnboundCommonJsWrapperName(id: ts.Identifier): boolean {
+        const source = id.getSourceFile();
+        const names = this.isJavaScriptSourceFile(source)
+            ? ["exports", "require", "module", "__filename", "__dirname"] : ["exports", "module"];
+        if (!names.includes(id.text) || this.isCommonJsSourceFile(source) || !ts.isExternalModule(source)) return false;
+        // A JavaScript assignment to a global object property (`globalThis.module
+        // = x`) joins the symbol as an expando declaration; it is a property,
+        // not a binding, so the name stays unbound.
+        const declarations = this.symbolForIdentifier(id)?.declarations ?? [];
+        return declarations.some(declaration => this.isAmbientDeclaration(declaration)) &&
+            declarations.every(declaration => this.isAmbientDeclaration(declaration) || this.isGlobalObjectExpandoDeclaration(declaration));
     }
 
     private commonJsImportForIdentifier(id: ts.Identifier): { info: ModuleInfo; name: string | null } | null {
@@ -17057,7 +17088,8 @@ class Emitter {
     private isCommonJsRequireCallee(expr: ts.Expression): boolean {
         const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
         if (this.isCommonJsRequireBindExpression(unwrapped)) return true;
-        return (ts.isIdentifier(unwrapped) && (unwrapped.text === "require" || this.isCommonJsRequireAliasIdentifier(unwrapped))) ||
+        return (ts.isIdentifier(unwrapped) && (unwrapped.text === "require" && !this.isUnboundCommonJsWrapperName(unwrapped) ||
+            this.isCommonJsRequireAliasIdentifier(unwrapped))) ||
             this.isModuleRequireAccess(unwrapped);
     }
 
@@ -17128,7 +17160,7 @@ class Emitter {
         this.commonJsRequireAliasResults.set(decl,false);
         if (!ts.isIdentifier(decl.name) || !decl.initializer) return false;
         const init = this.unwrapSideEffectFreeStaticExpression(decl.initializer);
-        const result=(ts.isIdentifier(init) && init.text === "require") ||
+        const result=(ts.isIdentifier(init) && init.text === "require" && !this.isUnboundCommonJsWrapperName(init)) ||
             (ts.isPropertyAccessExpression(init) && this.isModuleRequireAccess(init)) ||
             this.isCommonJsRequireBindExpression(init);
         this.commonJsRequireAliasResults.set(decl,result);return result;
@@ -30986,6 +31018,8 @@ class Emitter {
             if (ordinaryConstructor) {
                 return { c: `tsc_environment_reference_get(${this.stringLit(ordinaryConstructor)})`, ty: T_VALUE };
             }
+            if (this.isUnboundCommonJsWrapperName(expr))
+                return { c: `tsc_environment_reference_get(${this.test262GlobalBindingKey(expr.text)})`, ty: T_VALUE };
             if (expr.text === "__filename") {
                 return { c: this.stringLit(expr.getSourceFile().fileName), ty: T_STRING };
             }
@@ -31209,6 +31243,8 @@ class Emitter {
                 ? this.emitProcessPropertyRead(processNamedImport)
                 : null;
             if (processProp) return processProp;
+            if (this.isUnboundCommonJsWrapperName(expr))
+                return { c: `tsc_environment_reference_get(${this.test262GlobalBindingKey(expr.text)})`, ty: T_VALUE };
             if (declaration && (ts.isVariableDeclaration(declaration) || ts.isFunctionDeclaration(declaration)) &&
                 this.isAmbientDeclaration(declaration)) {
                 unsupported(expr, "ambient host value requires an ordinary runtime owner");
@@ -31310,6 +31346,7 @@ class Emitter {
             this.isSourceGlobalReference(operand) ||
             this.ordinaryNativeGlobalConstructor(operand) ||
             this.isUnresolvedParameterScopeReference(operand) ||
+            this.isUnboundCommonJsWrapperName(operand) ||
             !this.symbolForIdentifier(operand)
         )) {
             return {
@@ -31317,6 +31354,12 @@ class Emitter {
                 ty: T_STRING,
             };
         }
+        // A TypeScript module keeps Bun's host `require` (see
+        // isUnboundCommonJsWrapperName); its type is a function.
+        if (ts.isIdentifier(operand) && operand.text === "require" && !this.isJavaScriptSourceFile(operand.getSourceFile()) &&
+            ts.isExternalModule(operand.getSourceFile()) && !this.isCommonJsSourceFile(operand.getSourceFile()) &&
+            (this.symbolForIdentifier(operand)?.declarations ?? []).every(declaration => this.isAmbientDeclaration(declaration)))
+            return { c: this.stringLit("function"), ty: T_STRING };
         // `typeof` performs GetValue for resolvable lexical References, so an
         // uninitialized module slot must throw rather than being folded from
         // its declared or initializer type.
