@@ -12801,7 +12801,15 @@ class Emitter {
         return !!container && ts.isModuleBlock(container);
     }
 
+    private unsupportedEnumValue(node: ts.Node): never {
+        unsupported(node, "a TypeScript enum used as a value requires a runtime enum object; only constant member reads are supported");
+    }
+
     private declaredName(name: ts.Identifier): string {
+        // An enum has no runtime storage: constant member reads are folded
+        // (enumConstantValue), and any other value use fails closed rather
+        // than naming a C variable that is never declared.
+        if (ts.isEnumDeclaration(name.parent)) this.unsupportedEnumValue(name);
         const parts = [...this.declarationNamespaceParts(name), name.text];
         const source = name.getSourceFile();
         const moduleId = this.graph.fileToModuleId.get(source.fileName);
@@ -12871,6 +12879,7 @@ class Emitter {
             const name = this.declarationName(decl);
             return name ? this.declaredName(name) : mangleIdent(id.text);
         }
+        if (decl && !this.isAmbientDeclaration(decl) && ts.isEnumDeclaration(decl)) this.unsupportedEnumValue(id);
         return mangleIdent(id.text);
     }
 
@@ -39783,8 +39792,11 @@ class Emitter {
     }
 
     private enumConstantValue(pa: ts.PropertyAccessExpression): number | string | undefined {
-        if (!ts.isIdentifier(pa.expression)) return undefined;
-        const sym = this.checker.getSymbolAtLocation(pa.expression);
+        // `E.member` or a namespace-qualified `N.E.member`.
+        let qualifier: ts.Expression = pa.expression;
+        while (ts.isPropertyAccessExpression(qualifier)) qualifier = qualifier.expression;
+        if (!ts.isIdentifier(qualifier) || this.isJavaScriptSourceFile(pa.getSourceFile())) return undefined;
+        const sym = this.checker.getSymbolAtLocation(ts.isPropertyAccessExpression(pa.expression) ? pa.expression.name : pa.expression);
         const decl = sym?.getDeclarations()?.find(ts.isEnumDeclaration);
         if (!decl) return undefined;
 

@@ -142,10 +142,12 @@ export function earlyControlFlowStaticSemanticsFailure(
         const strict = entry.context.strict || ts.isClassLike(node) || !!body && ts.isBlock(body) && ecmaDirectivePrologueHasUseStrict(body.statements, sourceFile);
         const context = strict === entry.context.strict ? entry.context : {...entry.context, strict};
         // ModuleItem: ImportDeclaration and ExportDeclaration are productions
-        // of the module body only, never of a StatementList.
+        // of the module body only, never of a StatementList. A TypeScript
+        // namespace body (ModuleBlock) is not ECMAScript code; its exports and
+        // `import x = N.y` aliases are TypeScript members of the namespace.
         if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node) || ts.isExportAssignment(node) || ts.isImportEqualsDeclaration(node) ||
                 ts.canHaveModifiers(node) && !!ts.getModifiers(node)?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) &&
-                node.parent && !ts.isSourceFile(node.parent))
+                node.parent && !ts.isSourceFile(node.parent) && !ts.isModuleBlock(node.parent))
             return { node, message: "an import or export declaration is only permitted at the top level of a module" };
         // LexicalDeclaration / ForDeclaration: it is a Syntax Error if the
         // BoundNames of BindingList contains "let"; a const or using binding

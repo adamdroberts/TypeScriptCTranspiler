@@ -1,7 +1,7 @@
 import ts from "typescript";
 import { literalPropertyKey } from "./ecmascript-source";
 import {moduleNamespaceBinding,resolveModuleExport} from "./module-export-resolution";
-import {sourceModuleFailure,moduleSourceOriginal,moduleLinkRecord,type ModuleSourceFailure} from "./module-source-record";
+import {sourceModuleFailure,moduleSourceOriginal,moduleLinkRecord,resolvesToTypeExport,type ModuleSourceFailure} from "./module-source-record";
 import * as path from "node:path";
 import { sourceUnitFileName } from "./program";
 import { mangleQualifiedIdent } from "./emit/mangle";
@@ -153,6 +153,10 @@ export function buildModuleGraph(
             const target=imported(record,entry.moduleRequest);
             if(!target&&!entry.moduleRequest.specifier.startsWith('.'))continue;
             const resolution=target?resolveModuleExport(target,entry.importName,imported):null;
+            // An import that names only a type is elided (directly or through
+            // `export *`), as Bun does; a named re-export `export { T } from`
+            // of a type stays a link error there, as in Bun and Node.
+            if(resolution===null&&target&&resolvesToTypeExport(target,entry.importName,imported))continue;
             if(resolution===null||resolution==='ambiguous'){failure(`cannot resolve imported binding ${JSON.stringify(entry.importName)}`);break;}
         }
     }

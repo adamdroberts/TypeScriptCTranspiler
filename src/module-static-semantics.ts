@@ -466,6 +466,12 @@ export function earlyModuleStaticSemanticsFailure(
         };
     }
     const declaredNames = new Set([...lexicalSet, ...varNames.map((entry) => entry.name)]);
+    // A TypeScript module also declares types (interfaces, type aliases,
+    // namespaces) that `export { T }` may name; TypeScript elides them.
+    if (!/\.[cm]?jsx?$/i.test(sourceFile.fileName))
+        for (const statement of sourceFile.statements)
+            if ((ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement) || ts.isModuleDeclaration(statement)) &&
+                ts.isIdentifier(statement.name)) declaredNames.add(statement.name.text);
     for (const entry of exportedBindings) {
         if (!declaredNames.has(entry.name)) {
             return {
