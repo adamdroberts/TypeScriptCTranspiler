@@ -509,6 +509,9 @@ typedef struct {
     tsc_function_identity_t* prototype_identity;
     tsc_function_identity_t* constructor_identity;
     tsc_function_identity_t* throw_type_error_identity;
+    /* The legacy accessor functions (caller get/set, arguments get/set)
+     * every non-strict ordinary function shares as own properties. */
+    tsc_value_t legacy_accessors[4];
     int initialization_state;
 } tsc_function_intrinsics_t;
 
@@ -726,11 +729,13 @@ static tsc_value_t throw_type_error_body(void* env, tsc_value_t receiver, tsc_ar
 static tsc_object_t* arguments_object_new(tsc_array_t* arguments, tsc_array_t* parameter_cells,
         tsc_value_t callee, bool restricted_callee);
 
-/* Function.prototype.caller and Function.prototype.arguments. Node (V8)
- * exposes both as accessors that read only on non-strict normal functions
- * and throw a TypeError for every other callable, which
- * sec-forbidden-extensions permits for non-strict functions and requires for
- * the rest. caller is the non-strict normal function whose value-call frame
+/* The legacy `caller` and `arguments` extension. Function.prototype keeps
+ * the spec's %ThrowTypeError% accessors (AddRestrictedFunctionProperties);
+ * each non-strict ordinary function carries its own configurable,
+ * non-enumerable `caller` and `arguments` accessors instead, which
+ * sec-forbidden-extensions permits for exactly those functions (Node exposes
+ * the same reads through Function.prototype). The shared getters still throw
+ * a TypeError for any other receiver. caller is the non-strict normal function whose value-call frame
  * sits directly below the receiver's most recent frame (call, apply,
  * Reflect.apply and bound functions are transparent; a built-in or strict
  * caller reads as null); a call that did not pass through a value-call
@@ -769,15 +774,11 @@ static tsc_value_t function_arguments_setter(void* env, tsc_value_t receiver, ts
     legacy_accessor_require(receiver);
     return tsc_value_undefined();
 }
-static void define_legacy_accessor(tsc_value_t target, const char* name, size_t name_length,
-        tsc_generic_function_t getter, tsc_generic_function_t setter) {
-    tsc_str_t* key = tsc_str_from_lit(name, name_length);
+static void define_legacy_accessor(tsc_value_t target, tsc_str_t* key, tsc_value_t getter, tsc_value_t setter) {
     tsc_descriptor_record_t descriptor = { .present = TSC_DESCRIPTOR_BIT(GET) |
         TSC_DESCRIPTOR_BIT(SET) | TSC_DESCRIPTOR_BIT(ENUMERABLE) | TSC_DESCRIPTOR_BIT(CONFIGURABLE) };
-    descriptor.values[TSC_DESCRIPTOR_GET] = tsc_value_function_builtin_named(getter, NULL, 0.0,
-        tsc_str_concat(tsc_str_from_lit("get ", 4), key));
-    descriptor.values[TSC_DESCRIPTOR_SET] = tsc_value_function_builtin_named(setter, NULL, 1.0,
-        tsc_str_concat(tsc_str_from_lit("set ", 4), key));
+    descriptor.values[TSC_DESCRIPTOR_GET] = getter;
+    descriptor.values[TSC_DESCRIPTOR_SET] = setter;
     descriptor.values[TSC_DESCRIPTOR_ENUMERABLE] = tsc_value_bool(false);
     descriptor.values[TSC_DESCRIPTOR_CONFIGURABLE] = tsc_value_bool(true);
     if (!tsc_value_define_property_record(target, key, &descriptor))
@@ -913,9 +914,14 @@ static tsc_function_intrinsics_t* ensure_function_intrinsics(void) {
         tsc_object_prevent_extensions(thrower_identity->props);
         thrower_identity->extensible = false;
         tsc_value_t thrower = value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)thrower_identity);
-        (void)thrower;
+        /* AddRestrictedFunctionProperties(%Function.prototype%). */
+        size_t legacy = 0;
 #define TSC_FUNCTION_RESTRICTED_PROPERTY(name) \
-        define_legacy_accessor(prototype, #name, sizeof(#name) - 1, function_##name##_getter, function_##name##_setter);
+        define_restricted_accessor(prototype, tsc_str_from_lit(#name, sizeof(#name) - 1), thrower, true); \
+        intrinsics->legacy_accessors[legacy++] = tsc_value_function_builtin_named(function_##name##_getter, NULL, 0.0, \
+            tsc_str_from_lit("get " #name, sizeof("get " #name) - 1)); \
+        intrinsics->legacy_accessors[legacy++] = tsc_value_function_builtin_named(function_##name##_setter, NULL, 1.0, \
+            tsc_str_from_lit("set " #name, sizeof("set " #name) - 1));
 #include "tsc_function_restricted_properties.def"
 #undef TSC_FUNCTION_RESTRICTED_PROPERTY
 
@@ -925,6 +931,19 @@ static tsc_function_intrinsics_t* ensure_function_intrinsics(void) {
     }
     tsc_runtime_unlock();
     return intrinsics;
+}
+
+/* Installs the legacy `caller` and `arguments` own accessors on a non-strict
+ * ordinary function (see legacy_accessor_require). */
+void tsc_function_define_legacy_properties(tsc_value_t function) {
+    tsc_function_intrinsics_t* intrinsics = ensure_function_intrinsics();
+    size_t legacy = 0;
+#define TSC_FUNCTION_RESTRICTED_PROPERTY(name) \
+    define_legacy_accessor(function, tsc_str_from_lit(#name, sizeof(#name) - 1), \
+        intrinsics->legacy_accessors[legacy], intrinsics->legacy_accessors[legacy + 1]); \
+    legacy += 2;
+#include "tsc_function_restricted_properties.def"
+#undef TSC_FUNCTION_RESTRICTED_PROPERTY
 }
 
 tsc_value_t tsc_function_default_prototype(void) {

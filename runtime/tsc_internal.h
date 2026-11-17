@@ -306,6 +306,7 @@ bool tsc_value_is_html_dda(tsc_value_t value);
  * built-in, strict or otherwise restricted callable, or when the call did
  * not go through a value-call frame. */
 tsc_value_t tsc_function_legacy_caller(tsc_value_t function);
+void tsc_function_define_legacy_properties(tsc_value_t function);
 void tsc_value_mark_html_dda(tsc_value_t value);
 tsc_object_t* tsc_object_new_with_prototype(tsc_value_t prototype);
 

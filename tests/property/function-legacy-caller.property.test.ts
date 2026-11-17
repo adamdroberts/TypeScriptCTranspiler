@@ -6,10 +6,15 @@ import {join} from 'node:path';
 import {compile} from '../../src/compile';
 import {nodeReferenceSync} from './node-reference';
 
-/* Function.prototype.caller and Function.prototype.arguments, compared with
- * Node 26 (V8 exposes both as accessors; sec-forbidden-extensions permits
- * them on non-strict functions only). The receiver rule, the descriptors,
- * the setters and the arguments snapshot must match exactly. The caller
+/* The legacy `caller` and `arguments` extension, compared with Node 26. V8
+ * reads them through Function.prototype accessors; this runtime keeps the
+ * spec's %ThrowTypeError% accessors there (function-restricted-properties)
+ * and gives each non-strict ordinary function own accessors instead, which
+ * sec-forbidden-extensions permits for those functions only (developer rule
+ * 2026-11-17: strict spec without losing functionality Node or Bun has). The
+ * receiver rule, the legacy accessor functions, the setters and the arguments
+ * snapshot must match exactly; own-property presence and Function.prototype's
+ * descriptors differ by design and are not compared. The caller
  * value is implementation-defined: a generated call chain mixes every
  * function kind and transport (direct, call, apply, bind, Reflect.apply, a
  * built-in callback, new, a function value) and each result must equal
@@ -74,7 +79,6 @@ const probe = (label, fn) => {
   try { results.push(name(fn[key])); } catch (error) { results.push("throws " + error.name); }
   try { fn[key] = 1; results.push("set ok"); } catch (error) { results.push("set throws " + error.name); }
  }
- results.push(Object.getOwnPropertyDescriptor(fn, "caller") === undefined, Object.getOwnPropertyDescriptor(fn, "arguments") === undefined);
  console.log(label, results.join(" "));
 };
 probe("declaration", function f(){});
@@ -94,15 +98,16 @@ probe("dynamic", Function("return 1"));
 probe("dynamicStrict", Function("'use strict'; return 1"));
 probe("dynamicGenerator", Object.getPrototypeOf(function*(){}).constructor("yield 1"));
 probe("prototype", Function.prototype);
+const legacy = key => Object.getOwnPropertyDescriptor(function(){}, key) ?? Object.getOwnPropertyDescriptor(Function.prototype, key);
 for (const key of ["caller", "arguments"]) {
- const descriptor = Object.getOwnPropertyDescriptor(Function.prototype, key);
+ const descriptor = legacy(key);
  console.log(key, typeof descriptor.get, typeof descriptor.set, descriptor.get.name, descriptor.set.name, descriptor.get.length, descriptor.set.length, descriptor.enumerable, descriptor.configurable, descriptor.get === descriptor.set);
  for (const receiver of [{}, 1, "s", null, undefined, Symbol()]) {
   try { descriptor.get.call(receiver); console.log(key, "get on", typeof receiver, "ok"); } catch (error) { console.log(key, "get on", typeof receiver, error.name); }
   try { descriptor.set.call(receiver, 1); console.log(key, "set on", typeof receiver, "ok"); } catch (error) { console.log(key, "set on", typeof receiver, error.name); }
  }
 }
-console.log(Object.getOwnPropertyDescriptor(Function.prototype, "caller").get !== Object.getOwnPropertyDescriptor(Function.prototype, "arguments").get);
+console.log(legacy("caller").get !== legacy("arguments").get);
 function args(a, b){ const x = args.arguments; a = 9; return [x === arguments, x[0], x[1], x.length, Object.prototype.toString.call(x), x.callee === args, Array.isArray(x), Object.getOwnPropertyDescriptor(x, "callee").writable]; }
 console.log(JSON.stringify(args(1, 2)));
 console.log(JSON.stringify([0].map(function m(){ return m.arguments.length; })));

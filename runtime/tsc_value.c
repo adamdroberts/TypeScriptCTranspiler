@@ -638,6 +638,7 @@ tsc_value_t tsc_callable_owner_get(tsc_callable_owner_t* owner, tsc_generic_func
             tsc_function_identity_t* identity = (tsc_function_identity_t*)value_ptr(value);
             identity->legacy_caller_value = true;
             identity->legacy_caller_receiver = constructable;
+            if (constructable) tsc_function_define_legacy_properties(value);
         }
         tsc_callable_owner_set(owner, value);
         (void)tsc_parse_unit_swap(previous_unit);
