@@ -34006,6 +34006,7 @@ class Emitter {
             if (ts.isFunctionLike(node) && "body" in node) { owner = node as ts.FunctionLikeDeclaration; break; }
         }
         const references: string[] = [];
+        const inParameters = !!owner && owner.parameters.some(parameter => this.isNodeWithin(call, parameter));
         for (const scopedSymbol of this.checker.getSymbolsInScope(call, ts.SymbolFlags.Value)) {
             // With lookup follows the retained environment tree. Projecting
             // checker-visible outer bindings above its object would shadow it.
@@ -34022,6 +34023,10 @@ class Emitter {
             if (ts.isFunctionExpression(declaration)) continue;
             const outer = !!owner && !this.isNodeWithin(declaration, owner);
             if (!outer && !this.environmentBindingIsLexical(symbol)) continue;
+            // The checker scopes a function's body declarations over its
+            // parameter list; ECMAScript does not (the body environments are
+            // created after the formals are bound).
+            if (inParameters && owner?.body && this.isNodeWithin(declaration, owner.body)) continue;
             references.push(this.environmentBindingReference(symbol, call, outer));
         }
         const privateNames = classPrivateNamesInScope(call).map(name => {
