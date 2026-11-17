@@ -1699,7 +1699,9 @@ static tsc_value_t string_search_from_values(
 
 double tsc_value_to_integer_or_infinity(tsc_value_t value) {
     double number = tsc_value_to_number(value);
-    return isnan(number) || number == 0.0 ? 0.0 : trunc(number);
+    // truncate(ℝ(number)) is a mathematical integer: a fraction in (-1, 0)
+    // truncates to +0, never -0 (IsValidIntegerIndex rejects -0).
+    return isnan(number) || number == 0.0 ? 0.0 : trunc(number) + 0.0;
 }
 
 double tsc_value_to_index(tsc_value_t value) {
