@@ -9541,7 +9541,16 @@ class SourceValueFlow {
                             const instance = this.owner(node);
                             this.markPropertyAlgorithm(instance,ts.isClassLike(atom.owner.definition)&&atom.owner.base?"opaque":"ordinary");
                             instance.prototype ??= this.newCell();
-                            this.copy(this.property(invocation.target,"prototype"),instance.prototype);
+                            // GetPrototypeFromConstructor: an abrupt Get(F,
+                            // "prototype") throws before the object exists, and
+                            // a value that is not an Object selects %Object.prototype%
+                            // of F's Realm.
+                            const linked=instance.prototype,prototype=this.property(invocation.target,"prototype"),realms=this.executionRealms(atom.owner.definition);
+                            this.rule([prototype,realms],()=>{for(const value of prototype.values){
+                                if(value.tag==="abrupt")continue;
+                                if(value.tag==="primitive"||value.tag==="non-string"||value.tag==="unknown-string"||value.tag==="text-operation"){for(const realm of realms.values)if(realm.tag==="realm-record")this.copy(this.realmObjectPrototype(realm.realm),linked);}
+                                else this.publish(linked,value);
+                            }});
                         }
                         this.copy(invocation.construct?invocation.receiver:this.functionThisBinding(atom.owner,invocation.receiver,node), atom.owner.receiver);
                         if(invocation.construct)this.copy(invocation.newTarget??invocation.target,atom.owner.newTarget);else this.publish(atom.owner.newTarget,this.primitive(undefined));
