@@ -142,6 +142,13 @@ export const runtimeIteratorMethods: ReadonlySet<string> = new Set(
             .matchAll(/^TSC_ITERATOR_(?:HELPER|CONSUMER)\((\w+), /gm)].map(match=>match[1]!)),
 );
 
+/** Each Iterator.prototype helper and consumer's `length`, from the same tables. */
+export const runtimeIteratorMethodLengths: ReadonlyMap<string,number> = new Map(
+    ["tsc_iterator_helpers.def","tsc_iterator_consumers.def"].flatMap(filename=>
+        [...fs.readFileSync(path.join(resolvePackageRoot(),"runtime",filename),"utf8")
+            .matchAll(/^TSC_ITERATOR_(?:HELPER|CONSUMER)\((\w+), \w+, (\d+)\)$/gm)].map(match=>[match[1]!,Number(match[2])] as const)),
+);
+
 /** Promise source members project the native publication collection. */
 export const runtimePromiseMethods:ReadonlyMap<string,{length:number;static:boolean}>=new Map(
     [...fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_promise.c"),"utf8")

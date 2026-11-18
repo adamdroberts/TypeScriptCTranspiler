@@ -26,7 +26,7 @@ import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, functionConstructorSourceKey, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
 import {declarativeSourceBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding, sourceBindingTarget} from "./source-bindings";
-import {runtimeDynamicFunctionDescriptors,runtimeGeneratorMethods,runtimeCallbackTimerDescriptors,runtimeAtomicsMethods,runtimeTypedArrayDescriptors,runtimeMathMethods,runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeBufferExports, runtimeChildProcessOperations, runtimeUtilExports, runtimeFsExports, runtimeFsConstants, runtimeErrorKinds, runtimeIteratorMethods, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeStringPrototypeMethods, runtimeObjectPrototypeMethods, runtimeObjectPrototypeDescriptors, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
+import {runtimeDynamicFunctionDescriptors,runtimeGeneratorMethods,runtimeCallbackTimerDescriptors,runtimeAtomicsMethods,runtimeTypedArrayDescriptors,runtimeMathMethods,runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeBufferExports, runtimeChildProcessOperations, runtimeUtilExports, runtimeFsExports, runtimeFsConstants, runtimeErrorKinds, runtimeIteratorMethods, runtimeIteratorMethodLengths, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeStringPrototypeMethods, runtimeObjectPrototypeMethods, runtimeObjectPrototypeDescriptors, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
     readonly roots?: readonly string[];
@@ -78,7 +78,7 @@ type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpressio
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
 type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-integrity:${"preventExtensions"|"seal"|"freeze"}` | `object-integrity-test:${"isExtensible"|"isSealed"|"isFrozen"}` | `regexp-flag:${string}` | `regexp-member:${string}` | `object-enumerable:${"keys"|"values"|"entries"}` | `object-has-own:${"static"|"prototype"}` | `array-iteration:${ArrayIterationMode}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `legacy-function-accessor:${"caller"|"arguments"}:${"get"|"set"}` | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | `collection-member:${string}` | "promise-finally-forward" | "species-getter" | "proto-accessor:get" | "proto-accessor:set" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
+    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | "regexp-string-iterator-next" | `iterator-helper:${string}` | "wrap-iterator:next" | "wrap-iterator:return" | "string-iterator" | "string-iterator-next" | "iterator-helper-next" | "iterator-helper-return" | `collection-member:${string}` | "promise-finally-forward" | "species-getter" | "proto-accessor:get" | "proto-accessor:set" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
 type Primitive = SourcePrimitive;
 /** Callables and collection-iterator cells reachable from one escaping value;
  * a sink forwards them into one escaping call. */
@@ -568,6 +568,8 @@ const PROPERTY_MUTATIONS = new Set<Operation>(["define-property", "define-proper
 const CONDITIONAL_EFFECT_DEPTH = 8;
 const CONDITIONAL_EFFECT_PROJECTIONS = 16;
 const CONDITIONAL_EFFECT_RECORDS = 16;
+/** Iterator.prototype helpers that return an Iterator Helper object. */
+const LAZY_ITERATOR_HELPERS:ReadonlySet<string>=new Set(["map","filter","take","drop","flatMap"].map(name=>`iterator-helper:${name}`));
 const CAPTURE_COMPOSITION_BOUND = 8;
 /** Operand combinations one text operation's value proof may enumerate. Each
  * combination is evaluated and its result interned, so a JSON text, join or
@@ -756,6 +758,14 @@ class SourceValueFlow {
     private readonly topLevelGlobalEscapes=new Map<ts.SourceFile,{visit:(input:Cell,as?:EscapeReachKind)=>void;active:Cell;thrown:Cell;sources:Set<Cell>;handlers:Set<Cell>}>();
     private readonly escapeReaches=new Map<string,{cells:Map<Cell,EscapeReach>;atoms:Map<Atom,EscapeReach>}>();
     private readonly escapedInvocationOrigins=new WeakMap<ts.Node,ts.Node>();
+    private regexpStringIteratorPrototypeCell:Cell|undefined;
+    private readonly regexpStringIterators=new Map<ts.Node,Cell>();
+    private wrapForValidIteratorPrototypeCell:Cell|undefined;
+    private stringIteratorPrototypeCell:Cell|undefined;
+    private iteratorHelperPrototypeCell:Cell|undefined;
+    private readonly iteratorHelperObjects=new Map<ts.Node,Cell>();
+    private readonly stringIterators=new Map<ts.Node,Cell>();
+    private readonly wrappedIterators=new Map<ts.Node,Cell>();
     /** Escape invocations made by a native: their actuals are native values. */
     private readonly nativeEscapeInvocations=new WeakSet<ts.Node>();
     /** The values a native passes an escaped callable (an absent argument is
@@ -5151,7 +5161,10 @@ class SourceValueFlow {
                         this.defineField(fields, name, value, false);
                     }
                 }
-                if(key==="Iterator")this.defineField(fields,"prototype",this.iteratorPrototype());
+                if(key==="Iterator"){
+                    this.defineField(fields,"prototype",this.iteratorPrototype());
+                    const from=this.newCell();this.publish(from,this.operation("iterator-helper:from"));this.defineField(fields,"from",from,false);
+                }
                 if(key==="RegExp")this.defineField(fields,"prototype",this.regexpPrototype(),false);
                 if(runtimePrimitiveDescriptors.has(key))this.defineField(fields,"prototype",this.primitivePrototype(key),false);
                 const element=runtimeTypedArrayDescriptors.get(key);
@@ -5490,7 +5503,9 @@ class SourceValueFlow {
                 this.onActive(context,()=>this.escapeCallableArgument(returned,context,false,"argument"));
             }
             if(name==="match"||name==="matchAll"||name==="replace"||name==="split")this.property(receiver,"flags",context);
-            if(name==="split")this.onActive(context,()=>this.escapeCallableArgument(receiver,context));
+            // SpeciesConstructor(R, %RegExp%): @@split and @@matchAll construct
+            // their matcher through the receiver's constructor.
+            if(name==="split"||name==="matchAll")this.onActive(context,()=>this.escapeCallableArgument(receiver,context));
         }
         this.rule([receiver],()=>{for(const atom of receiver.values){
             if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
@@ -5505,7 +5520,9 @@ class SourceValueFlow {
                 // receiver's own and inherited members, so only code reachable
                 // from the receiver and arguments runs; the result is native.
                 if(owner||atom.tag==="unknown"||atom.tag==="opaque-object"){
-                    this.publish(result,this.nativeUnknown);if(handler)this.publish(handler,this.unknown);
+                    // @@matchAll returns CreateRegExpStringIterator's object
+                    // whenever it completes normally.
+                    if(name==="matchAll")this.copy(this.regexpStringIterator(context),result);else this.publish(result,this.nativeUnknown);if(handler)this.publish(handler,this.unknown);
                     this.onActive(context,()=>{this.escapeCallableArgument(receiver,context);for(const argument of args??[])this.escapeCallableArgument(argument,context);});
                 }
                 else this.publish(result,this.abrupt);
@@ -5518,11 +5535,117 @@ class SourceValueFlow {
                 case "search":this.publish(result,this.numberValue());break;
                 case "split":this.copy(this.regexpStringArray(context,"split"),result);break;
                 case "replace":this.publish(result,this.unknownString);break;
-                case "matchAll":this.publish(result,this.opaqueObject);break;
+                case "matchAll":this.copy(this.regexpStringIterator(context),result);break;
                 default:this.publish(result,this.unknown);this.activateOpaqueEffect(context);
             }
         }});
         return result;
+    }
+    /** %RegExpStringIteratorPrototype% (sec-%regexpstringiteratorprototype%-object):
+     * inherits %IteratorPrototype%, with `next` and @@toStringTag
+     * "RegExp String Iterator". */
+    private regexpStringIteratorPrototype():Cell {
+        if(!this.regexpStringIteratorPrototypeCell){
+            const value=this.newCell(),owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.iteratorPrototype()};
+            this.regexpStringIteratorPrototypeCell=value;this.copy(this.opaqueMutation,owner.shape);this.publish(value,{tag:"object",owner});
+            const next=this.newCell();this.publish(next,this.operation("regexp-string-iterator-next"));this.defineField(owner,"next",next,false);
+            const tag=this.newCell();this.publish(tag,this.primitive("RegExp String Iterator"));this.defineField(owner,this.wellKnownSymbols.get("toStringTag")!,tag,false);
+        }
+        return this.regexpStringIteratorPrototypeCell;
+    }
+    /** %IteratorHelperPrototype% (sec-%iteratorhelperprototype%-object):
+     * inherits %Iterator.prototype%, with `next`, `return` and
+     * @@toStringTag "Iterator Helper". */
+    private iteratorHelperPrototype():Cell {
+        if(!this.iteratorHelperPrototypeCell){
+            const value=this.newCell(),owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.iteratorPrototype()};
+            this.iteratorHelperPrototypeCell=value;this.copy(this.opaqueMutation,owner.shape);this.publish(value,{tag:"object",owner});
+            for(const member of ["next","return"] as const){const method=this.newCell();this.publish(method,this.operation(`iterator-helper-${member}`));this.defineField(owner,member,method,false);}
+            const tag=this.newCell();this.publish(tag,this.primitive("Iterator Helper"));this.defineField(owner,this.wellKnownSymbols.get("toStringTag")!,tag,false);
+        }
+        return this.iteratorHelperPrototypeCell;
+    }
+    /** The Iterator Helper a lazy helper creates at one call site; its
+     * [[UnderlyingIterator]] and callback are internal. */
+    private iteratorHelperObject(context:ts.Node):Cell {
+        const prior=this.iteratorHelperObjects.get(context);if(prior)return prior;
+        const value=this.newCell(),owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.iteratorHelperPrototype()};
+        this.iteratorHelperObjects.set(context,value);this.copy(this.opaqueMutation,owner.shape);this.publish(value,{tag:"object",owner});
+        return value;
+    }
+    /** %StringIteratorPrototype% (sec-%stringiteratorprototype%-object):
+     * inherits %Iterator.prototype%, with `next` and @@toStringTag
+     * "String Iterator". */
+    private stringIteratorPrototype():Cell {
+        if(!this.stringIteratorPrototypeCell){
+            const value=this.newCell(),owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.iteratorPrototype()};
+            this.stringIteratorPrototypeCell=value;this.copy(this.opaqueMutation,owner.shape);this.publish(value,{tag:"object",owner});
+            const next=this.newCell();this.publish(next,this.operation("string-iterator-next"));this.defineField(owner,"next",next,false);
+            const tag=this.newCell();this.publish(tag,this.primitive("String Iterator"));this.defineField(owner,this.wellKnownSymbols.get("toStringTag")!,tag,false);
+        }
+        return this.stringIteratorPrototypeCell;
+    }
+    /** String.prototype[@@iterator] (sec-string.prototype-%symbol.iterator%):
+     * RequireObjectCoercible(this) and ToString(this) (an Object receiver's
+     * own conversion runs there), then CreateStringIterator's fresh object. */
+    private stringIterator(receiver:Cell,context:ts.Node):Cell {
+        const prior=this.stringIterators.get(context);if(prior)return prior;
+        const result=this.newCell();this.stringIterators.set(context,result);
+        const [text]=this.convertList([receiver],context,"text");
+        const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.stringIteratorPrototype()};
+        this.copy(this.opaqueMutation,owner.shape);
+        this.rule([receiver,text!],()=>{
+            for(const atom of receiver.values)if(atom===this.primitive(undefined)||atom===this.primitive(null)){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context,"TypeError"));}
+            for(const atom of text!.values)if(atom.tag==="abrupt"||atom.tag==="pending-source")this.publish(result,atom);
+            if([...text!.values].some(atom=>atom.tag!=="abrupt"&&atom.tag!=="pending-source"))this.publish(result,{tag:"object",owner});
+        });
+        return result;
+    }
+    /** %WrapForValidIteratorPrototype% (sec-%wrapforvaliditeratorprototype%-object):
+     * inherits %Iterator.prototype%; its next and return call the wrapped
+     * iterator's, which escaped where Iterator.from made the wrapper. */
+    private wrapForValidIteratorPrototype():Cell {
+        if(!this.wrapForValidIteratorPrototypeCell){
+            const value=this.newCell(),owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.iteratorPrototype()};
+            this.wrapForValidIteratorPrototypeCell=value;this.copy(this.opaqueMutation,owner.shape);this.publish(value,{tag:"object",owner});
+            for(const member of ["next","return"] as const){const method=this.newCell();this.publish(method,this.operation(`wrap-iterator:${member}`));this.defineField(owner,member,method,false);}
+        }
+        return this.wrapForValidIteratorPrototypeCell;
+    }
+    /** Iterator.from(O) (sec-iterator.from): GetIteratorFlattenable calls
+     * O's @@iterator (O itself when the method is undefined or null; a
+     * String primitive iterates its code points), reads the iterator's next,
+     * and returns the iterator when it inherits %Iterator.prototype%, else a
+     * wrapper whose next and return call the iterator's. A non-Object,
+     * non-String O, or a non-Object iterator, throws a TypeError. */
+    private iteratorFrom(input:Cell,context:ts.Node):Cell {
+        const prior=this.wrappedIterators.get(context);if(prior)return prior;
+        const result=this.newCell();this.wrappedIterators.set(context,result);
+        const method=this.property(input,this.wellKnownSymbols.get("iterator")!,context),callee=this.newCell(),returned=this.newCell(),iterator=this.newCell();
+        this.rule([method],()=>{for(const atom of method.values)if(atom===this.primitive(undefined)||atom===this.primitive(null))this.copy(input,iterator);else this.publish(callee,atom);});
+        this.invoke(context,callee,input,[],returned);this.copy(returned,iterator);
+        this.property(iterator,"next",context);
+        const objects=this.newCell();
+        this.rule([iterator],()=>{for(const atom of iterator.values){
+            if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
+            if(atom.tag==="primitive"||atom.tag==="non-string"||atom.tag==="unknown-string"||atom.tag==="text-operation"){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context,"TypeError"));continue;}
+            this.publish(objects,atom);this.publish(result,atom);
+        }});
+        const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.unknown);
+        const wrapper:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.wrapForValidIteratorPrototype()};
+        this.copy(this.opaqueMutation,wrapper.shape);
+        this.rule([objects],()=>{if(objects.values.nonempty)this.publish(result,{tag:"object",owner:wrapper});});
+        // The wrapper's next and return call the iterator's later: it escapes here.
+        this.onActive(context,()=>{this.escapeCallableArgument(objects,context);this.escapeCallableArgument(input,context);});
+        return result;
+    }
+    /** CreateRegExpStringIterator's object at one @@matchAll site; its
+     * [[IteratingRegExp]] is internal, so it has no own properties. */
+    private regexpStringIterator(context:ts.Node):Cell {
+        const prior=this.regexpStringIterators.get(context);if(prior)return prior;
+        const value=this.newCell(),owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.regexpStringIteratorPrototype()};
+        this.regexpStringIterators.set(context,value);this.copy(this.opaqueMutation,owner.shape);this.publish(value,{tag:"object",owner});
+        return value;
     }
     private collectionPrototype(kind:CollectionKind):Cell {
         const prior=this.collectionPrototypes.get(kind);if(prior)return prior;
@@ -5619,7 +5742,9 @@ class SourceValueFlow {
     private collectionIteratorNext(receiver:Cell,kind:CollectionKind|"Array",context:ts.Node,result:Cell):void {
         const results=new Map<ObjectOwner,{normal:Cell;done:Cell}>(),activated=new Set<ObjectOwner>();let rule!:Rule;
         rule=this.rule([receiver],()=>{for(const atom of receiver.values){const owner=this.ordinaryOwner(atom),view=owner?.collectionIterator;
-            if(!owner||!view||view.kind!==kind){const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));this.publish(result,atom.tag==="unknown"||atom.tag==="opaque-object"?this.unknown:this.abrupt);continue;}
+            // A native value's next (one a native's escape invocation passes)
+            // returns what natives hold; an unrepresented one is unknown code's.
+            if(!owner||!view||view.kind!==kind){const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));this.publish(result,atom===this.nativeUnknown?this.nativeUnknown:atom.tag==="unknown"||atom.tag==="opaque-object"?this.unknown:this.abrupt);continue;}
             if(view.kind==="Array"&&view.source&&!activated.has(owner)){activated.add(owner);const actual=this.arrayIterationView(view.source,context,view.operation!);this.copy(actual.elements,view.elements);this.copy(actual.activity,view.activity);}
             this.watch(rule,view.activity);this.watch(rule,view.elements);
             let records=results.get(owner);if(!records){const make=(done:boolean)=>{const record=this.newCell(),fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()},state=this.newCell(),value=this.newCell();this.publish(state,this.primitive(done));if(done)this.publish(value,this.primitive(undefined));else this.copy(view.elements,value);this.defineField(fields,"done",state);this.defineField(fields,"value",value);this.publish(record,{tag:"object",owner:fields});return record;};records={normal:make(false),done:make(true)};results.set(owner,records);}
@@ -5880,7 +6005,7 @@ class SourceValueFlow {
         for(const name of runtimePrimitivePrototypeMembers.get(descriptor.kind)??[]){if(name==="valueOf"||name==="toString")continue;const method=this.newCell();
             if(PRIMITIVE_MEMBER_LENGTHS.has(`${descriptor.kind}:${name}`))this.publish(method,this.operation(`primitive-member:${descriptor.kind}:${name}`));else this.publish(method,this.nativeUnknown);
             this.defineField(owner,name,method,false);}
-        if(descriptor.kind==="string"){const iterator=this.newCell();this.publish(iterator,this.nativeUnknown);this.defineField(owner,this.wellKnownSymbols.get("iterator")!,iterator,false);this.defineField(owner,"length",this.primitiveDefault("number"),false);}
+        if(descriptor.kind==="string"){const iterator=this.newCell();this.publish(iterator,this.operation("string-iterator"));this.defineField(owner,this.wellKnownSymbols.get("iterator")!,iterator,false);this.defineField(owner,"length",this.primitiveDefault("number"),false);}
         if(descriptor.kind==="number"||descriptor.kind==="bigint"){const method=this.newCell();this.publish(method,this.operation(`primitive-member:${descriptor.kind}:toLocaleString`));this.defineField(owner,"toLocaleString",method,false);}
         if(descriptor.kind==="symbol"){const getter=this.newCell();this.publish(getter,this.nativeUnknown);this.ownPresence(owner,"description").initial=true;this.defineAccessor(owner,"description","get",getter,this.program.getSourceFiles().find(file=>!file.isDeclarationFile)!);}
         this.defineField(owner,"constructor",this.globalBinding(name),false);
@@ -6996,6 +7121,11 @@ class SourceValueFlow {
                 const operation=atom.operation.slice("atomics-member:".length),descriptor=runtimeAtomicsMethods.get(operation)!,name=this.newCell(),length=this.newCell();this.publish(name,this.primitive(operation));this.publish(length,this.primitive(descriptor.length));this.defineField(owner,"name",name);this.defineField(owner,"length",length);
             }return owner;
         }
+        if(atom.tag==="operation"&&(atom.operation.startsWith("iterator-helper:")||atom.operation.startsWith("wrap-iterator:")||atom.operation==="regexp-string-iterator-next"||atom.operation==="string-iterator"||atom.operation==="string-iterator-next"||atom.operation==="iterator-helper-next"||atom.operation==="iterator-helper-return")){
+            let owner=this.intrinsicOwners.get(atom);if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);this.copy(this.opaqueMutation,owner.shape);
+                const member=atom.operation==="string-iterator"?"[Symbol.iterator]":atom.operation==="iterator-helper-return"?"return":atom.operation==="regexp-string-iterator-next"||atom.operation==="string-iterator-next"||atom.operation==="iterator-helper-next"?"next":atom.operation.slice(atom.operation.indexOf(":")+1),name=this.newCell(),length=this.newCell();this.publish(name,this.primitive(member));this.publish(length,this.primitive(member==="from"?1:runtimeIteratorMethodLengths.get(member)??0));this.defineField(owner,"name",name,false);this.defineField(owner,"length",length,false);
+            }return owner;
+        }
         if(atom.tag==="operation"&&atom.operation.startsWith("math-member:")){
             let owner=this.intrinsicOwners.get(atom);if(!owner){owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);this.copy(this.opaqueMutation,owner.shape);
                 const operation=atom.operation.slice("math-member:".length),descriptor=runtimeMathMethods.get(operation)!,name=this.newCell(),length=this.newCell();this.publish(name,this.primitive(operation));this.publish(length,this.primitive(descriptor.length));this.defineField(owner,"name",name);this.defineField(owner,"length",length);
@@ -7937,7 +8067,7 @@ class SourceValueFlow {
             this.copy(this.opaqueMutation,owner.shape);this.publish(value,{tag:"object",owner});
             const self=this.newCell();this.publish(self,this.operation("collection-iterator:self"));this.defineField(owner,this.wellKnownSymbols.get("iterator")!,self);
             for(const key of runtimeIteratorMethods) {
-                const field=this.newCell();this.publish(field,this.nativeUnknown);this.defineField(owner,key,field);
+                const field=this.newCell();this.publish(field,this.operation(`iterator-helper:${key}`));this.defineField(owner,key,field);
             }
             for(const key of ["constructor",this.wellKnownSymbols.get("toStringTag")!]) {
                 const accessor={get:this.newCell(),set:this.newCell()};
@@ -8662,7 +8792,17 @@ class SourceValueFlow {
                         else{this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));}
                         continue;
                     }
-                    if(invocation.construct&&atom.tag==="operation"&&SOURCE_NATIVE_METHODS.has(atom.operation)){
+                    if(atom.tag==="operation"&&atom.operation==="string-iterator"&&!invocation.construct){
+                        if(!handled(atom,signature))this.copy(this.stringIterator(invocation.receiver,node),result);
+                        continue;
+                    }
+                    if(atom.tag==="operation"&&atom.operation==="iterator-helper:from"&&!invocation.construct){
+                        if(!handled(atom,signature))this.copy(this.iteratorFrom((invocation.args?invocation.args[0]:invocation.sequence?this.argumentPosition(invocation.sequence,0):undefined)??omittedArgument,node),result);
+                        continue;
+                    }
+                    // Iterator.from and the Iterator.prototype helpers and
+                    // consumers are built-in functions without [[Construct]].
+                    if(invocation.construct&&atom.tag==="operation"&&(SOURCE_NATIVE_METHODS.has(atom.operation)||atom.operation.startsWith("iterator-helper:")||atom.operation.startsWith("wrap-iterator:")||atom.operation==="regexp-string-iterator-next"||atom.operation==="string-iterator"||atom.operation==="string-iterator-next"||atom.operation==="iterator-helper-next"||atom.operation==="iterator-helper-return")){
                         this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node,"TypeError"));continue;
                     }
                     const proxy=this.ordinaryOwner(atom)?.proxy;
@@ -8703,7 +8843,13 @@ class SourceValueFlow {
                         const setReceiver=invocation.args?invocation.args[3]:invocation.sequence?this.allArgumentValues(invocation.sequence):undefined;
                         if(setReceiver)this.proxyInternalMethod(setReceiver,["getOwnPropertyDescriptor","defineProperty"],node);
                     }
-                    if (atom.tag === "unknown" || atom.tag === "opaque-object" || proxy || atom.tag==="operation"&&SOURCE_NATIVE_METHODS.get(atom.operation)?.opaque&&!invocation.construct) {
+                    // The Iterator.prototype helpers and consumers, the next of a
+                    // RegExp String Iterator and of Iterator.from's wrapper read
+                    // their receiver and arguments and call what those reach
+                    // (next, return, a callback, a matcher's exec, each of which
+                    // escaped where the iterator was made); none writes either.
+                    const iteratorHelper=atom.tag==="operation"&&(atom.operation.startsWith("iterator-helper:")||atom.operation.startsWith("wrap-iterator:")||atom.operation==="regexp-string-iterator-next"||atom.operation==="string-iterator-next"||atom.operation==="iterator-helper-next"||atom.operation==="iterator-helper-return");
+                    if (atom.tag === "unknown" || atom.tag === "opaque-object" || proxy || iteratorHelper || atom.tag==="operation"&&SOURCE_NATIVE_METHODS.get(atom.operation)?.opaque&&!invocation.construct) {
                         // A return value belongs to the invocation that
                         // produced it, just as an opaque write does. Shared
                         // formals must retain that provenance when forwarding.
@@ -8727,6 +8873,10 @@ class SourceValueFlow {
                         const arrayEffect=atom.tag==="operation"?NATIVE_ARRAY_RECEIVER_EFFECTS.get(atom.operation):undefined;
                         if(invocation.construct)this.publish(result!,this.opaqueObject);
                         else if(arrayEffect?.receiverResult)this.copy(this.toObject(invocation.receiver,node),result!);
+                        // A lazy helper (map, filter, take, drop, flatMap) returns a
+                        // fresh Iterator Helper; its underlying iterator and
+                        // callback escape below.
+                        else if(iteratorHelper&&LAZY_ITERATOR_HELPERS.has((atom as {operation:string}).operation))this.copy(this.iteratorHelperObject(node),result!);
                         else if(directCallees)this.publish(result!,this.nativeUnknown);
                         // Unknown code runs only in the invocations whose own
                         // callee is unknown: an opaque call inside a function
@@ -8744,7 +8894,7 @@ class SourceValueFlow {
                             }
                             const argumentsEscaping = invocation.args ?? (invocation.sequence ? [this.allArgumentValues(invocation.sequence)] : []);
                             if(arrayEffect)this.nativeArrayReceiverWrites(invocation.receiver,arrayEffect,argumentsEscaping,node);
-                            else this.writeProperty(invocation.receiver,null,this.empty,false,"set",node,invocation.receiver,undefined,conditioned);
+                            else if(!iteratorHelper)this.writeProperty(invocation.receiver,null,this.empty,false,"set",node,invocation.receiver,undefined,conditioned);
                             // An Array.prototype native never calls its receiver or the
                             // values it stores; their accessors and methods may run. A
                             // native that calls a callback (sort's comparator) hands it
@@ -8754,7 +8904,7 @@ class SourceValueFlow {
                             const callsCallback=directCallees==="all"||!!directCallees&&directCallees.size>0;
                             this.escapeCallableArgument(invocation.receiver,node,false,arrayEffect&&!callsCallback?"elements":"direct",conditioned);
                             for (const [index,argument] of argumentsEscaping.entries()) {
-                                if(!arrayEffect)this.writeProperty(argument,null,this.empty,false,"set",node,argument,undefined,conditioned);
+                                if(!arrayEffect&&!iteratorHelper)this.writeProperty(argument,null,this.empty,false,"set",node,argument,undefined,conditioned);
                                 this.escapeCallableArgument(argument,node,false,!directCallees||directCallees==="all"||directCallees.has(index)?"direct":"argument",conditioned);
                             }
                         });
@@ -8899,8 +9049,33 @@ class SourceValueFlow {
                             this.copy(this.regexpMember(regexpMember,argv[0]!,[text!,...argv.slice(1)],node,false),result);continue;
                         }
                         const normalKinds=memberKind==="string"?KIND_PRIMITIVE&~(KIND_UNDEFINED|KIND_NULL|KIND_SYMBOL):memberKind==="number"?KIND_NUMBER:KIND_BIGINT;
-                        if(kind&&argv&&!objectArgument&&!(receiverKinds&~KIND_PRIMITIVE)){
+                        // An Object receiver: a String method's ToString(this) is
+                        // the receiver's own ToPrimitive (its toString, valueOf or
+                        // @@toPrimitive run there); thisNumberValue and
+                        // thisBigIntValue read a wrapper's [[NumberData]] or
+                        // [[BigIntData]] and run no code, throwing TypeError for any
+                        // other Object. The method then sees that primitive.
+                        let thisKinds=receiverKinds,unrepresentedReceiver=false;
+                        if(kind&&argv&&!objectArgument&&receiverKinds&~KIND_PRIMITIVE){
+                            const objects=receiverKinds&~KIND_PRIMITIVE,primitives=receiverKinds&KIND_PRIMITIVE;
+                            if(memberKind==="string"){
+                                const [text]=this.convertList([invocation.receiver],node,"text");this.watch(rule,text!);
+                                const textKinds=this.primitiveKinds(text!);if(!textKinds)continue;
+                                thisKinds=primitives|textKinds;
+                            }else{
+                                thisKinds=primitives;
+                                for(const value of invocation.receiver.values){
+                                    const payload=this.ordinaryOwner(value)?.boxed?.get(memberKind);
+                                    if(payload){this.watch(rule,payload);thisKinds|=this.primitiveKinds(payload)&normalKinds;}
+                                    else if(this.ordinaryOwner(value)||value.tag==="function"||value.tag==="bound")thisKinds|=KIND_OBJECT;
+                                    else if(value.tag!=="primitive"&&value.tag!=="non-string"&&value.tag!=="unknown-string"&&value.tag!=="text-operation"&&value.tag!=="abrupt"&&value.tag!=="pending-source")unrepresentedReceiver=true;
+                                }
+                                if(objects&&!thisKinds)thisKinds=KIND_OBJECT;
+                            }
+                        }
+                        if(kind&&argv&&!objectArgument&&!unrepresentedReceiver&&!(thisKinds&~KIND_PRIMITIVE&~(memberKind==="string"?0:KIND_OBJECT))){
                             if(pendingArgument)continue;
+                            const receiverKinds=thisKinds;
                             if(handler)this.publish(handler,this.nativeException(node));
                             if(receiverKinds&~normalKinds)this.publish(result,this.abrupt);
                             if(receiverKinds&normalKinds){
@@ -9798,6 +9973,33 @@ class SourceValueFlow {
     }
     /** guardedOnly seals only expressions whose guards prove they never run
      * (an operand after an abrupt-only one, an unselected branch). */
+    /** An ambient reference with no value yet: "unresolvable" when, under
+     * the Test262 host, ResolveBinding finds no binding (GetValue throws
+     * ReferenceError and typeof answers "undefined"; both are published),
+     * the external binding to treat as an input otherwise, or null when the
+     * name has a source (a write, a declaration, an eval's declaration or a
+     * caller environment) or the code never runs. */
+    private absentAmbientReference(node:ts.Identifier,cell:Cell):Cell|"unresolvable"|null {
+        const origins=this.sourceOrigins.get(this.sourceFile(node));
+        if(origins&&!origins.values.nonempty)return null;
+        let binding=this.binding(node);
+        // Inside a function the name reads the global binding unless
+        // a direct eval there declares it: that global binding is
+        // the external input.
+        const global=this.activationGlobalFallbacks.get(binding);
+        if(global&&!this.evaluationDeclarationBindings.get(binding)?.origins.size)binding=global;
+        if(binding.values.nonempty||this.writtenAmbientBindings.has(binding)||this.scriptDeclaredBindings.has(binding))return null;
+        // A reference inside evaluated or generated code resolves
+        // through its environment's callers (the caller's realm
+        // supplies the global); it is not an external input.
+        if(this.evaluationDeclarationBindings.has(binding))return null;
+        if(this.unresolvableHostName(node.text,this.evaluationGlobalTargets.get(node))){
+            if(ts.isTypeOfExpression(node.parent))this.publish(cell,this.primitive(undefined));
+            else{this.publish(cell,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node,"ReferenceError"));}
+            return "unresolvable";
+        }
+        return binding;
+    }
     private sealSourceValue(node:ts.Node,cell:Cell,guardedOnly=false):boolean {
         if(cell.values.nonempty)return false;
         const activation=this.enclosingActivation(node);
@@ -9850,31 +10052,19 @@ class SourceValueFlow {
                 // owner absence dependencies. Wake their guarded mutations
                 // before sealing any contextual own-location absence.
                 for(const [node,cell]of this.cells)if(ts.isIdentifier(node)&&!cell.values.nonempty&&this.isAmbientIdentifier(node)){
-                    const origins=this.sourceOrigins.get(this.sourceFile(node));
-                    if(origins&&!origins.values.nonempty)continue;
-                    let binding=this.binding(node);
-                    // Inside a function the name reads the global binding unless
-                    // a direct eval there declares it: that global binding is
-                    // the external input.
-                    const global=this.activationGlobalFallbacks.get(binding);
-                    if(global&&!this.evaluationDeclarationBindings.get(binding)?.origins.size)binding=global;
-                    if(binding.values.nonempty||this.writtenAmbientBindings.has(binding)||this.scriptDeclaredBindings.has(binding))continue;
-                    // A reference inside evaluated or generated code resolves
-                    // through its environment's callers (the caller's realm
-                    // supplies the global); it is not an external input.
-                    if(this.evaluationDeclarationBindings.has(binding))continue;
-                    if(this.unresolvableHostName(node.text,this.evaluationGlobalTargets.get(node))){
-                        // ResolveBinding finds no binding: GetValue throws
-                        // ReferenceError, and typeof answers "undefined".
-                        if(ts.isTypeOfExpression(node.parent))this.publish(cell,this.primitive(undefined));
-                        else{this.publish(cell,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node,"ReferenceError"));}
-                        changed=true;continue;
-                    }
-                    this.publish(binding,this.unknown);changed=true;
+                    const absent=this.absentAmbientReference(node,cell);
+                    if(absent==="unresolvable")changed=true;
+                    else if(absent){this.publish(absent,this.unknown);changed=true;}
                 }
                 if(changed)continue;
                 this.presenceClosed=true;for(const rule of this.presenceRules)this.schedule(rule);continue;
             }
+            // A reference that generated or evaluated code connects to its
+            // caller after the presence closure (a Function constructor's or
+            // eval's source discovered later) follows the same unresolvable
+            // name rule before any empty fact is sealed as unknown.
+            for(const [node,cell]of this.cells)if(ts.isIdentifier(node)&&!cell.values.nonempty&&this.isAmbientIdentifier(node)&&this.absentAmbientReference(node,cell)==="unresolvable")changed=true;
+            if(changed)continue;
             for (const cell of this.exceptionCells) if (!cell.values.nonempty) {this.publish(cell, this.abrupt); changed = true;}
             for (const cell of this.accessorSlots) if (!cell.values.nonempty) {this.publish(cell, this.primitive(undefined)); changed = true;}
             if (changed) continue;
