@@ -2686,7 +2686,13 @@ class SourceValueFlow {
     private registerEvaluationDeclaration(binding:Cell,caller:ts.Node):void {
         let record=this.evaluationDeclarationBindings.get(binding);if(!record){record={origins:new Set()};this.evaluationDeclarationBindings.set(binding,record);}record.origins.add(caller);
     }
-    private evaluationDeclarationUnavailable(binding:Cell,read:ts.Node):boolean {
+    /** A read that precedes every eval declaring its name sees the binding
+     * as it was before those evals ran: unknown for a name the host may or
+     * may not define, but a runtime global binding (eval, parseInt, ...)
+     * already exists, so the read is its global value, which the ambient
+     * read copies. */
+    private evaluationDeclarationUnavailable(binding:Cell,read:ts.Identifier):boolean {
+        if(runtimeGlobalBindings.has(read.text))return false;
         const origins=this.evaluationDeclarationBindings.get(binding)?.origins;if(!origins?.size)return false;
         const activation=this.enclosingActivation(read);
         return [...origins].every(caller=>this.sourceFile(caller)===this.sourceFile(read)&&

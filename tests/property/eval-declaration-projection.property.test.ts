@@ -19,6 +19,9 @@ const partitions=[
  `{(globalThis as any).isolated='37;';(0,eval)("'use strict';var isolated='41;'");console.log('strict:',eval((globalThis as any).isolated));}`,
  `{const realm:any=$262.createRealm().global;realm.eval("let hidden='43;';class Local{}");console.log('lexical:',typeof realm.hidden,typeof realm.Local);}`,
  `{const realm:any=$262.createRealm().global;realm.eval("function hidden(){var unreachable='47;'}");console.log('nested-boundary:',typeof realm.unreachable);}`,
+ // A runtime global read before an eval that redeclares it is its existing
+ // value, not an unknown that would make later calls opaque.
+ `{const saved=eval,before=typeof parseInt;(0,eval)("var eval;var parseInt;");const Probe:any=function(this:any){return this instanceof Probe};console.log('runtime-global:',before,saved===eval,Probe(),Probe.call(globalThis),parseInt('67'),eval('71;'));}`,
 ];
 
 test('generated declaration projection respects scope, strictness, origin order and opaque admission',()=>{
@@ -26,6 +29,7 @@ test('generated declaration projection respects scope, strictness, origin order 
   const source=`(0,eval)(${JSON.stringify(declaration)});eval(${declaration.startsWith('function')?'body()':'body'});`,result=graph([{path:'main.js',source,goal:'script'}]);expect(result.error).toBeNull();expect(result.directEvalSources.map(row=>row.source)).toContain(declaration.includes('19;')?'19;':declaration.includes('23;')?'23;':'17;');
  }
  for(const source of ["eval(body);(0,eval)(\"var body='29;'\");","function read(){const saved=body;eval(\"var body='17;'\");return saved}eval(read());","(0,eval)(\"'use strict';var body='31;'\");eval(body);","(0,eval)(\"function hidden(){var body='37;'}\");eval(body);","(0,eval)(\"var body=opaque();\");eval(body);"]){expect(graph([{path:'main.js',source,goal:'script'}]).error).toContain('direct eval source is not a finite static string expression');}
+ for(const source of ["var s=eval;s(\"var eval;\");function T(){return this instanceof T}T();T.call(this);","var s=eval;s(\"var parseInt;\");function T(){return this instanceof T}T();"])expect(graph([{path:'main.js',source,goal:'script'}]).error).toBeNull();
  const saved="var body='41;';const saved=body;(0,eval)(\"var body=opaque();\");eval(saved);";expect(graph([{path:'main.js',source:saved,goal:'script'}]).error).toBeNull();
 });
 
