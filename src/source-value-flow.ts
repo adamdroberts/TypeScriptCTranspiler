@@ -499,7 +499,7 @@ interface SourceCollectionRecord {readonly kind:CollectionKind;readonly entries:
 interface SourceSetLikeRecord {readonly object:Cell;readonly size:Cell;readonly has:Cell;readonly keys:Cell;readonly normal:Cell;}
 interface UnknownOwnPropertyRecord {readonly keys:Cell;readonly value:Cell;readonly algorithm:Cell;readonly events:Map<string,{mode:"set"|"define"|"delete";context?:ts.Node}>;readonly prototypeInputs:Set<Cell>;readonly receiver:Cell;}
 interface SourcePrivateSlot {readonly kind:"field"|"method"|"accessor";readonly value:Cell;readonly get:Cell;readonly set:Cell;}
-interface ObjectOwner { arguments?:SourceArgumentsRecord; privateSlots?:Map<ClassPrivateName,SourcePrivateSlot>;propertyAlgorithm?:Cell; collectionIterator?:{kind:CollectionKind|"Array";elements:Cell;activity:Cell;source?:Cell;operation?:"keys"|"values"|"entries"}; collections?:Map<CollectionKind,SourceCollectionRecord>; readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, OwnPresence>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; closedIndices?:boolean; closedOwn?:boolean; immutableOwn?:boolean; rawJSON?:Cell; boxed?:Map<string,Cell>; unboxed?:boolean; ordinary?:boolean; proxy?:{target:Cell;handler:Cell;context:ts.Node}; }
+interface ObjectOwner { arguments?:SourceArgumentsRecord; privateSlots?:Map<ClassPrivateName,SourcePrivateSlot>;propertyAlgorithm?:Cell; collectionIterator?:{kind:CollectionKind|"Array";elements:Cell;activity:Cell;source?:Cell;operation?:"keys"|"values"|"entries"}; collections?:Map<CollectionKind,SourceCollectionRecord>; readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, OwnPresence>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; closedIndices?:boolean; closedOwn?:boolean; immutableOwn?:boolean; rawJSON?:Cell; boxed?:Map<string,Cell>; unboxed?:boolean; ordinary?:boolean; proxy?:{target:Cell;handler:Cell;context:ts.Node}; iterated?:{iterator:Cell;next:Cell}; }
 interface SourceDescriptorRecord {readonly normal:Cell;readonly fields:Map<string,{present:Cell;value:Cell}>;}
 interface SourceJSONRecord {readonly value:Atom;readonly children:Map<string,SourceJSONRecord>;readonly source:string|null;readonly array:boolean;}
 interface SourceCallArguments {readonly args:readonly Cell[]|null;readonly sequence:ArgumentSequence|null;readonly context:ts.Node;}
@@ -788,6 +788,7 @@ class SourceValueFlow {
     private iteratorHelperPrototypeCell:Cell|undefined;
     private readonly iteratorHelperObjects=new Map<ts.Node,Cell>();
     private readonly stringIterators=new Map<ts.Node,Cell>();
+    private readonly wrappedIteratorSteps=new Map<ts.Node,Map<"next"|"return",Cell>>();
     private readonly wrappedIterators=new Map<ts.Node,Cell>();
     /** Escape invocations made by a native: their actuals are native values. */
     private readonly nativeEscapeInvocations=new WeakSet<ts.Node>();
@@ -1899,6 +1900,9 @@ class SourceValueFlow {
             for(const [key,property] of owner.own?.entries()??[])if(!skipped(key))for(const write of property.writes.values())visit(write.values);
             for(const accessor of owner.accessors.values())if(this.accessorDefinitions.has(accessor.get)){visit(accessor.get,nested);visit(accessor.set,nested);}
             const stored=this.unknownPropertyLocations.get(owner);if(stored)visit(stored.value);
+            // An %WrapForValidIteratorPrototype% object calls its [[Iterated]]
+            // record's next method on the iterator (and the iterator's return).
+            if(owner.iterated){visit(owner.iterated.iterator);visit(owner.iterated.next,nested);}
             if(!sourceCallbacksOnly&&atom.tag!=="function"&&!this.sourceObjectOwners.has(owner)&&!this.ownerCreations.has(owner)&&!this.ownerRealms.has(owner)&&!owner.collections&&!owner.collectionIterator)return;
             const realm=sourceCallbacksOnly?undefined:this.ownerRealms.get(owner);
             for(const key of owner.fields.keys())if(!skipped(key)){
@@ -5714,19 +5718,50 @@ class SourceValueFlow {
         const method=this.property(input,this.wellKnownSymbols.get("iterator")!,context),callee=this.newCell(),returned=this.newCell(),iterator=this.newCell();
         this.rule([method],()=>{for(const atom of method.values)if(atom===this.primitive(undefined)||atom===this.primitive(null))this.copy(input,iterator);else this.publish(callee,atom);});
         this.invoke(context,callee,input,[],returned);this.copy(returned,iterator);
-        this.property(iterator,"next",context);
-        const objects=this.newCell();
+        const objects=this.newCell(),next=this.property(objects,"next",context);
         this.rule([iterator],()=>{for(const atom of iterator.values){
             if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
             if(atom.tag==="primitive"||atom.tag==="non-string"||atom.tag==="unknown-string"||atom.tag==="text-operation"){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context,"TypeError"));continue;}
             this.publish(objects,atom);this.publish(result,atom);
         }});
         const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.unknown);
-        const wrapper:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.wrapForValidIteratorPrototype()};
+        // [[Iterated]] is GetIteratorDirect's record: the iterator and the
+        // next method read once here. The wrapper's next and return call
+        // through it (wrappedIteratorStep); escapes reach it as a slot.
+        const wrapper:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.wrapForValidIteratorPrototype(),iterated:{iterator:objects,next}};
         this.copy(this.opaqueMutation,wrapper.shape);
         this.rule([objects],()=>{if(objects.values.nonempty)this.publish(result,{tag:"object",owner:wrapper});});
-        // The wrapper's next and return call the iterator's later: it escapes here.
-        this.onActive(context,()=>{this.escapeCallableArgument(objects,context);this.escapeCallableArgument(input,context);});
+        return result;
+    }
+    /** %WrapForValidIteratorPrototype%.next and .return (27.1.3.2.1.1): on a
+     * receiver without [[Iterated]], TypeError; next is
+     * Call(iterated.[[NextMethod]], iterated.[[Iterator]]); return is
+     * GetMethod(iterator, "return"), CreateIterResultObject(undefined, true)
+     * when it is undefined, else Call(returnMethod, iterator). */
+    private wrappedIteratorStep(receiver:Cell,context:ts.Node,mode:"next"|"return"):Cell {
+        let modes=this.wrappedIteratorSteps.get(context);if(!modes){modes=new Map();this.wrappedIteratorSteps.set(context,modes);}
+        const prior=modes.get(mode);if(prior)return prior;
+        const result=this.newCell(),callee=this.newCell(),target=this.newCell(),returned=this.newCell();modes.set(mode,result);
+        const handler=this.exceptionHandlers.get(context);
+        this.rule([receiver],()=>{for(const atom of receiver.values){
+            if(atom.tag==="abrupt"||atom.tag==="pending-source")continue;
+            const record=atom.tag==="object"?atom.owner.iterated:undefined;
+            if(!record){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.nativeException(context,"TypeError"));continue;}
+            this.copy(record.iterator,target);
+            if(mode==="next")this.copy(record.next,callee);
+        }});
+        if(mode==="return"){
+            const method=this.property(target,"return",context);
+            let done:Cell|undefined;
+            this.rule([method],()=>{for(const atom of method.values){
+                if(atom===this.primitive(undefined)||atom===this.primitive(null)){
+                    if(!done){done=this.newCell();const fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()},value=this.newCell(),state=this.newCell();
+                        this.publish(value,this.primitive(undefined));this.publish(state,this.primitive(true));this.defineField(fields,"value",value);this.defineField(fields,"done",state);
+                        this.sourceObjectOwners.add(fields);this.publish(done,{tag:"object",owner:fields});this.copy(done,result);}
+                }else this.publish(callee,atom);
+            }});
+        }
+        this.invoke(context,callee,target,[],returned);this.copy(returned,result);
         return result;
     }
     /** CreateRegExpStringIterator's object at one @@matchAll site; its
@@ -8476,6 +8511,10 @@ class SourceValueFlow {
             const operand=this.cell(node.expression);let rule!:Rule;
             rule=this.rule([operand],()=>{
                 this.watchText(rule,operand);
+                // typeof GetValue(reference): an operand that completes
+                // abruptly (a member read of an unresolvable base) completes
+                // the typeof expression abruptly; it never yields a type name.
+                if(operand.values.has(this.abrupt))this.publish(result,this.abrupt);
                 const kinds=this.primitiveKinds(operand);
                 for(const [mask,name]of [[KIND_UNDEFINED,"undefined"],[KIND_NULL|KIND_OBJECT,"object"],[KIND_BOOLEAN,"boolean"],[KIND_NUMBER,"number"],[KIND_BIGINT,"bigint"],[KIND_STRING,"string"],[KIND_SYMBOL,"symbol"],[KIND_FUNCTION,"function"]] as const)
                     if(kinds&mask)this.publish(result,this.text(name));
@@ -8945,6 +8984,14 @@ class SourceValueFlow {
                     if(atom.tag==="operation"&&atom.operation==="set-property"){
                         const setReceiver=invocation.args?invocation.args[3]:invocation.sequence?this.allArgumentValues(invocation.sequence):undefined;
                         if(setReceiver)this.proxyInternalMethod(setReceiver,["getOwnPropertyDescriptor","defineProperty"],node);
+                    }
+                    // Iterator.from's wrapper calls its [[Iterated]] record. An
+                    // unrepresented receiver keeps the opaque path below.
+                    if(atom.tag==="operation"&&(atom.operation==="wrap-iterator:next"||atom.operation==="wrap-iterator:return")&&!invocation.construct){
+                        this.watch(rule,invocation.receiver);
+                        if(![...invocation.receiver.values].some(value=>value.tag==="unknown"||value.tag==="opaque-object")){
+                            this.copy(this.wrappedIteratorStep(invocation.receiver,node,atom.operation==="wrap-iterator:next"?"next":"return"),result!);continue;
+                        }
                     }
                     // The Iterator.prototype helpers and consumers, the next of a
                     // RegExp String Iterator and of Iterator.from's wrapper read
