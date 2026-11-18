@@ -248,6 +248,8 @@ const GLOBAL_EFFECT_OPERATIONS:ReadonlySet<string>=new Set(["eval","eval-script"
 const TEST262_HOST_NAMES:ReadonlySet<string>=new Set(["print","$262","globalThis","eval","Function","undefined","NaN","Infinity"]);
 /** Global builtins without [[Construct]] (ES2026 19.2 function properties)
  * and the namespace objects (not callable at all). */
+/** ECMA-262's global namespace objects: ordinary, non-callable, inheriting %Object.prototype%. */
+const NAMESPACE_OBJECTS:ReadonlySet<string>=new Set(["Math","JSON","Atomics","Reflect"]);
 const NON_CONSTRUCTOR_BUILTINS:ReadonlySet<string>=new Set(["eval","isFinite","isNaN","parseFloat","parseInt","decodeURI","decodeURIComponent","encodeURI","encodeURIComponent","escape","unescape","Math","JSON","Reflect","Atomics","Intl","globalThis","undefined","NaN","Infinity"]);
 /** Array.prototype natives that call a callback once per element (ES2026
  * 23.1.3); one iteration model covers them, parametrized by how the
@@ -7457,6 +7459,11 @@ class SourceValueFlow {
                 // toJSON (SerializeJSONProperty reads it before treating a
                 // callable value as undefined).
                 key==="toJSON"&&current.normalResult!=="not-callable"||
+                // Nor does an ECMA-262 namespace object (Math, JSON, Atomics,
+                // Reflect): each owns only the members its clause lists and
+                // inherits %Object.prototype%, whose toJSON (a program's
+                // write) the prototype step below still reads.
+                key==="toJSON"&&NAMESPACE_OBJECTS.has(current.name)||
                 plainFunction&&!(typeof key==="string"&&(key==="name"||key==="length")));
             if (current.tag === "builtin" && !owner.closedOwn && !representedAbsence && !closedIndex && !presence?.values.has(this.primitive(true)) &&
                 !(typeof key === "string" && (runtimeObjectPrototypeMethods.has(key) || key === "constructor" ||
