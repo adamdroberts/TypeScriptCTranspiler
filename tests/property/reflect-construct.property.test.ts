@@ -280,4 +280,5 @@ test("Reflect.construct consumes one validated argument-list worklist", async ()
     } finally {
         await fs.rm(temporary, { recursive: true, force: true });
     }
-}, 90_000);
+// Two full native compiles (gc and no-gc) of a Proxy-heavy subject.
+}, 180_000);

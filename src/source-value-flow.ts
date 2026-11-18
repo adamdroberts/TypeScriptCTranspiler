@@ -4493,7 +4493,19 @@ class SourceValueFlow {
     private proxyCreate(target:Cell,handler:Cell,context:ts.Node):Cell {
         let calls=this.proxyCreations.get(context);if(!calls){calls=new Map();this.proxyCreations.set(context,calls);}
         const key=target.id+":"+handler.id,previous=calls.get(key);if(previous)return previous;
-        const result=this.newCell(),owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),proxy:{target,handler,context}};
+        // ProxyCreate throws unless both operands are Objects, so the Proxy
+        // records only their Object values: a primitive never becomes its
+        // target or handler.
+        const objectsOf=(input:Cell):Cell=>{
+            const objects=this.newCell(),singles=new Map<Atom,Cell>();
+            this.rule([input],()=>{for(const atom of input.values){
+                if(atom.tag==="abrupt"||atom.tag==="pending-source")continue;
+                let single=singles.get(atom);if(!single){single=this.newCell();singles.set(atom,single);this.publish(single,atom);}
+                if(this.primitiveKinds(single)&(KIND_OBJECT|KIND_FUNCTION))this.publish(objects,atom);
+            }});
+            return objects;
+        };
+        const result=this.newCell(),owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),proxy:{target:objectsOf(target),handler:objectsOf(handler),context}};
         calls.set(key,result);this.ownerCreations.set(owner,context);this.sourceObjectOwners.add(owner);this.ownerMutation(owner);this.markPropertyAlgorithm(owner,"opaque");
         if(!this.proxyCreated){this.proxyCreated=true;for(const pending of this.pendingProxyMethods.splice(0))this.installProxyInternalMethod(pending.objects,pending.traps,pending.context,pending.chain);}
         this.returnTransforms.set(result,{kind:"allocation",inputs:[target,handler],evaluate:inputs=>this.proxyCreate(inputs[0]!,inputs[1]!,context)});
@@ -8641,15 +8653,24 @@ class SourceValueFlow {
                     const proxy=this.ordinaryOwner(atom)?.proxy;
                     if(proxy){
                         this.watch(rule,proxy.target);this.watch(rule,proxy.handler);
-                        // Proxy call/construct invariants are not projected yet.
-                        // Preserve possible target and trap closure effects in
-                        // the same call worklist, then retain an opaque result.
+                        const trap=this.property(proxy.handler,invocation.construct?"construct":"apply",node);this.watch(rule,trap);
+                        // The target receives the call: Call(target, thisArgument,
+                        // argumentsList) or Construct(target, argumentsList,
+                        // newTarget), where newTarget defaults to the Proxy. A
+                        // Proxy is never %eval%, so the call is never a direct eval.
                         if(!invocation.boundPath.has(atom)){
-                            worklist.push({...invocation,target:proxy.target,boundPath:new Set([...invocation.boundPath,atom])});
-                            if(!handled(atom,signature+":proxy")){
-                                const trap=this.property(proxy.handler,invocation.construct?"construct":"apply",node);
-                                this.opaqueCallableCaptures(trap,node);
-                            }
+                            worklist.push({...invocation,target:proxy.target,direct:false,boundPath:new Set([...invocation.boundPath,atom]),...(invocation.construct?{newTarget:invocation.newTarget??invocation.target}:{})});
+                            if(!handled(atom,signature+":proxy"))this.opaqueCallableCaptures(trap,node);
+                        }
+                        // [[Call]]/[[Construct]] step: GetMethod(handler, trap) is
+                        // undefined, so the operation is exactly the target's. Only
+                        // an ordinary handler's read is that GetMethod; a present
+                        // trap keeps the opaque result (trap invariants are not
+                        // projected yet). An unread trap waits for its value.
+                        if([...proxy.handler.values].every(value=>{const owner=this.ordinaryOwner(value);return !!owner&&!owner.proxy;})){
+                            if(!trap.values.nonempty)continue;
+                            // A throwing trap read (an accessor) throws from the call itself.
+                            if([...trap.values].every(value=>value===this.primitive(undefined)||value===this.primitive(null)||value===this.abrupt))continue;
                         }
                     }
                     // A native performs internal methods on its receiver and
