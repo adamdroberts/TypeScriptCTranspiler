@@ -579,6 +579,29 @@ const CAPTURE_COMPOSITION_BOUND = 8;
  * list, and a boolean result is either boolean. It also bounds the steps of a
  * search for one normal completion (primitiveCompletions). */
 const PRIMITIVE_CHOICE_PRODUCT_LIMIT = 65_536;
+/** Distinct values one loop counter update may store before it keeps only
+ * its Number category (fail closed): a counter whose condition never stops
+ * its steps (`i !== 0.5`) would otherwise grow without bound. */
+const LOOP_COUNTER_VALUE_LIMIT = 1024;
+/** Loop conditions a counter's values are filtered by; each compares the
+ * counter with the other operand's values by the host's own operator on
+ * primitives, which is the spec's IsLessThan/IsLooselyEqual/IsStrictlyEqual. */
+const LOOP_COUNTER_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken, ts.SyntaxKind.GreaterThanToken,
+    ts.SyntaxKind.GreaterThanEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken]);
+function loopCounterCompare(operator: ts.SyntaxKind, left: Primitive, right: Primitive): boolean {
+    // A Symbol operand throws TypeError: the body does not run.
+    if (typeof left === "symbol" || typeof right === "symbol") return false;
+    const a = left as number, b = right as number;
+    switch (operator) {
+        case ts.SyntaxKind.LessThanToken: return a < b;
+        case ts.SyntaxKind.LessThanEqualsToken: return a <= b;
+        case ts.SyntaxKind.GreaterThanToken: return a > b;
+        case ts.SyntaxKind.GreaterThanEqualsToken: return a >= b;
+        case ts.SyntaxKind.ExclamationEqualsEqualsToken: return a !== b;
+        // eslint-disable-next-line eqeqeq
+        default: return a != b;
+    }
+}
 /** Solver steps (rule evaluations, initializations, primitive flushes) one
  * source-value solve may perform: a deterministic backstop well above legitimate
  * analyses (ordinary programs use under 50k, the largest property suites
@@ -1367,6 +1390,73 @@ class SourceValueFlow {
             });
         }};
         extend();return result;
+    }
+    /** The update expression of `for (...; i REL bound; i++)` (or --, prefix
+     * or postfix) runs only after its condition read `i` and found it true.
+     * When no write to `i`'s location can run between that condition and
+     * the update, the update reads a value that passed the condition, so it
+     * stores v±1 only for those values: a constant-bounded counter stays a
+     * finite Number set instead of every Number. */
+    private loopCounter(node: ts.Node): {loop: ts.ForStatement; operand: ts.Identifier; location: Cell; bound: Cell; operator: ts.SyntaxKind; counterLeft: boolean} | null {
+        if (!ts.isPrefixUnaryExpression(node) && !ts.isPostfixUnaryExpression(node)) return null;
+        const loop = node.parent;
+        if (!loop || !ts.isForStatement(loop) || loop.incrementor !== node || !loop.condition) return null;
+        const operand = node.operand;
+        if (!ts.isIdentifier(operand)) return null;
+        const condition = unwrap(loop.condition);
+        if (!ts.isBinaryExpression(condition) || !LOOP_COUNTER_OPERATORS.has(condition.operatorToken.kind)) return null;
+        const left = unwrap(condition.left), right = unwrap(condition.right);
+        const symbol = this.bindingSymbol(operand);
+        const same = (expression: ts.Expression) => ts.isIdentifier(expression) && expression.text === operand.text && this.bindingSymbol(expression) === symbol;
+        const counterLeft = same(left);
+        if (!symbol || counterLeft === same(right)) return null;
+        // Eval code's References, a with object, or an eval-declared var can
+        // redirect the name to a location this rule does not watch.
+        const reference = counterLeft ? left as ts.Identifier : right as ts.Identifier;
+        for (const name of [operand, reference])
+            if (this.evaluationGlobalTargets.has(name) || this.evaluationReferenceEnvironment(name) || this.withBindingObjects(name).length) return null;
+        // A binding the loop's own frame declares cannot be shadowed there by
+        // an eval-declared var (EvalDeclarationInstantiation reuses the var
+        // or throws for a lexical one); eval code's writes are foreign
+        // location sources, which loopCounterSteps rejects.
+        const frame = this.sourceActivation(loop), declarations = symbol.declarations ?? [];
+        // A sloppy function's mapped arguments object aliases a parameter
+        // without a lexical write.
+        if (!declarations.length || declarations.some(declaration => ts.isParameter(declaration) || this.sourceActivation(declaration) !== frame)) return null;
+        return {loop, operand, location: this.binding(operand), bound: this.cell(counterLeft ? condition.right : condition.left), operator: condition.operatorToken.kind, counterLeft};
+    }
+    /** The values the update stores, or null when the location may be written
+     * between the condition and the update (any write that is not a recorded
+     * lexical write of the loop's own frame outside its condition and body,
+     * other than the update itself), or when a value or bound is not a
+     * complete primitive set. */
+    private loopCounterSteps(node: ts.PrefixUnaryExpression | ts.PostfixUnaryExpression, counter: NonNullable<ReturnType<SourceValueFlow["loopCounter"]>>, proof: PrimitiveChoiceProof, rule: Rule): number[] | null | "pending" {
+        if (!proof.primitiveComplete || proof.values.some(value => typeof value !== "number")) return null;
+        const {loop, location} = counter, frame = this.sourceActivation(loop);
+        const within = (inner: ts.Node, outer: ts.Node | undefined) => {
+            if (!outer) return false;
+            for (let current: ts.Node | undefined = inner; current; current = current.parent) if (current === outer) return true;
+            return false;
+        };
+        for (const atom of location.values.ownValues()) if (atom.tag !== "primitive" || atom.value !== undefined) return null;
+        for (const [facts, kind] of location.values.sources) {
+            const source = this.sourceCells.get(facts)!;
+            // Unknown code's global writes arrive as unknown atoms, which make
+            // the counter's values incomplete (and this rule rerun) first.
+            // A property's effect cell carries only effect origins (unknown
+            // atoms through origin edges), which do the same.
+            if (source === this.globalMutation || source.values.ownValues().next().done && [...source.values.sources.values()].every(edge => edge === "origin")) continue;
+            const write = this.knownWriteOrigins.get(source);
+            if (kind !== "value" || !write || !write.lexical || !write.event || write.location !== location) return null;
+            if (write.origin !== node && (this.sourceActivation(write.origin) !== frame || within(write.origin, loop.statement) || within(write.origin, loop.condition))) return null;
+        }
+        const bound = this.primitiveState(counter.bound, rule);
+        if (bound.pending) return "pending";
+        if (!bound.proof.primitiveComplete) return null;
+        const delta = node.operator === ts.SyntaxKind.PlusPlusToken ? 1 : -1, steps: number[] = [];
+        for (const value of proof.values as number[])
+            if (bound.proof.values.some(other => loopCounterCompare(counter.operator, counter.counterLeft ? value : other, counter.counterLeft ? other : value))) steps.push(value + delta);
+        return steps;
     }
     private updateStored(node: ts.Node): Cell {
         let value = this.numericWrites.get(node);
@@ -8320,12 +8410,25 @@ class SourceValueFlow {
                 // Retain its numeric category after normal conversion instead
                 // of feeding expression values back into the location graph.
                 const stored = this.updateStored(node);
-                let write!: Rule;
-                write = this.rule([converted[0]!], () => {
+                const counter = this.loopCounter(node);
+                const counted = new Set<number>();
+                let write!: Rule, widened = false;
+                write = this.rule([converted[0]!, ...(counter ? [counter.location, counter.bound] : [])], () => {
                     const state = this.primitiveState(converted[0]!, write, true);
                     if (state.pending) return;
                     if(state.proof.primitiveComplete&&!state.proof.values.length)this.publish(stored,this.abrupt);
                     else {
+                        if (counter && !widened) {
+                            const steps = this.loopCounterSteps(node as ts.PrefixUnaryExpression | ts.PostfixUnaryExpression, counter, state.proof, write);
+                            if (steps === "pending") return;
+                            if (steps) for (const step of steps) {
+                                if (counted.has(step)) continue;
+                                if (counted.size >= LOOP_COUNTER_VALUE_LIMIT) {widened = true; break;}
+                                counted.add(step); this.publish(stored, this.primitive(step));
+                            }
+                            if (steps && !widened) return;
+                            widened = true;
+                        }
                         const kinds=this.primitiveKinds(converted[0]!)&KIND_NUMERIC||KIND_NUMERIC;
                         let value=this.numericValues.get(kinds);if(!value){value={tag:"non-string",kinds};this.numericValues.set(kinds,value);}
                         this.publish(stored,value);
