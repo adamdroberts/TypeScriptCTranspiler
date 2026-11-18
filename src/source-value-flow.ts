@@ -756,6 +756,11 @@ class SourceValueFlow {
     private readonly topLevelGlobalEscapes=new Map<ts.SourceFile,{visit:(input:Cell,as?:EscapeReachKind)=>void;active:Cell;thrown:Cell;sources:Set<Cell>;handlers:Set<Cell>}>();
     private readonly escapeReaches=new Map<string,{cells:Map<Cell,EscapeReach>;atoms:Map<Atom,EscapeReach>}>();
     private readonly escapedInvocationOrigins=new WeakMap<ts.Node,ts.Node>();
+    /** Escape invocations made by a native: their actuals are native values. */
+    private readonly nativeEscapeInvocations=new WeakSet<ts.Node>();
+    /** The values a native passes an escaped callable (an absent argument is
+     * undefined), one cell for every native escape point. */
+    private nativeEscapeActualCell:Cell|undefined;
     /** Opaque code invokes an async callee with unknown actuals, so all such
      * invocations share one resolution record per callee: a fresh record per
      * synthetic site would let each resolution job escape the callee again. */
@@ -1895,6 +1900,7 @@ class SourceValueFlow {
         const sink=this.newEscapeReach({callable:atom=>this.publish(target,atom),iterator:cell=>visit(this.directIteratorElements(cell,context))});
         const visit=(input:Cell,as:EscapeReachKind="direct"):void=>{const key=input.id+":"+as;if(seen.has(key))return;seen.add(key);this.linkEscapeReach(this.escapeCellReach(input,sourceCallbacksOnly,as),sink);};
         this.escapedInvocationOrigins.set(invocation,context);
+        if(!sourceCallbacksOnly)this.nativeEscapeInvocations.add(invocation);
         const thrown=this.exceptionCell(),constructed=this.newCell();
         this.exceptionHandlers.set(invocation,thrown);
         this.publish(constructed,{tag:"object",owner:this.owner(invocation)});
@@ -1903,6 +1909,15 @@ class SourceValueFlow {
         this.invoke(invocation,target,actuals,parts,returned);
         this.invoke(invocation,target,constructed,parts,returned,true);
         return {visit,thrown};
+    }
+    private nativeEscapeFormals(owner:FunctionOwner,actualFormals:ReadonlyMap<Cell,Cell>):ReadonlyMap<Cell,Cell> {
+        if(!this.nativeEscapeActualCell){this.nativeEscapeActualCell=this.newCell();this.publish(this.nativeEscapeActualCell,this.nativeUnknown);this.publish(this.nativeEscapeActualCell,this.primitive(undefined));}
+        const shared=this.nativeEscapeActualCell,formals=new Map<Cell,Cell>();
+        for(const parameter of owner.parameters)if(ts.isIdentifier(parameter.name)&&!parameter.dotDotDotToken){
+            const formal=this.binding(parameter.name),actual=actualFormals.get(formal);
+            if(actual)formals.set(formal,parameter.initializer?actual:shared);
+        }
+        return formals;
     }
     /** The Script's shared actual List; each top-level escape point adds its
      * own execution origins. */
@@ -9225,13 +9240,21 @@ class SourceValueFlow {
                             }
                         }
                         this.recordInvocation(atom.owner,node,actualFormals);
-                        // Unknown code and natives call an escaped callable with
-                        // the values they hold, never a call-specific List, so
-                        // projecting its return per escape point refines nothing;
-                        // the shared return (the union over every activation)
-                        // is that result. Each escape point's actual cell would
-                        // otherwise key a projection of every reachable function.
-                        const projectionFormals:ReadonlyMap<Cell,Cell>=this.escapedInvocationOrigins.has(node)?new Map():actualFormals;
+                        // Unknown code calls an escaped callable with the values it
+                        // holds, never a call-specific List, so projecting its
+                        // return per escape point refines nothing; the shared
+                        // return (the union over every activation) is that
+                        // result. A native passes only native values: each
+                        // simple formal reads the one shared native actual cell,
+                        // so the projection is one per function, not one per
+                        // escape point, and keeps another activation's return
+                        // (a trap's normal call) out of the native's result. A
+                        // formal with an initializer keeps its own actual. Only
+                        // ordinary functions are projected: an async or generator
+                        // projection also clones its resumption state, which the
+                        // shared return already covers.
+                        const projectionFormals:ReadonlyMap<Cell,Cell>=!this.escapedInvocationOrigins.has(node)?actualFormals:
+                            this.nativeEscapeInvocations.has(node)&&atom.owner.kind==="ordinary"?this.nativeEscapeFormals(atom.owner,actualFormals):new Map();
                         if (atom.owner.kind.includes("generator")) this.copy(this.generatorInstance(atom.owner,projectionFormals,node),result);
                         else if (atom.owner.kind === "async") {
                             // Async return resolution runs in the callee activation, which
