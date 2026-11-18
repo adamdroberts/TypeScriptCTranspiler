@@ -21231,6 +21231,7 @@ class Emitter {
         sourceValue: string,
         initialize: BindingInitializationLeafEmitter,
         prepare?: BindingInitializationLeafPreparation,
+        leafPrepared = false,
     ): void {
         this.emitBindingInitializationValue(
             buf,
@@ -21239,6 +21240,7 @@ class Emitter {
             element.initializer,
             initialize,
             prepare,
+            leafPrepared,
         );
     }
 
@@ -21253,6 +21255,7 @@ class Emitter {
         initializer: ts.Expression | undefined,
         initialize: BindingInitializationLeafEmitter,
         prepare?: BindingInitializationLeafPreparation,
+        leafPrepared = false,
     ): void {
         const value = this.freshTemp("_binding_value");
         const root = this.freshTemp("_binding_value_gc_root");
@@ -21265,21 +21268,26 @@ class Emitter {
             buf.line(`${root} = tsc_value_gc_root(${value});`);
             buf.close();
         }
-        this.emitBindingInitialization(buf, binding, value, initialize, prepare);
+        this.emitBindingInitialization(buf, binding, value, initialize, prepare, leafPrepared);
     }
 
     /** BindingInitialization consumes the BindingName AST as one canonical
      * recursive tree. Every object member and iterator step enters this same
-     * algorithm independently of pattern width or nesting depth. */
+     * algorithm independently of pattern width or nesting depth. A pattern
+     * element resolves its identifier target once, before its value is read
+     * (KeyedBindingInitialization / IteratorBindingInitialization step 1:
+     * ResolveBinding precedes GetV, the iterator step and the initializer);
+     * `leafPrepared` marks that the element already did so. */
     private emitBindingInitialization(
         buf: CBuf,
         binding: ts.BindingName,
         sourceValue: string,
         initialize: BindingInitializationLeafEmitter,
         prepare?: BindingInitializationLeafPreparation,
+        leafPrepared = false,
     ): void {
         if (ts.isIdentifier(binding)) {
-            prepare?.(buf, binding);
+            if (!leafPrepared) prepare?.(buf, binding);
             const declaration = binding.parent && ts.isVariableDeclaration(binding.parent) ? binding.parent : null;
             const value = this.resourceInitializationValue(declaration, sourceValue);
             if (declaration) this.emittingResourceBindings.add(declaration);
@@ -21365,6 +21373,7 @@ class Emitter {
                     `tsc_value_get_computed_prop(${source}, ${key})`,
                     initialize,
                     prepare,
+                    ts.isIdentifier(element.name),
                 );
             }
             buf.close();
@@ -21409,14 +21418,16 @@ class Emitter {
                 buf.close();
                 buf.line(`tsc_value_t ${boxedRest} = tsc_value_array(${rest});`);
                 buf.line(`void* volatile ${boxedRestRoot} = tsc_value_gc_root(${boxedRest});`);
-                this.emitBindingInitialization(buf, element.name, boxedRest, initialize, prepare);
+                this.emitBindingInitialization(buf, element.name, boxedRest, initialize, prepare,
+                    ts.isIdentifier(element.name));
                 continue;
             }
             const next = this.freshTemp("_binding_iterator_value");
             if (ts.isIdentifier(element.name)) prepare?.(buf, element.name);
             buf.line(`tsc_value_t ${next} = tsc_value_undefined();`);
             buf.line(`(void)tsc_sync_iterator_step(${iterator}, &${next});`);
-            this.emitBindingInitializationElement(buf, element, next, initialize, prepare);
+            this.emitBindingInitializationElement(buf, element, next, initialize, prepare,
+                ts.isIdentifier(element.name));
         }
         buf.line(`tsc_sync_iterator_close(${iterator});`);
         buf.line("tsc_try_pop();");
