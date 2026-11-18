@@ -222,6 +222,7 @@ function parseFailure(
     origin: ParseFailure["origin"],
     goal: "script" | "module",
     allowExternalPrivateNames = false,
+    evalCode = false,
 ): ParseFailure | null {
     const sourceFile = createEcmaSourceFile(
         filename,
@@ -243,7 +244,7 @@ function parseFailure(
         ? earlyControlFlowFailure(sourceFile)
         : null;
     const functionFailure = diagnostics.length === 0 && !goalMismatch && !controlFailure
-        ? earlyFunctionStaticSemanticsFailure(sourceFile) ?? earlyPrivateStaticSemanticsFailure(sourceFile, allowExternalPrivateNames) ??
+        ? earlyFunctionStaticSemanticsFailure(sourceFile, undefined, goal === "script" && !evalCode) ?? earlyPrivateStaticSemanticsFailure(sourceFile, allowExternalPrivateNames) ??
             earlyRegExpLiteralFailure(sourceFile) ?? earlyShortCircuitMixFailure(sourceFile)
         : null;
     const moduleFailure = diagnostics.length === 0 && !goalMismatch && !controlFailure && !functionFailure && goal === "module"
@@ -645,7 +646,7 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
             const relative =
                 `__tsc2c_direct_eval__/${direct.strictCaller ? "strict" : "sloppy"}/` +
                 `${directEvalSourceDigest(direct.source,direct.domain,direct.context)}.js`;
-            const failure = parseFailure(direct.source, relative, "parse", "test-source", "script", true);
+            const failure = parseFailure(direct.source, relative, "parse", "test-source", "script", true, true);
             if (failure || !evalSourceIsValid({kind:"direct",...direct})) {
                 directEvalEntries.push({ ...direct, entry: null });
                 continue;
@@ -665,7 +666,7 @@ export async function prepareNativeRequest(request: HostRequest): Promise<HostPr
             const relative =
                 `__tsc2c_indirect_eval__/${indirect.strict ? "strict" : "sloppy"}/` +
                 `${sha256Text(JSON.stringify([indirect.source,indirect.domain]))}.js`;
-            const failure = parseFailure(indirect.source, relative, "parse", "test-source", "script");
+            const failure = parseFailure(indirect.source, relative, "parse", "test-source", "script", false, true);
             if (failure || !evalSourceIsValid({kind:"indirect",strictCaller:false,...indirect})) {
                 indirectEvalEntries.push({ ...indirect, entry: null });
                 continue;

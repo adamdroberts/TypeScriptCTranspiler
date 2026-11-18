@@ -21994,6 +21994,8 @@ class Emitter {
     ): EmitResult {
         if (kind === "this" && this.isCommonJsSourceFile(fn.getSourceFile()) && !this.nearestEnclosingNewTargetOwner(fn))
             return { c: this.commonJsModuleBindings.get(fn.getSourceFile())!.initialExports, ty: T_VALUE };
+        if (kind === "new-target" && this.isCommonJsSourceFile(fn.getSourceFile()) && !this.nearestEnclosingNewTargetOwner(fn))
+            return { c: "tsc_value_undefined()", ty: T_VALUE };
         const current = this.currentFunctionActivationBinding(kind);
         if (current) return current;
         const inherited = this.activeArrowLexicalBinding(fn, kind);
@@ -31004,6 +31006,11 @@ class Emitter {
         ) {
             if (this.isTest262EvalSourceFile(expr.getSourceFile()) && !this.nearestEnclosingNewTargetOwner(expr))
                 return { c: "tsc_environment_eval_new_target()", ty: T_VALUE };
+            // A CommonJS module body runs inside its wrapper function, which
+            // the loader calls (never constructs): NewTarget is undefined,
+            // also for arrows at the top level.
+            if (this.isCommonJsSourceFile(expr.getSourceFile()) && !this.nearestEnclosingNewTargetOwner(expr))
+                return { c: "tsc_value_undefined()", ty: T_VALUE };
             return this.currentFunctionActivationBinding("new-target") ??
                 this.activeArrowLexicalBinding(expr, "new-target") ??
                 { c: "tsc_value_current_new_target()", ty: T_VALUE };

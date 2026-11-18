@@ -86,7 +86,8 @@ export function evalSourceIsValid(request: EvalSourceRequest): boolean {
     const file = createEcmaSourceFile("eval-source.js", text, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS, "script");
     return !(file as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics?.length &&
         !earlyControlFlowStaticSemanticsFailure(file) &&
-        !earlyFunctionStaticSemanticsFailure(file, request.kind === "direct" || request.kind === "indirect" ? request.context : null) &&
+        !earlyFunctionStaticSemanticsFailure(file, request.kind === "direct" || request.kind === "indirect" ? request.context : null,
+            request.kind === "script" || request.kind === "agent") &&
         !earlyPrivateStaticSemanticsFailure(file, request.kind === "direct") && !earlyRegExpLiteralFailure(file) &&
         !earlyShortCircuitMixFailure(file);
 }

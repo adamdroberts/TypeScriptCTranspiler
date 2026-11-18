@@ -21,6 +21,7 @@ import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import { buildProgram, resolvePackageRoot } from "./program";
 import { ecmaParseGoal } from "./ecmascript-source";
+import { sourceUnitFormat } from "./source-unit-format";
 import { buildModuleGraph,moduleLoadFailures } from "./resolve";
 import {
     emitProgram,
@@ -200,11 +201,12 @@ function controlStaticSemanticsDiagnostics(
 
 function functionStaticSemanticsDiagnostics(
     program: ts.Program,
+    scripts: ReadonlySet<string> = new Set(),
 ): FunctionStaticSemanticsFailure[] {
     const failures: FunctionStaticSemanticsFailure[] = [];
     for (const sourceFile of program.getSourceFiles()) {
         if (sourceFile.isDeclarationFile || /\.json$/i.test(sourceFile.fileName)) continue;
-        const failure = earlyFunctionStaticSemanticsFailure(sourceFile);
+        const failure = earlyFunctionStaticSemanticsFailure(sourceFile, undefined, scripts.has(path.resolve(sourceFile.fileName)));
         if (failure) failures.push(failure);
     }
     return failures;
@@ -921,7 +923,14 @@ async function compileWithDiagnostics(opts: CompileOptions, writeDiagnostic: (me
             .flatMap(file => { const directEval = sourceEval?.directEvalEntries?.some(entry => entry.entry && path.resolve(entry.entry) === path.resolve(file.fileName));
                 const failure = earlyPrivateStaticSemanticsFailure(file, !!directEval); return failure ? [failure] : []; }),
         ...controlStaticSemanticsDiagnostics(program),
-        ...functionStaticSemanticsDiagnostics(program),
+        // The Script goal: initialization entries the program keeps as
+        // global Scripts (not CommonJS wrappers), $262.evalScript sources and
+        // agent Scripts, as the emitter selects them.
+        ...functionStaticSemanticsDiagnostics(program, new Set([
+            ...program.getSourceFiles().filter(file => ecmaParseGoal(file) === "script" && sourceUnitFormat(file) !== "commonjs" &&
+                (opts.initializationEntries ?? [opts.entry]).some(entry => path.resolve(entry) === path.resolve(file.fileName))).map(file => path.resolve(file.fileName)),
+            ...[...(sourceEval?.evalScriptEntries ?? []), ...(sourceEval?.agentEntries ?? [])].flatMap(entry => entry.entry ? [path.resolve(entry.entry)] : []),
+        ])),
         ...regExpStaticSemanticsDiagnostics(program),
         ...moduleStaticSemanticsDiagnostics(program, opts.moduleRoots),
     ];

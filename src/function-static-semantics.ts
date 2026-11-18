@@ -555,9 +555,20 @@ function functionLikeFailure(
 /** Function-definition early errors over one explicit source-tree worklist.
  * Formal BoundNames always come from one recursive binding tree; neither
  * parameter count nor generated fixture families affect the decision. */
+function newTargetOwner(node: ts.Node): ts.Node | null {
+    for (let current: ts.Node = node, parent: ts.Node | undefined = node.parent; parent; current = parent, parent = parent.parent) {
+        if (ts.isArrowFunction(parent)) continue;
+        if ((ts.isFunctionLike(parent) || ts.isPropertyDeclaration(parent)) && "name" in parent && parent.name === current) continue;
+        if (ts.isFunctionLike(parent) || ts.isClassStaticBlockDeclaration(parent) || ts.isPropertyDeclaration(parent)) return parent;
+        if (ts.isSourceFile(parent)) return null;
+    }
+    return null;
+}
+
 export function earlyFunctionStaticSemanticsFailure(
     sourceFile: ts.SourceFile,
     evalContext: number | null = evalSourceContext(sourceFile),
+    script = false,
 ): FunctionStaticSemanticsFailure | null {
     const module = ecmaParseGoal(sourceFile) === "module";
     const javascript = isJavaScriptSourceFile(sourceFile);
@@ -571,6 +582,13 @@ export function earlyFunctionStaticSemanticsFailure(
             return { node, message: "MetaProperty requires its literal token spelling" };
         if (!module && ts.isMetaProperty(node) && node.keywordToken === ts.SyntaxKind.ImportKeyword)
             return { node, message: "import.meta requires the Module parse goal" };
+        // ScriptBody: StatementList Contains NewTarget outside eval code
+        // (sec-scripts-static-semantics-early-errors). Arrow functions and
+        // element keys see the enclosing environment; a non-arrow function,
+        // field initializer or static block owns a NewTarget. Eval code is
+        // checked against its PerformEval context when it is evaluated.
+        if (script && ts.isMetaProperty(node) && node.keywordToken === ts.SyntaxKind.NewKeyword && !newTargetOwner(node))
+            return { node, message: "new.target is only permitted in functions" };
         // The TypeScript AST also calls a JavaScript class's `extends` operand
         // a TypeNode. Its expression is ordinary ECMAScript syntax; only an
         // attached type-argument List belongs to the TypeScript grammar.
