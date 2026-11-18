@@ -394,6 +394,9 @@ export function earlyControlFlowStaticSemanticsFailure(
         if ((ts.isForInStatement(node) || ts.isForOfStatement(node)) && ts.isVariableDeclarationList(node.initializer)) {
             // Only Annex B's non-strict `for (var BindingIdentifier Initializer in ...)` keeps an initializer.
             const annexB = ts.isForInStatement(node) && !context.strict && (node.initializer.flags & ts.NodeFlags.BlockScoped) === 0;
+            // `var ForBinding` and ForDeclaration each name exactly one binding.
+            if (node.initializer.declarations.length !== 1)
+                return { node: node.initializer, message: `${ts.isForInStatement(node) ? "for-in" : "for-of"} head must declare exactly one binding` };
             for (const declaration of node.initializer.declarations) {
                 if (declaration.initializer && !(annexB && ts.isIdentifier(declaration.name))) {
                     return { node: declaration, message: `${ts.isForInStatement(node) ? "for-in" : "for-of"} declaration cannot have an initializer` };
