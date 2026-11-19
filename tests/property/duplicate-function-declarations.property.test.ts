@@ -15,9 +15,12 @@ import {compile} from '../../src/compile';
  * scoped, so a duplicate there is an early SyntaxError.
  * Partitions: duplicate count, a call before, between and after the
  * declarations, a reference captured before a later declaration, a
- * superseded body calling the name, strict mode, and the module goal. (A
- * `var` redeclaration of a function's name is a separate open emitter gap:
- * its storage field collides with the function's C name.) The stress declares one
+ * superseded body calling the name, strict mode, the module goal, and a
+ * `var` redeclaration of the name (bare, with an initializer, as a for-in or
+ * for-of head, destructured from an array or an object; in a CommonJS module
+ * body and in a function body). A var names the function's binding: it
+ * starts as the function, and the CommonJS body emitted a second storage
+ * field under the function's C name. The stress declares one
  * name 64 times. */
 const stress=64;
 const body=(count:number,strict:boolean,mixVar:boolean)=>{
@@ -33,8 +36,14 @@ const body=(count:number,strict:boolean,mixVar:boolean)=>{
  return lines.join('\n')+'\n';
 };
 const programs:Record<string,string>={};
-for(const count of [2,3,4])for(const strict of [false,true])for(const mixVar of [false])programs[`n${count}${strict?'strict':'sloppy'}${mixVar?'Var':''}`]=body(count,strict,mixVar);
+for(const count of [2,3,4])for(const strict of [false,true])for(const mixVar of [false,true])programs[`n${count}${strict?'strict':'sloppy'}${mixVar?'Var':''}`]=body(count,strict,mixVar);
 programs.stress=body(stress,false,false);
+const varForms:Record<string,string>={bare:'var f;',initialized:'var f = function () { return "init"; };',forOf:'for (var f of [function () { return "of"; }]);',
+ forIn:'for (var f in { k: 1 }); f = function () { return "in:" + "k"; };',array:'var [f] = [function () { return "array"; }];',object:'var { a: f } = { a: function () { return "object"; } };'};
+for(const [form,statement] of Object.entries(varForms)){
+ programs[`var_${form}`]=`console.log(typeof f, f());\nfunction f() { return "declared"; }\n${statement}\nconsole.log(f());\n`;
+ programs[`varInFunction_${form}`]=`function outer() { const before = f(); function f() { return "declared"; }\n${statement}\nreturn before + ":" + f(); }\nconsole.log(outer());\n`;
+}
 
 test('a name declared by several function declarations binds the last one, as in Node',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'tsc2c-duplicate-functions-'));

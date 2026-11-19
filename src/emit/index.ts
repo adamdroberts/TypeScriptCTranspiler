@@ -706,7 +706,7 @@ class Emitter {
     private eventListenerIdentities = new Map<string, string>();
     private capturedCellsCache = new WeakMap<ts.Node, Map<ts.Symbol, CaptureCell>>();
     private parameterScopeReferences = new WeakMap<ts.Identifier, { symbol: ts.Symbol | undefined } | null>();
-    private bodyFunctionDeclarations = new WeakMap<ts.Block, Map<string, ts.FunctionDeclaration & { name: ts.Identifier }>>();
+    private bodyFunctionDeclarations = new WeakMap<ts.Block | ts.SourceFile, Map<string, ts.FunctionDeclaration & { name: ts.Identifier }>>();
     private cellScopes: Map<ts.Symbol, CaptureCell>[] = [];
     private preallocatedVariableCells: Set<CaptureCell>[] = [];
     private capturedSuperPropertyReferenceScopes: ReadonlyMap<ts.Expression, CapturedSuperPropertyReference>[] = [];
@@ -18266,7 +18266,7 @@ class Emitter {
         return decl ? this.declarationCName(decl) : null;
     }
 
-    private functionDeclarationsForBody(body: ts.Block): Map<string, ts.FunctionDeclaration & { name: ts.Identifier }> {
+    private functionDeclarationsForBody(body: ts.Block | ts.SourceFile): Map<string, ts.FunctionDeclaration & { name: ts.Identifier }> {
         const cached = this.bodyFunctionDeclarations.get(body);
         if (cached) return cached;
         const declarations = new Map<string, ts.FunctionDeclaration & { name: ts.Identifier }>();
@@ -18359,17 +18359,23 @@ class Emitter {
         const declaration = sym?.valueDeclaration ?? sym?.declarations?.[0];
         let bindingOwner: ts.Node | undefined;
         if (declaration && ts.isParameter(declaration)) bindingOwner = declaration.parent;
-        if (declaration && ts.isVariableDeclaration(declaration) &&
-            ts.isVariableDeclarationList(declaration.parent) &&
-            (declaration.parent.flags & ts.NodeFlags.BlockScoped) === 0) {
-            for (let node: ts.Node | undefined = declaration.parent; node; node = node.parent) {
+        // A destructured var name is declared by its pattern's declaration.
+        const variable = declaration && ts.isBindingElement(declaration) ? ts.walkUpBindingElementsAndPatterns(declaration) : declaration;
+        if (variable && ts.isVariableDeclaration(variable) &&
+            ts.isVariableDeclarationList(variable.parent) &&
+            (variable.parent.flags & ts.NodeFlags.BlockScoped) === 0) {
+            for (let node: ts.Node | undefined = variable.parent; node; node = node.parent) {
                 if (ts.isFunctionLike(node)) { bindingOwner = node; break; }
-                if (ts.isSourceFile(node) || ts.isClassLike(node)) break;
+                // A CommonJS module body is a function body: its top-level
+                // var and function names share one binding too.
+                if (ts.isSourceFile(node)) { if (this.isCommonJsSourceFile(node)) bindingOwner = node; break; }
+                if (ts.isClassLike(node)) break;
             }
         }
-        if (bindingOwner && ts.isFunctionLike(bindingOwner) && "body" in bindingOwner &&
-            bindingOwner.body && ts.isBlock(bindingOwner.body) && this.isNodeWithin(id, bindingOwner.body)) {
-            const selected = this.functionDeclarationsForBody(bindingOwner.body).get(id.text);
+        const bindingBody = bindingOwner && ts.isSourceFile(bindingOwner) ? bindingOwner
+            : bindingOwner && ts.isFunctionLike(bindingOwner) && "body" in bindingOwner && bindingOwner.body && ts.isBlock(bindingOwner.body) ? bindingOwner.body : undefined;
+        if (bindingBody && this.isNodeWithin(id, bindingBody)) {
+            const selected = this.functionDeclarationsForBody(bindingBody).get(id.text);
             if (selected) sym = this.functionBindingSymbol(selected, this.checker.getSymbolAtLocation(selected.name));
         }
         // Checking a JavaScript expando assignment can replace a function's
@@ -20540,7 +20546,7 @@ class Emitter {
                     ts.isVariableStatement(node.parent.parent) && node.parent.parent.parent === sf;
                 if (moduleBinding) for (const name of this.test262BindingNames(node.name)) {
                     const symbol = this.symbolForIdentifier(name);
-                    if (!symbol || !this.moduleVarBindings.has(symbol) && !this.moduleLexicalBindings.has(symbol))
+                    if (!symbol || !this.moduleVarBindings.has(symbol) && !this.moduleLexicalBindings.has(symbol) && !this.moduleFunctionBindingForSymbol(symbol))
                         unsupported(name, "Module binding requires a canonical retained cell");
                 }
             }
@@ -20640,7 +20646,7 @@ class Emitter {
                 const lexical = symbol && this.moduleLexicalBindings.get(symbol);
                 const callable = target && ts.isFunctionDeclaration(target) && this.moduleFunctionDeclarations.get(target);
                 const defaultBinding = target && this.moduleDefaultExportBindings.get(target as ts.ExportAssignment | ts.ClassDeclaration);
-                const binding = variable || lexical || callable || defaultBinding;
+                const binding = variable || lexical || callable || defaultBinding || (symbol && this.moduleFunctionBindingForSymbol(symbol));
                 if (!binding) unsupported(name, "Module binding requires a canonical retained cell");
                 add(name.text,binding.cName,binding.gcRoot,"initialized" in binding ? `&${binding.initialized}` : "NULL",true,true);
             }
@@ -20693,6 +20699,11 @@ class Emitter {
                 for (const name of this.test262BindingNames(node.name)) {
                     const symbol = this.symbolForIdentifier(name);
                     if (!symbol) unsupported(name, "Module binding requires a canonical retained cell");
+                    // A var redeclaring a function declaration's name names
+                    // that one binding (initialized with the function, not
+                    // undefined), whose module function cell it writes.
+                    if (symbol.declarations?.some(declaration => ts.isFunctionDeclaration(declaration) && !!declaration.body &&
+                        declaration.getSourceFile() === sf && this.isTopLevelValueDeclaration(declaration))) continue;
                     let plan = this.moduleVarBindings.get(symbol);
                     if (!plan) {
                         const cName = this.declaredName(name);
@@ -20754,7 +20765,8 @@ class Emitter {
 
     private emitModuleBindingLeaf(buf: CBuf, identifier: ts.Identifier, value: string): void {
         const symbol = this.symbolForIdentifier(identifier);
-        const binding = symbol && (this.moduleVarBindings.get(symbol) ?? this.moduleLexicalBindings.get(symbol));
+        // A var naming a function declaration's binding writes its cell.
+        const binding = symbol && (this.moduleVarBindings.get(symbol) ?? this.moduleLexicalBindings.get(symbol) ?? this.moduleFunctionBindingForSymbol(symbol));
         if (!binding) unsupported(identifier, "Module binding requires a canonical retained cell");
         buf.line(`${binding.cName} = ${value};`);
         buf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.cName});`);

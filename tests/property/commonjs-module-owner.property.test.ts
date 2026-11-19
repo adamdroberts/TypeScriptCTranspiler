@@ -86,9 +86,11 @@ test('CommonJS projects actual source values from one retained cached module rec
     const directory=path.join(temporary,`${strict}-${typed}-${profile}-${noGc}`);await fs.mkdir(directory);
     await fs.writeFile(path.join(directory,'package.json'),'{"type":"commonjs"}\n');
     for(const [name,source] of sources(strict))await fs.writeFile(path.join(directory,name),source);
-    const entry=path.join(directory,typed?'main.ts':'main.mjs'),output=path.join(directory,'program'),diagnostics:string[]=[];
-    await fs.writeFile(entry,typed?subject(profile,noGc):erase(subject(profile,noGc),ts.ModuleKind.ESNext));
-    const result=await compile({entry,output,noGc,buildDir:path.join(directory,'build'),moduleRoots:[entry],initializationEntries:[entry],
+    // A JavaScript ES module has no require (Node 26; developer decision
+    // 2026-11-16), so the untyped subject is the CommonJS module Node runs.
+    const entry=path.join(directory,typed?'main.ts':'main.cjs'),output=path.join(directory,'program'),diagnostics:string[]=[];
+    await fs.writeFile(entry,typed?subject(profile,noGc):erase(subject(profile,noGc),ts.ModuleKind.CommonJS));
+    const result=await compile({entry,output,noGc,buildDir:path.join(directory,'build'),moduleRoots:typed?[entry]:[],initializationEntries:[entry],
      ...(profile?{test262Observation:{kind:'test262-native-observation' as const,scenarioId:'property/commonjs-module-owner.js#'+(strict?'strict':'sloppy'),setupEntries:[],testEntry:entry,async:false}}:{}),diagnosticWriter:message=>diagnostics.push(message)});
     expect({exitCode:result.exitCode,diagnostics:diagnostics.join('')}).toEqual({exitCode:0,diagnostics:''});
     const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:120_000,env:{...process.env,GC_FREE_SPACE_DIVISOR:'100'}});
