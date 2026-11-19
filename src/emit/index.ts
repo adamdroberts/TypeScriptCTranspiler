@@ -785,6 +785,32 @@ class Emitter {
                     ? [[path.resolve(entry.entry), entry.strict] as const]
                     : []),
         );
+        for (const module of graph.modules.values()) this.selectWinningFunctionDeclarations(module.sf);
+    }
+
+    /** A Script or module body may declare one name with several function
+     * declarations; its binding is initialized with the last of them
+     * (GlobalDeclarationInstantiation and FunctionDeclarationInstantiation
+     * keep the last declaration of each name). The checker's symbol names the
+     * first one as its value declaration, and every emitter lookup resolves a
+     * reference through that, so the symbol is pointed at the winning
+     * declaration once, before any emission. */
+    private selectWinningFunctionDeclarations(sf: ts.SourceFile): void {
+        for (const statement of sf.statements) {
+            if (!ts.isFunctionDeclaration(statement) || !statement.name || !statement.body) continue;
+            const symbol = this.checker.getSymbolAtLocation(statement.name);
+            const declarations = this.topLevelFunctionDeclarations(statement);
+            if (symbol && declarations.length > 1) (symbol as { valueDeclaration?: ts.Declaration }).valueDeclaration = declarations[declarations.length - 1];
+        }
+    }
+
+    /** The top-level function declarations with a body that share `fd`'s
+     * binding, in source order. */
+    private topLevelFunctionDeclarations(fd: ts.FunctionDeclaration): readonly ts.FunctionDeclaration[] {
+        if (!fd.name || !fd.body) return [];
+        return this.checker.getSymbolAtLocation(fd.name)?.declarations?.filter((declaration): declaration is ts.FunctionDeclaration =>
+            ts.isFunctionDeclaration(declaration) && !!declaration.body && declaration.getSourceFile() === fd.getSourceFile() &&
+            this.isTopLevelValueDeclaration(declaration)) ?? [];
     }
 
     private readonly functionSourcePaths: ReadonlySet<string>;
@@ -13146,13 +13172,23 @@ class Emitter {
         return null;
     }
 
+    /** A top-level function declaration followed by another of the same
+     * name in its scope: the binding is initialized with the last one
+     * (FunctionDeclarationInstantiation and GlobalDeclarationInstantiation
+     * keep the last declaration of each name), whose C function carries the
+     * binding's name; an earlier one still has its own body. */
+    private supersededFunctionDeclaration(fd: ts.FunctionDeclaration): boolean {
+        const declarations = this.topLevelFunctionDeclarations(fd);
+        return declarations.length > 1 && declarations[declarations.length - 1] !== fd;
+    }
+
     private functionDeclarationHasCName(fd: ts.FunctionDeclaration): boolean {
         return !!fd.name || this.isDefaultExportDeclaration(fd);
     }
 
     private functionDeclarationCName(fd: ts.FunctionDeclaration): string {
         if (fd.name) {
-            return this.isTopLevelValueDeclaration(fd)
+            return this.isTopLevelValueDeclaration(fd) && !this.supersededFunctionDeclaration(fd)
                 ? this.declaredName(fd.name)
                 : this.localFunctionCName(fd);
         }
