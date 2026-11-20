@@ -8456,6 +8456,10 @@ tsc_value_t tsc_value_stringify_indexed_range(tsc_value_t recv, size_t len, tsc_
     void* volatile receiver_root=tsc_value_gc_root(recv);
     void* volatile separator_root=tsc_value_gc_root(separator);
     tsc_str_t* volatile sep = tsc_value_is_undefined(separator) ? tsc_str_from_lit(",", 1) : tsc_value_to_string(separator);
+    /* After the length read and separator conversion (Node's order), a
+     * receiver this agent is already joining is the empty String. */
+    tsc_join_frame_t join_frame = {0};
+    if (len > 0 && !tsc_join_enter(&join_frame, recv)) return tsc_value_string(tsc_str_from_lit("", 0));
     /* Every element converts in index order into one part collection, then
      * the result materializes once: repeated pairwise concatenation of
      * immutable Strings would copy the growing prefix for every element. */
@@ -8472,6 +8476,7 @@ tsc_value_t tsc_value_stringify_indexed_range(tsc_value_t recv, size_t len, tsc_
         }else if(!locale){part=value_join_part(value);tsc_array_push_raw(parts,&part);}
         (void)value_root;
     }
+    tsc_join_leave(&join_frame);
     (void)receiver_root;(void)separator_root;
     return tsc_value_string(tsc_str_concat_parts(parts));
 }

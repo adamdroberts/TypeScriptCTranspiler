@@ -745,6 +745,8 @@ class SourceValueFlow {
     private readonly invocationTimings=new WeakMap<ts.Node,{readonly repeated:boolean;readonly deferred:boolean}>();
     private readonly arrayPushes=new Map<ts.Node,Map<string,Cell>>();
     private readonly arrayJoinSummaries=new Map<ts.Node,Map<string,Cell>>();
+    private readonly arrayJoinTexts=new Map<ts.Node,Map<string,Cell>>();
+    private readonly joinReceivers=new Map<Atom,Cell>();
     private readonly arrayTexts = new Map<ts.Node,Map<Cell,Cell>>();
     private readonly objectTexts = new Map<ts.Node,Map<Cell,Cell>>();
     private readonly constructorChecks = new Map<ts.Node,Map<Cell,Cell>>();
@@ -6681,6 +6683,21 @@ class SourceValueFlow {
         });
         return result;
     }
+    /** The text of one join at `node`: separator conversion, then each
+     * index read and converted during the invocation (ordinary getters and
+     * writes stay in those location facts). A receiver object's text is
+     * shared by every join of it at this site with the same separator and
+     * index range; other receivers keep the invocation's own text. */
+    private arrayJoinText(node:ts.Node,receiverKey:string|null,receiver:Cell,separator:Cell|undefined,size:number,indices:readonly number[]):Cell {
+        let texts=this.arrayJoinTexts.get(node);if(!texts){texts=new Map();this.arrayJoinTexts.set(node,texts);}
+        const key=receiverKey===null?null:receiverKey+":"+(separator?"s"+separator.id:"omitted")+":"+size+":"+indices.join(",");
+        const prior=key===null?undefined:texts.get(key);if(prior)return prior;
+        const result=this.newCell();if(key!==null)texts.set(key,result);
+        let input=separator;if(!input){input=this.newCell();this.publish(input,this.primitive(undefined));}
+        const inputs=[this.joinTextInput(input,true),...indices.map(index=>this.joinTextInput(this.indexedRead(receiver,index,node),false))];
+        this.publish(result,{tag:"text-operation",operation:"array-join",parts:this.convertList(inputs,node,"text"),indexedRange:{length:size,positions:indices}});
+        return result;
+    }
     private joinTextInput(value:Cell,separator:boolean):Cell {
         const normalized=this.newCell();
         this.rule([value],()=>{
@@ -8900,6 +8917,9 @@ class SourceValueFlow {
         const convertArguments = (args: readonly Cell[] | null): readonly Cell[] | null =>
             args ? this.convertList(args, node, "text") : null;
         const seen = new Map<Atom, Set<string>>();
+        // Array.prototype.join's non-object receivers per extent and index
+        // range (object receivers each have their site's shared text).
+        const joinOthers = new Map<string, Cell>();
         const handled = (atom: Atom, signature: string): boolean => {
             let signatures = seen.get(atom); if (!signatures) { signatures = new Set(); seen.set(atom, signatures); }
             if (signatures.has(signature)) return true; signatures.add(signature); return false;
@@ -9674,13 +9694,26 @@ class SourceValueFlow {
                             for(const extent of state.proof.values){
                                 const size=extent as number,indices=positions.filter(index=>index<size);
                                 const listKey=signature+":"+size+":"+indices.join(",");
-                                if(handled(atom,listKey))continue;
-                                // join reads indices during the invocation,
-                                // after separator conversion. Keep ordinary
-                                // getters and writes in those location facts.
-                                const inputs=[this.joinTextInput(argv?.[0]??omittedArgument,true),...indices.map(index=>this.joinTextInput(this.indexedRead(invocation.receiver,index,node),false))];
-                                const converted=this.convertList(inputs,node,"text");
-                                this.publish(result,{tag:"text-operation",operation:"array-join",parts:converted,indexedRange:{length:size,positions:indices}});
+                                // One join text per receiver object at this
+                                // site: an element that is the receiver (or
+                                // reaches it) converts through toString to a
+                                // join of that same object, which reads this
+                                // text again instead of a fresh activation's,
+                                // so a cyclic receiver closes a cycle the text
+                                // proof leaves incomplete rather than
+                                // unrolling a new join per level. The runtime
+                                // gives such a nested join "" (as Node does).
+                                for(const value of invocation.receiver.values){
+                                    const owner=this.representedOwner(value),receiverKey=owner?"o"+owner.shape.id:"other";
+                                    if(!owner){
+                                        let others=joinOthers.get(listKey);
+                                        if(!others){others=this.newCell();joinOthers.set(listKey,others);this.copy(this.arrayJoinText(node,null,others,argv?.[0],size,indices),result);}
+                                        this.publish(others,value);continue;
+                                    }
+                                    if(handled(atom,listKey+":"+receiverKey))continue;
+                                    let receiver=this.joinReceivers.get(value);if(!receiver){receiver=this.newCell();this.publish(receiver,value);this.joinReceivers.set(value,receiver);}
+                                    this.copy(this.arrayJoinText(node,receiverKey,receiver,argv?.[0],size,indices),result);
+                                }
                             }
                             continue;
                         }

@@ -61,6 +61,7 @@ struct tsc_agent {
     struct tsc_callee_frame* callee;
     tsc_try_frame_t* try_top;
     tsc_call_activation_t* activation_top;
+    tsc_join_frame_t* join_top;
     tsc_throw_completion_t current_throw;
     tsc_next_tick_entry_t* next_tick_queue;
     tsc_microtask_entry_t* microtask_queue;
@@ -187,6 +188,7 @@ void tsc_agent_release(tsc_agent_t* agent){
 #define g_current_parse_unit (tsc_agent_current()->parse_unit)
 #define g_try_top (tsc_agent_current()->try_top)
 #define g_call_activation_top (tsc_agent_current()->activation_top)
+#define g_join_top (tsc_agent_current()->join_top)
 #define g_current_throw (tsc_agent_current()->current_throw)
 #define g_next_tick_queue (tsc_agent_current()->next_tick_queue)
 #define g_next_tick_len (tsc_agent_current()->next_tick_len)
@@ -3070,9 +3072,31 @@ void tsc_try_push(tsc_try_frame_t* f) {
     f->lexical_environment = tsc_environment_current();
     f->activation_top = g_call_activation_top;
     f->callee_top = tsc_value_callee_checkpoint();
+    f->join_top = g_join_top;
     f->completion = (tsc_throw_completion_t*)TSC_GC_MALLOC(sizeof(tsc_throw_completion_t));
     f->active = true;
     g_try_top = f;
+}
+
+bool tsc_join_enter(tsc_join_frame_t* frame, tsc_value_t receiver) {
+    frame->receiver = receiver;
+    frame->prev = NULL;
+    frame->entered = false;
+    /* ToObject of a primitive receiver is a fresh object that no element
+     * can reach, so only objects take part in the cycle check. */
+    if (!tsc_value_is_object(receiver)) return true;
+    for (const tsc_join_frame_t* current = g_join_top; current; current = current->prev)
+        if (current->receiver == receiver) return false;
+    frame->prev = g_join_top;
+    frame->entered = true;
+    g_join_top = frame;
+    return true;
+}
+
+void tsc_join_leave(tsc_join_frame_t* frame) {
+    if (!frame->entered) return;
+    g_join_top = frame->prev;
+    frame->entered = false;
 }
 
 void tsc_try_pop(void) {
@@ -3121,6 +3145,7 @@ _Noreturn void tsc_throw_value(tsc_value_t value) {
         *frame->completion = g_current_throw;
         // The landing path owns pop; no language conversion precedes transfer.
         g_call_activation_top = frame->activation_top;
+        g_join_top = frame->join_top;
         tsc_value_callee_restore(frame->callee_top);
         (void)tsc_realm_swap(frame->realm);
         (void)tsc_parse_unit_swap(frame->parse_unit);
