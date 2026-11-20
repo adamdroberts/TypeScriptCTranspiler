@@ -7863,15 +7863,24 @@ class SourceValueFlow {
             const signature=receiver.id+":"+JSON.stringify(key)+":"+(record?records.get(record):"changed")+":"+[...ancestors].map(owner=>owner.shape.id).join(","),prior=entries.get(signature);if(prior)return prior;
             const result=this.newCell(),read=this.property(receiver,key,context),callbackValue=this.newCell(),callbackContext=this.newCell(),name=this.newCell();entries.set(signature,result);this.publish(name,this.primitive(key));
             this.invoke(context,callee,receiver,[{cell:name,spread:false},{cell:callbackValue,spread:false},{cell:callbackContext,spread:false}],result);
-            const opened=new Set<Atom>();let open!:Rule;
+            // An object's context is {} (no source); one serves every object
+            // value of this visit. Each chain over an object's keys is built
+            // once per key list: keys only grow, and a write the reviver
+            // makes before this walk starts (a forward modification under a
+            // guard) can reach the key list after it was first read, so a
+            // grown list gets its own chain instead of being ignored.
+            let objectContext:Cell|undefined;
+            const freshContext=()=>{const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()},value=this.newCell();this.publish(value,{tag:"object",owner});return {owner,value};};
+            const opened=new Set<Atom>(),chains=new Map<Atom,Set<string>>();let open!:Rule;
             open=this.rule([read],()=>{for(const atom of read.values){
                 if(opened.has(atom))continue;
                 if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);opened.add(atom);continue;}
                 const owner=this.ordinaryOwner(atom),unmodified=record?.value===atom||!!owner&&this.ordinaryOwner(record?.value??this.abrupt)===owner;
-                const contextOwner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()},contextValue=this.newCell();this.publish(contextValue,{tag:"object",owner:contextOwner});
                 if(!owner){
-                    if(record?.source!==null&&record?.value.tag==="primitive"){
-                        const state=this.primitiveState(cell(atom),open,true);if(state.pending&&!state.unresolved)continue;
+                    const state=record?.source!==null&&record?.value.tag==="primitive"?this.primitiveState(cell(atom),open,true):null;
+                    if(state&&state.pending&&!state.unresolved)continue;
+                    const {owner:contextOwner,value:contextValue}=freshContext();
+                    if(state&&record?.value.tag==="primitive"){
                         if(state.proof.values.some(value=>Object.is(value,record.value.tag==="primitive"?record.value.value:undefined))){const source=this.newCell();this.publish(source,this.primitive(record.source));this.defineField(contextOwner,"source",source,true);}
                         if(!state.proof.primitiveComplete||state.proof.values.some(value=>!Object.is(value,record.value.tag==="primitive"?record.value.value:undefined))){const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()};this.publish(contextValue,{tag:"object",owner});}
                     }
@@ -7881,45 +7890,58 @@ class SourceValueFlow {
                 if(ancestors.has(owner)){opened.add(atom);fail(result);continue;}
                 this.watch(open,owner.shape);if(!this.definitionsReady(owner,open))continue;
                 if(this.opaqueShape(owner,context)||owner.proxy||owner.accessors.has(null)){opened.add(atom);fail(result);continue;}
-                const selections:string[][]=[];
+                // The keys InternalizeJSONProperty may visit, in order, and
+                // whether each may be skipped (an index past a shorter
+                // extent, a key that may be absent or not enumerable). One
+                // chain visits them all: a skippable key's successor runs
+                // after its visit or without it, so the possible subsets
+                // share one visit per key instead of one chain each (their
+                // count is exponential in the uncertain keys, and each
+                // chain's children recurse with fresh receivers).
+                const chain:{key:string;skippable:boolean}[]=[];
                 if(owner.listLength){
                     const length=this.primitiveState(owner.listLength,open,true);if(length.pending&&!length.unresolved)continue;
                     const positions=this.indexedPropertyPositions(cell(atom),context,open);if(positions===undefined)continue;
                     if(!length.proof.primitiveComplete||positions===null){opened.add(atom);fail(result);continue;}
-                    // Capture each represented List extent once, then visit
-                    // every index through the same property continuation.
-                    for(const value of length.proof.values){const extent=Number(value),keys=positions.filter(index=>index<extent);if(!Number.isSafeInteger(extent)||extent<0||keys.length!==extent){fail(result);continue;}selections.push(keys.map(String));}
+                    const extents:number[]=[];
+                    for(const value of length.proof.values){const extent=Number(value),keys=positions.filter(index=>index<extent);if(!Number.isSafeInteger(extent)||extent<0||keys.length!==extent){fail(result);continue;}extents.push(extent);}
+                    if(extents.length){const shortest=Math.min(...extents),longest=Math.max(...extents);for(let index=0;index<longest;index++)chain.push({key:String(index),skippable:index>=shortest});}
                 }else {
                     const ownKeys=this.ownerKeys(owner,open);if(ownKeys===undefined)continue;if(ownKeys===null){opened.add(atom);fail(result);continue;}
                     const keys=ownKeys.filter((key):key is string=>typeof key==="string").sort((a,b)=>{const ai=Number(a),bi=Number(b),ia=String(ai)===a&&Number.isInteger(ai)&&ai>=0&&ai<0xffffffff,ib=String(bi)===b&&Number.isInteger(bi)&&bi>=0&&bi<0xffffffff;return ia&&ib?ai-bi:ia?-1:ib?1:0;});
-                    const names:string[]=[],choices:Primitive[][]=[];let ready=true;
+                    let ready=true;
                     for(const key of keys){
                         const location=this.ownPresence(owner,key),presence=this.propertyPresence(owner,key,context);this.watch(open,presence);
                         if(!presence.values.nonempty){ready=false;continue;}
                         if(!presence.values.has(this.primitive(true)))continue;
                         const enumerable=this.primitiveState(location.enumerable,open,true);if(enumerable.pending&&!enumerable.unresolved){ready=false;continue;}
                         if(!enumerable.proof.primitiveComplete){fail(result);ready=false;continue;}
-                        names.push(key);choices.push([...new Set([...enumerable.proof.values.map(Boolean),...(presence.values.has(this.primitive(false))?[false]:[])])]);
+                        if(!enumerable.proof.values.some(Boolean))continue;
+                        chain.push({key,skippable:enumerable.proof.values.some(value=>!value)||presence.values.has(this.primitive(false))});
                     }
                     if(!ready)continue;
-                    for(const tuple of sourceChoiceTuples(choices))selections.push(names.filter((_,index)=>!!tuple[index]));
                 }
-                opened.add(atom);
+                const chainKey=chain.map(({key,skippable})=>JSON.stringify(key)+(skippable?"?":"")).join(",");
+                let built=chains.get(atom);if(!built){built=new Set();chains.set(atom,built);}
+                if(built.has(chainKey))continue;built.add(chainKey);
                 const path=new Set(ancestors);path.add(owner);
-                for(const keys of selections){
-                    let previous:Cell|null=null;
-                    for(const key of keys){
-                        const selected=this.newCell();
-                        if(previous){const prior=previous;let advance!:Rule;advance=this.rule([prior],()=>{const state=this.primitiveState(prior,advance,true);if(state.pending&&!state.unresolved)return;if(state.proof.values.length||!state.proof.primitiveComplete&&state.unresolved)this.publish(selected,atom);});}else this.publish(selected,atom);
-                        const child=visit(selected,key,unmodified?record?.children.get(key)??null:null,path),stored=this.newCell(),removed=this.newCell();
-                        this.rule([child],()=>{for(const value of child.values){if(value.tag==="abrupt"||value.tag==="pending-source")continue;if(value===this.primitive(undefined))this.publish(removed,value);else this.publish(stored,value);}});
-                        this.rule([stored],()=>{if(stored.values.nonempty)this.writeProperty(selected,key,stored,true,"define",context);});
-                        this.rule([removed],()=>{if(removed.values.nonempty)this.writeProperty(selected,key,removed,true,"delete",context);});
-                        previous=child;
-                    }
-                    if(previous){const prior=previous;let finish!:Rule;finish=this.rule([prior],()=>{const state=this.primitiveState(prior,finish,true);if(state.pending&&!state.unresolved)return;if(state.proof.values.length||!state.proof.primitiveComplete&&state.unresolved){this.publish(callbackValue,atom);this.copy(contextValue,callbackContext);}});}
-                    else {this.publish(callbackValue,atom);this.copy(contextValue,callbackContext);}
+                // A gate holds the object when the walk can reach that key.
+                // The next key's gate opens when this key's visit completes
+                // normally, or with this key's own gate when it may be skipped.
+                const gate=()=>this.newCell(),advance=(from:Cell,child:Cell,skippable:boolean,to:Cell)=>{
+                    let normal!:Rule;normal=this.rule([child],()=>{const state=this.primitiveState(child,normal,true);if(state.pending&&!state.unresolved)return;if(state.proof.values.length||!state.proof.primitiveComplete&&state.unresolved)this.publish(to,atom);});
+                    if(skippable)this.copy(from,to);
+                };
+                let current=gate();this.publish(current,atom);
+                for(const {key,skippable} of chain){
+                    const selected=current;
+                    const child=visit(selected,key,unmodified?record?.children.get(key)??null:null,path),stored=this.newCell(),removed=this.newCell();
+                    this.rule([child],()=>{for(const value of child.values){if(value.tag==="abrupt"||value.tag==="pending-source")continue;if(value===this.primitive(undefined))this.publish(removed,value);else this.publish(stored,value);}});
+                    this.rule([stored],()=>{if(stored.values.nonempty)this.writeProperty(selected,key,stored,true,"define",context);});
+                    this.rule([removed],()=>{if(removed.values.nonempty)this.writeProperty(selected,key,removed,true,"delete",context);});
+                    const next=gate();advance(selected,child,skippable,next);current=next;
                 }
+                const done=current,contextValue=objectContext??=freshContext().value;this.rule([done],()=>{if(done.values.nonempty){this.publish(callbackValue,atom);this.copy(contextValue,callbackContext);}});
             }});
             return result;
         };
