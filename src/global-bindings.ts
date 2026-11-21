@@ -94,6 +94,18 @@ export const runtimeTypedArrayDescriptors:ReadonlyMap<string,{width:number;kind:
 );
 if(!runtimeTypedArrayDescriptors.size)throw new Error("missing native TypedArray descriptors");
 
+/** %TypedArray%.prototype's traversal methods: the collection the runtime
+ * installs (tsc_typed_array.c includes the same rows). */
+export const runtimeTypedArrayPrototypeMethods:ReadonlyMap<string,{length:number}>=new Map(
+    fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_typed_array_methods.def"),"utf8")
+        .split(/\r?\n/).filter(line=>line.trim()).map(line=>{
+            const row=/^TSC_TYPED_METHOD\((\w+), (\w+), (true|false), (\d+)\)$/.exec(line);
+            if(!row)throw new Error("invalid native TypedArray method descriptor");
+            return [row[1]!,{length:Number(row[4])}] as const;
+        }),
+);
+if(!runtimeTypedArrayPrototypeMethods.size)throw new Error("missing native TypedArray method descriptors");
+
 /** Atomics callable identities share the native operation collection. */
 export const runtimeAtomicsMethods:ReadonlyMap<string,{operation:string;length:number}>=new Map(
     fs.readFileSync(path.join(resolvePackageRoot(),"runtime/tsc_atomics.def"),"utf8")

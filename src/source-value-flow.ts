@@ -26,7 +26,7 @@ import { staticStringExpressionTexts } from "./module-specifiers";
 import { functionKindForDeclaration, functionConstructorDisplaySource, functionConstructorSourceKey, type DynamicFunctionKind, type FunctionConstructorEntry } from "./function-constructor-source";
 
 import {declarativeSourceBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding, sourceBindingTarget} from "./source-bindings";
-import {runtimeDynamicFunctionDescriptors,runtimeGeneratorMethods,runtimeCallbackTimerDescriptors,runtimeAtomicsMethods,runtimeTypedArrayDescriptors,runtimeMathMethods,runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeBufferExports, runtimeChildProcessOperations, runtimeUtilExports, runtimeFsExports, runtimeFsConstants, runtimeErrorKinds, runtimeIteratorMethods, runtimeIteratorMethodLengths, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeStringPrototypeMethods, runtimeObjectPrototypeMethods, runtimeObjectPrototypeDescriptors, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
+import {runtimeDynamicFunctionDescriptors,runtimeGeneratorMethods,runtimeCallbackTimerDescriptors,runtimeAtomicsMethods,runtimeTypedArrayDescriptors,runtimeTypedArrayPrototypeMethods,runtimeMathMethods,runtimeCollectionMethods, runtimeSetCompositionMethods, runtimeGlobalBindings, runtimeBufferExports, runtimeChildProcessOperations, runtimeUtilExports, runtimeFsExports, runtimeFsConstants, runtimeErrorKinds, runtimeIteratorMethods, runtimeIteratorMethodLengths, runtimePromiseMethods, runtimeObjectConstructorOwnKeys, runtimeDescriptorFields, runtimePrimitiveDescriptors, runtimePrimitivePrototypeMembers, runtimeStringPrototypeMethods, runtimeObjectPrototypeMethods, runtimeObjectPrototypeDescriptors, runtimeWellKnownSymbolDescriptions, type RuntimeGlobalBinding} from "./global-bindings";
 
 export interface SourceValueGraphEntries {
     readonly roots?: readonly string[];
@@ -77,7 +77,7 @@ type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFun
 type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpression;
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
-type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-integrity:${"preventExtensions"|"seal"|"freeze"}` | `object-integrity-test:${"isExtensible"|"isSealed"|"isFrozen"}` | `regexp-flag:${string}` | `regexp-member:${string}` | `object-enumerable:${"keys"|"values"|"entries"}` | `object-has-own:${"static"|"prototype"}` | `array-iteration:${ArrayIterationMode}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-function:${string}` | "throw-type-error" | `legacy-function-accessor:${"caller"|"arguments"}:${"get"|"set"}` | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
+type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-integrity:${"preventExtensions"|"seal"|"freeze"}` | `object-integrity-test:${"isExtensible"|"isSealed"|"isFrozen"}` | `regexp-flag:${string}` | `regexp-member:${string}` | `object-enumerable:${"keys"|"values"|"entries"}` | `object-has-own:${"static"|"prototype"}` | `array-iteration:${ArrayIterationMode}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-typed-array:${string}` | `native-typed-array-static:${string}` | `native-uint8-codec:${string}` | "typed-array-species" | `native-function:${string}` | "throw-type-error" | `legacy-function-accessor:${"caller"|"arguments"}:${"get"|"set"}` | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
     "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | "regexp-string-iterator-next" | `iterator-helper:${string}` | "wrap-iterator:next" | "wrap-iterator:return" | "string-iterator" | "string-iterator-next" | "iterator-helper-next" | "iterator-helper-return" | `collection-member:${string}` | "promise-finally-forward" | "species-getter" | "proto-accessor:get" | "proto-accessor:set" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
 type Primitive = SourcePrimitive;
 /** Callables and collection-iterator cells reachable from one escaping value;
@@ -214,12 +214,30 @@ const NUMERIC_CONVERSIONS: ReadonlyMap<string, (value: Primitive) => Primitive> 
     }],
 ]);
 const SOURCE_OBJECT_PROTOTYPE_OPERATIONS:ReadonlyMap<string,Operation>=new Map([["toString","object-text"],["hasOwnProperty","object-has-own:prototype"]]);
+/** %TypedArray%'s members outside its traversal collection, as
+ * tsc_typed_array.c installs them (ES2026 23.2.2, 23.2.3): the iteration
+ * methods, the accessor properties' getters (with @@toStringTag), the static
+ * factories, and Uint8Array's base64 and hex members (ES2026 23.3.2, 23.3.3). */
+const TYPED_ARRAY_ITERATION_METHODS:readonly string[]=["keys","values","entries"];
+const TYPED_ARRAY_PROTOTYPE_GETTERS:readonly string[]=["buffer","byteLength","byteOffset","length","[Symbol.toStringTag]"];
+const TYPED_ARRAY_STATIC_METHODS:readonly {name:string;length:number}[]=[{name:"from",length:1},{name:"of",length:0}];
+const UINT8_ARRAY_CODEC_MEMBERS:readonly {name:string;length:number;constructor:boolean}[]=[
+    {name:"fromBase64",length:1,constructor:true},{name:"fromHex",length:1,constructor:true},
+    {name:"setFromBase64",length:1,constructor:false},{name:"setFromHex",length:1,constructor:false},
+    {name:"toBase64",length:0,constructor:false},{name:"toHex",length:0,constructor:false}];
 /** Argument positions an opaque Array.prototype native invokes as functions
  * (callbacks and comparators). Every other argument of a listed native is
  * only read: its conversion methods and getters may run, it never is called
  * itself. Natives outside this table keep every position callable. */
-const NATIVE_DIRECT_CALLEE_POSITIONS:ReadonlyMap<string,ReadonlySet<number>>=new Map([...runtimeArrayPrototypeMethods.keys()].map(name=>
-    [`native-array:${name}`,new Set(["forEach","map","flatMap","filter","some","every","find","findIndex","findLast","findLastIndex","reduce","reduceRight","sort","toSorted"].includes(name)?[0]:[])]));
+const NATIVE_DIRECT_CALLEE_POSITIONS:ReadonlyMap<string,ReadonlySet<number>>=new Map([...[...runtimeArrayPrototypeMethods.keys()].map(name=>
+    [`native-array:${name}`,new Set(["forEach","map","flatMap","filter","some","every","find","findIndex","findLast","findLastIndex","reduce","reduceRight","sort","toSorted"].includes(name)?[0]:[])] as const),
+    // %TypedArray%.prototype's natives (ES2026 23.2.3) call their callback or
+    // comparator; set (an array-like source's elements are converted) and
+    // toLocaleString (each element's toLocaleString is invoked) keep every
+    // position callable, as do the static from (mapper and iterator).
+    ...[...runtimeTypedArrayPrototypeMethods.keys(),...TYPED_ARRAY_ITERATION_METHODS].filter(name=>name!=="set"&&name!=="toLocaleString").map(name=>
+    [`native-typed-array:${name}`,new Set(["forEach","map","filter","some","every","find","findIndex","findLast","findLastIndex","reduce","reduceRight","sort","toSorted"].includes(name)?[0]:[])] as const),
+    ...[...TYPED_ARRAY_PROTOTYPE_GETTERS.map(name=>`native-typed-array:get ${name}`),"native-typed-array-static:of",...UINT8_ARRAY_CODEC_MEMBERS.map(member=>`native-uint8-codec:${member.name}`)].map(operation=>[operation,new Set<number>()] as const)]);
 /** What an Array.prototype native stores into its receiver (after ToObject):
  * the mutating methods Set elements at integer indices, delete integer
  * indices and Set "length", each only where its algorithm does
@@ -250,6 +268,11 @@ const NATIVE_ARRAY_RECEIVER_EFFECTS:ReadonlyMap<string,NativeArrayReceiverEffect
 const NATIVE_ARRAY_RESULT_KINDS:ReadonlyMap<string,"number"|"boolean"|"string">=new Map([
     ["native-array:indexOf","number"],["native-array:lastIndexOf","number"],["native-array:unshift","number"],
     ["native-array:includes","boolean"],["native-array:toLocaleString","string"],
+    // %TypedArray%.prototype (ES2026 23.2.3) and its length getters.
+    ...["indexOf","lastIndexOf","findIndex","findLastIndex","get byteLength","get byteOffset","get length"].map(name=>[`native-typed-array:${name}`,"number"] as const),
+    ...["includes","some","every"].map(name=>[`native-typed-array:${name}`,"boolean"] as const),
+    ...["join","toLocaleString"].map(name=>[`native-typed-array:${name}`,"string"] as const),
+    ["native-uint8-codec:toBase64","string"],["native-uint8-codec:toHex","string"],
 ]);
 /** Natives that evaluate or load code: their effects are not bounded by
  * what their receiver and arguments reach. */
@@ -341,8 +364,8 @@ function escapeRegExpPattern(pattern:string,unicodeSets:boolean):string{
     }
     return out;
 }
-const SOURCE_NATIVE_METHODS:ReadonlyMap<Operation,{name:string;length:number;owner:"Array"|"Function"|"String"|"Object"|"Reflect"|null;opaque:boolean}>=(()=>{
-    const methods=new Map<Operation,{name:string;length:number;owner:"Array"|"Function"|"String"|"Object"|"Reflect"|null;opaque:boolean}>();
+const SOURCE_NATIVE_METHODS:ReadonlyMap<Operation,{name:string;length:number;owner:"Array"|"TypedArray"|"Function"|"String"|"Object"|"Reflect"|null;opaque:boolean}>=(()=>{
+    const methods=new Map<Operation,{name:string;length:number;owner:"Array"|"TypedArray"|"Function"|"String"|"Object"|"Reflect"|null;opaque:boolean}>();
     const collections=[
         {owner:"Object" as const,methods:runtimeObjectStaticMethods,prefix:"native-object-static:",precise:INITIAL_SOURCE_OPERATIONS.get("Object")!},
         {owner:"Reflect" as const,methods:runtimeReflectMethods,prefix:"native-reflect:",precise:INITIAL_SOURCE_OPERATIONS.get("Reflect")!},
@@ -360,6 +383,12 @@ const SOURCE_NATIVE_METHODS:ReadonlyMap<Operation,{name:string;length:number;own
         const descriptor=runtimeObjectPrototypeDescriptors.get(name);if(!descriptor||methods.has(operation))throw new Error("native Object.prototype operation cannot be represented");
         methods.set(operation,{name,length:descriptor.length,owner:null,opaque:false});
     }
+    for(const[name,descriptor]of [...runtimeTypedArrayPrototypeMethods,...TYPED_ARRAY_ITERATION_METHODS.map(name=>[name,{length:0}] as const)])
+        methods.set(`native-typed-array:${name}`,{name,length:descriptor.length,owner:"TypedArray",opaque:true});
+    for(const name of TYPED_ARRAY_PROTOTYPE_GETTERS)methods.set(`native-typed-array:get ${name}`,{name:`get ${name}`,length:0,owner:null,opaque:true});
+    for(const{name,length}of TYPED_ARRAY_STATIC_METHODS)methods.set(`native-typed-array-static:${name}`,{name,length,owner:null,opaque:true});
+    for(const{name,length}of UINT8_ARRAY_CODEC_MEMBERS)methods.set(`native-uint8-codec:${name}`,{name,length,owner:null,opaque:true});
+    methods.set("typed-array-species",{name:"get [Symbol.species]",length:0,owner:null,opaque:false});
     for(const[operation,name,length]of [["throw-type-error","",0],["ordinary-has-instance","[Symbol.hasInstance]",1],["eval","eval",1]] as const)
         methods.set(operation,{name,length,owner:null,opaque:false});
     for(const name of runtimeFunctionRestrictedProperties as readonly ("caller"|"arguments")[])for(const mode of ["get","set"] as const)
@@ -1908,6 +1937,14 @@ class SourceValueFlow {
         if(atom.tag==="generator"){visit(atom.yielded);visit(atom.returned);}
         const transparent=kind==="method"&&atom.tag==="operation"&&TRANSPARENT_CALL_OPERATIONS.has(atom.operation);
         if(kind!=="argument"&&kind!=="elements"&&!transparent&&(atom.tag==="function"||atom.tag==="bound"||atom.tag==="promise-resolver"||owner?.proxy||!sourceCallbacksOnly&&(atom.tag==="intrinsic"||atom.tag==="operation"||atom.tag==="builtin"&&atom.normalResult!=="not-callable")))this.pushEscapeReach(result,atom);
+        // A native reads and invokes through a primitive on ToObject of it
+        // (an element's toLocaleString, Get of a key on a primitive receiver,
+        // a BigInt's toJSON): the members a program wrote on that kind's
+        // prototype are reached as an Object argument's own members are. A
+        // native value may be any primitive.
+        const primitiveKinds=atom.tag==="primitive"?atom.value===null?0:({boolean:KIND_BOOLEAN,number:KIND_NUMBER,bigint:KIND_BIGINT,string:KIND_STRING,symbol:KIND_SYMBOL} as Record<string,number>)[typeof atom.value]??0:
+            atom.tag==="non-string"?atom.kinds??(KIND_PRIMITIVE&~KIND_STRING):atom.tag==="unknown-string"||atom.tag==="text-operation"?KIND_STRING:atom===this.nativeUnknown?KIND_PRIMITIVE:0;
+        for(const prototype of this.kindPrototypes(primitiveKinds))visit(prototype,"argument");
         if(!owner)return result;
         const skipped=(key:SourcePropertyKey):boolean=>kind!=="direct"&&kind!=="elements"&&(key==="constructor"||key==="prototype"&&atom.tag==="function");
         let inspect!:Rule;
@@ -2810,8 +2847,7 @@ class SourceValueFlow {
                     this.copy(binding,destination);this.registerEvaluationDeclaration(destination,caller);
                 }else{
                     const destination=this.realmBinding(realm,name);this.copy(binding,destination);this.registerEvaluationDeclaration(destination,caller);
-                    const receiver=this.newCell();this.publish(receiver,realm.global);
-                    this.writeProperty(receiver,name,binding,true,"define",caller);
+                    this.writeProperty(this.realmGlobalReceiver(realm),name,binding,true,"define",caller);
                 }
                 if(declaration.function&&!declaration.annexB)this.copy(this.cell(declaration.function),binding);
             }
@@ -2945,6 +2981,17 @@ class SourceValueFlow {
         }
         return objects;
     }
+    /** The one cell holding a realm's global object, the base of every
+     * global-object property write. writeProperty deduplicates writes by
+     * their cells, and a binding write re-runs whenever its activation or
+     * guards change: a fresh base cell per run made each rerun a new write
+     * rule, whose shape mutation woke the guards again, without end. */
+    private realmGlobalReceiver(realm:SourceRealmRecord): Cell {
+        let receiver=this.realmGlobalReceivers.get(realm);
+        if(!receiver){receiver=this.newCell();this.publish(receiver,realm.global);this.realmGlobalReceivers.set(realm,receiver);}
+        return receiver;
+    }
+    private readonly realmGlobalReceivers=new Map<SourceRealmRecord,Cell>();
     private writeBinding(node: ts.Identifier, value: Cell, context?:ts.Node): void {
         const environment=this.evaluationGlobalTargets.has(node)?undefined:this.evaluationReferenceEnvironment(node);
         if(environment) {
@@ -2957,8 +3004,7 @@ class SourceValueFlow {
             // an unresolved external input.
             this.writtenAmbientBindings.add(this.binding(node));
             const realm=this.evaluationGlobalTargets.get(node)??this.currentRealm;
-            const receiver=this.newCell();this.publish(receiver,realm.global);
-            this.writeProperty(receiver,node.text,value,true,"set",context??node);
+            this.writeProperty(this.realmGlobalReceiver(realm),node.text,value,true,"set",context??node);
         }
         // Presence and unscopables can change during execution. Keep both
         // object-record and declarative destinations in this may-flow graph;
@@ -5281,6 +5327,10 @@ class SourceValueFlow {
                     const width=this.newCell(),name=this.newCell(),length=this.newCell();this.publish(width,this.primitive(element.width));this.publish(name,this.primitive(key));this.publish(length,this.primitive(3));
                     this.defineField(fields,"BYTES_PER_ELEMENT",width,false);this.defineField(fields,"prototype",this.typedArrayPrototype(key,width),false);
                     this.defineField(fields,"name",name,false);this.defineField(fields,"length",length,false);
+                    // A concrete constructor owns exactly these (and Uint8Array its
+                    // base64 and hex factories) and inherits %TypedArray%.
+                    fields.prototype=this.typedArrayIntrinsic();fields.closedOwn=true;fields.ordinary=true;
+                    if(key==="Uint8Array")this.defineNativeMethods(fields,UINT8_ARRAY_CODEC_MEMBERS.filter(member=>member.constructor).map(member=>[member.name,`native-uint8-codec:${member.name}`]));
                 }
                 if(key==="Symbol") {
                     for (const [name, symbol] of this.wellKnownSymbols) {
@@ -6134,12 +6184,60 @@ class SourceValueFlow {
         let value=this.typedArrayPrototypes.get(name);if(value)return value;
         if(!width){width=this.newCell();this.publish(width,this.primitive(runtimeTypedArrayDescriptors.get(name)!.width));}
         value=this.newCell();this.typedArrayPrototypes.set(name,value);
-        // %TypedArray%.prototype is not modelled: its members are natives.
-        const parent=this.newCell();this.publish(parent,this.nativeUnknown);
-        const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:parent};
+        const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.typedArrayIntrinsicPrototype()};
         this.publish(value,{tag:"object",owner});this.copy(this.opaqueMutation,owner.shape);
         this.defineField(owner,"BYTES_PER_ELEMENT",width,false);this.defineField(owner,"constructor",this.globalBinding(name),false);
+        if(name==="Uint8Array")this.defineNativeMethods(owner,UINT8_ARRAY_CODEC_MEMBERS.filter(member=>!member.constructor).map(member=>[member.name,`native-uint8-codec:${member.name}`]));
         return value;
+    }
+    /** %TypedArray% (ES2026 23.2.1, 23.2.2): an abstract constructor whose
+     * [[Call]] and [[Construct]] throw a TypeError. It owns exactly length,
+     * name, prototype, from, of and @@species, and inherits
+     * %Function.prototype%; each concrete constructor inherits it. */
+    private typedArrayIntrinsic():Cell {
+        if(this.typedArrayIntrinsicCell)return this.typedArrayIntrinsicCell;
+        const value=this.newCell();this.typedArrayIntrinsicCell=value;
+        const fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary"),closedOwn:true,ordinary:true};
+        this.copy(this.opaqueMutation,fields.shape);this.publish(value,{tag:"builtin",name:"TypedArray",normalResult:"object",fields});
+        const name=this.newCell(),length=this.newCell();this.publish(name,this.primitive("TypedArray"));this.publish(length,this.primitive(0));
+        this.defineField(fields,"length",length,false);this.defineField(fields,"name",name,false);
+        this.defineField(fields,"prototype",this.typedArrayIntrinsicPrototype(),false);
+        this.defineNativeMethods(fields,TYPED_ARRAY_STATIC_METHODS.map(member=>[member.name,`native-typed-array-static:${member.name}`]));
+        const species=this.newCell();this.publish(species,this.operation("typed-array-species"));this.defineNativeGetter(fields,this.wellKnownSymbols.get("species")!,species);
+        return value;
+    }
+    private typedArrayIntrinsicCell?:Cell;
+    /** %TypedArray%.prototype (ES2026 23.2.3): an ordinary object inheriting
+     * %Object.prototype% whose own keys are exactly its constructor, the
+     * native methods (toString is %Array.prototype.toString% itself and
+     * @@iterator is values), and the buffer, byteLength, byteOffset, length
+     * and @@toStringTag getters. */
+    private typedArrayIntrinsicPrototype():Cell {
+        if(this.typedArrayIntrinsicPrototypeCell)return this.typedArrayIntrinsicPrototypeCell;
+        const value=this.newCell();this.typedArrayIntrinsicPrototypeCell=value;
+        const fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype(),closedIndices:true,closedOwn:true,ordinary:true};
+        this.markPropertyAlgorithm(fields,"ordinary");
+        this.copy(this.opaqueMutation,fields.shape);this.publish(value,{tag:"builtin",name:"TypedArray.prototype",normalResult:"not-callable",fields});
+        this.defineField(fields,"constructor",this.typedArrayIntrinsic(),false);
+        this.defineNativeMethods(fields,[...SOURCE_NATIVE_METHODS].filter(([,descriptor])=>descriptor.owner==="TypedArray").map(([operation,descriptor])=>[descriptor.name,operation]));
+        this.defineField(fields,this.wellKnownSymbols.get("iterator")!,this.field(fields,"values"),false);
+        this.defineNativeMethods(fields,[["toString","array-text"]]);
+        for(const name of TYPED_ARRAY_PROTOTYPE_GETTERS){
+            const getter=this.newCell();this.publish(getter,this.operation(`native-typed-array:get ${name}`));
+            this.defineNativeGetter(fields,name==="[Symbol.toStringTag]"?this.wellKnownSymbols.get("toStringTag")!:name,getter);
+        }
+        return value;
+    }
+    private typedArrayIntrinsicPrototypeCell?:Cell;
+    /** Built-in methods are writable, configurable, non-enumerable data
+     * properties holding their native function. */
+    private defineNativeMethods(owner:ObjectOwner,members:readonly (readonly [string,Operation])[]):void {
+        for(const[name,operation]of members){const member=this.newCell();this.publish(member,this.operation(operation));this.defineField(owner,name,member,false);}
+    }
+    /** A built-in accessor property: a native getter, no setter, not enumerable. */
+    private defineNativeGetter(owner:ObjectOwner,key:SourcePropertyKey,getter:Cell):void {
+        this.ownPresence(owner,key).initial=true;
+        this.defineAccessor(owner,key,"get",getter,this.program.getSourceFiles().find(file=>!file.isDeclarationFile)!);
     }
     private primitivePrototype(name:string):Cell {
         let value=this.primitivePrototypes.get(name);if(value)return value;
@@ -6310,7 +6408,7 @@ class SourceValueFlow {
             if(atom.tag==="bound"){pending.push(atom.target);continue;}
             const proxy=this.ordinaryOwner(atom)?.proxy;if(proxy){pending.push(proxy.target);continue;}
             if(atom.tag==="function"){const definition=atom.owner.definition;this.publish(result,this.primitive(ts.isClassLike(definition)||atom.owner.kind==="ordinary"&&(ts.isFunctionDeclaration(definition)||ts.isFunctionExpression(definition))));}
-            else if(atom.tag==="builtin"){const descriptor=runtimePrimitiveDescriptors.get(atom.name);this.publish(result,this.primitive(descriptor?descriptor.constructible:runtimeGlobalBindings.get(atom.name)?.kind==="intrinsic"&&atom.normalResult!=="not-callable"));}
+            else if(atom.tag==="builtin"){const descriptor=runtimePrimitiveDescriptors.get(atom.name);this.publish(result,this.primitive(descriptor?descriptor.constructible:atom.name==="TypedArray"||runtimeGlobalBindings.get(atom.name)?.kind==="intrinsic"&&atom.normalResult!=="not-callable"));}
             else if(atom.tag==="intrinsic")this.publish(result,this.primitive(atom.domain==="constructor"));
             // A value from a source that a later solve compiles is not yet a
             // constructor verdict: forward the pending mark instead of the
@@ -9059,6 +9157,8 @@ class SourceValueFlow {
                             this.copy(this.wrappedIteratorStep(invocation.receiver,node,atom.operation==="wrap-iterator:next"?"next":"return"),result!);continue;
                         }
                     }
+                    // get %TypedArray% [ @@species ] returns its this value.
+                    if(atom.tag==="operation"&&atom.operation==="typed-array-species"){this.copy(invocation.receiver,result!);continue;}
                     // The Iterator.prototype helpers and consumers, the next of a
                     // RegExp String Iterator and of Iterator.from's wrapper read
                     // their receiver and arguments and call what those reach
@@ -9070,7 +9170,6 @@ class SourceValueFlow {
                         // produced it, just as an opaque write does. Shared
                         // formals must retain that provenance when forwarding.
                         const handler = this.exceptionHandlers.get(node);
-                        if (handler) this.publish(handler, this.unknown);
                         // Provenance distinguishes captured reads. After an
                         // opaque callee is selected its invocation effects
                         // share one signature, independent of origin count.
@@ -9087,6 +9186,17 @@ class SourceValueFlow {
                             [...invocation.receiver.values].every(value=>value.tag==="builtin"||value.tag==="intrinsic"||value.tag==="operation"||value===this.nativeUnknown);
                         const directCallees:ReadonlySet<number>|"all"|undefined=atom.tag==="operation"&&!GLOBAL_EFFECT_OPERATIONS.has(atom.operation)?NATIVE_DIRECT_CALLEE_POSITIONS.get(atom.operation)??"all":builtinMember?"all":undefined;
                         const arrayEffect=atom.tag==="operation"?NATIVE_ARRAY_RECEIVER_EFFECTS.get(atom.operation):undefined;
+                        // A TypedArray native validates its receiver before any
+                        // write and stores only into TypedArray elements (whose
+                        // property algorithm is already opaque); it writes no
+                        // ordinary property of its receiver or arguments.
+                        const typedArrayNative=atom.tag==="operation"&&/^native-(typed-array|typed-array-static|uint8-codec):/.test(atom.operation);
+                        // A TypedArray native's own abrupt completion is one of
+                        // its realm's errors; whatever a callback, getter or
+                        // conversion it runs throws reaches the handler from
+                        // that code's escaped invocation. Any other opaque call
+                        // keeps an unknown exception.
+                        if (handler) this.publish(handler, typedArrayNative&&!proxy?this.nativeException(node):this.unknown);
                         if(invocation.construct)this.publish(result!,this.opaqueObject);
                         else if(arrayEffect?.receiverResult)this.copy(this.toObject(invocation.receiver,node),result!);
                         // A lazy helper (map, filter, take, drop, flatMap) returns a
@@ -9122,7 +9232,7 @@ class SourceValueFlow {
                             }
                             const argumentsEscaping = invocation.args ?? (invocation.sequence ? [this.allArgumentValues(invocation.sequence)] : []);
                             if(arrayEffect)this.nativeArrayReceiverWrites(invocation.receiver,arrayEffect,argumentsEscaping,node);
-                            else if(!iteratorHelper)this.writeProperty(invocation.receiver,null,this.empty,false,"set",node,invocation.receiver,undefined,conditioned);
+                            else if(!iteratorHelper&&!typedArrayNative)this.writeProperty(invocation.receiver,null,this.empty,false,"set",node,invocation.receiver,undefined,conditioned);
                             // An Array.prototype native never calls its receiver or the
                             // values it stores; their accessors and methods may run. A
                             // native that calls a callback (sort's comparator) hands it
@@ -9132,7 +9242,7 @@ class SourceValueFlow {
                             const callsCallback=directCallees==="all"||!!directCallees&&directCallees.size>0;
                             this.escapeCallableArgument(invocation.receiver,node,false,arrayEffect&&!callsCallback?"elements":"direct",conditioned);
                             for (const [index,argument] of argumentsEscaping.entries()) {
-                                if(!arrayEffect&&!iteratorHelper)this.writeProperty(argument,null,this.empty,false,"set",node,argument,undefined,conditioned);
+                                if(!arrayEffect&&!iteratorHelper&&!typedArrayNative)this.writeProperty(argument,null,this.empty,false,"set",node,argument,undefined,conditioned);
                                 this.escapeCallableArgument(argument,node,false,!directCallees||directCallees==="all"||directCallees.has(index)?"direct":"argument",conditioned);
                             }
                         });
@@ -9471,6 +9581,8 @@ class SourceValueFlow {
                         else{this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node,"TypeError"));}
                         continue;
                     }
+                    // %TypedArray% throws a TypeError for every Call and Construct.
+                    if(atom.tag==="builtin"&&atom.name==="TypedArray"){this.publish(result!,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node,"TypeError"));continue;}
                     if(invocation.construct&&!(atom.tag==="builtin"&&atom.name==="Promise")){
                         const owner=this.owner(node);
                         if(atom.tag==="builtin"){this.markPropertyAlgorithm(owner,"opaque");if(runtimeTypedArrayDescriptors.has(atom.name))this.typedArrayInstancePrototype(owner,atom.name,invocation.newTarget??invocation.target,node);}
