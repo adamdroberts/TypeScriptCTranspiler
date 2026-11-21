@@ -240,6 +240,17 @@ const NATIVE_ARRAY_RECEIVER_EFFECTS:ReadonlyMap<string,NativeArrayReceiverEffect
         length:["pop","push","shift","splice","unshift"].includes(name),
         receiverResult:["copyWithin","fill","reverse","sort"].includes(name),
     }]));
+/** Opaque Array.prototype natives whose normal completion has a fixed
+ * primitive kind whatever their receiver holds (ES2026 23.1.3): indexOf and
+ * lastIndexOf return k or -1, unshift returns the new length, includes
+ * returns a Boolean and toLocaleString the String R (`at` returns one of
+ * the receiver's elements, read at an unknown index). Their getters and
+ * element conversions still run as escaped invocations; only the result is
+ * no longer an arbitrary native value. */
+const NATIVE_ARRAY_RESULT_KINDS:ReadonlyMap<string,"number"|"boolean"|"string">=new Map([
+    ["native-array:indexOf","number"],["native-array:lastIndexOf","number"],["native-array:unshift","number"],
+    ["native-array:includes","boolean"],["native-array:toLocaleString","string"],
+]);
 /** Natives that evaluate or load code: their effects are not bounded by
  * what their receiver and arguments reach. */
 const GLOBAL_EFFECT_OPERATIONS:ReadonlySet<string>=new Set(["eval","eval-script","agent-start","native-require"]);
@@ -5384,6 +5395,12 @@ class SourceValueFlow {
     private regexpOwnerData(atom:Atom):{readonly source:Cell;readonly flags:Cell}|null {
         const owner=this.ordinaryOwner(atom);return owner?this.regexpData.get(owner)??null:null;
     }
+    /** One key cell holding every Number, for reads at an unknown index. */
+    private anyNumberKeyCell?:Cell;
+    private anyNumberKey():Cell {
+        if(!this.anyNumberKeyCell){this.anyNumberKeyCell=this.newCell();this.publish(this.anyNumberKeyCell,this.numberValue());}
+        return this.anyNumberKeyCell;
+    }
     private numberValue():Atom {
         let value=this.numericValues.get(KIND_NUMBER);if(!value){value={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,value);}return value;
     }
@@ -9076,6 +9093,18 @@ class SourceValueFlow {
                         // fresh Iterator Helper; its underlying iterator and
                         // callback escape below.
                         else if(iteratorHelper&&LAZY_ITERATOR_HELPERS.has((atom as {operation:string}).operation))this.copy(this.iteratorHelperObject(node),result!);
+                        else if(atom.tag==="operation"&&NATIVE_ARRAY_RESULT_KINDS.has(atom.operation)){
+                            const kind=NATIVE_ARRAY_RESULT_KINDS.get(atom.operation)!;
+                            if(kind==="string")this.publish(result!,this.unknownString);
+                            else if(kind==="boolean"){this.publish(result!,this.primitive(true));this.publish(result!,this.primitive(false));}
+                            else this.publish(result!,this.numberValue());
+                        }
+                        // at(index) is Get(O, ToString(k)) for an integer k, or
+                        // undefined when k is out of range.
+                        else if(atom.tag==="operation"&&atom.operation==="native-array:at"){
+                            this.copy(this.computedProperty(this.toObject(invocation.receiver,node),this.anyNumberKey(),node),result!);
+                            this.publish(result!,this.primitive(undefined));
+                        }
                         else if(directCallees)this.publish(result!,this.nativeUnknown);
                         // Unknown code runs only in the invocations whose own
                         // callee is unknown: an opaque call inside a function
