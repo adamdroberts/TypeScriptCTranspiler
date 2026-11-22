@@ -22,7 +22,11 @@ test('canonical escaped values observe later descriptors, prototypes and collect
   const source=prelude+item.body;expect(reference(source,item.external)).toBe('17\n23\n19\n29\n');expect({source,error:graph([{path:'subject.js',source}]).error}).toEqual({source,error:expect.stringContaining('direct eval source is not a finite static string expression')});
  }
  const disconnected=prelude+'external({value:1});';expect(reference(disconnected)).toBe('17\n23\n');expect(reference(disconnected,'()=>{}','function external(){first("19;");second("29;");}')).toBe('17\n23\n19\n29\n');expect(graph([{path:'subject.js',source:disconnected}]).error).toContain('direct eval source is not a finite static string expression');
- const privateControl='{'+disconnected+'}',result=graph([{path:'subject.js',source:privateControl}]);expect(reference(privateControl)).toBe('17\n23\n');expect(result.error).toBeNull();expect(new Set(result.directEvalSources.map(value=>value.source))).toEqual(new Set(['17;','23;']));
+ // A sloppy block's function declarations are also var-bound on the global
+ // object (Annex B.3.3), so same-realm code still reaches them: the block
+ // form is not private. A function scope is.
+ const blockForm='{'+disconnected+'}';expect(reference(blockForm,'()=>{}','function external(){first("19;");second("29;");}')).toBe('17\n23\n19\n29\n');expect(graph([{path:'subject.js',source:blockForm}]).error).toContain('direct eval source is not a finite static string expression');
+ const privateControl='(function(){'+disconnected+'})();',result=graph([{path:'subject.js',source:privateControl}]);expect(reference(privateControl)).toBe('17\n23\n');expect(reference(privateControl,'()=>{}','function external(){try{first("19;")}catch(e){print(e.name)}}')).toBe('17\n23\nReferenceError\n');expect(result.error).toBeNull();expect(new Set(result.directEvalSources.map(value=>value.source))).toEqual(new Set(['17;','23;']));
 });
 function ownerGraph():string{
  return 'const owner0={callback:C};'+Array.from({length:512},(_,index)=>'const owner'+(index+1)+'={next:owner'+index+',alias:owner'+index+'};').join('\n');

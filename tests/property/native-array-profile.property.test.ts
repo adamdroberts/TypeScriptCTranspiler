@@ -42,18 +42,22 @@ test('native Array profiles preserve absence, callable metadata and actual join 
   const calls=await graph(directory,part.name,part.source);expect({name:part.name,choices:calls.map(call=>call.choices)}).toEqual({name:part.name,choices:[part.choices]});
  }}finally{await rm(directory,{recursive:true,force:true});}
 });
-test('unrepresented native callback arguments and Proxy calls retain stable source uncertainty',async()=>{
+test('unrepresented native callback arguments retain stable source uncertainty; a trapless Proxy join is its target call',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'tsc2c-native-array-opaque-'));
- try{for(const source of [
-  'function read(a,b){print(eval(a));return 0}read("17;","");["19;","23;"].sort(read);',
-  'const owner={join:new Proxy(function(){return "53;"},{})};print(eval(Array.prototype.toString.call(owner)));',
- ]){
-  expect(reference(source)).toBe(source.includes('sort')?'17\n23\n':'53\n');
+ try{
+  const source='function read(a,b){print(eval(a));return 0}read("17;","");["19;","23;"].sort(read);';
+  expect(reference(source)).toBe('17\n23\n');
   const calls=await graph(directory,'opaque',source);expect(calls.some(call=>call.choices===null)).toBe(true);
   const entry=join(directory,'opaque.js'),diagnostics:string[]=[];
   const built=await compile({entry,output:join(directory,'rejected'),buildDir:join(directory,'rejected-build'),isolatedScriptRoots:[entry],initializationEntries:[entry],diagnosticWriter:message=>diagnostics.push(message)});
   expect(built.exitCode).toBe(3);expect(diagnostics.join('')).toContain('unknown eval() source requires --runtime-code-manifest allow-list');
- }}finally{await rm(directory,{recursive:true,force:true});}
+  // [[Call]] of a Proxy whose handler has no apply trap is Call(target)
+  // (sec-proxy-object-internal-methods-and-internal-slots-call-thisargument-argumentslist):
+  // the join it stands for returns exactly its target's string.
+  const proxy='const owner={join:new Proxy(function(){return "53;"},{})};print(eval(Array.prototype.toString.call(owner)));';
+  expect(reference(proxy)).toBe('53\n');
+  expect((await graph(directory,'proxy',proxy)).map(call=>call.choices)).toEqual([['53;']]);
+ }finally{await rm(directory,{recursive:true,force:true});}
 });
 const metadata=`
 const names=Object.getOwnPropertyNames(Array.prototype).sort();

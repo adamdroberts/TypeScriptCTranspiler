@@ -42,9 +42,13 @@ test('callable and descriptor source projections contain the independently obser
   expect({name:part.name,choices:calls[0]!.choices}).toMatchObject({choices:expect.arrayContaining([expected.trimEnd()+';'])});
  }}finally{await rm(directory,{recursive:true,force:true});}
 });
-// Function.prototype's caller and arguments accessors follow Node 26 and Bun
-// (their own getters and setters, as the runtime has had them since
-// a1e80a7af), so Node is the oracle for this profile as for every other.
+// Function.prototype's caller and arguments are the spec's restricted
+// accessors (AddRestrictedFunctionProperties): getter and setter are both
+// the one %ThrowTypeError% intrinsic, which is unnamed, has length 0, is not
+// extensible and throws when read or defined. Node 26 and Bun keep V8/JSC
+// legacy accessors there, so this profile's expectation is the spec's; the
+// legacy `f.caller` read of a non-strict function still works as in Node
+// (an own accessor of that function, sec-forbidden-extensions).
 const coreProfile=`
 const caller=Object.getOwnPropertyDescriptor(Function.prototype,'caller');
 const args=Object.getOwnPropertyDescriptor(Function.prototype,'arguments');
@@ -55,11 +59,12 @@ print(Object.isExtensible(thrower)===false);
 let body='97;';try{Object.defineProperty(thrower,'caller',{value:null});}catch(error){body='101;';}
 print(eval(body));
 let inherited='103;';try{thrower.caller;}catch(error){inherited='107;';}print(eval(inherited));
+function outer(){return inner();}function inner(){return inner.caller===outer;}print(outer());
 print('callable-profile-complete');`;
 test('callable prototypes preserve native completions and the core accessor profile in both memory modes',async()=>{
  const standard=partitions.map(part=>'{'+part.source+'}').join('\n');
  const subjects=[{name:'standard',source:standard,expected:partitions.map(part=>reference(part.source)).join('')},
-  {name:'core-profile',source:coreProfile,expected:reference(coreProfile)}];
+  {name:'core-profile',source:coreProfile,expected:'true\ntrue\ntrue\ntrue\ntrue\n101\n107\ntrue\ncallable-profile-complete\n'}];
  const directory=await mkdtemp(join(tmpdir(),'tsc2c-native-callable-profile-'));
  try{for(const subject of subjects)for(const noGc of [false,true]){
   const entry=join(directory,subject.name+'.js'),output=join(directory,subject.name+'-'+noGc),diagnostics:string[]=[];

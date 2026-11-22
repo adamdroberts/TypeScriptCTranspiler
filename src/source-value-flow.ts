@@ -424,7 +424,7 @@ type Atom =
     | { readonly tag: "abrupt" }
     | { readonly tag: "pending-source" }
     | { readonly tag: "descriptor"; readonly identity: object }
-    | { readonly tag: "unknown"; readonly origin?: ts.Node; readonly native?: true }
+    | { readonly tag: "unknown"; readonly origin?: ts.Node; readonly native?: true; readonly object?: true }
     | { readonly tag: "opaque-object" }
     | { readonly tag: "text-operation"; readonly operation: "to-string" | "numeric" | "template" | "bound-name" | "prefix" | "coerce" | "error-text" | "primitive-string" | "util-format"; readonly numeric?: SourceNumericOperation; readonly conversion?: string; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
     | { readonly tag: "text-operation"; readonly operation: "array-join"; readonly parts: readonly Cell[]; readonly indexedRange: {readonly length:number;readonly positions:readonly number[]} }
@@ -809,6 +809,13 @@ class SourceValueFlow {
     private readonly asyncIteratorPrototypes=new WeakMap<SourceRealmRecord,Cell>();
     private readonly sourceObjectOwners=new WeakSet<ObjectOwner>();
     private readonly opaqueCaptureCalls=new Map<ts.Node,Set<Cell>>();
+    /** Escape contexts whose native reads and invokes through every value
+     * it reaches, so an unknown value there is unknown code (its getters,
+     * toJSON or conversion methods) and the call's opaque effect: the
+     * JSON.stringify serialization the model cannot follow. Other natives'
+     * unknown arguments reach unknown code through their own conversion and
+     * write paths. */
+    private readonly unknownCodeEscapes=new Set<ts.Node>();
     private readonly escapedCallableCalls=new Map<ts.Node,Map<boolean,{visit:(input:Cell,as?:EscapeReachKind)=>void;origins?:Cell;sources:Set<Cell>;invocation:ts.Node}>>();
     /** The origins of an escape graph's synthetic invocation when a
      * conditioned opaque call made the graph: the union of the origins of the
@@ -983,6 +990,10 @@ class SourceValueFlow {
      * calling or constructing through it is bounded the same way and never
      * takes the global opaque effect reserved for unknown code. */
     private readonly nativeUnknown: Atom = { tag: "unknown", native: true };
+    /** An unknown value that is an Object (possibly callable), never a
+     * primitive: what ToObject of an unknown value is. Every consumer treats
+     * it as unknown except eval, which returns any Object unevaluated. */
+    private readonly unknownObject: Atom = { tag: "unknown", object: true };
     /** A native value may be any object the program created that reached a
      * native through its receiver and arguments (its escape graph). Writes through
      * native values feed two shared cells, and each such object links to them
@@ -1937,6 +1948,10 @@ class SourceValueFlow {
         if(atom.tag==="generator"){visit(atom.yielded);visit(atom.returned);}
         const transparent=kind==="method"&&atom.tag==="operation"&&TRANSPARENT_CALL_OPERATIONS.has(atom.operation);
         if(kind!=="argument"&&kind!=="elements"&&!transparent&&(atom.tag==="function"||atom.tag==="bound"||atom.tag==="promise-resolver"||owner?.proxy||!sourceCallbacksOnly&&(atom.tag==="intrinsic"||atom.tag==="operation"||atom.tag==="builtin"&&atom.normalResult!=="not-callable")))this.pushEscapeReach(result,atom);
+        // An unknown value a native reaches (not a native value) is recorded
+        // for the escapes that treat it as code (see unknownCodeEscapes);
+        // every other escape's sink ignores it.
+        if(!sourceCallbacksOnly&&atom.tag==="unknown"&&!atom.native)this.pushEscapeReach(result,atom);
         // A native reads and invokes through a primitive on ToObject of it
         // (an element's toLocaleString, Get of a key on a primitive receiver,
         // a BigInt's toJSON): the members a program wrote on that kind's
@@ -2053,7 +2068,7 @@ class SourceValueFlow {
         else if(!this.enclosingActivation(context)&&!this.sourceOrigins.has(this.sourceFile(context)))actuals=this.topLevelActuals(context);
         else this.publish(actuals,this.unknown);
         // Iterator elements are read through this escaping call's context.
-        const sink=this.newEscapeReach({callable:atom=>this.publish(target,atom),iterator:cell=>visit(this.directIteratorElements(cell,context))});
+        const sink=this.newEscapeReach({callable:atom=>{if(atom.tag!=="unknown"||atom.native)this.publish(target,atom);else if(this.unknownCodeEscapes.has(context))this.activateOpaqueEffect(context);},iterator:cell=>visit(this.directIteratorElements(cell,context))});
         const visit=(input:Cell,as:EscapeReachKind="direct"):void=>{const key=input.id+":"+as;if(seen.has(key))return;seen.add(key);this.linkEscapeReach(this.escapeCellReach(input,sourceCallbacksOnly,as),sink);};
         this.escapedInvocationOrigins.set(invocation,context);
         if(!sourceCallbacksOnly)this.nativeEscapeInvocations.add(invocation);
@@ -6311,7 +6326,7 @@ class SourceValueFlow {
                 if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
                 // ToObject of a native value (or its wrapper) is a native value.
                 if(this.ordinaryOwner(atom)||atom.tag==="promise"||atom.tag==="generator"||atom===this.nativeUnknown){this.publish(result,atom);continue;}
-                if(atom.tag==="unknown"){this.publish(result,this.unknown);continue;}
+                if(atom.tag==="unknown"){this.publish(result,this.unknownObject);continue;}
                 const state=this.primitiveState(cell(atom),convert,true);if(state.pending&&!state.unresolved)continue;
                 for(const value of state.proof.values){
                     if(value===null||value===undefined){owner.ordinary=true;owner.unboxed=true;this.publish(plain,this.primitive(true));this.publish(result,{tag:"object",owner});continue;}
@@ -8126,7 +8141,22 @@ class SourceValueFlow {
         const inputs=new Map<Atom,Cell>(),indexed=new Map<Cell,Map<SourcePropertyKey,Cell>>();
         const cell=(atom:Atom)=>{let input=inputs.get(atom);if(!input){input=this.newCell();inputs.set(atom,input);this.publish(input,atom);}return input;};
         const item=(input:Cell,key:SourcePropertyKey)=>{let keys=indexed.get(input);if(!keys){keys=new Map();indexed.set(input,keys);}let value=keys.get(key);if(!value){value=this.property(input,key,context);keys.set(key,value);}return value;};
-        const fail=(output:Cell)=>{this.publish(output,this.unknownString);this.publish(output,this.primitive(undefined));const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.unknown);this.activateOpaqueEffect(context);};
+        // A value whose serialization the model cannot follow still runs
+        // only code its arguments reach (SerializeJSONProperty: getters and
+        // toJSON methods of the value graph, the replacer, the wrapper
+        // conversions of value and space, Proxy traps; a BigInt's toJSON
+        // through its prototype), so they escape instead of unknown code
+        // running: JSON.stringify writes nothing itself. Its own abrupt
+        // completions are native errors (a cycle, a BigInt); what the
+        // escaped code throws reaches the handler from the escape graph.
+        let escaped=false;
+        const fail=(output:Cell)=>{
+            this.publish(output,this.unknownString);this.publish(output,this.primitive(undefined));
+            const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));
+            if(escaped)return;escaped=true;
+            this.unknownCodeEscapes.add(this.escapeContext(context));
+            this.onActive(context,()=>{this.escapeCallableArgument(value,context,false,"argument");this.escapeCallableArgument(replacer,context,false,"direct");this.escapeCallableArgument(space,context,false,"argument");});
+        };
         const abrupt=(output:Cell)=>{this.publish(output,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));};
         const gap=this.newCell(),spacingInput=this.jsonPrimitive(space,"space",context);let spacing!:Rule;
         spacing=this.rule([spacingInput],()=>{
@@ -8193,7 +8223,10 @@ class SourceValueFlow {
                     }else {
                         // SerializeJSONObject: K is the replacer's PropertyList
                         // in its own order, else EnumerableOwnProperties order.
-                        const ownKeys=plan.keys??this.ownerKeys(owner,outputRule);if(ownKeys===undefined)continue;if(ownKeys===null){fail(output);continue;}
+                        const ownKeys=plan.keys??this.ownerKeys(owner,outputRule);if(ownKeys===undefined)continue;
+                        // A key the analysis cannot name (null) is still an own key the
+                        // serialization visits.
+                        if(ownKeys===null||ownKeys.some(key=>key===null)){fail(output);continue;}
                         const strings=ownKeys.filter((key):key is string=>typeof key==="string");
                         const names=plan.keys?strings:strings.sort((a,b)=>{const ai=Number(a),bi=Number(b),ia=String(ai)===a&&Number.isInteger(ai)&&ai>=0&&ai<0xffffffff,ib=String(bi)===b&&Number.isInteger(bi)&&bi>=0&&bi<0xffffffff;return ia&&ib?ai-bi:ia?-1:ib?1:0;});
                         selections=[{keys:names,length:null}];
@@ -10484,7 +10517,9 @@ class SourceValueFlow {
                 const proof = source ? this.primitiveChoiceProof(source) : undefined;
                 const primitives = proof?.values ?? [];
                 const unresolved = this.unresolvedPrivate || unknown || source && (!source.values.nonempty ||
-                    [...source.values].some(value => value.tag === "unknown" || value.tag === "pending-source") ||
+                    // eval returns an Object argument without evaluating it
+                    // (PerformEval step 2), so an unknown Object is no source.
+                    [...source.values].some(value => value.tag === "unknown" && !(operation === "eval" && value.object) || value.tag === "pending-source") ||
                     !proof!.textComplete || operation !== "eval" && !proof!.primitiveComplete);
                 const listed = unresolved ? null : source
                     ? [...new Set(primitives.filter(value => operation !== "eval" || typeof value === "string").map(String))]
