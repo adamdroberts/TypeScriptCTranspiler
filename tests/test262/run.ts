@@ -990,7 +990,7 @@ async function runScenario(
         projectRoot,
         containment,
     );
-    await fs.rm(requestPath, { force: true });
+    if (!process.env.TSC2C_KEEP_REQUESTS) await fs.rm(requestPath, { force: true });
     if (!processResult.processGroupCleared) {
         return judge(scenario, infrastructureObservation(request.scenarioId, "host process group survived runner cleanup"));
     }
