@@ -4997,7 +4997,10 @@ class SourceValueFlow {
                 element(key);count++;
                 if(present.values.has(this.primitive(false)))uncertain=true;
             }
-            if(uncertain)incomplete(opaqueAlgorithm);else if(!pending)this.publish(length,this.primitive(count));
+            // A builtin's exotic [[OwnPropertyKeys]] (a String wrapper, a
+            // TypedArray) is native and runs no code; only a Proxy's ownKeys
+            // trap does.
+            if(uncertain)incomplete(!!source.proxy);else if(!pending)this.publish(length,this.primitive(count));
         }});
         return result;
     }
