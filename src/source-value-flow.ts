@@ -424,7 +424,7 @@ type Atom =
     | { readonly tag: "abrupt" }
     | { readonly tag: "pending-source" }
     | { readonly tag: "descriptor"; readonly identity: object }
-    | { readonly tag: "unknown"; readonly origin?: ts.Node; readonly native?: true; readonly object?: true }
+    | { readonly tag: "unknown"; readonly origin?: ts.Node; readonly native?: true; readonly object?: true; readonly intrinsic?: true }
     | { readonly tag: "opaque-object" }
     | { readonly tag: "text-operation"; readonly operation: "to-string" | "numeric" | "template" | "bound-name" | "prefix" | "coerce" | "error-text" | "primitive-string" | "util-format"; readonly numeric?: SourceNumericOperation; readonly conversion?: string; readonly operator?: ts.PrefixUnaryOperator; readonly parts: readonly Cell[] }
     | { readonly tag: "text-operation"; readonly operation: "array-join"; readonly parts: readonly Cell[]; readonly indexedRange: {readonly length:number;readonly positions:readonly number[]} }
@@ -1000,6 +1000,14 @@ class SourceValueFlow {
      * calling or constructing through it is bounded the same way and never
      * takes the global opaque effect reserved for unknown code. */
     private readonly nativeUnknown: Atom = { tag: "unknown", native: true };
+    /** A native value that is one of another realm's original global
+     * bindings (a global constructor, function or namespace object). It is
+     * a native value everywhere; calling it writes neither its this value nor
+     * its arguments, since no ECMA-262 global function or constructor does
+     * (eval is its own operation). */
+    private readonly externalGlobalReads=new Map<string,Set<Cell>>();
+    private readonly realmIntrinsic: Atom = { tag: "unknown", native: true, intrinsic: true };
+    private isNativeValue(atom: Atom): boolean { return atom.tag === "unknown" && !!atom.native; }
     /** An unknown value that is an Object (possibly callable), never a
      * primitive: what ToObject of an unknown value is. Every consumer treats
      * it as unknown except eval, which returns any Object unevaluated. */
@@ -2101,7 +2109,7 @@ class SourceValueFlow {
         // prototype are reached as an Object argument's own members are. A
         // native value may be any primitive.
         const primitiveKinds=atom.tag==="primitive"?atom.value===null?0:({boolean:KIND_BOOLEAN,number:KIND_NUMBER,bigint:KIND_BIGINT,string:KIND_STRING,symbol:KIND_SYMBOL} as Record<string,number>)[typeof atom.value]??0:
-            atom.tag==="non-string"?atom.kinds??(KIND_PRIMITIVE&~KIND_STRING):atom.tag==="unknown-string"||atom.tag==="text-operation"?KIND_STRING:atom===this.nativeUnknown?KIND_PRIMITIVE:0;
+            atom.tag==="non-string"?atom.kinds??(KIND_PRIMITIVE&~KIND_STRING):atom.tag==="unknown-string"||atom.tag==="text-operation"?KIND_STRING:this.isNativeValue(atom)?KIND_PRIMITIVE:0;
         for(const prototype of this.kindPrototypes(primitiveKinds))visit(prototype,"argument");
         if(!owner)return result;
         const skipped=(key:SourcePropertyKey):boolean=>kind!=="direct"&&kind!=="elements"&&(key==="constructor"||key==="prototype"&&atom.tag==="function");
@@ -3766,7 +3774,7 @@ class SourceValueFlow {
                 else if (typeof key === "string" && !this.immutableGlobalBinding(key)) this.copyWrite(value,this.realmBinding(atom.realm,key),context);
             }
             if((atom.tag==="unknown"||atom.tag==="opaque-object")&&context&&!unrepresented.has(atom)){
-                unrepresented.add(atom);const native=atom===this.nativeUnknown;
+                unrepresented.add(atom);const native=this.isNativeValue(atom);
                 // The analysis cannot follow a value stored into an object it does
                 // not represent: whatever reads it back (a native, unknown code, or
                 // the program through a native value) may call it, so it escapes
@@ -3805,7 +3813,7 @@ class SourceValueFlow {
      * there. A conversion an invocation's return projection replays takes
      * its effect from the conversion it replays (`replayDepth`). */
     private conversionEffect(source: Cell, context: ts.Node): void {
-        this.activateConditionalEffect(context, source, atom => atom !== this.nativeUnknown && atom.tag !== "primitive" && atom.tag !== "non-string" && atom.tag !== "unknown-string" &&
+        this.activateConditionalEffect(context, source, atom => !this.isNativeValue(atom) && atom.tag !== "primitive" && atom.tag !== "non-string" && atom.tag !== "unknown-string" &&
             atom.tag !== "text-operation" && atom.tag !== "abrupt" && atom.tag !== "pending-source");
     }
     private primitiveConversion(source: Cell, context?: ts.Node, hint: PrimitiveHint = "string"): Cell {
@@ -3824,7 +3832,7 @@ class SourceValueFlow {
                     this.publish(result, atom); continue;
                 }
                 const owner = this.ordinaryOwner(atom);
-                if (atom === this.nativeUnknown && context) {
+                if (this.isNativeValue(atom) && context) {
                     // A native value's conversion methods are builtins or callables
                     // that escaped where the value was produced: the result is
                     // some primitive (a String for the string hint), with no
@@ -3859,7 +3867,7 @@ class SourceValueFlow {
                             const parent = this.ordinaryOwner(prototype);
                             if (parent) worklist.push(parent);
                             else if (prototype.tag === "pending-source") ready = false;
-                            else if (prototype === this.nativeUnknown) nativeParent = true;
+                            else if (this.isNativeValue(prototype)) nativeParent = true;
                             else if (prototype !== this.primitive(null)) opaque = true;
                         }
                     }
@@ -3906,7 +3914,7 @@ class SourceValueFlow {
                     this.invoke(context, callee, receiver, [], returned);
                     this.rule([method], () => {
                         for (const value of method.values) {
-                            if (value === this.nativeUnknown) this.nativePrimitive(result, hint);
+                            if (this.isNativeValue(value)) this.nativePrimitive(result, hint);
                             else if (value.tag === "pending-source" || value.tag === "unknown" || value.tag === "opaque-object" || value.tag === "abrupt") this.publish(result, value);
                             else if (value.tag === "function" || value.tag === "bound" || value.tag === "operation" ||
                                 value.tag === "intrinsic" || value.tag === "builtin" && value.normalResult !== "not-callable") this.publish(callee, value);
@@ -3915,7 +3923,7 @@ class SourceValueFlow {
                     });
                     this.rule([returned], () => {
                         for (const value of returned.values) {
-                            if (value === this.nativeUnknown) this.nativePrimitive(result, hint);
+                            if (this.isNativeValue(value)) this.nativePrimitive(result, hint);
                             else if (value.tag === "primitive" || value.tag === "non-string" || value.tag === "unknown-string" || value.tag === "text-operation" || value.tag === "abrupt" || value.tag === "pending-source" || value.tag === "unknown") this.publish(result, value);
                             else advance(index + 1);
                         }
@@ -3934,7 +3942,7 @@ class SourceValueFlow {
                     for (const value of hook.values) {
                         if (value === this.primitive(undefined) || value === this.primitive(null)) advance(0);
                         // An inherited native member: a native @@toPrimitive, or none.
-                        else if (value === this.nativeUnknown) {this.nativePrimitive(result, hint);advance(0);}
+                        else if (this.isNativeValue(value)) {this.nativePrimitive(result, hint);advance(0);}
                         else if (value.tag === "function" || value.tag === "bound" || value.tag === "operation" ||
                             value.tag === "intrinsic" || value.tag === "builtin" && value.normalResult !== "not-callable") this.publish(callee, value);
                         else if (["abrupt", "pending-source", "unknown", "opaque-object"].includes(value.tag)) this.publish(result, value);
@@ -3943,7 +3951,7 @@ class SourceValueFlow {
                 });
                 this.rule([returned], () => {
                     for (const value of returned.values) {
-                        if (value === this.nativeUnknown) this.nativePrimitive(result, hint);
+                        if (this.isNativeValue(value)) this.nativePrimitive(result, hint);
                         else if (["primitive", "non-string", "unknown-string", "text-operation", "abrupt", "pending-source", "unknown"].includes(value.tag)) this.publish(result, value);
                         else invalid();
                     }
@@ -5389,7 +5397,7 @@ class SourceValueFlow {
         else if(key==="Infinity")this.publish(cell,this.primitive(Infinity));
         // Another realm's remaining runtime bindings start as that realm's
         // intrinsics: native values, like an unmodelled builtin member here.
-        else if(runtimeGlobalBindings.has(key))this.publish(cell,this.nativeUnknown);
+        else if(runtimeGlobalBindings.has(key))this.publish(cell,this.realmIntrinsic);
         this.initialGlobalValues.set(cell,new Set(cell.values.ownValues()));
         if(realm.owner)this.attachField(realm.owner,key,cell);
         return cell;
@@ -5698,7 +5706,7 @@ class SourceValueFlow {
             }
             if(!owner&&atom.tag!=="unknown"&&atom.tag!=="opaque-object"){fail();continue;}
             // A native receiver's accessors are builtins or escaped callables.
-            const bounded=atom===this.nativeUnknown;
+            const bounded=this.isNativeValue(atom);
             if(name==="flags"){this.publish(result,this.unknownString);if(!bounded)this.activateOpaqueEffect(context);if(handler)this.publish(handler,this.unknown);}
             else if(owner)fail();
             else{this.publish(result,bounded?this.nativeUnknown:this.unknown);if(!bounded)this.activateOpaqueEffect(context);if(handler)this.publish(handler,this.unknown);}
@@ -6101,7 +6109,7 @@ class SourceValueFlow {
         rule=this.rule([receiver],()=>{for(const atom of receiver.values){const owner=this.ordinaryOwner(atom),view=owner?.collectionIterator;
             // A native value's next (one a native's escape invocation passes)
             // returns what natives hold; an unrepresented one is unknown code's.
-            if(!owner||!view||view.kind!==kind){const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));this.publish(result,atom===this.nativeUnknown?this.nativeUnknown:atom.tag==="unknown"||atom.tag==="opaque-object"?this.unknown:this.abrupt);continue;}
+            if(!owner||!view||view.kind!==kind){const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));this.publish(result,this.isNativeValue(atom)?this.nativeUnknown:atom.tag==="unknown"||atom.tag==="opaque-object"?this.unknown:this.abrupt);continue;}
             if(view.kind==="Array"&&view.source&&!activated.has(owner)){activated.add(owner);const actual=this.arrayIterationView(view.source,context,view.operation!);this.copy(actual.elements,view.elements);this.copy(actual.activity,view.activity);}
             this.watch(rule,view.activity);this.watch(rule,view.elements);
             let records=results.get(owner);if(!records){const make=(done:boolean)=>{const record=this.newCell(),fields:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()},state=this.newCell(),value=this.newCell();this.publish(state,this.primitive(done));if(done)this.publish(value,this.primitive(undefined));else this.copy(view.elements,value);this.defineField(fields,"done",state);this.defineField(fields,"value",value);this.publish(record,{tag:"object",owner:fields});return record;};records={normal:make(false),done:make(true)};results.set(owner,records);}
@@ -6471,7 +6479,7 @@ class SourceValueFlow {
             for(const atom of input.values){
                 if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
                 // ToObject of a native value (or its wrapper) is a native value.
-                if(this.ordinaryOwner(atom)||atom.tag==="promise"||atom.tag==="generator"||atom===this.nativeUnknown){this.publish(result,atom);continue;}
+                if(this.ordinaryOwner(atom)||atom.tag==="promise"||atom.tag==="generator"||this.isNativeValue(atom)){this.publish(result,atom);continue;}
                 if(atom.tag==="unknown"){this.publish(result,this.unknownObject);continue;}
                 const state=this.primitiveState(cell(atom),convert,true);if(state.pending&&!state.unresolved)continue;
                 for(const value of state.proof.values){
@@ -6575,7 +6583,7 @@ class SourceValueFlow {
             // constructor verdict: forward the pending mark instead of the
             // opaque effect, which would make that source itself unknown.
             else if(atom.tag==="pending-source")this.publish(result,atom);
-            else if(atom===this.nativeUnknown){this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));}
+            else if(this.isNativeValue(atom)){this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));}
             else if(atom.tag==="unknown"||atom.tag==="opaque-object"){this.publish(result,this.primitive(false));this.publish(result,this.primitive(true));this.activateOpaqueEffect(context);}
             else this.publish(result,this.primitive(false));
         }}});
@@ -6669,7 +6677,7 @@ class SourceValueFlow {
                 }else if(owner.prototype)this.copyRead(owner.prototype,result,context);
                 else this.publish(result,this.unknown);
             }else if(atom.tag==="unknown"||atom.tag==="opaque-object"){
-                this.publish(result,atom===this.nativeUnknown?this.nativeUnknown:this.unknown);fail();
+                this.publish(result,this.isNativeValue(atom)?this.nativeUnknown:this.unknown);fail();
                 // A getPrototypeOf trap is user code reachable only through
                 // the argument: it escapes as a callee rather than widening
                 // every global binding.
@@ -7098,7 +7106,7 @@ class SourceValueFlow {
                 continue;
             }
             const owner=this.ordinaryOwner(atom);
-            if(!owner){opaque=true;if(atom!==this.nativeUnknown)generic=true;continue;}
+            if(!owner){opaque=true;if(!this.isNativeValue(atom))generic=true;continue;}
             if(visited.has(owner))continue;visited.add(owner);
             this.watch(rule,owner.shape);
             if(!this.definitionsReady(owner,rule))unresolved=true;
@@ -7139,7 +7147,23 @@ class SourceValueFlow {
         const key="dispatch:"+value.id+":"+target.id,prior=calls.get(key);if(prior)return prior;
         const result=this.newCell(),objects=this.newCell(),callee=this.newCell(),ordinary=this.newCell(),returned=this.newCell();calls.set(key,result);
         const fail=()=>{this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));};
-        this.rule([target],()=>{for(const atom of target.values){if(this.ordinaryOwner(atom))this.publish(objects,atom);else if(atom.tag==="unknown"||atom.tag==="opaque-object"){this.publish(objects,atom);this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));this.activateOpaqueEffect(context);}else if(atom.tag!=="pending-source"&&atom.tag!=="abrupt")fail();}});
+        // A native target (another realm's constructor, an unmodelled
+        // builtin member) has a native @@hasInstance: OrdinaryHasInstance
+        // reads its native prototype and walks the value's prototype chain,
+        // where only a Proxy's getPrototypeOf trap or unknown code runs.
+        let nativeTarget=false;
+        this.rule([target],()=>{if(nativeTarget||![...target.values].some(atom=>this.isNativeValue(atom)))return;nativeTarget=true;
+            this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));
+            let effect!:Rule;effect=this.rule([value],()=>{for(const atom of value.values){
+                if(atom.tag==="unknown"&&!atom.native||atom.tag==="opaque-object"){this.activateOpaqueEffect(context);return;}
+                const pending=[this.ordinaryOwner(atom)],visited=new Set<ObjectOwner>();
+                while(pending.length){const current=pending.pop();if(!current||visited.has(current))continue;visited.add(current);this.watch(effect,current.shape);
+                    if(current.proxy){this.activateOpaqueEffect(context);return;}
+                    if(current.prototype){this.watch(effect,current.prototype);for(const parent of current.prototype.values){if(parent.tag==="unknown"&&!parent.native||parent.tag==="opaque-object"){this.activateOpaqueEffect(context);return;}pending.push(this.ordinaryOwner(parent));}}
+                }
+            }});
+        });
+        this.rule([target],()=>{for(const atom of target.values){if(this.isNativeValue(atom))continue;if(this.ordinaryOwner(atom))this.publish(objects,atom);else if(atom.tag==="unknown"||atom.tag==="opaque-object"){this.publish(objects,atom);this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));this.activateOpaqueEffect(context);}else if(atom.tag!=="pending-source"&&atom.tag!=="abrupt")fail();}});
         const method=this.property(objects,this.wellKnownSymbols.get("hasInstance")!,context),atoms=new Map<Atom,Cell>();
         this.rule([method],()=>{for(const atom of method.values){
             if(atom===this.primitive(undefined)||atom===this.primitive(null)){this.copy(objects,ordinary);continue;}
@@ -7664,6 +7688,12 @@ class SourceValueFlow {
         return owner;
     }
     private read(atom: Atom, base: Cell, key: SourcePropertyKey, result: Cell, handler?: Cell, rule?: Rule, context?: ts.Node, ownOnly=false): void {
+        // Without the Test262 host an unresolved name is an external input
+        // (absentAmbientReference); so is the global object's property of
+        // that name, unless the program binds or writes it.
+        if(atom.tag==="global"&&atom.realm===this.currentRealm&&!this.test262Host&&!ownOnly&&typeof key==="string"&&!runtimeGlobalBindings.has(key)&&!TEST262_HOST_NAMES.has(key)){
+            let results=this.externalGlobalReads.get(key);if(!results){results=new Set();this.externalGlobalReads.set(key,results);}results.add(result);
+        }
         if(atom.tag==="primitive"&&typeof atom.value==="string"){
             if(key==="length"){this.publish(result,this.primitive(atom.value.length));return;}
             if(typeof key==="string"){
@@ -7680,7 +7710,7 @@ class SourceValueFlow {
         }
         if (atom.tag === "pending-source") {this.publish(result,atom);return;}
         if (atom.tag === "unknown" || atom.tag === "opaque-object") {
-            this.publish(result, atom===this.nativeUnknown?this.nativeUnknown:this.unknown);
+            this.publish(result, this.isNativeValue(atom)?this.nativeUnknown:this.unknown);
             if (handler) this.publish(handler, this.unknown);
             return;
         }
@@ -7773,7 +7803,7 @@ class SourceValueFlow {
                     const inherited = this.ordinaryOwner(prototype);
                     if (inherited) worklist.push(prototype);
                     else if (prototype.tag === "primitive" && prototype.value === null) this.publish(result,this.primitive(undefined));
-                    else this.publish(result, prototype.tag === "pending-source" || prototype === this.nativeUnknown ? prototype : this.unknown);
+                    else this.publish(result, prototype.tag === "pending-source" || this.isNativeValue(prototype) ? prototype : this.unknown);
                 }
             }
         }
@@ -9383,8 +9413,8 @@ class SourceValueFlow {
                         // An unmodelled member of a builtin (`Iterator.from`, a static the
                         // model has no operation for) is a native too: its receiver holds
                         // only builtin values, so it cannot be user code.
-                        const builtinMember=atom===this.nativeUnknown||atom.tag==="unknown"&&!proxy&&invocation.receiver!==this.empty&&invocation.receiver.values.nonempty&&
-                            [...invocation.receiver.values].every(value=>value.tag==="builtin"||value.tag==="intrinsic"||value.tag==="operation"||value===this.nativeUnknown);
+                        const builtinMember=this.isNativeValue(atom)||atom.tag==="unknown"&&!proxy&&invocation.receiver!==this.empty&&invocation.receiver.values.nonempty&&
+                            [...invocation.receiver.values].every(value=>value.tag==="builtin"||value.tag==="intrinsic"||value.tag==="operation"||this.isNativeValue(value));
                         const directCallees:ReadonlySet<number>|"all"|undefined=atom.tag==="operation"&&!GLOBAL_EFFECT_OPERATIONS.has(atom.operation)?NATIVE_DIRECT_CALLEE_POSITIONS.get(atom.operation)??"all":builtinMember?"all":undefined;
                         const arrayEffect=atom.tag==="operation"?NATIVE_ARRAY_RECEIVER_EFFECTS.get(atom.operation):undefined;
                         // A TypedArray native validates its receiver before any
@@ -9397,7 +9427,10 @@ class SourceValueFlow {
                         // conversion it runs throws reaches the handler from
                         // that code's escaped invocation. Any other opaque call
                         // keeps an unknown exception.
-                        if (handler) this.publish(handler, typedArrayNative&&!proxy?this.nativeException(node):this.unknown);
+                        // Any other native's own abrupt completion is a native
+                        // value (one shared atom rather than an error object per
+                        // site); a Proxy or unknown code may throw any value.
+                        if (handler) this.publish(handler, typedArrayNative&&!proxy?this.nativeException(node):directCallees&&!proxy?this.nativeUnknown:this.unknown);
                         if(invocation.construct)this.publish(result!,this.opaqueObject);
                         else if(arrayEffect?.receiverResult)this.copy(this.toObject(invocation.receiver,node),result!);
                         // A lazy helper (map, filter, take, drop, flatMap) returns a
@@ -9432,8 +9465,9 @@ class SourceValueFlow {
                                 this.escapeGlobalReach(node,conditioned);
                             }
                             const argumentsEscaping = invocation.args ?? (invocation.sequence ? [this.allArgumentValues(invocation.sequence)] : []);
+                            const intrinsicCall=atom.tag==="unknown"&&!!atom.intrinsic;
                             if(arrayEffect)this.nativeArrayReceiverWrites(invocation.receiver,arrayEffect,argumentsEscaping,node);
-                            else if(!iteratorHelper&&!typedArrayNative)this.writeProperty(invocation.receiver,null,this.empty,false,"set",node,invocation.receiver,undefined,conditioned);
+                            else if(!iteratorHelper&&!typedArrayNative&&!intrinsicCall)this.writeProperty(invocation.receiver,null,this.empty,false,"set",node,invocation.receiver,undefined,conditioned);
                             // An Array.prototype native never calls its receiver or the
                             // values it stores; their accessors and methods may run. A
                             // native that calls a callback (sort's comparator) hands it
@@ -9443,7 +9477,7 @@ class SourceValueFlow {
                             const callsCallback=directCallees==="all"||!!directCallees&&directCallees.size>0;
                             this.escapeCallableArgument(invocation.receiver,node,false,arrayEffect&&!callsCallback?"elements":"direct",conditioned);
                             for (const [index,argument] of argumentsEscaping.entries()) {
-                                if(!arrayEffect&&!iteratorHelper&&!typedArrayNative)this.writeProperty(argument,null,this.empty,false,"set",node,argument,undefined,conditioned);
+                                if(!arrayEffect&&!iteratorHelper&&!typedArrayNative&&!intrinsicCall)this.writeProperty(argument,null,this.empty,false,"set",node,argument,undefined,conditioned);
                                 this.escapeCallableArgument(argument,node,false,!directCallees||directCallees==="all"||directCallees.has(index)?"direct":"argument",conditioned);
                             }
                         });
@@ -10618,6 +10652,14 @@ class SourceValueFlow {
                     const absent=this.absentAmbientReference(node,cell);
                     if(absent==="unresolvable")changed=true;
                     else if(absent){this.publish(absent,this.unknown);changed=true;}
+                }
+                // The same input read as a property of this realm's global
+                // object (`globalThis.flag`): a name the program never binds,
+                // declares or writes may be one the host provides.
+                for(const[key,results]of this.externalGlobalReads){
+                    const binding=this.currentRealm.bindings.get(key);
+                    if(binding&&(binding.values.nonempty||this.writtenAmbientBindings.has(binding)||this.scriptDeclaredBindings.has(binding)))continue;
+                    for(const result of results)if(!result.values.has(this.unknown)){this.publish(result,this.unknown);changed=true;}
                 }
                 if(changed)continue;
                 this.presenceClosed=true;for(const rule of this.presenceRules)this.schedule(rule);continue;

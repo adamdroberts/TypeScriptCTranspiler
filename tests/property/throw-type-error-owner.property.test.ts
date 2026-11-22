@@ -23,9 +23,11 @@ check(!Object.isExtensible(thrower)&&Object.isFrozen(thrower)&&Object.getOwnProp
 check(!Reflect.defineProperty(thrower,"extra",{value:17})&&!Reflect.deleteProperty(thrower,"name"),"rejected-mutation");
 let caught;try{thrower.call({marker:17},1,2);}catch(error){caught=error;}check(caught instanceof TypeError,"call-type-error");
 try{new thrower();}catch(error){caught=error;}check(caught instanceof TypeError,"not-constructor");
-// Node 26 and Bun give Function.prototype its own caller and arguments accessors
-// (not %ThrowTypeError%, and distinct from each other); the runtime follows them.
-{const caller=Object.getOwnPropertyDescriptor(Function.prototype,"caller"),args=Object.getOwnPropertyDescriptor(Function.prototype,"arguments");check(typeof caller.get==="function"&&caller.get!==thrower&&args.get!==thrower&&caller.get!==args.get&&!caller.enumerable&&caller.configurable&&!args.enumerable&&args.configurable,"prototype-accessors");}
+// Function.prototype's caller and arguments accessors are the spec's
+// %ThrowTypeError% in the runtime (native-callable-profile asserts that) and
+// V8's legacy accessors in Node; both are non-enumerable, configurable
+// accessors with function getters, which is what this Node-checked profile asserts.
+{const caller=Object.getOwnPropertyDescriptor(Function.prototype,"caller"),args=Object.getOwnPropertyDescriptor(Function.prototype,"arguments");check(typeof caller.get==="function"&&typeof args.get==="function"&&!caller.enumerable&&caller.configurable&&!args.enumerable&&args.configurable,"prototype-accessors");}
 const foreign=$262.createRealm().global;
 const foreignArgs=foreign.Function('"use strict";return arguments;');
 const foreignThrower=Object.getOwnPropertyDescriptor(foreignArgs(),"callee").get;
