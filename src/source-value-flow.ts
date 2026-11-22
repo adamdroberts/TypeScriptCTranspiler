@@ -553,7 +553,10 @@ interface SourceInvocationRecord {readonly node:ts.Node;readonly origins:Cell;re
  * them (a record pushes itself to each subscriber, rather than every effect
  * rescanning the list), and one rule per activation reports an origin of
  * the activation that no record covers, with a null record. */
-interface SourceInvocationRecords {readonly list:SourceInvocationRecord[];readonly keys:WeakMap<ts.Node,Set<string>>;readonly covered:Cell;readonly subscribers:((record:SourceInvocationRecord|null)=>void)[];uncovered:boolean;watched:boolean;}
+interface SourceInvocationRecords {readonly list:SourceInvocationRecord[];readonly keys:WeakMap<ts.Node,Set<string>>;readonly covered:Cell;readonly subscribers:((record:SourceInvocationRecord|null)=>void)[];uncovered:boolean;watched:boolean;
+    /** Grows with every record and once when the records stop covering the
+     * activation, for rules that read the list (activationBound). */
+    readonly size:Cell;counted:boolean;}
 interface FunctionOwner {
     readonly parameters:readonly ts.ParameterDeclaration[];readonly actuals:Map<string,SourceCallArguments>;readonly actualChanges:Cell;arguments?:SourceArgumentsRecord;
     readonly definition: CallableDefinition; readonly node: FunctionNode | null; readonly kind: DynamicFunctionKind; readonly fields: ObjectOwner;
@@ -628,6 +631,13 @@ const LOOP_COUNTER_VALUE_LIMIT = 1024;
 /** Loop conditions a counter's values are filtered by; each compares the
  * counter with the other operand's values by the host's own operator on
  * primitives, which is the spec's IsLessThan/IsLooselyEqual/IsStrictlyEqual. */
+const ACTIVATION_COUNT_LIMIT = 64;
+/** Binary operators whose evaluation converts each operand once. */
+const CONVERTING_BINARY_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken,
+    ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken, ts.SyntaxKind.AsteriskAsteriskToken, ts.SyntaxKind.LessThanToken, ts.SyntaxKind.GreaterThanToken,
+    ts.SyntaxKind.LessThanEqualsToken, ts.SyntaxKind.GreaterThanEqualsToken, ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken,
+    ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.BarToken, ts.SyntaxKind.CaretToken, ts.SyntaxKind.LessThanLessThanToken,
+    ts.SyntaxKind.GreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken]);
 const LOOP_COUNTER_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken, ts.SyntaxKind.GreaterThanToken,
     ts.SyntaxKind.GreaterThanEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken]);
 function loopCounterCompare(operator: ts.SyntaxKind, left: Primitive, right: Primitive): boolean {
@@ -1514,6 +1524,139 @@ class SourceValueFlow {
             if (bound.proof.values.some(other => loopCounterCompare(counter.operator, counter.counterLeft ? value : other, counter.counterLeft ? other : value))) steps.push(value + delta);
         return steps;
     }
+    /** The counter of an update (`++i`, `i--`) the activation bound applies
+     * to: an identifier whose location no eval code, with object or mapped
+     * arguments object can redirect, as loopCounter requires. */
+    private activationCounter(node: ts.Node): {operand: ts.Identifier; location: Cell} | null {
+        if (!ts.isPrefixUnaryExpression(node) && !ts.isPostfixUnaryExpression(node)) return null;
+        const operand = node.operand;
+        if (!ts.isIdentifier(operand)) return null;
+        const symbol = this.bindingSymbol(operand), declarations = symbol?.declarations ?? [];
+        if (!symbol || !declarations.length || declarations.some(declaration => ts.isParameter(declaration))) return null;
+        if (this.evaluationGlobalTargets.has(operand) || this.evaluationReferenceEnvironment(operand) || this.withBindingObjects(operand).length) return null;
+        return {operand, location: this.binding(operand)};
+    }
+    /** The values an activation-bounded update stores. An update that runs at
+     * most E times in the whole program (executionBound) and is its
+     * location's only update moves the location at most E steps from a
+     * value another write stored (or its initial value): it stores b ± j for
+     * each such b and 1 <= j <= E. Null when the bound is not finite or a
+     * base value is not a complete set of Numbers (undefined counts as NaN). */
+    private activationCounterSteps(node: ts.PrefixUnaryExpression | ts.PostfixUnaryExpression, location: Cell, proof: PrimitiveChoiceProof, rule: Rule): number[] | null | "pending" {
+        // Unknown code's writes reach the read as unknown values first.
+        if (!proof.primitiveComplete || proof.values.some(value => typeof value !== "number")) return null;
+        const runs = this.executionBound(node, rule, new Set());
+        if (!Number.isFinite(runs)) return null;
+        const base = new Set<number>();
+        for (const atom of location.values.ownValues()) {
+            if (atom.tag !== "primitive" || atom.value !== undefined && typeof atom.value !== "number") return null;
+            base.add(Number(atom.value));
+        }
+        for (const [facts, kind] of location.values.sources) {
+            const source = this.sourceCells.get(facts)!;
+            if (source === this.globalMutation || source.values.ownValues().next().done && [...source.values.sources.values()].every(edge => edge === "origin")) continue;
+            const write = this.knownWriteOrigins.get(source);
+            if (kind !== "value" || !write || !write.lexical || write.location !== location) return null;
+            if (write.origin === node) continue;
+            // Another update of the same location would add its own steps.
+            if (ts.isPrefixUnaryExpression(write.origin) || ts.isPostfixUnaryExpression(write.origin)) return null;
+            const state = this.primitiveState(source, rule, true);
+            if (state.pending && !state.unresolved) return "pending";
+            if (!state.proof.primitiveComplete) return null;
+            for (const value of state.proof.values) {
+                if (value !== undefined && typeof value !== "number") return null;
+                base.add(Number(value));
+            }
+        }
+        const delta = node.operator === ts.SyntaxKind.PlusPlusToken ? 1 : -1, steps: number[] = [];
+        for (const value of base) for (let step = 1; step <= runs; step++) steps.push(value + delta * step);
+        return steps;
+    }
+    /** An upper bound on how many times `node` runs in the whole program,
+     * Infinity when the analysis cannot bound it: a node of generated or
+     * synthetic code, one inside a loop of its function, or one of a
+     * function whose activations are unbounded. Top-level Script code runs
+     * once. */
+    private executionBound(node: ts.Node, rule: Rule, chain: ReadonlySet<FunctionOwner>): number {
+        if (node.flags & ts.NodeFlags.Synthesized || node.pos < 0) return Infinity;
+        // The top level of eval code runs once per evaluation; a function
+        // that generated code defines is bounded by its own invocations.
+        if (this.sourceOrigins.has(this.sourceFile(node)) && !this.enclosingActivation(node)) return Infinity;
+        for (let current = node.parent; current && !functionNode(current); current = current.parent)
+            if (ts.isIterationStatement(current, false)) return Infinity;
+        // A loop, a repeated Script root or a repeated synthetic timing.
+        if (this.hasInvocationTiming(node, "repeated")) return Infinity;
+        const activation = this.enclosingActivation(node);
+        return activation ? this.activationBound(activation, rule, chain) : 1;
+    }
+    /** An upper bound on a function's activations: over the distinct nodes
+     * that invoke it, the calls each makes per run times the runs of that
+     * node. Recursion, an invocation no record covers (an escape, unknown
+     * code) and more records than the conditional-effect budget are
+     * unbounded. */
+    private activationBound(owner: FunctionOwner, rule: Rule, chain: ReadonlySet<FunctionOwner>): number {
+        if (chain.has(owner)) return Infinity;
+        const records = this.invocationRecordsOf(owner);
+        if (!records.counted) {
+            records.counted = true;
+            records.subscribers.push(record => {if (record === null) this.publish(records.size, this.primitive("uncovered"));});
+        }
+        this.watchInvocationCoverage(owner, records);
+        this.watch(rule, records.size); this.watch(rule, owner.active);
+        if (records.uncovered) return Infinity;
+        const callers = new Set(chain).add(owner);
+        let total = 0;
+        for (const node of new Set(records.list.map(record => record.node))) {
+            const calls = this.callsPerExecution(node, owner, rule);
+            if (!calls) continue;
+            const runs = Number.isFinite(calls) ? this.executionBound(node, rule, callers) : Infinity;
+            total += calls * runs;
+            if (!Number.isFinite(total) || total > ACTIVATION_COUNT_LIMIT) return Infinity;
+        }
+        return total;
+    }
+    /** How many times one run of a call or new expression may invoke
+     * `owner`: once for a callee that is a function (not a class, whose
+     * construction also runs its field initializers), a bound function or
+     * Function.prototype.call; for the Function
+     * constructors, once for each argument and each ToPrimitive key
+     * (@@toPrimitive, toString, valueOf) under which `owner` may be found on
+     * that argument (CreateDynamicFunction converts each argument once).
+     * Any other callee, a spread argument or any other node: Infinity. */
+    private callsPerExecution(node: ts.Node, owner: FunctionOwner, rule: Rule): number {
+        // An operator that converts each operand once (ToPrimitive for +,
+        // ToNumeric, IsLessThan, IsLooselyEqual) calls each conversion
+        // method of an operand at most once.
+        if (ts.isBinaryExpression(node) && CONVERTING_BINARY_OPERATORS.has(node.operatorToken.kind))
+            return this.conversionCalls(node.left, owner, node, rule) + this.conversionCalls(node.right, owner, node, rule);
+        if (!ts.isCallExpression(node) && !ts.isNewExpression(node)) return Infinity;
+        const args = node.arguments ?? [];
+        if (args.some(ts.isSpreadElement)) return Infinity;
+        const callee = this.cell(node.expression); this.watch(rule, callee);
+        let calls = 0;
+        for (const atom of callee.values) {
+            if (atom.tag === "function") {if (ts.isClassLike(atom.owner.definition)) return Infinity; if (atom.owner === owner) calls += 1;}
+            else if (atom.tag === "bound") calls += 1;
+            // Function.prototype.call invokes its this value once with the
+            // arguments already evaluated (apply and Reflect.apply also read
+            // an array-like, whose getters run here).
+            else if (atom.tag === "operation" && atom.operation === "call") calls += 1;
+            else if (atom.tag === "intrinsic" && atom.domain === "constructor") {for (const argument of args) calls += this.conversionCalls(argument, owner, node, rule);}
+            else if (atom.tag === "primitive" || atom.tag === "abrupt") continue;
+            else return Infinity;
+        }
+        return calls;
+    }
+    /** How many times one ToPrimitive of `operand` may call `owner`: once
+     * for each key (@@toPrimitive, toString, valueOf) whose value may be it. */
+    private conversionCalls(operand: ts.Expression, owner: FunctionOwner, context: ts.Node, rule: Rule): number {
+        let calls = 0;
+        for (const key of [this.wellKnownSymbols.get("toPrimitive")!, "toString", "valueOf"] as const) {
+            const member = this.property(this.cell(operand), key, context); this.watch(rule, member);
+            if ([...member.values].some(value => value.tag === "function" && value.owner === owner || value.tag === "unknown" || value.tag === "bound" || value.tag === "pending-source")) calls += 1;
+        }
+        return calls;
+    }
     private updateStored(node: ts.Node): Cell {
         let value = this.numericWrites.get(node);
         if (!value) {value = this.newCell(); this.numericWrites.set(node,value);}
@@ -1745,7 +1888,7 @@ class SourceValueFlow {
     }
     private invocationRecordsOf(owner:FunctionOwner):SourceInvocationRecords {
         let records=this.invocationRecords.get(owner);
-        if(!records){records={list:[],keys:new WeakMap(),covered:this.newCell(),subscribers:[],uncovered:false,watched:false};this.invocationRecords.set(owner,records);}
+        if(!records){records={list:[],keys:new WeakMap(),covered:this.newCell(),subscribers:[],uncovered:false,watched:false,size:this.newCell(),counted:false};this.invocationRecords.set(owner,records);}
         return records;
     }
     /** A call's origins reach the function's activation only through its
@@ -1761,7 +1904,7 @@ class SourceValueFlow {
         let recorded=false;
         this.onActive(node,()=>{
             if(recorded)return;recorded=true;
-            const origins=this.escapeInvocationOrigins.get(node)??this.executionOrigins(node),record={node,origins,formals};records.list.push(record);this.copy(origins,records.covered);
+            const origins=this.escapeInvocationOrigins.get(node)??this.executionOrigins(node),record={node,origins,formals};records.list.push(record);this.publish(records.size,this.primitive(records.list.length));this.copy(origins,records.covered);
             if(!records.uncovered){
                 if(records.list.length>CONDITIONAL_EFFECT_RECORDS){records.uncovered=true;for(const subscriber of [...records.subscribers])subscriber(null);}
                 else{const subscribers=records.subscribers,count=subscribers.length;for(let index=0;index<count;index++)subscribers[index]!(record);}
@@ -8634,18 +8777,27 @@ class SourceValueFlow {
             const computed = operation.form === "update" ? this.newCell() : result;
             this.publish(computed, {tag: "text-operation", operation: "numeric", numeric: operation, parts: converted});
             if (operation.form === "update") {
-                this.copy(ts.isPostfixUnaryExpression(node) ? converted[0]! : computed, result);
+                const counter = this.loopCounter(node);
+                // An update outside such a loop whose runs the activation
+                // bound limits (a counter advanced by a function the program
+                // calls a known number of times). A prefix update's value is
+                // the value it stores, so while the bound holds it takes the
+                // stored steps rather than every read value plus one.
+                const activation = counter ? null : this.activationCounter(node);
+                const fromStored = !!activation && ts.isPrefixUnaryExpression(node);
+                let computedLinked = false;
+                const linkComputed = (): void => {if (!computedLinked) {computedLinked = true; this.copy(computed, result);}};
+                if (ts.isPostfixUnaryExpression(node)) this.copy(converted[0]!, result); else if (!fromStored) linkComputed();
                 // A shared mutable location has no versioned scalar value.
                 // Retain its numeric category after normal conversion instead
                 // of feeding expression values back into the location graph.
                 const stored = this.updateStored(node);
-                const counter = this.loopCounter(node);
                 const counted = new Set<number>();
                 let write!: Rule, widened = false;
-                write = this.rule([converted[0]!, ...(counter ? [counter.location, counter.bound] : [])], () => {
+                write = this.rule([converted[0]!, ...(counter ? [counter.location, counter.bound] : activation ? [activation.location] : [])], () => {
                     const state = this.primitiveState(converted[0]!, write, true);
                     if (state.pending) return;
-                    if(state.proof.primitiveComplete&&!state.proof.values.length)this.publish(stored,this.abrupt);
+                    if(state.proof.primitiveComplete&&!state.proof.values.length){this.publish(stored,this.abrupt);if(fromStored)this.publish(result,this.abrupt);}
                     else {
                         if (counter && !widened) {
                             const steps = this.loopCounterSteps(node as ts.PrefixUnaryExpression | ts.PostfixUnaryExpression, counter, state.proof, write);
@@ -8658,6 +8810,19 @@ class SourceValueFlow {
                             if (steps && !widened) return;
                             widened = true;
                         }
+                        if (activation && !widened) {
+                            const steps = this.activationCounterSteps(node as ts.PrefixUnaryExpression | ts.PostfixUnaryExpression, activation.location, state.proof, write);
+                            if (steps === "pending") return;
+                            if (steps) for (const step of steps) {
+                                if (counted.has(step)) continue;
+                                if (counted.size >= LOOP_COUNTER_VALUE_LIMIT) {widened = true; break;}
+                                counted.add(step); this.publish(stored, this.primitive(step));
+                                if (fromStored) this.publish(result, this.primitive(step));
+                            }
+                            if (steps && !widened) return;
+                            widened = true;
+                        }
+                        if (fromStored) linkComputed();
                         const kinds=this.primitiveKinds(converted[0]!)&KIND_NUMERIC||KIND_NUMERIC;
                         let value=this.numericValues.get(kinds);if(!value){value={tag:"non-string",kinds};this.numericValues.set(kinds,value);}
                         this.publish(stored,value);
