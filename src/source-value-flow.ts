@@ -447,6 +447,7 @@ class SourceFactEdges extends Map<SourceFacts,"value"|"origin"> {
     }
 }
 const noAtoms:ReadonlySet<Atom>=new Set();
+const noEdges:ReadonlyMap<SourceFacts,"value"|"origin">=new Map<SourceFacts,"value"|"origin">();
 /** A fact collection is not a Set subclass: engines fast-path array spread
  * and iteration of Set instances by copying raw entries, which would bypass
  * the transitive traversal below (observed in JavaScriptCore's DFG tier). */
@@ -454,7 +455,10 @@ class SourceFacts implements Iterable<Atom> {
     private readonly own = new Set<Atom>();
     // One monotone dependency collection distinguishes complete value flow
     // from origin-only effects without copying every origin into each field.
-    readonly sources:Map<SourceFacts,"value"|"origin"> = new SourceFactEdges(this);
+    // Allocated with the first edge: most collections never copy another.
+    private edges:SourceFactEdges|undefined;
+    get sources():ReadonlyMap<SourceFacts,"value"|"origin">{return this.edges??noEdges;}
+    addSource(facts:SourceFacts,kind:"value"|"origin"):void{(this.edges??=new SourceFactEdges(this)).set(facts,kind);}
     // Reverse source edges: the collections whose traversal passes here.
     private dependents:SourceFacts[]|undefined;
     // Every collection whose traversal passes here has been invalidated since
@@ -465,7 +469,7 @@ class SourceFacts implements Iterable<Atom> {
     // so a walk past a wide owner (a global object's keys) through origin
     // edges does not visit its every key. Allocated with the first unknown.
     private ownUnknown:Set<Atom>|undefined;
-    private readonly memberships = new Set<Atom>();
+    private memberships:Set<Atom>|undefined;
     private knownNonempty=false;
     private flattened:readonly Atom[]|undefined;
     add(atom:Atom):this{if(this.own.has(atom))return this;sourceFactsEpoch++;this.own.add(atom);if(atom.tag==="unknown")(this.ownUnknown??=new Set()).add(atom);this.changed();return this;}
@@ -499,15 +503,15 @@ class SourceFacts implements Iterable<Atom> {
         return undefined;
     }
     has(atom: Atom): boolean {
-        if (this.own.has(atom) || this.memberships.has(atom)) return true;
+        if (this.own.has(atom) || this.memberships?.has(atom)) return true;
         const pending:SourceFacts[] = [this], visited = new Set<SourceFacts>();
         while (pending.length) {
             const facts = pending.pop()!;
             if (visited.has(facts)) continue; visited.add(facts);
-            if (facts.own.has(atom) || facts.memberships.has(atom)) {
+            if (facts.own.has(atom) || facts.memberships?.has(atom)) {
                 // Facts and copy edges only grow. A positive membership proof
                 // remains valid throughout this graph's monotone solution.
-                this.memberships.add(atom); return true;
+                (this.memberships ??= new Set()).add(atom); return true;
             }
             for(const [source,kind]of facts.sources)if(kind==="value"||atom.tag==="unknown")pending.push(source);
         }
@@ -517,7 +521,23 @@ class SourceFacts implements Iterable<Atom> {
     get size(): number {let size=0; for (const _ of this) size++; return size;}
 }
 interface PrimitiveCellCache {proof?:PrimitiveChoiceProof;kind?:number;readiness?:PrimitiveReadiness;empty?:true;normal?:true;}
-interface Cell { ownRevision:number;primitiveCache?:PrimitiveCellCache;readonly id: number; readonly values: SourceFacts; readonly users: Set<Rule>; }
+/** `stale`: the change flush has cleared this cell's primitive cache and
+ * scheduled every user, and nothing has observed the cell since (no user has
+ * been dequeued and no cache entry stored). Every cell whose value includes a
+ * stale cell is stale too, so a flush stops at a stale cell instead of
+ * revisiting the cells above it. `proofSources` are the cells whose changes
+ * reach this one (the reverse of the proof-parent edges), which an
+ * observation walks to clear the marks below it. */
+interface Cell { ownRevision:number;primitiveCache?:PrimitiveCellCache;readonly id: number; readonly values: SourceFacts; readonly users: Set<Rule>; stale:boolean; proofSources:Cell[]|undefined; }
+/** An observed cell is no longer stale, nor is any cell its value includes. */
+function observeCell(cell:Cell):void {
+    if(!cell.stale)return;
+    const pending=[cell];
+    while(pending.length){
+        const current=pending.pop()!;if(!current.stale)continue;current.stale=false;
+        if(current.proofSources)for(const source of current.proofSources)if(source.stale)pending.push(source);
+    }
+}
 /** One lazy record retains cache storage while invalidation releases stale
  * proof/readiness values immediately. Undefined is a miss; a zero kind mask
  * remains a present value. */
@@ -525,7 +545,7 @@ class SourceCellCache<Key extends keyof PrimitiveCellCache> {
     constructor(private readonly key:Key){}
     get(cell:Cell):PrimitiveCellCache[Key] {return cell.primitiveCache?.[this.key];}
     has(cell:Cell):boolean {return this.get(cell)!==undefined;}
-    set(cell:Cell,value:NonNullable<PrimitiveCellCache[Key]>):void {(cell.primitiveCache??={})[this.key]=value;}
+    set(cell:Cell,value:NonNullable<PrimitiveCellCache[Key]>):void {observeCell(cell);(cell.primitiveCache??={})[this.key]=value;}
 }
 interface Rule { readonly inputs: Set<Cell>; readonly run: () => void; queued: boolean; }
 interface SourcePropertyWrite {readonly context:ts.Node;readonly base:Cell;readonly receiver:Cell;readonly mode:"set"|"define"|"delete";readonly weak:Cell;readonly values:Cell;}
@@ -1405,7 +1425,7 @@ class SourceValueFlow {
             }
         }
     }
-    private newCell(): Cell { const cell={id:this.nextCell++,ownRevision:0,values:new SourceFacts(),users:new Set<Rule>()};this.sourceCells.set(cell.values,cell);return cell; }
+    private newCell(): Cell { const cell:Cell={id:this.nextCell++,ownRevision:0,values:new SourceFacts(),users:new Set<Rule>(),stale:false,proofSources:undefined};this.sourceCells.set(cell.values,cell);return cell; }
     /** Return copy graphs retain actual formal inputs independently of other
      * invocations. Local writes and derived facts stay conservative; the
      * ordinary invocation graph still owns all effects and exceptions. */
@@ -1805,7 +1825,7 @@ class SourceValueFlow {
         if (atom.tag === "text-operation") for (const part of atom.parts) {
             let parents = this.primitiveProofParents.get(part);
             if (!parents) {parents = new Set(); this.primitiveProofParents.set(part,parents);}
-            parents.add(cell);
+            if (!parents.has(cell)) {parents.add(cell); (cell.proofSources ??= []).push(part);}
         }
         cell.values.add(atom);cell.ownRevision++;this.factRevision++;
         this.primitiveChanges.add(cell);
@@ -1813,11 +1833,13 @@ class SourceValueFlow {
     }
     private flushPrimitiveChanges(): void {
         if (!this.primitiveChanges.size) return;
-        const pending = [...this.primitiveChanges], visited = new Set<Cell>();
+        const pending = [...this.primitiveChanges];
         this.primitiveChanges.clear();
         while (pending.length) {
             const value = pending.pop()!;
-            if (visited.has(value)) continue; visited.add(value);
+            // A stale cell's cache is clear, its users are queued and every
+            // cell above it is stale: this change reaches nothing new there.
+            if (value.stale) continue; value.stale = true;
             const cache=value.primitiveCache;
             if(cache){cache.proof=undefined;cache.kind=undefined;cache.readiness=undefined;cache.empty=undefined;}
             for (const user of value.users) this.schedule(user);
@@ -1836,8 +1858,8 @@ class SourceValueFlow {
     }
     private copy(from:Cell,into:Cell,kind:"value"|"origin"="value"):void {
         const previous=into.values.sources.get(from.values);if(previous==="value"||previous===kind)return;
-        into.values.sources.set(from.values,kind);into.ownRevision++;this.factRevision++;
-        let parents=this.primitiveProofParents.get(from);if(!parents){parents=new Set();this.primitiveProofParents.set(from,parents);}parents.add(into);
+        into.values.addSource(from.values,kind);into.ownRevision++;this.factRevision++;
+        let parents=this.primitiveProofParents.get(from);if(!parents){parents=new Set();this.primitiveProofParents.set(from,parents);}if(!parents.has(into)){parents.add(into);(into.proofSources??=[]).push(from);}
         this.primitiveChanges.add(into);for(const user of into.users)this.schedule(user);
     }
     /** Keep the completion point on the copy edge, rather than attaching it
@@ -2349,7 +2371,7 @@ class SourceValueFlow {
         this.flushPrimitiveChanges();
         if(timing.primitiveCache?.empty)return false;
         if(timing.values.nonempty)return true;
-        (timing.primitiveCache??={}).empty=true;return false;
+        observeCell(timing);(timing.primitiveCache??={}).empty=true;return false;
     }
     private dynamicContext(node: ts.Node): boolean {
         const pending: ts.Node[] = [];
@@ -10628,7 +10650,10 @@ class SourceValueFlow {
                 else if (this.initializers.length) { const initializer = this.initializers.pop()!; this.initialize(initializer.node, initializer.result); }
                 else if (this.primitiveChanges.size) this.flushPrimitiveChanges();
                 else {
-                    const rule = this.queue[this.queueCursor++]!; rule.queued = false; rule.run();
+                    const rule = this.queue[this.queueCursor++]!; rule.queued = false;
+                    // The run reads its inputs, which are no longer stale.
+                    for (const cell of rule.inputs) if (cell.stale) observeCell(cell);
+                    rule.run();
                     if (this.queueCursor * 2 >= this.queue.length) {this.queue.splice(0,this.queueCursor); this.queueCursor=0;}
                 }
             }
