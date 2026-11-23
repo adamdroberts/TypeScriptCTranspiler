@@ -57,6 +57,7 @@ import {
     functionConstructorSourceIsValid,
     functionConstructorSourceKey,
     type FunctionConstructorEntry,
+    type FunctionConstructorSource,
 } from "./function-constructor-source";
 import {
     formatTsDiagnostics,
@@ -827,8 +828,36 @@ async function compileWithDiagnostics(opts: CompileOptions, writeDiagnostic: (me
             evalEntries.set(evalSourceKey(request), { ...request, entry: admitted ? entry.entry : null });
         }
     }
-    programOptions.additionalRoots=programOptions.additionalRoots?.filter(file=>!rejectedEvalRoots.has(path.resolve(file)));
-    programOptions.isolatedScriptRoots=programOptions.isolatedScriptRoots?.filter(file=>!rejectedEvalRoots.has(path.resolve(file)));
+    /** Records a Function constructor source; true when it adds a root. */
+    const admitFunctionSource = async (source: FunctionConstructorSource): Promise<boolean> => {
+        const key = functionConstructorSourceKey(source);
+        if (functionEntries.has(key)) return false;
+        let entry: string | null = null;
+        if (functionConstructorSourceIsValid(source)) {
+            entry = path.join(buildDir, `function-source-${createHash("sha256").update(key).digest("hex")}.js`);
+            addEvalSourceEntry(entry);
+            // Source strings are ECMAScript UTF-16 sequences, including
+            // isolated surrogates. TypeScript's BOM-aware source reader
+            // preserves them; UTF-8 fs encoding would replace those units.
+            await fs.writeFile(entry, Buffer.from("\ufeff" + functionConstructorExpressionSource(source), "utf16le"));
+        }
+        functionEntries.set(key, { ...source, entry });
+        return entry !== null;
+    };
+    // The source discovery below always returns the manifest's sources (the
+    // empty function and the runtime-code manifest's), so admitting them
+    // before the first build gives the first analysis the program it would
+    // otherwise rebuild for them, instead of solving the graph twice.
+    const manifestFunctionSources: FunctionConstructorSource[] = [{ parameters: "", body: "" }, ...runtimeCode.functions];
+    const manifestFunctionKeys = new Set(runtimeCode.functions.map(functionConstructorSourceKey));
+    for (const source of manifestFunctionSources) {
+        await admitFunctionSource(source);
+        const entry = functionEntries.get(functionConstructorSourceKey(source))!.entry;
+        if (entry && manifestFunctionKeys.has(functionConstructorSourceKey(source))) addEvalSourceReferrer(entry, null);
+    }
+    const manifestFunctionRoots = [...functionEntries.values()].flatMap(source => source.entry ? [source.entry] : []);
+    programOptions.additionalRoots=[...(programOptions.additionalRoots??[]),...manifestFunctionRoots].filter(file=>!rejectedEvalRoots.has(path.resolve(file)));
+    programOptions.isolatedScriptRoots=[...(programOptions.isolatedScriptRoots??[]),...manifestFunctionRoots].filter(file=>!rejectedEvalRoots.has(path.resolve(file)));
     let built = buildProgram(programOptions);
     let sourceEval: SourceEvalPlan | undefined = evalEntries.size ? opts.test262Observation : undefined;
     let unresolvedCalls: readonly ts.Node[] = [];
@@ -878,25 +907,10 @@ async function compileWithDiagnostics(opts: CompileOptions, writeDiagnostic: (me
         }
         if (sourceEval) sourceEval = refreshEvalPlan();
         const functionReferrers = new Map<string, Set<string>>();
-        const sources = finiteFunctionConstructorSources(built.program, [
-            { parameters: "", body: "" }, ...runtimeCode.functions,
-        ], { ...(opts.test262Observation?{host:"test262" as const}:{}), roots:opts.initializationEntries??[opts.entry],functions: [...functionEntries.values()], evaluations: [...evalEntries.values()] }, functionReferrers);
-        const manifestFunctionKeys = new Set(runtimeCode.functions.map(functionConstructorSourceKey));
+        const sources = finiteFunctionConstructorSources(built.program, manifestFunctionSources, { ...(opts.test262Observation?{host:"test262" as const}:{}), roots:opts.initializationEntries??[opts.entry],functions: [...functionEntries.values()], evaluations: [...evalEntries.values()] }, functionReferrers);
         for (const source of sources) {
             const key = functionConstructorSourceKey(source);
-            if (!functionEntries.has(key)) {
-                let entry: string | null = null;
-                if (functionConstructorSourceIsValid(source)) {
-                    entry = path.join(buildDir, `function-source-${createHash("sha256").update(key).digest("hex")}.js`);
-                    addEvalSourceEntry(entry);
-                    // Source strings are ECMAScript UTF-16 sequences, including
-                    // isolated surrogates. TypeScript's BOM-aware source reader
-                    // preserves them; UTF-8 fs encoding would replace those units.
-                    await fs.writeFile(entry, Buffer.from("\ufeff" + functionConstructorExpressionSource(source), "utf16le"));
-                    addedRoot = true;
-                }
-                functionEntries.set(key, { ...source, entry });
-            }
+            if (await admitFunctionSource(source)) addedRoot = true;
             // A created function's [[ScriptOrModule]] is its creator's.
             const entry = functionEntries.get(key)!.entry;
             if (entry) {
