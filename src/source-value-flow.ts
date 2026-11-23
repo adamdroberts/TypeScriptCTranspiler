@@ -447,7 +447,7 @@ class SourceFactEdges extends Map<SourceFacts,"value"|"origin"> {
     }
 }
 const noAtoms:ReadonlySet<Atom>=new Set();
-let flattenEpoch=0;
+let flattenEpoch=0,captureWalkEpoch=0;
 const flattenStack:SourceFacts[]=[],flattenModes:boolean[]=[];
 const noEdges:ReadonlyMap<SourceFacts,"value"|"origin">=new Map<SourceFacts,"value"|"origin">();
 /** A fact collection is not a Set subclass: engines fast-path array spread
@@ -547,7 +547,7 @@ interface PrimitiveCellCache {proof?:PrimitiveChoiceProof;kind?:number;readiness
  * observation walks to clear the marks below it; `proofParents` are the
  * cells whose value includes this one (a copy's target, a concatenation over
  * it). Most cells have no users, so both sets are allocated on first use. */
-interface Cell { ownRevision:number;primitiveCache?:PrimitiveCellCache;readonly id: number; readonly values: SourceFacts; users: Set<Rule>|undefined; stale:boolean; proofSources:Cell[]|undefined; proofParents:Set<Cell>|undefined; }
+interface Cell { ownRevision:number;primitiveCache?:PrimitiveCellCache;readonly id: number; readonly values: SourceFacts; users: Set<Rule>|undefined; stale:boolean; proofSources:Cell[]|undefined; proofParents:Set<Cell>|undefined; walkEpoch:number; walkBits:number; }
 /** An observed cell is no longer stale, nor is any cell its value includes. */
 function observeCell(cell:Cell):void {
     if(!cell.stale)return;
@@ -1443,7 +1443,7 @@ class SourceValueFlow {
             }
         }
     }
-    private newCell(): Cell { const cell:Cell={id:this.nextCell++,ownRevision:0,values:new SourceFacts(),users:undefined,stale:false,proofSources:undefined,proofParents:undefined};this.sourceCells.set(cell.values,cell);return cell; }
+    private newCell(): Cell { const cell:Cell={id:this.nextCell++,ownRevision:0,values:new SourceFacts(),users:undefined,stale:false,proofSources:undefined,proofParents:undefined,walkEpoch:0,walkBits:0};this.sourceCells.set(cell.values,cell);return cell; }
     /** Return copy graphs retain actual formal inputs independently of other
      * invocations. Local writes and derived facts stay conservative; the
      * ordinary invocation graph still owns all effects and exceptions. */
@@ -2711,14 +2711,19 @@ class SourceValueFlow {
                 // rule through the change flush, so only the walk's roots (the
                 // source, capture inputs and transform replays, which are not
                 // copy edges) are watched, not every cell the walk visits.
-                const worklist=[{source,origins:false,root:true}],visited=new Map<Cell,number>();
-                while(worklist.length){
-                    const {source,origins,root}=worklist.pop()!,bit=origins?1:2;
-                    if((visited.get(source)??0)&bit)continue;visited.set(source,(visited.get(source)??0)|bit);if(root)this.watch(read,source);
+                // Parallel stacks and an epoch stamp on each cell keep the walk
+                // from allocating per visited cell. A walk started while this
+                // one runs takes a new epoch, so this walk may revisit a cell,
+                // which only repeats idempotent publications.
+                const cells:Cell[]=[source],modes:number[]=[2|4],epoch=++captureWalkEpoch;
+                while(cells.length){
+                    const source=cells.pop()!,mode=modes.pop()!,origins=(mode&1)!==0,root=(mode&4)!==0,bit=origins?1:2;
+                    if(source.walkEpoch!==epoch){source.walkEpoch=epoch;source.walkBits=0;}
+                    if(source.walkBits&bit)continue;source.walkBits|=bit;if(root)this.watch(read,source);
                     const prior=this.captureInputs.get(source);
                     if(prior){
                         const combined=this.captureConstraintSet([...constraints.phases,...prior.constraints.phases]);
-                        if(combined===constraints){worklist.push({source:prior.source,origins,root:true});continue;}
+                        if(combined===constraints){cells.push(prior.source);modes.push((origins?1:2)|4);continue;}
                         // A phase only filters, so an inner capture's own view
                         // over-approximates it under more phases. Composing
                         // nested captures of distinct activations adds one
@@ -2755,7 +2760,7 @@ class SourceValueFlow {
                         const transform=this.returnTransforms.get(source);
                         if(transform?.kind==="projection"){
                             const replay=transform.evaluate(transform.inputs.map(part=>project(part,constraints)));
-                            if(replay!==source){worklist.push({source:replay,origins:false,root:true});continue;}
+                            if(replay!==source){cells.push(replay);modes.push(2|4);continue;}
                         }
                     }
                     for(const atom of origins?source.values.ownUnknownValues():source.values.ownValues()){
@@ -2765,7 +2770,7 @@ class SourceValueFlow {
                         if(origins&&atom.tag!=="unknown"||constraints.phases.some(phase=>!phase.activationOnly&&!this.effectVisible(atom,phase.context,phase.argumentsRead)))continue;
                         this.publish(target,atom.tag==="text-operation"?this.captureAtom(atom,constraints):atom);
                     }
-                    for(const [facts,kind]of source.values.sources)worklist.push({source:this.sourceCells.get(facts)!,origins:origins||kind==="origin",root:false});
+                    for(const [facts,kind]of source.values.sources){cells.push(this.sourceCells.get(facts)!);modes.push(origins||kind==="origin"?1:2);}
                 }
                 extend();
             });
