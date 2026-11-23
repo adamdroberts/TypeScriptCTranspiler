@@ -1146,43 +1146,100 @@ tsc_str_t* tsc_str_substr(const tsc_str_t* s, double start, double length) {
     return string_from_utf16_range(sequence.data, (size_t)i0, (size_t)n);
 }
 
+/* One code point of a UTF-16 sequence at *pos (a lone surrogate is its own
+ * code point), advancing *pos. */
+static uint32_t case_read_cp(const uint16_t* data, size_t len, size_t* pos) {
+    uint32_t unit = data[*pos];
+    if (unit >= 0xd800 && unit <= 0xdbff && *pos + 1 < len && data[*pos + 1] >= 0xdc00 && data[*pos + 1] <= 0xdfff) {
+        uint32_t cp = 0x10000 + ((unit - 0xd800) << 10) + (data[*pos + 1] - 0xdc00);
+        *pos += 2;
+        return cp;
+    }
+    *pos += 1;
+    return unit;
+}
+/* The code point ending before position end (a lone surrogate is its own),
+ * moving *end back over it. */
+static uint32_t case_read_cp_before(const uint16_t* data, size_t* end) {
+    uint32_t unit = data[*end - 1];
+    if (unit >= 0xdc00 && unit <= 0xdfff && *end >= 2 && data[*end - 2] >= 0xd800 && data[*end - 2] <= 0xdbff) {
+        uint32_t cp = 0x10000 + ((data[*end - 2] - 0xd800) << 10) + (unit - 0xdc00);
+        *end -= 2;
+        return cp;
+    }
+    *end -= 1;
+    return unit;
+}
+/* Final_Sigma (Unicode 3.13, Table 3-17): the sigma at [start, after) is
+ * preceded by a cased letter and then zero or more case-ignorable
+ * characters, and not followed by zero or more case-ignorable characters
+ * and then a cased letter. A case-ignorable character is skipped even when
+ * it is also cased. */
+static bool case_final_sigma(const uint16_t* data, size_t len, size_t start, size_t after) {
+    bool preceded = false;
+    for (size_t end = start; end > 0;) {
+        uint32_t cp = case_read_cp_before(data, &end);
+        if (tsc_unicode_case_ignorable(cp)) continue;
+        preceded = tsc_unicode_cased(cp);
+        break;
+    }
+    if (!preceded) return false;
+    for (size_t pos = after; pos < len;) {
+        uint32_t cp = case_read_cp(data, len, &pos);
+        if (tsc_unicode_case_ignorable(cp)) continue;
+        return !tsc_unicode_cased(cp);
+    }
+    return true;
+}
+/* The locale-insensitive full case conversion (String.prototype.toUpperCase
+ * and toLowerCase, Unicode Default Case Conversion) over the pinned Unicode
+ * tables. The first pass counts the result's code units, the second writes. */
+static size_t case_map_cp(const uint16_t* data, size_t len, size_t start, size_t after, uint32_t cp, bool to_upper, uint32_t out[3]) {
+    if (cp < 0x80) {
+        if (to_upper && cp >= 'a' && cp <= 'z') cp -= 'a' - 'A';
+        else if (!to_upper && cp >= 'A' && cp <= 'Z') cp += 'a' - 'A';
+        out[0] = cp;
+        return 1;
+    }
+    if (cp >= 0xd800 && cp <= 0xdfff) { out[0] = cp; return 1; }
+    if (!to_upper && cp == tsc_unicode_final_sigma() && case_final_sigma(data, len, start, after)) {
+        out[0] = tsc_unicode_final_sigma_lower();
+        return 1;
+    }
+    return tsc_unicode_full_case(cp, to_upper, out);
+}
 static tsc_str_t* string_change_case(const tsc_str_t* s, bool to_upper) {
     tsc_utf16_sequence_t sequence = string_utf16_sequence(s);
-    if (sequence.len > (size_t)INT32_MAX) {
-        tsc_panic("String case conversion: input too large");
+    const uint16_t* data = (const uint16_t*)sequence.data;
+    size_t len = sequence.len, units = 0;
+    uint32_t mapped[3];
+    for (size_t pos = 0; pos < len;) {
+        size_t start = pos;
+        uint32_t cp = case_read_cp(data, len, &pos);
+        size_t count = case_map_cp(data, len, start, pos, cp, to_upper, mapped);
+        for (size_t i = 0; i < count; i++) {
+            size_t width = mapped[i] > 0xffff ? 2 : 1;
+            if (units > SIZE_MAX - width) tsc_panic("String case conversion: input too large");
+            units += width;
+        }
     }
-    UErrorCode status = U_ZERO_ERROR;
-    int32_t mapped_len = 0;
-    if (to_upper) {
-        mapped_len = u_strToUpper(
-            NULL, 0, (const UChar*)sequence.data, (int32_t)sequence.len, "", &status
-        );
-    } else {
-        mapped_len = u_strToLower(
-            NULL, 0, (const UChar*)sequence.data, (int32_t)sequence.len, "", &status
-        );
+    uint16_t* out = (uint16_t*)TSC_GC_MALLOC_ATOMIC(tsc_alloc_size(units ? units : 1, sizeof(uint16_t)));
+    size_t written = 0;
+    for (size_t pos = 0; pos < len;) {
+        size_t start = pos;
+        uint32_t cp = case_read_cp(data, len, &pos);
+        size_t count = case_map_cp(data, len, start, pos, cp, to_upper, mapped);
+        for (size_t i = 0; i < count; i++) {
+            uint32_t value = mapped[i];
+            if (value > 0xffff) {
+                value -= 0x10000;
+                out[written++] = (uint16_t)(0xd800 + (value >> 10));
+                out[written++] = (uint16_t)(0xdc00 + (value & 0x3ff));
+            } else out[written++] = (uint16_t)value;
+        }
     }
-    if (status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status)) {
-        tsc_panic("String case conversion: mapping sizing failed");
-    }
-    UChar* mapped =
-        (UChar*)TSC_GC_MALLOC_ATOMIC(tsc_alloc_size((size_t)(((size_t)mapped_len + 1)), sizeof(UChar)));
-    status = U_ZERO_ERROR;
-    if (to_upper) {
-        mapped_len = u_strToUpper(
-            mapped, mapped_len + 1, (const UChar*)sequence.data,
-            (int32_t)sequence.len, "", &status
-        );
-    } else {
-        mapped_len = u_strToLower(
-            mapped, mapped_len + 1, (const UChar*)sequence.data,
-            (int32_t)sequence.len, "", &status
-        );
-    }
-    if (U_FAILURE(status)) {
-        tsc_panic("String case conversion: mapping failed");
-    }
-    return string_from_utf16_range((const uint16_t*)mapped, 0, (size_t)mapped_len);
+    if (written != units) tsc_panic("String case conversion: length mismatch");
+    return string_from_utf16_range(out, 0, units);
 }
 
 tsc_str_t* tsc_str_to_upper(const tsc_str_t* s) {

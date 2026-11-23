@@ -1973,6 +1973,48 @@ static bool re_ucd_contains(int32_t set, uint32_t cp) {
     }
     return false;
 }
+
+/* Case data: binary search over the generated tables, sorted by code point. */
+static uint32_t ucd_case_pair(const tsc_ucd_case_pair_t* table, size_t count, uint32_t cp) {
+    size_t lo = 0, hi = count;
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        if (cp < table[mid].cp) hi = mid;
+        else if (cp > table[mid].cp) lo = mid + 1;
+        else return table[mid].to;
+    }
+    return cp;
+}
+static const tsc_ucd_case_full_t* ucd_case_full(const tsc_ucd_case_full_t* table, size_t count, uint32_t cp) {
+    size_t lo = 0, hi = count;
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        if (cp < table[mid].cp) hi = mid;
+        else if (cp > table[mid].cp) lo = mid + 1;
+        else return &table[mid];
+    }
+    return NULL;
+}
+#define UCD_COUNT(table) (sizeof(table) / sizeof(*(table)))
+uint32_t tsc_unicode_simple_fold(uint32_t cp) {
+    return ucd_case_pair(tsc_ucd_simple_fold, UCD_COUNT(tsc_ucd_simple_fold), cp);
+}
+size_t tsc_unicode_full_case(uint32_t cp, bool upper, uint32_t out[3]) {
+    const tsc_ucd_case_full_t* special = upper
+        ? ucd_case_full(tsc_ucd_special_upper, UCD_COUNT(tsc_ucd_special_upper), cp)
+        : ucd_case_full(tsc_ucd_special_lower, UCD_COUNT(tsc_ucd_special_lower), cp);
+    if (special) {
+        for (uint32_t i = 0; i < special->len; i++) out[i] = special->to[i];
+        return special->len;
+    }
+    out[0] = upper ? ucd_case_pair(tsc_ucd_simple_upper, UCD_COUNT(tsc_ucd_simple_upper), cp)
+                   : ucd_case_pair(tsc_ucd_simple_lower, UCD_COUNT(tsc_ucd_simple_lower), cp);
+    return 1;
+}
+bool tsc_unicode_cased(uint32_t cp) { return re_ucd_contains(TSC_UCD_SET_CASED, cp); }
+bool tsc_unicode_case_ignorable(uint32_t cp) { return re_ucd_contains(TSC_UCD_SET_CASE_IGNORABLE, cp); }
+uint32_t tsc_unicode_final_sigma(void) { return TSC_UCD_FINAL_SIGMA; }
+uint32_t tsc_unicode_final_sigma_lower(void) { return TSC_UCD_FINAL_SIGMA_LOWER; }
 static void re_ucd_add_set(USet* result, int32_t set) {
     const tsc_ucd_set_t* entry = &tsc_ucd_sets[set];
     for (uint32_t i = 0; i < entry->count; i++) {
@@ -2462,15 +2504,18 @@ static uint32_t re_canon_non_u(uint32_t cp) {
         return cp;
     }
     if (cp >= 0xd800 && cp <= 0xdfff) return cp;
-    UChar32 up = u_toupper((UChar32)cp);
-    if (up < 0x80) return cp;
-    return (uint32_t)up;
+    /* Canonicalize step 3: toUppercase of the character; a result that is
+     * not one code unit leaves the character unchanged. */
+    uint32_t mapped[3];
+    if (tsc_unicode_full_case(cp, true, mapped) != 1 || mapped[0] > 0xffff) return cp;
+    if (mapped[0] < 0x80) return cp;
+    return mapped[0];
 }
 
 static uint32_t re_canon(uint32_t cp, bool ignore_case, bool unicode) {
     if (!ignore_case) return cp;
     if (cp >= 0xd800 && cp <= 0xdfff) return cp;
-    if (unicode) return (uint32_t)u_foldCase((UChar32)cp, U_FOLD_CASE_DEFAULT);
+    if (unicode) return tsc_unicode_simple_fold(cp);
     return re_canon_non_u(cp);
 }
 
@@ -2501,43 +2546,20 @@ static USet* re_fold_set(const USet* source, bool ignore_case, bool unicode) {
     }
     return folded;
 }
-/* Code points whose simple case folding differs from themselves, computed once
- * per process and published with one atomic store (a racing builder frees
- * its own copy). */
-typedef struct { size_t count; UChar32 points[]; } re_fold_variants_t;
-static re_fold_variants_t* re_fold_variants_cache;
-static const re_fold_variants_t* re_fold_variants(void) {
-    re_fold_variants_t* cached = __atomic_load_n(&re_fold_variants_cache, __ATOMIC_ACQUIRE);
-    if (cached) return cached;
-    size_t count = 0;
-    for (UChar32 cp = 0; cp <= 0x10ffff; cp++)
-        if ((cp < 0xd800 || cp > 0xdfff) && u_foldCase(cp, U_FOLD_CASE_DEFAULT) != cp) count++;
-    re_fold_variants_t* built = malloc(sizeof(*built) + tsc_alloc_size(count, sizeof(UChar32)));
-    if (!built) tsc_alloc_failure(count);
-    built->count = 0;
-    for (UChar32 cp = 0; cp <= 0x10ffff; cp++)
-        if ((cp < 0xd800 || cp > 0xdfff) && u_foldCase(cp, U_FOLD_CASE_DEFAULT) != cp) built->points[built->count++] = cp;
-    re_fold_variants_t* expected = NULL;
-    if (__atomic_compare_exchange_n(&re_fold_variants_cache, &expected, built, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
-        return built;
-    free(built);
-    return expected;
-}
 /* Every code point whose simple case folding lies in the folded source,
  * with strings folded. Raw membership in the result equals folded membership
- * of the canonicalized input in the source. */
+ * of the canonicalized input in the source. The code points whose folding
+ * differs from themselves are exactly the simple folding table's keys. */
 static USet* re_case_closure(const USet* source) {
     USet* result = re_fold_set(source, true, true);
-    const re_fold_variants_t* variants = re_fold_variants();
-    for (size_t i = 0; i < variants->count; i++) {
-        UChar32 cp = variants->points[i];
-        if (uset_contains(result, u_foldCase(cp, U_FOLD_CASE_DEFAULT))) uset_add(result, cp);
+    for (size_t i = 0; i < UCD_COUNT(tsc_ucd_simple_fold); i++) {
+        if (uset_contains(result, (UChar32)tsc_ucd_simple_fold[i].to)) uset_add(result, (UChar32)tsc_ucd_simple_fold[i].cp);
     }
     return result;
 }
 static void re_complement_set(USet* set, bool unicode_sets, const USet* universe) {
     if (unicode_sets) {
-        USet* complement = uset_clone(universe); uset_removeAll(complement, set);
+        USet* complement = uset_cloneAsThawed(universe); uset_removeAll(complement, set);
         uset_clear(set); uset_addAll(set, complement); uset_close(complement);
     } else uset_complement(set);
 }
@@ -2660,9 +2682,27 @@ static bool re_normalize_set(tsc_re_parser_t* p, tsc_re_node_t* node, const USet
     }
     return true;
 }
+/* The canonicalized image of every code point (or code unit), per mode. It
+ * depends only on the mode, so it is built once per process, frozen for
+ * concurrent readers and published with one atomic store (a racing builder
+ * closes its own copy). */
+static USet* re_folded_universe_cache[2];
+static const USet* re_folded_universe(bool unicode) {
+    USet* cached = __atomic_load_n(&re_folded_universe_cache[unicode], __ATOMIC_ACQUIRE);
+    if (cached) return cached;
+    USet* all = uset_open(0, unicode ? 0x10ffff : 0xffff);
+    USet* built = re_fold_set(all, true, unicode);
+    uset_close(all);
+    uset_freeze(built);
+    USet* expected = NULL;
+    if (__atomic_compare_exchange_n(&re_folded_universe_cache[unicode], &expected, built, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
+        return built;
+    uset_close(built);
+    return expected;
+}
 static bool re_compile_sets(tsc_re_parser_t* p) {
     USet* all = uset_open(0, re_is_unicode(p) ? 0x10ffff : 0xffff);
-    USet* folded_universe = NULL;
+    const USet* folded_universe = NULL;
     typedef struct { tsc_re_node_t* node; size_t index; } frame_t;
     frame_t* frames = TSC_GC_MALLOC(tsc_alloc_size((size_t)((p->nnodes ? p->nnodes : 1)), sizeof(*frames)));
     bool ok = true;
@@ -2678,7 +2718,7 @@ static bool re_compile_sets(tsc_re_parser_t* p) {
                 if (!child->compile_set) frames[depth++] = (frame_t){child, 0};
             } else {
                 if (node->flags.ignore_case && !node->flags.unicode_sets && !folded_universe)
-                    folded_universe = re_fold_set(all, true, re_is_unicode(p));
+                    folded_universe = re_folded_universe(re_is_unicode(p));
                 /* Closed (raw-matched) sets complement within every code
                  * point; folded sets within the folded universe. */
                 bool folded = node->flags.ignore_case && !node->flags.unicode_sets;
@@ -2689,7 +2729,6 @@ static bool re_compile_sets(tsc_re_parser_t* p) {
     for (size_t i = 0; i < p->nnodes; i++) {
         if (p->nodes[i]->compile_set) { uset_close(p->nodes[i]->compile_set); p->nodes[i]->compile_set = NULL; }
     }
-    if (folded_universe) uset_close(folded_universe);
     uset_close(all);
     return ok;
 }

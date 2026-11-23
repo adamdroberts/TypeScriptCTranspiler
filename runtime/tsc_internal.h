@@ -1006,4 +1006,16 @@ void tsc_integer_indexed_set(tsc_object_t* object, double index, tsc_value_t val
 
 void tsc_weak_job_checkpoint(void);
 
+/* Unicode case data from the pinned Unicode Character Database tables
+ * (runtime/tsc_unicode_data.h), independent of the host ICU version.
+ * Implemented in runtime/tsc_regexp.c. */
+uint32_t tsc_unicode_simple_fold(uint32_t cp);
+/* The full (Unicode Default Case Conversion) mapping of one code point,
+ * without context: at most three code points written to out. */
+size_t tsc_unicode_full_case(uint32_t cp, bool upper, uint32_t out[3]);
+bool tsc_unicode_cased(uint32_t cp);
+bool tsc_unicode_case_ignorable(uint32_t cp);
+uint32_t tsc_unicode_final_sigma(void);
+uint32_t tsc_unicode_final_sigma_lower(void);
+
 #endif
