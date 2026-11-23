@@ -2015,6 +2015,114 @@ bool tsc_unicode_cased(uint32_t cp) { return re_ucd_contains(TSC_UCD_SET_CASED, 
 bool tsc_unicode_case_ignorable(uint32_t cp) { return re_ucd_contains(TSC_UCD_SET_CASE_IGNORABLE, cp); }
 uint32_t tsc_unicode_final_sigma(void) { return TSC_UCD_FINAL_SIGMA; }
 uint32_t tsc_unicode_final_sigma_lower(void) { return TSC_UCD_FINAL_SIGMA_LOWER; }
+
+/* Normalization over the generated tables (UAX #15). Hangul syllables
+ * decompose and compose algorithmically (Unicode 3.12). */
+enum { UCD_S_BASE = 0xac00, UCD_L_BASE = 0x1100, UCD_V_BASE = 0x1161, UCD_T_BASE = 0x11a7,
+       UCD_L_COUNT = 19, UCD_V_COUNT = 21, UCD_T_COUNT = 28, UCD_N_COUNT = UCD_V_COUNT * UCD_T_COUNT,
+       UCD_S_COUNT = UCD_L_COUNT * UCD_N_COUNT };
+static uint32_t ucd_ccc(uint32_t cp) {
+    size_t lo = 0, hi = UCD_COUNT(tsc_ucd_ccc);
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        if (cp < tsc_ucd_ccc[mid].lo) hi = mid;
+        else if (cp > tsc_ucd_ccc[mid].hi) lo = mid + 1;
+        else return tsc_ucd_ccc[mid].ccc;
+    }
+    return 0;
+}
+static const tsc_ucd_decomposition_t* ucd_decomposition(const tsc_ucd_decomposition_t* table, size_t count, uint32_t cp) {
+    size_t lo = 0, hi = count;
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        if (cp < table[mid].cp) hi = mid;
+        else if (cp > table[mid].cp) lo = mid + 1;
+        else return &table[mid];
+    }
+    return NULL;
+}
+static uint32_t ucd_compose(uint32_t first, uint32_t second) {
+    if (first >= UCD_L_BASE && first < UCD_L_BASE + UCD_L_COUNT && second >= UCD_V_BASE && second < UCD_V_BASE + UCD_V_COUNT)
+        return UCD_S_BASE + ((first - UCD_L_BASE) * UCD_V_COUNT + (second - UCD_V_BASE)) * UCD_T_COUNT;
+    if (first >= UCD_S_BASE && first < UCD_S_BASE + UCD_S_COUNT && (first - UCD_S_BASE) % UCD_T_COUNT == 0 &&
+        second > UCD_T_BASE && second < UCD_T_BASE + UCD_T_COUNT)
+        return first + (second - UCD_T_BASE);
+    size_t lo = 0, hi = UCD_COUNT(tsc_ucd_composition);
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        const tsc_ucd_composition_t* entry = &tsc_ucd_composition[mid];
+        if (first < entry->first || (first == entry->first && second < entry->second)) hi = mid;
+        else if (first > entry->first || second > entry->second) lo = mid + 1;
+        else return entry->composite;
+    }
+    return UINT32_MAX;
+}
+typedef struct { uint32_t* data; size_t len, cap; } ucd_buffer_t;
+static void ucd_push(ucd_buffer_t* buffer, uint32_t cp) {
+    if (buffer->len == buffer->cap) {
+        size_t cap = buffer->cap ? buffer->cap : 16;
+        if (cap > SIZE_MAX / 2) tsc_panic("String.normalize: input too large");
+        cap *= 2;
+        uint32_t* grown = TSC_GC_MALLOC_ATOMIC(tsc_alloc_size(cap, sizeof(uint32_t)));
+        if (buffer->len) memcpy(grown, buffer->data, buffer->len * sizeof(uint32_t));
+        buffer->data = grown; buffer->cap = cap;
+    }
+    buffer->data[buffer->len++] = cp;
+}
+uint32_t* tsc_unicode_normalize(const uint32_t* input, size_t len, bool compat, bool compose, size_t* out_len) {
+    const tsc_ucd_decomposition_t* table = compat ? tsc_ucd_compatibility_decomposition : tsc_ucd_canonical_decomposition;
+    size_t count = compat ? UCD_COUNT(tsc_ucd_compatibility_decomposition) : UCD_COUNT(tsc_ucd_canonical_decomposition);
+    ucd_buffer_t decomposed = {0};
+    for (size_t i = 0; i < len; i++) {
+        uint32_t cp = input[i];
+        if (cp >= UCD_S_BASE && cp < UCD_S_BASE + UCD_S_COUNT) {
+            uint32_t index = cp - UCD_S_BASE;
+            ucd_push(&decomposed, UCD_L_BASE + index / UCD_N_COUNT);
+            ucd_push(&decomposed, UCD_V_BASE + (index % UCD_N_COUNT) / UCD_T_COUNT);
+            if (index % UCD_T_COUNT) ucd_push(&decomposed, UCD_T_BASE + index % UCD_T_COUNT);
+            continue;
+        }
+        const tsc_ucd_decomposition_t* entry = ucd_decomposition(table, count, cp);
+        if (!entry) { ucd_push(&decomposed, cp); continue; }
+        for (uint32_t j = 0; j < entry->len; j++) ucd_push(&decomposed, tsc_ucd_decomposition_pool[entry->offset + j]);
+    }
+    /* Canonical Ordering: a stable sort by combining class of each run of
+     * non-starters (insertion sort; runs are short). */
+    uint32_t* data = decomposed.data;
+    for (size_t i = 1; i < decomposed.len; i++) {
+        uint32_t cp = data[i], cc = ucd_ccc(cp);
+        if (!cc) continue;
+        size_t j = i;
+        while (j > 0) {
+            uint32_t previous = ucd_ccc(data[j - 1]);
+            if (previous <= cc) break;
+            data[j] = data[j - 1];
+            j--;
+        }
+        data[j] = cp;
+    }
+    if (!compose) { *out_len = decomposed.len; return data; }
+    /* Canonical Composition: each character combines with the last starter
+     * unless blocked (an intervening character of class 0 or of a class
+     * not lower than its own). The result never grows. */
+    size_t written = 0, starter = SIZE_MAX;
+    uint32_t last_cc = 0;
+    for (size_t i = 0; i < decomposed.len; i++) {
+        uint32_t cp = data[i], cc = ucd_ccc(cp);
+        if (starter != SIZE_MAX) {
+            bool adjacent = written - 1 == starter;
+            if (adjacent || (last_cc != 0 && last_cc < cc)) {
+                uint32_t composite = ucd_compose(data[starter], cp);
+                if (composite != UINT32_MAX) { data[starter] = composite; continue; }
+            }
+        }
+        if (cc == 0) starter = written;
+        last_cc = cc;
+        data[written++] = cp;
+    }
+    *out_len = written;
+    return data;
+}
 static void re_ucd_add_set(USet* result, int32_t set) {
     const tsc_ucd_set_t* entry = &tsc_ucd_sets[set];
     for (uint32_t i = 0; i < entry->count; i++) {

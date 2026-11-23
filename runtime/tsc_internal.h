@@ -1017,5 +1017,9 @@ bool tsc_unicode_cased(uint32_t cp);
 bool tsc_unicode_case_ignorable(uint32_t cp);
 uint32_t tsc_unicode_final_sigma(void);
 uint32_t tsc_unicode_final_sigma_lower(void);
+/* Unicode normalization (UAX #15) of a code point sequence: NFD when
+ * compose is false, NFC when true; compat selects NFKD/NFKC. Returns a
+ * GC-owned code point array and its length in *out_len. */
+uint32_t* tsc_unicode_normalize(const uint32_t* input, size_t len, bool compat, bool compose, size_t* out_len);
 
 #endif

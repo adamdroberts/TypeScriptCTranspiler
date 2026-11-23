@@ -1251,50 +1251,46 @@ tsc_str_t* tsc_str_to_lower(const tsc_str_t* s) {
 }
 
 tsc_str_t* tsc_str_normalize(const tsc_str_t* s, const tsc_str_t* form) {
-    const UNormalizer2* normalizer = NULL;
-    UErrorCode status = U_ZERO_ERROR;
+    bool compat = false, compose = true;
     if (!form || str_lit_eq(form, "NFC")) {
-        normalizer = unorm2_getNFCInstance(&status);
     } else if (str_lit_eq(form, "NFD")) {
-        normalizer = unorm2_getNFDInstance(&status);
+        compose = false;
     } else if (str_lit_eq(form, "NFKC")) {
-        normalizer = unorm2_getNFKCInstance(&status);
+        compat = true;
     } else if (str_lit_eq(form, "NFKD")) {
-        normalizer = unorm2_getNFKDInstance(&status);
+        compat = true; compose = false;
     } else {
         tsc_throw_error(
             TSC_ERROR_RANGE,
             tsc_str_from_cstr("String.normalize: form must be NFC, NFD, NFKC, or NFKD")
         );
     }
-    if (U_FAILURE(status) || !normalizer) {
-        tsc_panic("String.normalize: ICU normalizer unavailable");
-    }
+    /* Normalization runs on code points; a lone surrogate is its own code
+     * point with combining class 0 and no decomposition, as in ICU. */
     tsc_utf16_sequence_t sequence = string_utf16_sequence(s);
-    if (sequence.len > (size_t)INT32_MAX) {
-        tsc_panic("String.normalize: input too large");
+    const uint16_t* data = sequence.data;
+    uint32_t* points = TSC_GC_MALLOC_ATOMIC(tsc_alloc_size(sequence.len ? sequence.len : 1, sizeof(uint32_t)));
+    size_t count = 0;
+    for (size_t pos = 0; pos < sequence.len;) points[count++] = case_read_cp(data, sequence.len, &pos);
+    size_t normalized_len = 0;
+    uint32_t* normalized = tsc_unicode_normalize(points, count, compat, compose, &normalized_len);
+    size_t units = 0;
+    for (size_t i = 0; i < normalized_len; i++) {
+        size_t width = normalized[i] > 0xffff ? 2 : 1;
+        if (units > SIZE_MAX - width) tsc_panic("String.normalize: input too large");
+        units += width;
     }
-
-    int32_t norm_len = 0;
-    status = U_ZERO_ERROR;
-    norm_len = unorm2_normalize(
-        normalizer, (const UChar*)sequence.data, (int32_t)sequence.len,
-        NULL, 0, &status
-    );
-    if (status != U_BUFFER_OVERFLOW_ERROR && U_FAILURE(status)) {
-        tsc_panic("String.normalize: normalization sizing failed");
+    uint16_t* out = TSC_GC_MALLOC_ATOMIC(tsc_alloc_size(units ? units : 1, sizeof(uint16_t)));
+    size_t written = 0;
+    for (size_t i = 0; i < normalized_len; i++) {
+        uint32_t value = normalized[i];
+        if (value > 0xffff) {
+            value -= 0x10000;
+            out[written++] = (uint16_t)(0xd800 + (value >> 10));
+            out[written++] = (uint16_t)(0xdc00 + (value & 0x3ff));
+        } else out[written++] = (uint16_t)value;
     }
-
-    UChar* nbuf = (UChar*)TSC_GC_MALLOC_ATOMIC(tsc_alloc_size((size_t)(((size_t)norm_len + 1)), sizeof(UChar)));
-    status = U_ZERO_ERROR;
-    norm_len = unorm2_normalize(
-        normalizer, (const UChar*)sequence.data, (int32_t)sequence.len,
-        nbuf, norm_len + 1, &status
-    );
-    if (U_FAILURE(status)) {
-        tsc_panic("String.normalize: normalization failed");
-    }
-    return string_from_utf16_range((const uint16_t*)nbuf, 0, (size_t)norm_len);
+    return string_from_utf16_range(out, 0, units);
 }
 
 tsc_str_t* tsc_str_trim(const tsc_str_t* s) {
