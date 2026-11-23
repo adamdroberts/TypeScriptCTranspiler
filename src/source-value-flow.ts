@@ -8887,10 +8887,24 @@ class SourceValueFlow {
                         if (counter && !widened) {
                             const steps = this.loopCounterSteps(node as ts.PrefixUnaryExpression | ts.PostfixUnaryExpression, counter, state.proof, write);
                             if (steps === "pending") return;
-                            if (steps) for (const step of steps) {
-                                if (counted.has(step)) continue;
-                                if (counted.size >= LOOP_COUNTER_VALUE_LIMIT) {widened = true; break;}
-                                counted.add(step); this.publish(stored, this.primitive(step));
+                            // A stored step is read back by this update (the
+                            // location has no other writes, loopCounterSteps
+                            // checks), so the values converge to the closure
+                            // of the step under the condition. Taking the
+                            // closure in one run reaches that fixpoint, or the
+                            // widening, without one rerun (and one proof of
+                            // every dependent value) per step.
+                            if (steps) {
+                                const bound = this.primitiveState(counter.bound, write).proof.values;
+                                const delta = (node as ts.PrefixUnaryExpression | ts.PostfixUnaryExpression).operator === ts.SyntaxKind.PlusPlusToken ? 1 : -1;
+                                const frontier = [...steps];
+                                while (frontier.length) {
+                                    const step = frontier.pop()!;
+                                    if (counted.has(step)) continue;
+                                    if (counted.size >= LOOP_COUNTER_VALUE_LIMIT) {widened = true; break;}
+                                    counted.add(step); this.publish(stored, this.primitive(step));
+                                    if (bound.some(other => loopCounterCompare(counter.operator, counter.counterLeft ? step : other, counter.counterLeft ? other : step))) frontier.push(step + delta);
+                                }
                             }
                             if (steps && !widened) return;
                             widened = true;
