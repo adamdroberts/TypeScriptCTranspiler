@@ -1853,6 +1853,11 @@ class SourceValueFlow {
         for (const input of inputs) this.watch(rule, input);
         this.schedule(rule); return rule;
     }
+    /** A rule whose output is final no longer runs when its inputs grow. */
+    private retire(rule: Rule): void {
+        for (const cell of rule.inputs) cell.users?.delete(rule);
+        rule.inputs.clear();
+    }
     private watch(rule: Rule, cell: Cell): void {
         if (rule.inputs.has(cell)) return;
         rule.inputs.add(cell); (cell.users ??= new Set()).add(rule); this.schedule(rule);
@@ -2681,7 +2686,10 @@ class SourceValueFlow {
             read=this.rule([source,...activations.flatMap(owner=>[owner.active,this.activationTiming(owner)])],()=>{
                 if(activations.some(owner=>!owner.active.values.nonempty))return;
                 const normalized=this.captureConstraintSet(constraints.phases);
-                if(normalized!==constraints){this.copy(this.captureProjection(source,normalized),target);return;}
+                // The normalized view's own rule follows any later
+                // normalization, and the copy edge is permanent, so this rule
+                // has nothing left to do and stops watching its inputs.
+                if(normalized!==constraints){this.copy(this.captureProjection(source,normalized),target);this.retire(read);return;}
                 if(constraints.phases.every(phase=>!!phase.activationOnly)){this.copy(source,target);return;}
                 // Growth anywhere in a watched cell's copy closure reaches the
                 // rule through the change flush, so only the walk's roots (the
