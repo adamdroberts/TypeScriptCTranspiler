@@ -78,7 +78,7 @@ type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpressio
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
 type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-integrity:${"preventExtensions"|"seal"|"freeze"}` | `object-integrity-test:${"isExtensible"|"isSealed"|"isFrozen"}` | `regexp-flag:${string}` | `regexp-member:${string}` | `object-enumerable:${"keys"|"values"|"entries"}` | `object-has-own:${"static"|"prototype"}` | `array-iteration:${ArrayIterationMode}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-typed-array:${string}` | `native-typed-array-static:${string}` | `native-uint8-codec:${string}` | "typed-array-species" | `native-function:${string}` | "throw-type-error" | `legacy-function-accessor:${"caller"|"arguments"}:${"get"|"set"}` | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | "regexp-string-iterator-next" | `iterator-helper:${string}` | "wrap-iterator:next" | "wrap-iterator:return" | "string-iterator" | "string-iterator-next" | "iterator-helper-next" | "iterator-helper-return" | `collection-member:${string}` | "promise-finally-forward" | "species-getter" | "proto-accessor:get" | "proto-accessor:set" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
+    "proxy-revocable" | "proxy-revoke" | "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | "regexp-string-iterator-next" | `iterator-helper:${string}` | "wrap-iterator:next" | "wrap-iterator:return" | "string-iterator" | "string-iterator-next" | "iterator-helper-next" | "iterator-helper-return" | `collection-member:${string}` | "promise-finally-forward" | "species-getter" | "proto-accessor:get" | "proto-accessor:set" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
 type Primitive = SourcePrimitive;
 /** Callables and collection-iterator cells reachable from one escaping value;
  * a sink forwards them into one escaping call. */
@@ -837,6 +837,7 @@ class SourceValueFlow {
     private readonly sameValueQueries=new Map<ts.Node,Map<string,Cell>>();
     private readonly ownPropertyQueries=new Map<ts.Node,Map<string,Cell>>();
     private readonly hasProperties=new Map<ts.Node,Map<Cell,Map<SourcePropertyKey,Cell>>>();
+    private readonly proxyRevocables=new Map<ts.Node,Cell>();
     private readonly proxyCreations=new Map<ts.Node,Map<string,Cell>>();
     private readonly objectCoercions = new Map<ts.Node,Map<Cell,Cell>>();
     private readonly prototypeReads = new Map<ts.Node,Map<string,Cell>>();
@@ -4902,9 +4903,23 @@ class SourceValueFlow {
     }
     /** ProxyCreate validates object domains without reading properties or
      * invoking either operand. Later Proxy operations own their trap effects. */
-    private proxyCreate(target:Cell,handler:Cell,context:ts.Node):Cell {
+    /** Proxy.revocable: ProxyCreate's abrupt completion, else an ordinary
+     * object with the revocable proxy and its revoke function. */
+    private proxyRevocable(target:Cell,handler:Cell,context:ts.Node):Cell {
+        const prior=this.proxyRevocables.get(context);if(prior)return prior;
+        const result=this.newCell();this.proxyRevocables.set(context,result);
+        const proxy=this.proxyCreate(target,handler,context,true),revoke=this.newCell();this.publish(revoke,this.operation("proxy-revoke"));
+        const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype(),ordinary:true};
+        this.markPropertyAlgorithm(owner,"ordinary");this.ownerCreations.set(owner,context);
+        const value=this.newCell();
+        this.rule([proxy],()=>{for(const atom of proxy.values){if(atom.tag==="abrupt"||atom.tag==="pending-source")this.publish(result,atom);else this.publish(value,atom);}});
+        this.defineField(owner,"proxy",value,true);this.defineField(owner,"revoke",revoke,true);
+        this.publish(result,{tag:"object",owner});
+        return result;
+    }
+    private proxyCreate(target:Cell,handler:Cell,context:ts.Node,revocable=false):Cell {
         let calls=this.proxyCreations.get(context);if(!calls){calls=new Map();this.proxyCreations.set(context,calls);}
-        const key=target.id+":"+handler.id,previous=calls.get(key);if(previous)return previous;
+        const key=target.id+":"+handler.id+(revocable?":revocable":""),previous=calls.get(key);if(previous)return previous;
         // ProxyCreate throws unless both operands are Objects, so the Proxy
         // records only their Object values: a primitive never becomes its
         // target or handler.
@@ -4918,9 +4933,13 @@ class SourceValueFlow {
             return objects;
         };
         const result=this.newCell(),owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),proxy:{target:objectsOf(target),handler:objectsOf(handler),context}};
+        // A revocable Proxy's revoke sets [[ProxyHandler]] to null, after
+        // which every internal method throws a TypeError: its handler may be
+        // null, whose trap reads throw there.
+        if(revocable)this.publish(owner.proxy!.handler,this.primitive(null));
         calls.set(key,result);this.ownerCreations.set(owner,context);this.sourceObjectOwners.add(owner);this.ownerMutation(owner);this.markPropertyAlgorithm(owner,"opaque");
         if(!this.proxyCreated){this.proxyCreated=true;for(const pending of this.pendingProxyMethods.splice(0))this.installProxyInternalMethod(pending.objects,pending.traps,pending.context,pending.chain);}
-        this.returnTransforms.set(result,{kind:"allocation",inputs:[target,handler],evaluate:inputs=>this.proxyCreate(inputs[0]!,inputs[1]!,context)});
+        this.returnTransforms.set(result,{kind:"allocation",inputs:[target,handler],evaluate:inputs=>this.proxyCreate(inputs[0]!,inputs[1]!,context,revocable)});
         const fail=()=>{this.publish(result,this.abrupt);const caught=this.exceptionHandlers.get(context);if(caught)this.publish(caught,this.nativeException(context,"TypeError"));};
         const operands=[target,handler].map(input=>{
             const normal=this.newCell();this.rule([input],()=>{for(const value of input.values){
@@ -5517,6 +5536,8 @@ class SourceValueFlow {
                     for(const name of runtimeAtomicsMethods.keys()){const value=this.newCell();this.publish(value,this.operation(`atomics-member:${name}`));this.defineField(fields,name,value,false);}
                     const value=this.newCell();this.publish(value,this.primitive("Atomics"));this.defineField(fields,this.wellKnownSymbols.get("toStringTag")!,value,false);
                 }
+                // Proxy.revocable (ES2026 28.2.2.1): a native operation.
+                if(key==="Proxy"){const value=this.newCell();this.publish(value,this.operation("proxy-revocable"));this.defineField(fields,"revocable",value,false);}
                 if(key==="JSON") {
                     fields.ordinary=true;
                     fields.prototype=this.objectPrototype();
@@ -9949,6 +9970,14 @@ class SourceValueFlow {
                     if(atom.tag==="builtin"&&atom.name==="Proxy") {
                         if(invocation.construct)this.copy(this.proxyCreate(argument(0)??omittedArgument,argument(1)??omittedArgument,node),result);
                         else{this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node,"TypeError"));}
+                        continue;
+                    }
+                    // Proxy.revocable returns { proxy, revoke }; revoke is a native
+                    // that returns undefined. Neither is a constructor.
+                    if(atom.tag==="operation"&&(atom.operation==="proxy-revocable"||atom.operation==="proxy-revoke")){
+                        if(invocation.construct){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node,"TypeError"));}
+                        else if(atom.operation==="proxy-revoke")this.publish(result,this.primitive(undefined));
+                        else this.copy(this.proxyRevocable(argument(0)??omittedArgument,argument(1)??omittedArgument,node),result);
                         continue;
                     }
                     // %TypedArray% throws a TypeError for every Call and Construct.
