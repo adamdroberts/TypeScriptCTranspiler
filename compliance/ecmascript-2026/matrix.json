@@ -8830,7 +8830,7 @@
       "tracking": "todo",
       "semanticPartitions": ["legacy syntax", "legacy built-ins", "web compatibility semantics", "IsHTMLDDA"],
       "localEvidence": { "property": ["tests/property/own-property-source.property.test.ts"], "generatedRegression": [], "stress": [], "e2e": ["string_substr", "string_trim_aliases", "source_own_query"], "negativeDiagnostics": ["source_own_unknown"], "declarationSurface": [], "implementation": ["runtime/tsc_string.c"] },
-      "knownGaps": ["An unqualified claim includes Annex B here; IsHTMLDDA and the remaining legacy surface are not implemented."]
+      "knownGaps": ["An unqualified claim includes Annex B here. Every annexB Test262 directory passed in full in the 2026-11-18 discovery runs (docs/todo.md), with $262.IsHTMLDDA provided by the host; the claim still needs the pinned full-suite run."]
     }
   ]
 }

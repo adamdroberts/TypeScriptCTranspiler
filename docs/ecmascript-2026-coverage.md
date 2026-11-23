@@ -2473,7 +2473,7 @@ Lexical source reads now consult one intraprocedural may-flow graph and one reac
 - [ ] **Normative Annex B — Additional ECMAScript Features for Web Browsers** (`sec-additional-ecmascript-features-for-web-browsers`) — tracking: `todo`, scope: `required`
   - Semantic partitions: legacy syntax; legacy built-ins; web compatibility semantics; IsHTMLDDA.
   - Linked local regression evidence: property: tests/property/own-property-source.property.test.ts; E2E: string_substr, string_trim_aliases, source_own_query; negative: source_own_unknown.
-  - Known blockers: An unqualified claim includes Annex B here; IsHTMLDDA and the remaining legacy surface are not implemented.
+  - Known blockers: An unqualified claim includes Annex B here. Every annexB Test262 directory passed in full in the 2026-11-18 discovery runs (docs/todo.md), with $262.IsHTMLDDA provided by the host; the claim still needs the pinned full-suite run.
   - [ ] `sec-additional-ecmascript-features-for-web-browsers` — Additional ECMAScript Features for Web Browsers: exact disposition and partitions missing.
   - [ ] `sec-additional-syntax` — Additional Syntax: exact disposition and partitions missing.
   - [ ] `sec-html-like-comments` — HTML-like Comments: exact disposition and partitions missing.
