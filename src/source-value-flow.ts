@@ -447,6 +447,8 @@ class SourceFactEdges extends Map<SourceFacts,"value"|"origin"> {
     }
 }
 const noAtoms:ReadonlySet<Atom>=new Set();
+let flattenEpoch=0;
+const flattenStack:SourceFacts[]=[],flattenModes:boolean[]=[];
 const noEdges:ReadonlyMap<SourceFacts,"value"|"origin">=new Map<SourceFacts,"value"|"origin">();
 /** A fact collection is not a Set subclass: engines fast-path array spread
  * and iteration of Set instances by copying raw entries, which would bypass
@@ -472,6 +474,9 @@ class SourceFacts implements Iterable<Atom> {
     private memberships:Set<Atom>|undefined;
     private knownNonempty=false;
     private flattened:readonly Atom[]|undefined;
+    // This collection's mark in the current traversal (see flatten).
+    private visitEpoch=0;
+    private visitBits=0;
     add(atom:Atom):this{if(this.own.has(atom))return this;sourceFactsEpoch++;this.own.add(atom);if(atom.tag==="unknown")(this.ownUnknown??=new Set()).add(atom);this.changed();return this;}
     addDependent(facts:SourceFacts):void{(this.dependents??=[]).push(facts);}
     /** Invalidate the flattened traversal of this collection and of every
@@ -494,11 +499,22 @@ class SourceFacts implements Iterable<Atom> {
      * code, so nothing grows during it and the result is always cached. */
     private flatten():readonly Atom[]{
         if(this.flattenedValid&&this.flattened)return this.flattened;
-        const collected:Atom[]=[];
-        const pending:{facts:SourceFacts;origins:boolean}[]=[{facts:this,origins:false}],visited=new Map<SourceFacts,number>(),values=new Set<Atom>();
-        while(pending.length){const {facts,origins}=pending.pop()!,bit=origins?1:2,prior=visited.get(facts)??0;if(prior&bit)continue;visited.set(facts,prior|bit);facts.notified=false;
+        this.notified=false;
+        if(!this.edges?.size){const collected=[...this.own];this.flattened=collected;this.flattenedValid=true;return collected;}
+        // The traversal is not re-entrant, so it shares one pair of stacks and
+        // stamps visits with an epoch instead of allocating per call. A
+        // collection reached through value edges whose own flattening is
+        // still valid contributes that list (its subgraph has not changed
+        // since, so its notified marks are already clear).
+        const epoch=++flattenEpoch,collected:Atom[]=[],values=new Set<Atom>(),stack=flattenStack,modes=flattenModes;
+        stack.length=0;modes.length=0;stack.push(this);modes.push(false);
+        while(stack.length){
+            const facts=stack.pop()!,origins=modes.pop()!,bit=origins?1:2;
+            if(facts.visitEpoch!==epoch){facts.visitEpoch=epoch;facts.visitBits=0;}
+            if(facts.visitBits&bit)continue;facts.visitBits|=bit;facts.notified=false;
+            if(!origins&&facts!==this&&facts.flattenedValid&&facts.flattened){for(const value of facts.flattened)if(!values.has(value)){values.add(value);collected.push(value);}continue;}
             for(const value of origins?facts.ownUnknownValues():facts.own.values())if(!values.has(value)){values.add(value);collected.push(value);}
-            for(const [source,kind]of facts.sources)pending.push({facts:source,origins:origins||kind==="origin"});
+            if(facts.edges)for(const [source,kind]of facts.edges){stack.push(source);modes.push(origins||kind==="origin");}
         }
         this.flattened=collected;this.flattenedValid=true;return collected;
     }
