@@ -580,7 +580,7 @@ interface SourceCollectionRecord {readonly kind:CollectionKind;readonly entries:
 interface SourceSetLikeRecord {readonly object:Cell;readonly size:Cell;readonly has:Cell;readonly keys:Cell;readonly normal:Cell;}
 interface UnknownOwnPropertyRecord {readonly keys:Cell;readonly value:Cell;readonly algorithm:Cell;readonly events:Map<string,{mode:"set"|"define"|"delete";context?:ts.Node}>;readonly prototypeInputs:Set<Cell>;readonly receiver:Cell;}
 interface SourcePrivateSlot {readonly kind:"field"|"method"|"accessor";readonly value:Cell;readonly get:Cell;readonly set:Cell;}
-interface ObjectOwner { arguments?:SourceArgumentsRecord; privateSlots?:Map<ClassPrivateName,SourcePrivateSlot>;propertyAlgorithm?:Cell; collectionIterator?:{kind:CollectionKind|"Array"|"String";elements:Cell;activity:Cell;source?:Cell;operation?:"keys"|"values"|"entries"}; collections?:Map<CollectionKind,SourceCollectionRecord>; readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, OwnPresence>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; closedIndices?:boolean; closedOwn?:boolean; immutableOwn?:boolean; rawJSON?:Cell; boxed?:Map<string,Cell>; unboxed?:boolean; ordinary?:boolean; proxy?:{target:Cell;handler:Cell;context:ts.Node}; iterated?:{iterator:Cell;next:Cell}; }
+interface ObjectOwner { nativeInstance?:string; arguments?:SourceArgumentsRecord; privateSlots?:Map<ClassPrivateName,SourcePrivateSlot>;propertyAlgorithm?:Cell; collectionIterator?:{kind:CollectionKind|"Array"|"String";elements:Cell;activity:Cell;source?:Cell;operation?:"keys"|"values"|"entries"}; collections?:Map<CollectionKind,SourceCollectionRecord>; readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, OwnPresence>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; closedIndices?:boolean; closedOwn?:boolean; immutableOwn?:boolean; rawJSON?:Cell; boxed?:Map<string,Cell>; unboxed?:boolean; ordinary?:boolean; proxy?:{target:Cell;handler:Cell;context:ts.Node}; iterated?:{iterator:Cell;next:Cell}; }
 interface SourceDescriptorRecord {readonly normal:Cell;readonly fields:Map<string,{present:Cell;value:Cell}>;}
 interface SourceJSONRecord {readonly value:Atom;readonly children:Map<string,SourceJSONRecord>;readonly source:string|null;readonly array:boolean;}
 interface SourceCallArguments {readonly args:readonly Cell[]|null;readonly sequence:ArgumentSequence|null;readonly context:ts.Node;}
@@ -667,6 +667,20 @@ const PRIMITIVE_CHOICE_PRODUCT_LIMIT = 65_536;
  * its Number category (fail closed): a counter whose condition never stops
  * its steps (`i !== 0.5`) would otherwise grow without bound. */
 const LOOP_COUNTER_VALUE_LIMIT = 1024;
+/** Constructors whose [[Call]] creates the same instance their
+ * [[Construct]] does, NewTarget being the active function (ES2026 20.5.1.1
+ * Error, 20.5.6.1.1 NativeError, 20.5.7.1.1 AggregateError). */
+const CALL_CONSTRUCTS:ReadonlySet<string>=new Set(["Error","EvalError","RangeError","ReferenceError","SyntaxError","TypeError","URIError","AggregateError"]);
+/** The own properties an instance a builtin constructor creates may have
+ * natively: an Error's message and cause (ES2026 20.5.1.1, InstallErrorCause)
+ * and the host's stack, an AggregateError's errors; the instances of these
+ * other constructors have none (their state is internal slots). Any other
+ * builtin's instance may own any key. */
+const NATIVE_INSTANCE_OWN_KEYS:ReadonlyMap<string,ReadonlySet<string>>=new Map([
+    ...["Error","EvalError","RangeError","ReferenceError","SyntaxError","TypeError","URIError"].map(name=>[name,new Set(["message","cause","stack"])] as const),
+    ["AggregateError",new Set(["message","cause","stack","errors"])],
+    ...["Date","WeakRef","FinalizationRegistry","ArrayBuffer","SharedArrayBuffer","DataView"].map(name=>[name,new Set<string>()] as const),
+]);
 /** Loop conditions a counter's values are filtered by; each compares the
  * counter with the other operand's values by the host's own operator on
  * primitives, which is the spec's IsLessThan/IsLooselyEqual/IsStrictlyEqual. */
@@ -7887,6 +7901,10 @@ class SourceValueFlow {
                 // there is a separate fact of the field.
                 this.publish(result, this.nativeUnknown); if (handler) this.publish(handler, this.unknown);
             }
+            // A builtin's instance may natively own a member the analysis does
+            // not represent (an Error's message): its value is native, beside
+            // whatever the program itself stores there.
+            if(owner.nativeInstance!==undefined&&(!NATIVE_INSTANCE_OWN_KEYS.has(owner.nativeInstance)||typeof key==="string"&&NATIVE_INSTANCE_OWN_KEYS.get(owner.nativeInstance)!.has(key)))this.publish(result,this.nativeUnknown);
             if(ownOnly){if(!presence?.values.has(this.primitive(true)) || presence.values.has(this.primitive(false)))this.publish(result,this.primitive(undefined));continue;}
             if (presence?.values.has(this.primitive(true)) && !presence.values.has(this.primitive(false))) continue;
             inherit();
@@ -9935,9 +9953,16 @@ class SourceValueFlow {
                     }
                     // %TypedArray% throws a TypeError for every Call and Construct.
                     if(atom.tag==="builtin"&&atom.name==="TypedArray"){this.publish(result!,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node,"TypeError"));continue;}
-                    if(invocation.construct&&!(atom.tag==="builtin"&&atom.name==="Promise")){
+                    const callConstructs=atom.tag==="builtin"&&CALL_CONSTRUCTS.has(atom.name);
+                    if((invocation.construct||callConstructs)&&!(atom.tag==="builtin"&&atom.name==="Promise")){
                         const owner=this.owner(node);
-                        if(atom.tag==="builtin"){this.markPropertyAlgorithm(owner,"opaque");if(runtimeTypedArrayDescriptors.has(atom.name))this.typedArrayInstancePrototype(owner,atom.name,invocation.newTarget??invocation.target,node);}
+                        if(atom.tag==="builtin"){this.markPropertyAlgorithm(owner,"opaque");
+                            if(runtimeTypedArrayDescriptors.has(atom.name))this.typedArrayInstancePrototype(owner,atom.name,invocation.newTarget??invocation.target,node);
+                            // OrdinaryCreateFromConstructor: the instance inherits
+                            // NewTarget's prototype (the builtin's own for a call);
+                            // its own members are native (nativeInstance).
+                            else {owner.nativeInstance??=atom.name;owner.prototype??=this.newCell();this.copy(this.property(invocation.construct?invocation.newTarget??invocation.target:invocation.target,"prototype",node),owner.prototype);}
+                        }
                         this.publish(result!,{tag:"object",owner});
                     }
                     const evolvingPrimitiveResult = constructorArguments !== undefined || atom.tag === "builtin" && (atom.normalResult === "primitive-string" || atom.name === "Symbol" || NUMERIC_CONVERSIONS.has(atom.name));
@@ -9963,13 +9988,15 @@ class SourceValueFlow {
                         }
                     } else if (atom.tag === "builtin") {
                         if (atom.name === "Buffer" || atom.name.startsWith("Buffer.") || atom.name.startsWith("fs:") || atom.name.startsWith("child_process:")) {
-                            // A Buffer static (from, alloc, concat, byteLength,
-                            // compare, ...) writes no ordinary property of its
-                            // arguments and runs only what they reach (an
-                            // array-like's getters, an object's valueOf or
-                            // @@toPrimitive), which the escape below invokes; it
-                            // is not unknown code writing every global.
-                            const argumentsOnly = atom.name.startsWith("Buffer.");
+                            // Buffer (whose legacy call is Buffer.from or
+                            // Buffer.alloc on its arguments) and its statics
+                            // (from, alloc, concat, byteLength, compare, ...)
+                            // write no ordinary property of their arguments and
+                            // run only what those reach (an array-like's
+                            // getters, an object's valueOf or @@toPrimitive),
+                            // which the escape below invokes; they are not
+                            // unknown code writing every global.
+                            const argumentsOnly = atom.name === "Buffer" || atom.name.startsWith("Buffer.");
                             this.onActive(node, () => {
                                 if (!argumentsOnly) this.opaqueEffect(node);
                                 for (const actual of argv ?? (invocation.sequence ? [this.allArgumentValues(invocation.sequence)] : []))
@@ -10047,7 +10074,7 @@ class SourceValueFlow {
                             ? this.stringHintCell(argv[0], node, !invocation.construct) : undefined;
                         if (stringValue && !invocation.construct) this.normalResults.set(result,this.abrupt);
                         if (stringValue) this.watch(rule, stringValue);
-                        if (!invocation.construct) {
+                        if (!invocation.construct && !CALL_CONSTRUCTS.has(atom.name)) {
                             if (atom.normalResult === "primitive-string") {
                                 if (argv === null) this.publish(result!, this.unknownString);
                                 else if (argv.length === 0) this.publish(result!, this.primitive(""));
