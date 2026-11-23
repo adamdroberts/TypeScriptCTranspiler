@@ -133,7 +133,9 @@ function subjectSource(stress: readonly StressOperation[]): string {
             String(prototypeOf(date) === D.prototype) + ":" +
             String(date instanceof D) + ":" + String(staticBoxIdentity()));
         print("date-brand:" + Object.prototype.toString.call(date) + ":" +
-            String(Number.isNaN(D.prototype.getTime())));
+            // %Date.prototype% is an ordinary object without [[DateValue]]
+            // (ES2026 21.4.4), so thisTimeValue rejects it, as in Node.
+            String((function () { try { D.prototype.getTime(); return false; } catch (error) { return error instanceof TypeError; } })()));
         print("date-parts:" + [
             date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(),
             date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds(),
