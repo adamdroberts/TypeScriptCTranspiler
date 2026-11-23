@@ -22,7 +22,7 @@ Specification pin: ECMA-262 edition 17, commit `0248456c758431e4bb8e5d26333ff186
 - [ ] **Normative References** (`sec-normative-references`) — tracking: `todo`, scope: `non-observable`
   - Semantic partitions: Unicode; IEEE 754; referenced Ecma standards.
   - Linked local regression evidence: none linked yet.
-  - Known blockers: Unicode and numeric dependency versions are not yet attested in run artifacts.
+  - Known blockers: The runtime's Unicode character data (property escapes, case mapping and folding, normalization) is generated from the pinned Unicode 17.0.0 Character Database (runtime/tsc_unicode_data.h, SHA-256 pinned per file), independent of the host ICU, which remains only for collation; the numeric dependency versions are not yet attested in run artifacts.
   - Scope rationale: Dependency identity is attestation evidence rather than a Test262 result.
   - [ ] `sec-normative-references` — Normative References: exact disposition and partitions missing.
 - [ ] **Overview** (`sec-overview`) — tracking: `todo`, scope: `non-observable`
