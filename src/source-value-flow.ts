@@ -9963,8 +9963,15 @@ class SourceValueFlow {
                         }
                     } else if (atom.tag === "builtin") {
                         if (atom.name === "Buffer" || atom.name.startsWith("Buffer.") || atom.name.startsWith("fs:") || atom.name.startsWith("child_process:")) {
+                            // A Buffer static (from, alloc, concat, byteLength,
+                            // compare, ...) writes no ordinary property of its
+                            // arguments and runs only what they reach (an
+                            // array-like's getters, an object's valueOf or
+                            // @@toPrimitive), which the escape below invokes; it
+                            // is not unknown code writing every global.
+                            const argumentsOnly = atom.name.startsWith("Buffer.");
                             this.onActive(node, () => {
-                                this.opaqueEffect(node);
+                                if (!argumentsOnly) this.opaqueEffect(node);
                                 for (const actual of argv ?? (invocation.sequence ? [this.allArgumentValues(invocation.sequence)] : []))
                                     this.escapeCallableArgument(actual, node);
                             });
