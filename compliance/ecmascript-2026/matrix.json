@@ -7083,7 +7083,7 @@
       "tracking": "todo",
       "semanticPartitions": ["Unicode", "IEEE 754", "referenced Ecma standards"],
       "localEvidence": { "property": [], "generatedRegression": [], "stress": [], "e2e": [], "negativeDiagnostics": [], "declarationSurface": [], "implementation": [] },
-      "knownGaps": ["Unicode and numeric dependency versions are not yet attested in run artifacts."],
+      "knownGaps": ["The runtime's Unicode character data (property escapes, case mapping and folding, normalization) is generated from the pinned Unicode 17.0.0 Character Database (runtime/tsc_unicode_data.h, SHA-256 pinned per file), independent of the host ICU, which remains only for collation; the numeric dependency versions are not yet attested in run artifacts."],
       "rationale": "Dependency identity is attestation evidence rather than a Test262 result."
     },
     {
