@@ -580,7 +580,7 @@ interface SourceCollectionRecord {readonly kind:CollectionKind;readonly entries:
 interface SourceSetLikeRecord {readonly object:Cell;readonly size:Cell;readonly has:Cell;readonly keys:Cell;readonly normal:Cell;}
 interface UnknownOwnPropertyRecord {readonly keys:Cell;readonly value:Cell;readonly algorithm:Cell;readonly events:Map<string,{mode:"set"|"define"|"delete";context?:ts.Node}>;readonly prototypeInputs:Set<Cell>;readonly receiver:Cell;}
 interface SourcePrivateSlot {readonly kind:"field"|"method"|"accessor";readonly value:Cell;readonly get:Cell;readonly set:Cell;}
-interface ObjectOwner { arguments?:SourceArgumentsRecord; privateSlots?:Map<ClassPrivateName,SourcePrivateSlot>;propertyAlgorithm?:Cell; collectionIterator?:{kind:CollectionKind|"Array";elements:Cell;activity:Cell;source?:Cell;operation?:"keys"|"values"|"entries"}; collections?:Map<CollectionKind,SourceCollectionRecord>; readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, OwnPresence>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; closedIndices?:boolean; closedOwn?:boolean; immutableOwn?:boolean; rawJSON?:Cell; boxed?:Map<string,Cell>; unboxed?:boolean; ordinary?:boolean; proxy?:{target:Cell;handler:Cell;context:ts.Node}; iterated?:{iterator:Cell;next:Cell}; }
+interface ObjectOwner { arguments?:SourceArgumentsRecord; privateSlots?:Map<ClassPrivateName,SourcePrivateSlot>;propertyAlgorithm?:Cell; collectionIterator?:{kind:CollectionKind|"Array"|"String";elements:Cell;activity:Cell;source?:Cell;operation?:"keys"|"values"|"entries"}; collections?:Map<CollectionKind,SourceCollectionRecord>; readonly fields: Map<SourcePropertyKey, Cell>; readonly accessors: Map<SourcePropertyKey|null, {get:Cell;set:Cell}>; readonly shape: Cell; computedDefinitions?: {key:Cell;defined:Cell;context:ts.Node}[]; own?: Map<SourcePropertyKey, OwnPresence>; listLength?: Cell; listSources?: readonly Cell[]; prototype?: Cell; closedIndices?:boolean; closedOwn?:boolean; immutableOwn?:boolean; rawJSON?:Cell; boxed?:Map<string,Cell>; unboxed?:boolean; ordinary?:boolean; proxy?:{target:Cell;handler:Cell;context:ts.Node}; iterated?:{iterator:Cell;next:Cell}; }
 interface SourceDescriptorRecord {readonly normal:Cell;readonly fields:Map<string,{present:Cell;value:Cell}>;}
 interface SourceJSONRecord {readonly value:Atom;readonly children:Map<string,SourceJSONRecord>;readonly source:string|null;readonly array:boolean;}
 interface SourceCallArguments {readonly args:readonly Cell[]|null;readonly sequence:ArgumentSequence|null;readonly context:ts.Node;}
@@ -5980,6 +5980,20 @@ class SourceValueFlow {
         const [text]=this.convertList([receiver],context,"text");
         const owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.stringIteratorPrototype()};
         this.copy(this.opaqueMutation,owner.shape);
+        // [[IteratedString]]: %StringIteratorPrototype%.next yields each code
+        // point (a lone surrogate on its own) of the converted text, then
+        // done; the collection-iterator view gives that element domain.
+        const elements=this.newCell(),activity=this.newCell();owner.collectionIterator={kind:"String",elements,activity};
+        let iterate!:Rule;
+        iterate=this.rule([text!],()=>{
+            const state=this.primitiveState(text!,iterate);
+            if(state.pending&&!state.unresolved)return;
+            for(const value of state.proof.values)if(typeof value==="string"){
+                for(const point of value)this.publish(elements,this.primitive(point));
+                this.publish(activity,this.primitive(value.length>0));
+            }
+            if(!state.proof.primitiveComplete){this.publish(elements,this.unknownString);this.publish(activity,this.primitive(true));this.publish(activity,this.primitive(false));}
+        });
         this.rule([receiver,text!],()=>{
             for(const atom of receiver.values)if(atom===this.primitive(undefined)||atom===this.primitive(null)){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context,"TypeError"));}
             for(const atom of text!.values)if(atom.tag==="abrupt"||atom.tag==="pending-source")this.publish(result,atom);
@@ -6156,7 +6170,7 @@ class SourceValueFlow {
         const self=this.newCell();this.publish(self,this.operation("collection-iterator:self"));this.defineField(owner,this.wellKnownSymbols.get("iterator")!,self);
         this.publish(value,{tag:"object",owner});return value;
     }
-    private collectionIteratorNext(receiver:Cell,kind:CollectionKind|"Array",context:ts.Node,result:Cell):void {
+    private collectionIteratorNext(receiver:Cell,kind:CollectionKind|"Array"|"String",context:ts.Node,result:Cell):void {
         const results=new Map<ObjectOwner,{normal:Cell;done:Cell}>(),activated=new Set<ObjectOwner>();let rule!:Rule;
         rule=this.rule([receiver],()=>{for(const atom of receiver.values){const owner=this.ordinaryOwner(atom),view=owner?.collectionIterator;
             // A native value's next (one a native's escape invocation passes)
@@ -7804,6 +7818,32 @@ class SourceValueFlow {
             if(rule)this.watch(rule,owner.shape);
             if(handler&&this.opaqueShape(owner,context))this.publish(handler,this.unknown);
             if(!this.definitionsReady(owner,rule))continue;
+            const inherit=():void=>{
+                if (!owner.prototype) return;
+                if (rule) this.watch(rule, owner.prototype);
+                for (const prototype of owner.prototype.values) {
+                    const inherited = this.ordinaryOwner(prototype);
+                    if (inherited) worklist.push(prototype);
+                    else if (prototype.tag === "primitive" && prototype.value === null) this.publish(result,this.primitive(undefined));
+                    else this.publish(result, prototype.tag === "pending-source" || this.isNativeValue(prototype) ? prototype : this.unknown);
+                }
+            };
+            // An Array's integer index that no field, accessor, own-property
+            // record or unknown-key write names is not an own property of it
+            // now, nor is one of a builtin whose indexed members are all
+            // represented (closedIndices: the intrinsic prototypes). Every
+            // later definition publishes to the shape this rule watches, so
+            // the read takes the normal path once one exists; until then it
+            // continues on the prototype without allocating a field and
+            // presence record for the absent key (a parameter holding several
+            // arrays reads each one at the union of their indices).
+            if((owner.ordinary&&owner.listLength&&!owner.arguments&&!owner.boxed&&current.tag!=="builtin"||current.tag==="builtin"&&owner.closedIndices)&&!owner.proxy&&current.tag!=="global"&&
+                typeof key==="string"&&Number.isSafeInteger(Number(key))&&Number(key)>=0&&String(Number(key))===key&&
+                !owner.fields.has(key)&&!owner.accessors.has(key)&&!owner.accessors.has(null)&&!owner.own?.has(key)&&
+                !this.primitiveStringFields.has(owner)&&!this.unknownPropertyLocations.has(owner)&&!this.opaqueShape(owner,context)){
+                if(ownOnly)this.publish(result,this.primitive(undefined));else inherit();
+                continue;
+            }
             this.stringField(owner,key);
             this.copyRead(this.dataProperty(owner,key),result,context);
             for (const name of [key,null]) {
@@ -7849,15 +7889,7 @@ class SourceValueFlow {
             }
             if(ownOnly){if(!presence?.values.has(this.primitive(true)) || presence.values.has(this.primitive(false)))this.publish(result,this.primitive(undefined));continue;}
             if (presence?.values.has(this.primitive(true)) && !presence.values.has(this.primitive(false))) continue;
-            if (owner.prototype) {
-                if (rule) this.watch(rule, owner.prototype);
-                for (const prototype of owner.prototype.values) {
-                    const inherited = this.ordinaryOwner(prototype);
-                    if (inherited) worklist.push(prototype);
-                    else if (prototype.tag === "primitive" && prototype.value === null) this.publish(result,this.primitive(undefined));
-                    else this.publish(result, prototype.tag === "pending-source" || this.isNativeValue(prototype) ? prototype : this.unknown);
-                }
-            }
+            inherit();
         }
         if (atom.tag === "host" || atom.tag === "realm-record") {
             if (key === "gc") this.publish(result, this.operation("host-gc"));
@@ -9454,6 +9486,16 @@ class SourceValueFlow {
                             this.copy(this.wrappedIteratorStep(invocation.receiver,node,atom.operation==="wrap-iterator:next"?"next":"return"),result!);continue;
                         }
                     }
+                    // %StringIteratorPrototype%.next on a String Iterator: the
+                    // next code point of its [[IteratedString]] or done; another
+                    // receiver is a TypeError. An unrepresented receiver keeps
+                    // the opaque path below.
+                    if(atom.tag==="operation"&&atom.operation==="string-iterator-next"&&!invocation.construct){
+                        this.watch(rule,invocation.receiver);
+                        if(![...invocation.receiver.values].some(value=>value.tag==="unknown"||value.tag==="opaque-object")){
+                            if(!handled(atom,signature))this.collectionIteratorNext(invocation.receiver,"String",node,result!);continue;
+                        }
+                    }
                     // get %TypedArray% [ @@species ] returns its this value.
                     if(atom.tag==="operation"&&atom.operation==="typed-array-species"){this.copy(invocation.receiver,result!);continue;}
                     // The Iterator.prototype helpers and consumers, the next of a
@@ -9508,6 +9550,15 @@ class SourceValueFlow {
                             if(kind==="string")this.publish(result!,this.unknownString);
                             else if(kind==="boolean"){this.publish(result!,this.primitive(true));this.publish(result!,this.primitive(false));}
                             else this.publish(result!,this.numberValue());
+                        }
+                        // slice (ArraySpeciesCreate), toReversed and toSorted
+                        // (ArrayCreate) return a fresh array of the receiver's
+                        // element values, read at an unknown index (getters
+                        // run there; the conversions, callbacks and species
+                        // constructor are the escape's below).
+                        else if(atom.tag==="operation"&&(atom.operation==="native-array:slice"||atom.operation==="native-array:toReversed"||atom.operation==="native-array:toSorted")){
+                            const objects=this.toObject(invocation.receiver,node),elements=this.computedProperty(objects,this.anyNumberKey(),node),fresh=this.arrayOfValues(node,atom.operation,elements);
+                            this.copy(atom.operation==="native-array:slice"?this.arraySpeciesCreate(objects,fresh,elements,node):fresh,result!);
                         }
                         // at(index) is Get(O, ToString(k)) for an integer k, or
                         // undefined when k is out of range.
