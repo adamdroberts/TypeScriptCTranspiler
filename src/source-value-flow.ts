@@ -490,18 +490,19 @@ class SourceFacts implements Iterable<Atom> {
     /** The unknown atoms stored here, in insertion order. */
     ownUnknownValues():IterableIterator<Atom>{return (this.ownUnknown??noAtoms).values();}
     ownHas(atom:Atom):boolean{return this.own.has(atom);}
-    *[Symbol.iterator](): IterableIterator<Atom> {
-        if(this.flattenedValid&&this.flattened){yield* this.flattened;return undefined;}
-        const epoch=sourceFactsEpoch,collected:Atom[]=[];
+    /** The reachable atoms, first-seen order. The traversal runs no other
+     * code, so nothing grows during it and the result is always cached. */
+    private flatten():readonly Atom[]{
+        if(this.flattenedValid&&this.flattened)return this.flattened;
+        const collected:Atom[]=[];
         const pending:{facts:SourceFacts;origins:boolean}[]=[{facts:this,origins:false}],visited=new Map<SourceFacts,number>(),values=new Set<Atom>();
         while(pending.length){const {facts,origins}=pending.pop()!,bit=origins?1:2,prior=visited.get(facts)??0;if(prior&bit)continue;visited.set(facts,prior|bit);facts.notified=false;
-            for(const value of origins?facts.ownUnknownValues():facts.own.values())if(!values.has(value)){values.add(value);collected.push(value);yield value;}
+            for(const value of origins?facts.ownUnknownValues():facts.own.values())if(!values.has(value)){values.add(value);collected.push(value);}
             for(const [source,kind]of facts.sources)pending.push({facts:source,origins:origins||kind==="origin"});
         }
-        // Store only a complete traversal during which nothing grew.
-        if(epoch===sourceFactsEpoch){this.flattened=collected;this.flattenedValid=true;}
-        return undefined;
+        this.flattened=collected;this.flattenedValid=true;return collected;
     }
+    [Symbol.iterator](): IterableIterator<Atom> {return this.flatten()[Symbol.iterator]();}
     has(atom: Atom): boolean {
         if (this.own.has(atom) || this.memberships?.has(atom)) return true;
         const pending:SourceFacts[] = [this], visited = new Set<SourceFacts>();
@@ -517,8 +518,8 @@ class SourceFacts implements Iterable<Atom> {
         }
         return false;
     }
-    get nonempty():boolean{if(this.knownNonempty)return true;for(const _ of this){this.knownNonempty=true;return true;}return false;}
-    get size(): number {let size=0; for (const _ of this) size++; return size;}
+    get nonempty():boolean{if(this.knownNonempty||this.own.size)return this.knownNonempty=true;return this.knownNonempty=this.flatten().length>0;}
+    get size(): number {return this.flatten().length;}
 }
 interface PrimitiveCellCache {proof?:PrimitiveChoiceProof;kind?:number;readiness?:PrimitiveReadiness;empty?:true;normal?:true;}
 /** `stale`: the change flush has cleared this cell's primitive cache and
@@ -527,8 +528,10 @@ interface PrimitiveCellCache {proof?:PrimitiveChoiceProof;kind?:number;readiness
  * stale cell is stale too, so a flush stops at a stale cell instead of
  * revisiting the cells above it. `proofSources` are the cells whose changes
  * reach this one (the reverse of the proof-parent edges), which an
- * observation walks to clear the marks below it. */
-interface Cell { ownRevision:number;primitiveCache?:PrimitiveCellCache;readonly id: number; readonly values: SourceFacts; readonly users: Set<Rule>; stale:boolean; proofSources:Cell[]|undefined; }
+ * observation walks to clear the marks below it; `proofParents` are the
+ * cells whose value includes this one (a copy's target, a concatenation over
+ * it). Most cells have no users, so both sets are allocated on first use. */
+interface Cell { ownRevision:number;primitiveCache?:PrimitiveCellCache;readonly id: number; readonly values: SourceFacts; users: Set<Rule>|undefined; stale:boolean; proofSources:Cell[]|undefined; proofParents:Set<Cell>|undefined; }
 /** An observed cell is no longer stale, nor is any cell its value includes. */
 function observeCell(cell:Cell):void {
     if(!cell.stale)return;
@@ -1152,7 +1155,6 @@ class SourceValueFlow {
     private readonly numericWrites = new Map<ts.Node, Cell>();
     private readonly primitiveProofCache = new SourceCellCache("proof");
     private readonly primitiveKindCache = new SourceCellCache("kind");
-    private readonly primitiveProofParents = new Map<Cell, Set<Cell>>();
     private readonly primitiveReadyCache = new SourceCellCache("readiness");
     // A change flush does not clear it: facts only grow, so a normal
     // completion found among them stays possible.
@@ -1425,7 +1427,7 @@ class SourceValueFlow {
             }
         }
     }
-    private newCell(): Cell { const cell:Cell={id:this.nextCell++,ownRevision:0,values:new SourceFacts(),users:new Set<Rule>(),stale:false,proofSources:undefined};this.sourceCells.set(cell.values,cell);return cell; }
+    private newCell(): Cell { const cell:Cell={id:this.nextCell++,ownRevision:0,values:new SourceFacts(),users:undefined,stale:false,proofSources:undefined,proofParents:undefined};this.sourceCells.set(cell.values,cell);return cell; }
     /** Return copy graphs retain actual formal inputs independently of other
      * invocations. Local writes and derived facts stay conservative; the
      * ordinary invocation graph still owns all effects and exceptions. */
@@ -1476,7 +1478,7 @@ class SourceValueFlow {
                 const actual=inputs.get(source),arguments_=actual?this.formalInputs.get(source):undefined;
                 if(actual){
                     let entries=this.projectedFormalInputs.get(target);if(!entries){entries=new Set();this.projectedFormalInputs.set(target,entries);}
-                    if(!entries.has(actual)){entries.add(actual);target.ownRevision++;for(const user of target.users)this.schedule(user);}
+                    if(!entries.has(actual)){entries.add(actual);target.ownRevision++;if(target.users)for(const user of target.users)this.schedule(user);}
                     this.copy(actual,target);
                 }
                 for(const [facts,kind]of source.values.sources){const origin=this.sourceCells.get(facts)!;if(arguments_?.has(origin))continue;this.copy(kind==="value"?project(origin):origin,target,kind);}
@@ -1823,13 +1825,12 @@ class SourceValueFlow {
         }
         if (cell.values.has(atom)) return;
         if (atom.tag === "text-operation") for (const part of atom.parts) {
-            let parents = this.primitiveProofParents.get(part);
-            if (!parents) {parents = new Set(); this.primitiveProofParents.set(part,parents);}
+            const parents = part.proofParents ??= new Set();
             if (!parents.has(cell)) {parents.add(cell); (cell.proofSources ??= []).push(part);}
         }
         cell.values.add(atom);cell.ownRevision++;this.factRevision++;
         this.primitiveChanges.add(cell);
-        for (const user of cell.users) this.schedule(user);
+        if (cell.users) for (const user of cell.users) this.schedule(user);
     }
     private flushPrimitiveChanges(): void {
         if (!this.primitiveChanges.size) return;
@@ -1842,8 +1843,8 @@ class SourceValueFlow {
             if (value.stale) continue; value.stale = true;
             const cache=value.primitiveCache;
             if(cache){cache.proof=undefined;cache.kind=undefined;cache.readiness=undefined;cache.empty=undefined;}
-            for (const user of value.users) this.schedule(user);
-            for (const parent of this.primitiveProofParents.get(value) ?? []) pending.push(parent);
+            if (value.users) for (const user of value.users) this.schedule(user);
+            if (value.proofParents) for (const parent of value.proofParents) pending.push(parent);
         }
     }
     private schedule(rule: Rule): void { if (!rule.queued) { rule.queued = true; this.queue.push(rule); } }
@@ -1854,13 +1855,13 @@ class SourceValueFlow {
     }
     private watch(rule: Rule, cell: Cell): void {
         if (rule.inputs.has(cell)) return;
-        rule.inputs.add(cell); cell.users.add(rule); this.schedule(rule);
+        rule.inputs.add(cell); (cell.users ??= new Set()).add(rule); this.schedule(rule);
     }
     private copy(from:Cell,into:Cell,kind:"value"|"origin"="value"):void {
         const previous=into.values.sources.get(from.values);if(previous==="value"||previous===kind)return;
         into.values.addSource(from.values,kind);into.ownRevision++;this.factRevision++;
-        let parents=this.primitiveProofParents.get(from);if(!parents){parents=new Set();this.primitiveProofParents.set(from,parents);}if(!parents.has(into)){parents.add(into);(into.proofSources??=[]).push(from);}
-        this.primitiveChanges.add(into);for(const user of into.users)this.schedule(user);
+        const parents=from.proofParents??=new Set();if(!parents.has(into)){parents.add(into);(into.proofSources??=[]).push(from);}
+        this.primitiveChanges.add(into);if(into.users)for(const user of into.users)this.schedule(user);
     }
     /** Keep the completion point on the copy edge, rather than attaching it
      * to an interned value identity shared by unrelated writes. */
@@ -4155,7 +4156,7 @@ class SourceValueFlow {
                 state.pending ||= child.pending; state.pendingSource ||= child.pendingSource; state.unresolved ||= child.unresolved;
             }
             if (before !== [state.pending,state.pendingSource,state.unresolved].join(":"))
-                for (const parent of this.primitiveProofParents.get(cell) ?? []) if (states.has(parent) && !queued.has(parent)) {queued.add(parent); worklist.push(parent);}
+                if (cell.proofParents) for (const parent of cell.proofParents) if (states.has(parent) && !queued.has(parent)) {queued.add(parent); worklist.push(parent);}
         }
         for (const [cell,state] of states) this.primitiveReadyCache.set(cell,state);
         return states.get(root)!;
