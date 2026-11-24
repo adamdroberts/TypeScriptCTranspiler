@@ -6534,16 +6534,26 @@ class SourceValueFlow {
         if(receiver===this.empty){if(!this.undefinedCallReceiver){this.undefinedCallReceiver=this.newCell();this.publish(this.undefinedCallReceiver,this.primitive(undefined));}receiver=this.undefinedCallReceiver;}
         if(!owner.node||ts.isArrowFunction(owner.node)||isStrictCodeContext(owner.definition))return receiver;
         let inputs=this.functionThisBindings.get(owner);if(!inputs){inputs=new Map();this.functionThisBindings.set(owner,inputs);}const prior=inputs.get(receiver);if(prior)return prior;
-        const result=this.newCell(),objects=this.newCell();inputs.set(receiver,result);
-        const conversion=ts.setTextRange(ts.factory.createEmptyStatement(),context);(conversion as ts.Node&{parent:ts.Node}).parent=context;
+        // OrdinaryCallBindThis: undefined and null bind the global object, an
+        // Object binds itself (ToObject is the identity), and only a
+        // primitive is boxed, so the boxing conversion exists only once a
+        // primitive receiver does.
+        const result=this.newCell(),objects=this.newCell();inputs.set(receiver,result);let boxed=false;
         this.rule([receiver],()=>{for(const atom of receiver.values){
             if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
-            if(atom.tag==="unknown"){this.publish(result,this.global);this.publish(objects,atom);continue;}
+            if(atom.tag==="unknown"){this.publish(result,this.global);this.publish(result,this.isNativeValue(atom)?atom:this.unknownObject);continue;}
+            if(this.ordinaryOwner(atom)||atom.tag==="promise"||atom.tag==="generator"){this.publish(result,atom);continue;}
             const kinds=this.primitiveKinds(this.atomCell(atom));
             if(kinds&(KIND_NULL|KIND_UNDEFINED))this.publish(result,this.global);
-            if(kinds&~(KIND_NULL|KIND_UNDEFINED))this.publish(objects,atom);
+            if(!(kinds&~(KIND_NULL|KIND_UNDEFINED)))continue;
+            this.publish(objects,atom);
+            if(!boxed){
+                boxed=true;
+                const conversion=ts.setTextRange(ts.factory.createEmptyStatement(),context);(conversion as ts.Node&{parent:ts.Node}).parent=context;
+                this.copy(this.objectValue(objects,conversion),result);
+            }
         }});
-        this.copy(this.objectValue(objects,conversion),result);return result;
+        return result;
     }
     /** The one known string value of a represented field, or undefined. */
     private singleStringField(owner:ObjectOwner|null|undefined,key:string,rule:Rule):string|undefined {
