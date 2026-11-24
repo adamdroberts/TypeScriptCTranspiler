@@ -12972,9 +12972,9 @@ class Emitter {
         if (segment) {
             const local = this.namespaceLocalBinding(segment, declaration.name);
             this.emitNamespaceMemberObject(buf, declaration, segment, local, this.nodeIsInStrictMode(declaration));
-            this.emitEnumDeclarationInto(buf, declaration, local.cName, local.gcRoot);
+            this.emitEnumDeclarationInto(buf, declaration, local.cName, local.gcRoot, "", true);
         } else if (binding) {
-            this.emitEnumDeclarationInto(buf, declaration, binding.cName, binding.gcRoot);
+            this.emitEnumDeclarationInto(buf, declaration, binding.cName, binding.gcRoot, "", true);
         } else if (this.isTest262ScriptGlobalEnumDeclaration(declaration)) {
             const target = this.freshTemp("_enum");
             const root = this.freshTemp("_enum_root");
@@ -12989,7 +12989,7 @@ class Emitter {
     /** `(function (E) { members })(E || (E = {}))` over one binding: `target`
      * is its value lvalue, `root` its GC root, and `publish` writes a new
      * object back where the binding lives outside C storage. */
-    private emitEnumDeclarationInto(buf: CBuf, declaration: ts.EnumDeclaration, target: string, root: string, publish = ""): void {
+    private emitEnumDeclarationInto(buf: CBuf, declaration: ts.EnumDeclaration, target: string, root: string, publish = "", staticTarget = false): void {
         const strict = this.nodeIsInStrictMode(declaration);
         buf.line(`if (!tsc_value_is_truthy(${target})) { ${target} = tsc_value_object(tsc_object_new()); ${root} = tsc_value_gc_root(${target}); ${publish} }`);
         const double = (value: number): string => Number.isNaN(value) ? "NAN" : value === Infinity ? "INFINITY" : value === -Infinity ? "(-INFINITY)"
@@ -13010,7 +13010,7 @@ class Emitter {
                 // from the enum object (`E.B`).
                 if (!member.initializer) unsupported(member, "an enum member after a computed member requires an initializer");
                 const computed = this.freshTemp("_enum_member");
-                const overrides = this.enumMemberReferenceOverrides(declaration, member.initializer, target);
+                const overrides = this.enumMemberReferenceOverrides(declaration, member.initializer, target, staticTarget);
                 this.conditionValueScopes.push(overrides);
                 try {
                     buf.line(`tsc_value_t ${computed} = ${this.coerce(this.emitExpr(member.initializer), T_VALUE, member.initializer)};`);
@@ -13031,9 +13031,11 @@ class Emitter {
     /** Each bare identifier in an enum member's initializer that names a
      * member of the same (possibly merged) enum reads that member from the
      * enum object, as TypeScript's emit rewrites it to `E.B`. A reference in a
-     * function or class inside the initializer would read the object later,
-     * from a different C function, and fails closed. */
-    private enumMemberReferenceOverrides(declaration: ts.EnumDeclaration, initializer: ts.Expression, target: string): Map<ts.Expression, EmitResult> {
+     * function or class inside the initializer reads the object later, from a
+     * different C function: through the binding when it is static storage that
+     * nothing reassigns (a module's or namespace's enum), and fails closed
+     * otherwise. */
+    private enumMemberReferenceOverrides(declaration: ts.EnumDeclaration, initializer: ts.Expression, target: string, staticTarget: boolean): Map<ts.Expression, EmitResult> {
         const overrides = new Map<ts.Expression, EmitResult>();
         const owner = this.checker.getSymbolAtLocation(declaration.name);
         const visit = (node: ts.Node, nested: boolean): void => {
@@ -13041,7 +13043,7 @@ class Emitter {
                 const member = this.checker.getSymbolAtLocation(node)?.valueDeclaration;
                 if (member && ts.isEnumMember(member) && !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node) &&
                     this.checker.getSymbolAtLocation(member.parent.name) === owner) {
-                    if (nested) unsupported(node, "an enum member read in a function or class inside an enum member initializer");
+                    if (nested && !staticTarget) unsupported(node, "an enum member read in a function or class inside an enum member initializer");
                     const name = this.staticPropertyName(member.name);
                     if (name === null || name === undefined) unsupported(member, "an enum member requires a static name");
                     overrides.set(node, { c: `tsc_value_get_computed_prop(${target}, tsc_value_string(${this.stringLit(String(name))}))`, ty: T_VALUE });

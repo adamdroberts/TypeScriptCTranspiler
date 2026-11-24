@@ -26,9 +26,10 @@ const NODE=process.env.TSC2C_NODE_REFERENCE??'node';
  * module syntax) the enum is a global var binding: a property of the global
  * object, the same object in a function, merged declarations sharing it; the
  * reference is TypeScript's emit run as a Script. The stress is a 300-member
- * enum in each. A member read in a closure inside a member initializer
- * still fails closed with a diagnostic (Block enums:
- * typescript-local-enum). */
+ * enum in each. A bare member name read in a closure inside a member
+ * initializer reads the module's or namespace's enum binding (static storage
+ * nothing reassigns); in a Block enum it still fails closed with a
+ * diagnostic (Block enums: typescript-local-enum). */
 
 const generated=Array.from({length:300},(_,k)=>k%3===0?`M${k} = "s${k}"`:`M${k} = ${k*7-500}`).join(', ');
 const modules:Record<string,string>={
@@ -37,11 +38,13 @@ const modules:Record<string,string>={
 function note(value: number): number { order.push(String(value)); return value; }
 await Promise.resolve();
 export enum Sized { Base = 2, Len = "abcd".length, Twice = Len * Base, Call = note(Math.max(Base, 7)), Text = String(note(1)) as any, Again = Sized.Call + Twice }
-namespace Inner { export enum K { X = note(Sized.Again * 2) } }
+namespace Inner { export enum K { X = note(Sized.Again * 2), Y = ((): number => X + 1)() } }
+export const later: Array<() => number> = [];
+export enum Closure { A = 1, C = ((): number => { later.push(() => A + Closure.A); return A * 10; })() }
 export const inner = Inner.K;
 `,
  'main.ts':`import { Color, Label } from "./colors";
-import { Sized, inner, order } from "./late";
+import { Sized, inner, order, later, Closure } from "./late";
 enum Mixed { A = 1, B = "bee", C = 2 }
 enum Flags { None = 0, Read = 1 << 0, Write = 1 << 1, Both = Read | Write, Name = "a" + "b" }
 enum Merged { First = 1 }
@@ -57,7 +60,7 @@ out.push(names(Mixed), JSON.stringify(Mixed), JSON.stringify(Flags));
 out.push(names(Merged), String(Merged.First + Merged.Second));
 out.push(String(Inline.One + Inline.Two));
 const alias: any = Color; alias.Extra = 9; out.push(String((Color as any).Extra), typeof Color, typeof Label);
-out.push(JSON.stringify(Sized), JSON.stringify(inner), order.join());
+out.push(JSON.stringify(Sized), JSON.stringify(inner), order.join(), JSON.stringify(Closure), later.map(f => f()).join());
 out.push(String(Object.keys(Big).length), String(Big.M299), (Big as any)[1593], read(Big, "M3"));
 console.log(out.join("\\n"));
 `,
@@ -107,9 +110,10 @@ test('module-level TypeScript enums are runtime objects, as TypeScript emits the
   const scriptNative=Bun.spawnSync([join(scriptRoot,'program')],{stdout:'pipe',stderr:'pipe',timeout:60_000});
   expect({code:scriptNative.exitCode,stderr:scriptNative.stderr.toString()}).toEqual({code:0,stderr:''});
   expect(scriptNative.stdout.toString()).toBe(scriptReference.stdout.toString());
-  // Still fails closed: a member read in a closure inside an initializer.
+  // Still fails closed: a member read in a closure inside a Block enum's
+  // initializer.
   for(const [name,source,message] of [
-   ['closure',`export {};\nenum E { A = 1, C = ((): number => A)() }\nconsole.log(Object.keys(E).join());\n`,'enum member read in a function'],
+   ['closure',`export {};\nfunction f() { enum E { A = 1, C = ((): number => A)() } return Object.keys(E).join(); }\nconsole.log(f());\n`,'enum member read in a function'],
   ] as const){
    const entry=join(root,name+'.ts'),failed:string[]=[];
    await writeFile(entry,source);
