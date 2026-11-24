@@ -5,6 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {compile} from '../../src/compile';
 import {parseHostObservation} from '../test262/protocol';
+import {nodeReferenceSync} from './node-reference';
 
 const token=(value:number):string=>Object.is(value,-0)?'-0':String(value);
 function inputs():number[] {
@@ -67,7 +68,7 @@ def converted(text,format):
 print(json.dumps([[converted(value,'e'),converted(value,'f')] for value in json.load(sys.stdin)]))`],{stdin:Buffer.from(JSON.stringify(values.map(token))),stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({exitCode:0,stderr:''});const answers:string[][]=JSON.parse(oracle.stdout.toString());
   const referenceFile=path.join(temporary,'reference.mjs');await fs.writeFile(referenceFile,erase(subject(values,answers,false,true)));
-  const reference=Bun.spawnSync([process.execPath,'-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");import(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:120_000});
+  const reference=nodeReferenceSync(['node','-e','const fs=require("node:fs");console.log=(...values)=>fs.writeSync(1,values.join(" ")+"\\n");import(process.argv[1]);',referenceFile],{stdout:'pipe',stderr:'pipe',timeout:120_000});
   expect({exitCode:reference.exitCode,stderr:reference.stderr.toString()}).toEqual({exitCode:0,stderr:''});const expected=reference.stdout.toString().trimEnd().split('\n');expect(expected.at(-1)).toBe('saved-rounding-callee-through-suspension:true');
   for(const typed of [true,false])for(const profile of [false,true])for(const noGc of [false,true]) {
    const directory=path.join(temporary,`${typed}-${profile}-${noGc}`);await fs.mkdir(directory);const entry=path.join(directory,typed?'main.ts':'main.mjs'),output=path.join(directory,'program'),diagnostics:string[]=[];
