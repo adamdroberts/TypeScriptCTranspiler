@@ -1145,6 +1145,9 @@ class SourceValueFlow {
     private readonly booleanResult = this.newCell();
     private readonly unknownString: Atom = {tag:"unknown-string"};
     private readonly opaqueMutation = this.newCell();
+    /** Every value a program callable throws when a native calls it (the
+     * union of the native escape graphs' thrown cells). */
+    private readonly nativeThrown = this.newCell();
     private readonly opaqueEffects = new Map<ts.Node, Atom>();
     private readonly opaqueEffectActivations=new WeakSet<ts.Node>();
     private readonly invocationRecords=new WeakMap<FunctionOwner,SourceInvocationRecords>();
@@ -2316,7 +2319,7 @@ class SourceValueFlow {
         this.escapedInvocationOrigins.set(invocation,context);
         if(!sourceCallbacksOnly)this.nativeEscapeInvocations.add(invocation);
         const thrown=this.exceptionCell(),constructed=this.newCell();
-        this.exceptionHandlers.set(invocation,thrown);
+        this.exceptionHandlers.set(invocation,thrown);if(!sourceCallbacksOnly)this.copy(thrown,this.nativeThrown);
         this.publish(constructed,{tag:"object",owner:this.owner(invocation)});
         visit(returned);visit(thrown);
         const parts:readonly ListPart[]=[{cell:actuals,spread:true,abstractList:true}];
@@ -3946,8 +3949,12 @@ class SourceValueFlow {
                     // that escaped where the value was produced: the result is
                     // some primitive (a String for the string hint), with no
                     // further effect.
+                    // It throws a native error, or what a program callable a
+                    // native reaches throws: every such callable is called
+                    // through an escape, whose thrown values all reach
+                    // nativeThrown.
                     this.nativePrimitive(result, hint);
-                    const handler = this.exceptionHandlers.get(context); if (handler) this.publish(handler, this.unknown);
+                    const handler = this.exceptionHandlers.get(context); if (handler) {this.publish(handler, this.nativeException(context));this.copy(this.nativeThrown,handler);}
                     continue;
                 }
                 if (!owner || !context) {
@@ -5953,9 +5960,10 @@ class SourceValueFlow {
             if(!owner&&atom.tag!=="unknown"&&atom.tag!=="opaque-object"){fail();continue;}
             // A native receiver's accessors are builtins or escaped callables.
             const bounded=this.isNativeValue(atom);
-            if(name==="flags"){this.publish(result,this.unknownString);if(!bounded)this.activateOpaqueEffect(context);if(handler)this.publish(handler,this.unknown);}
+            const thrown=():void=>{if(!handler)return;if(bounded){this.publish(handler,this.nativeException(context));this.copy(this.nativeThrown,handler);}else this.publish(handler,this.unknown);};
+            if(name==="flags"){this.publish(result,this.unknownString);if(!bounded)this.activateOpaqueEffect(context);thrown();}
             else if(owner)fail();
-            else{this.publish(result,bounded?this.nativeUnknown:this.unknown);if(!bounded)this.activateOpaqueEffect(context);if(handler)this.publish(handler,this.unknown);}
+            else{this.publish(result,bounded?this.nativeUnknown:this.unknown);if(!bounded)this.activateOpaqueEffect(context);thrown();}
         }});
         return result;
     }
@@ -6076,7 +6084,8 @@ class SourceValueFlow {
         if(name==="compile"){for(const input of this.convertList([first,second],context,"text"))this.watchText(this.rule([input],()=>{}),input);}
         // An unlisted argument sequence (spread, forwarded arguments) still
         // reaches only the method's own conversions: its values escape.
-        if(!args){if(handler)this.publish(handler,this.unknown);this.onActive(context,()=>{if(sequenceValues)this.escapeCallableArgument(sequenceValues,context);else this.activateOpaqueEffect(context);});}
+        // What their callables throw reaches nativeThrown through that escape.
+        if(!args){if(handler){if(sequenceValues){this.publish(handler,this.nativeException(context));this.copy(this.nativeThrown,handler);}else this.publish(handler,this.unknown);}this.onActive(context,()=>{if(sequenceValues)this.escapeCallableArgument(sequenceValues,context);else this.activateOpaqueEffect(context);});}
         if(handler)this.publish(handler,this.nativeException(context,"TypeError"));
         // RegExp.prototype.toString reads the receiver's source and flags
         // (user getters on another object run through the property graph)
@@ -6140,7 +6149,11 @@ class SourceValueFlow {
                 if(owner||atom.tag==="unknown"||atom.tag==="opaque-object"){
                     // @@matchAll returns CreateRegExpStringIterator's object
                     // whenever it completes normally.
-                    if(name==="matchAll")this.copy(this.regexpStringIterator(context),result);else this.publish(result,this.nativeUnknown);if(handler)this.publish(handler,this.unknown);
+                    // What the escaped receiver's and arguments' callables throw
+                    // reaches nativeThrown; the method itself throws native
+                    // errors. A receiver that is itself unknown may throw anything.
+                    if(name==="matchAll")this.copy(this.regexpStringIterator(context),result);else this.publish(result,this.nativeUnknown);
+                    if(handler){if(owner||this.isNativeValue(atom)){this.publish(handler,this.nativeException(context));this.copy(this.nativeThrown,handler);}else this.publish(handler,this.unknown);}
                     this.onActive(context,()=>{this.escapeCallableArgument(receiver,context);for(const argument of args??[])this.escapeCallableArgument(argument,context);});
                 }
                 else this.publish(result,this.abrupt);
@@ -6823,6 +6836,14 @@ class SourceValueFlow {
             if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
             const owner=this.ordinaryOwner(atom),boxed=owner?.boxed?.get(kind!),kinds=this.primitiveKinds(cell(atom));
             if(boxed)this.copy(boxed,payload);else if(!(kinds&~mask))this.publish(payload,atom);
+            // thisNumberValue and its kin on a native value read its internal
+            // slot (a wrapper of the method's kind) or throw a TypeError; they
+            // run no code.
+            else if(this.isNativeValue(atom)){
+                if(kind==="boolean"){this.publish(payload,this.primitive(true));this.publish(payload,this.primitive(false));}
+                else this.publish(payload,kind==="string"?this.unknownString:{tag:"non-string",kinds:mask});
+                this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context,"TypeError"));
+            }
             else if(atom.tag==="unknown"||atom.tag==="opaque-object"){this.publish(result,this.unknown);this.activateOpaqueEffect(context);}
             else {this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context));}
         }});
@@ -8048,7 +8069,10 @@ class SourceValueFlow {
         if (atom.tag === "pending-source") {this.publish(result,atom);return;}
         if (atom.tag === "unknown" || atom.tag === "opaque-object") {
             this.publish(result, this.isNativeValue(atom)?this.nativeUnknown:this.unknown);
-            if (handler) this.publish(handler, this.unknown);
+            // A native object's getter is a builtin (a native error) or a
+            // program callable that escaped to it (nativeThrown).
+            if (handler&&this.isNativeValue(atom)&&context){this.publish(handler,this.nativeException(context));this.copy(this.nativeThrown,handler);}
+            else if (handler) this.publish(handler, this.unknown);
             return;
         }
         // GetValue on a primitive base (sec-getvalue): the wrapper object's own
@@ -9885,7 +9909,10 @@ class SourceValueFlow {
                             const argumentsEscaping = invocation.args ?? (invocation.sequence ? [this.allArgumentValues(invocation.sequence)] : []);
                             const intrinsicCall=atom.tag==="unknown"&&!!atom.intrinsic;
                             if(arrayEffect)this.nativeArrayReceiverWrites(invocation.receiver,arrayEffect,argumentsEscaping,node);
-                            else if(!iteratorHelper&&!typedArrayNative&&!intrinsicCall)this.writeProperty(invocation.receiver,null,this.empty,false,"set",node,invocation.receiver,undefined,conditioned);
+                            // [[Construct]] passes no receiver: the callee creates its own
+                            // object (the result above), so the caller's placeholder is
+                            // not mutated.
+                            else if(!iteratorHelper&&!typedArrayNative&&!intrinsicCall&&!invocation.construct)this.writeProperty(invocation.receiver,null,this.empty,false,"set",node,invocation.receiver,undefined,conditioned);
                             // An Array.prototype native never calls its receiver or the
                             // values it stores; their accessors and methods may run. A
                             // native that calls a callback (sort's comparator) hands it
@@ -10547,7 +10574,10 @@ class SourceValueFlow {
                             // "prototype") throws before the object exists, and
                             // a value that is not an Object selects %Object.prototype%
                             // of F's Realm.
-                            const linked=instance.prototype,prototype=this.property(invocation.target,"prototype"),realms=this.executionRealms(atom.owner.definition);
+                            // With no distinct newTarget, newTarget is this function F
+                            // itself, not every callee the target cell may hold.
+                            const own=!invocation.newTarget||invocation.newTarget===invocation.target;
+                            const linked=instance.prototype,prototype=this.property(own?this.atomCell(atom):invocation.target,"prototype"),realms=this.executionRealms(atom.owner.definition);
                             this.rule([prototype,realms],()=>{for(const value of prototype.values){
                                 if(value.tag==="abrupt")continue;
                                 if(value.tag==="primitive"||value.tag==="non-string"||value.tag==="unknown-string"||value.tag==="text-operation"){for(const realm of realms.values)if(realm.tag==="realm-record")this.copy(this.realmObjectPrototype(realm.realm),linked);}

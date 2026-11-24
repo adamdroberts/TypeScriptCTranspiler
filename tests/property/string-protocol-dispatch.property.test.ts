@@ -49,7 +49,9 @@ import {nodeReferenceSync} from './node-reference';
  * Array.prototype[@@unscopables] is a null-prototype object of true flags
  * (exact). A String of unknown text read at an unknown key is a one-code-unit
  * String, its length or a %String.prototype% member: no unknown code (exact),
- * and a program member there runs (listed). The stress makes 256
+ * and a program member there runs (listed). * Converting or reading a native value throws a native error or what a
+ * program callable stored on a builtin throws (listed), never unknown code
+ * (exact). The stress makes 256
  * dispatching calls. */
 
 const P=`eval("print('"+w+"')");`;
@@ -107,6 +109,8 @@ const shapes:Record<string,{source:string;exact:string[]|null}>={
  unscopables:{source:`var u=Array.prototype[Symbol.unscopables];var w=Object.getPrototypeOf(u)+":"+u.flat+":"+u.map;${P}`,exact:["print('null:true:undefined')"]},
  unknownTextIndex:{source:`var w='1';var s=String(Math.max);var pos=0;while(pos<s.length){var c=s[pos];/[a-z]/.test(c);pos+=1}${P}`,exact:["print('1')"]},
  textInherited:{source:`var w='1';String.prototype.zz=function(){w='3'};var s=String(Math.max);var k=["zz"];for(var n of k)s[n]();${P}`,exact:null},
+ nativeThrown:{source:`var w='1';var v=Object.getOwnPropertyDescriptors(Math).abs.value;Function.prototype.valueOf=function(){throw 'q'};try{var t=1/v}catch(e){w=typeof e}${P}`,exact:null},
+ nativeConversionError:{source:`var w='1';var v=Object.getOwnPropertyDescriptors(Math).abs.value;try{var t=1/v;var u=v.zz}catch(e){w=typeof e}${P}`,exact:["print('1')","print('object')"]},
  stress:{source:`var w='1';var m={[Symbol.match](s){return null}};${Array.from({length:256},(_,k)=>['"ab".match(m);','"ab".search({[Symbol.search](){return 0}});','"ab".padStart(4);','"ab".split({[Symbol.split](){return []}});'][k%4]).join('')}${P}`,exact:["print('1')"]},
 };
 
@@ -135,6 +139,8 @@ test('String prototype methods dispatch to their argument protocol, sound agains
  expect(observed[names.indexOf('regexpTestExec')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('nativeDescriptorWriter')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('textInherited')]).toEqual(["print('3')"]);
+ expect(observed[names.indexOf('nativeThrown')]).toEqual(["print('string')"]);
+ expect(observed[names.indexOf('nativeConversionError')]).toEqual(["print('1')"]);
  expect(observed[names.indexOf('constantWrite')]).toEqual(["print('3.141592653589793:2.220446049250313e-16')"]);
  expect(observed[names.indexOf('localeInvokesToString')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('arrayFromGetter')]).toEqual(["print('13')"]);
