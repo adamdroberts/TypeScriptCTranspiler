@@ -400,6 +400,12 @@ interface SyncCompletionScope {
     readonly controlDepths: readonly [number, number, number, number];
 }
 
+interface NamespaceSegmentPlan {
+    readonly declaration: ts.ModuleDeclaration;
+    readonly slot: string;
+    readonly root: string;
+}
+
 interface LocalLexicalBindingPlan {
     readonly symbol: ts.Symbol;
     readonly declaration: ScopeLexicalDeclaration;
@@ -650,7 +656,11 @@ class Emitter {
     private moduleVarBindings = new Map<ts.Symbol, ModuleVarBindingPlan>();
     /** Module-level enum declarations, whose names have module var storage. */
     private readonly enumStorageDeclarations = new Set<ts.EnumDeclaration>();
-    private readonly namespaceEnumBindingsBySource = new Map<ts.SourceFile, ModuleVarBindingPlan[]>();
+    private readonly namespaceInstantiationFacts = new Map<ts.ModuleDeclaration, boolean>();
+    private readonly valueImportAliasFacts = new Map<ts.ImportEqualsDeclaration, boolean>();
+    private readonly namespaceSegments = new Map<ts.ModuleDeclaration, NamespaceSegmentPlan>();
+    private readonly namespaceLocals = new Map<ts.ModuleDeclaration, Map<ts.Symbol, ModuleVarBindingPlan>>();
+    private readonly namespaceStorageBySource = new Map<ts.SourceFile, Array<{ value: string; root: string }>>();
     private moduleFunctionDeclarations = new Map<ts.FunctionDeclaration, ModuleFunctionBindingPlan>();
     private readonly sloppyDirectEvalBodies = new Map<ts.Block, boolean>();
     private moduleVarBindingsBySource = new WeakMap<ts.SourceFile, ModuleVarBindingPlan[]>();
@@ -11917,7 +11927,7 @@ class Emitter {
             if (info) {
                 this.collectCommonJsModuleBinding(info.sf, modId);
                 this.collectModuleVarBindings(info.sf);
-                this.collectNamespaceEnumBindings(info.sf);
+                this.collectNamespacePlans(info.sf);
                 this.collectModuleLexicalBindings(info.sf);
                 this.collectModuleFunctionBindings(info.sf);
                 this.collectModuleDefaultExportBinding(info.sf, modId);
@@ -12655,7 +12665,7 @@ class Emitter {
                         initializedPtr: initialized ? `&${initialized}` : undefined,
                         lexicalName: symbol.getName(), immutable });
                 };
-                for (const binding of [...this.collectModuleVarBindings(sf), ...this.collectNamespaceEnumBindings(sf)])
+                for (const binding of this.collectModuleVarBindings(sf))
                     addBinding(binding.symbol, binding.cName, binding.gcRoot);
                 for (const binding of this.collectModuleLexicalBindings(sf))
                     addBinding(binding.symbol, binding.cName, binding.gcRoot, binding.initialized, binding.immutable);
@@ -12665,8 +12675,9 @@ class Emitter {
                         if (symbol) addBinding(symbol, binding.cName, binding.gcRoot);
                     }
                 const runtimeStatements = statements.filter(statement => !this.isAmbientDeclaration(statement) &&
-                    !ts.isFunctionDeclaration(statement) && !ts.isImportDeclaration(statement) &&
-                    !ts.isImportEqualsDeclaration(statement) && !ts.isExportDeclaration(statement) &&
+                    (!ts.isFunctionDeclaration(statement) || this.isExportedNamespaceMember(statement)) && !ts.isImportDeclaration(statement) &&
+                    (!ts.isImportEqualsDeclaration(statement) || this.isValueImportAlias(statement) || this.isExportedNamespaceMember(statement)) &&
+                    !ts.isExportDeclaration(statement) &&
                     !ts.isInterfaceDeclaration(statement) && !ts.isTypeAliasDeclaration(statement));
                 const body = ts.factory.createBlock(runtimeStatements, true);
                 ts.setTextRange(body, sf);
@@ -12688,50 +12699,8 @@ class Emitter {
             this.emitResourceScope(initBuf, sf, this.directResourceDeclarations(statements), () => {
             for (const inner of statements) {
                 if (!inner) continue;
-                if (ts.isFunctionDeclaration(inner)) continue;
-                if (ts.isClassDeclaration(inner)) {
-                    if (!this.shouldEmitClassDeclaration(inner)) continue;
-                    if (this.isCanonicalClassDeclaration(inner)) {
-                        const value = this.emitClassDefinitionValue(inner);
-                        if (!this.emitTest262ScriptGlobalClassLexicalInitializer(initBuf, inner, value) &&
-                            !this.emitModuleClassLexicalInitializer(initBuf, inner, value))
-                            unsupported(inner, "class declaration requires a canonical lexical binding");
-                        continue;
-                    }
-                    this.emitClassStaticInitializers(initBuf, inner);
-                    const metadata = this.classHasDecorators(inner)
-                        ? this.freshTemp("_decorator_metadata")
-                        : null;
-                    const initializers = metadata
-                        ? this.freshTemp("_decorator_initializers")
-                        : null;
-                    if (metadata) {
-                        initBuf.line(`tsc_object_t* ${metadata} = tsc_object_new();`);
-                        initBuf.line(`tsc_array_t* ${initializers} = tsc_array_new(sizeof(tsc_value_t), 4);`);
-                        this.emitClassFieldDecoratorInitializerSetup(initBuf, inner);
-                    }
-                    this.emitClassMemberDecorators(initBuf, inner, metadata, initializers);
-                    this.emitClassDecorators(initBuf, inner, metadata, initializers);
-                    this.emitDecoratorInitializers(initBuf, initializers);
-                    if (this.emitTest262ScriptGlobalClassLexicalInitializer(initBuf, inner)) continue;
-                    this.emitModuleClassLexicalInitializer(initBuf, inner);
-                    continue;
-                }
-                if (ts.isInterfaceDeclaration(inner)) continue;
-                if (ts.isTypeAliasDeclaration(inner)) continue;
-                if (ts.isEnumDeclaration(inner)) { this.emitModuleEnumDeclaration(initBuf, inner); continue; }
-                if (ts.isImportDeclaration(inner)) continue;
-                if (ts.isExportDeclaration(inner)) continue; // re-exports - metadata only
-                if (ts.isImportEqualsDeclaration(inner)) continue;
-                if (ts.isExportAssignment(inner)) {
-                    this.emitDefaultExportAssignment(initBuf, inner);
-                    continue;
-                }
-                if (ts.isVariableStatement(inner)) {
-                    this.emitTopLevelVarStmt(initBuf, inner);
-                    continue;
-                }
-                this.emitStmt(initBuf, inner);
+                if (this.isNamespaceBodyStatement(inner)) this.emitNamespaceBodyStatement(initBuf, inner);
+                else this.emitModuleStatementOnce(initBuf, inner);
             }
             });
         } catch (e) {
@@ -12753,6 +12722,147 @@ class Emitter {
         }
     }
 
+    /** A namespace segment's entry, or a statement of a namespace body. */
+    private isNamespaceBodyStatement(statement: ts.Statement): boolean {
+        return ts.isModuleDeclaration(statement) || !!statement.parent && ts.isModuleBlock(statement.parent);
+    }
+
+    /** A namespace body statement in a module's statement list: the segment's
+     * entry, an exported member's publication, or the statement itself. */
+    private emitNamespaceBodyStatement(buf: CBuf, statement: ts.Statement): void {
+        if (ts.isModuleDeclaration(statement)) { this.emitNamespaceEntry(buf, statement); return; }
+        if (!this.emitNamespaceDeclarationPublication(buf, statement, () => this.emitModuleStatementOnce(buf, statement)))
+            this.emitModuleStatementOnce(buf, statement);
+    }
+
+    /** An exported namespace function or class declaration runs as itself
+     * and then `N.f = f;` (TypeScript's emit), and an `export import a = X.y`
+     * alias as `N.a = X.y;`. */
+    private emitNamespaceDeclarationPublication(buf: CBuf, statement: ts.Statement, emitDeclaration: () => void): boolean {
+        if (ts.isImportEqualsDeclaration(statement) && this.isExportedNamespaceMember(statement) &&
+            !statement.isTypeOnly && !ts.isExternalModuleReference(statement.moduleReference)) {
+            if (!this.entityNameHasValue(statement.moduleReference)) return true;
+            this.emitNamespaceMemberPublication(buf, statement, statement.name, this.emitEntityNameValue(statement.moduleReference));
+            return true;
+        }
+        if (!(ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) || !statement.name ||
+            !this.isExportedNamespaceMember(statement)) return false;
+        emitDeclaration();
+        this.emitNamespaceMemberPublication(buf, statement, statement.name, this.emitExpr(statement.name));
+        return true;
+    }
+
+    /** `import a = X.y` (an entity name, not `require`) with a value target,
+     * referenced as a value: TypeScript's `var a = X.y;` at its position, a
+     * snapshot binding (an alias used only as a type is elided). */
+    private isValueImportAlias(declaration: ts.Node): declaration is ts.ImportEqualsDeclaration {
+        if (!ts.isImportEqualsDeclaration(declaration) || declaration.isTypeOnly ||
+            ts.isExternalModuleReference(declaration.moduleReference) || this.isAmbientDeclaration(declaration) ||
+            this.isJavaScriptSourceFile(declaration.getSourceFile())) return false;
+        const known = this.valueImportAliasFacts.get(declaration);
+        if (known !== undefined) return known;
+        let referenced = false;
+        if (this.entityNameHasValue(declaration.moduleReference)) {
+            const symbol = this.checker.getSymbolAtLocation(declaration.name);
+            const worklist: ts.Node[] = [declaration.parent];
+            while (worklist.length > 0 && !referenced) {
+                const node = worklist.pop()!;
+                if (ts.isTypeNode(node) || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) continue;
+                if (ts.isIdentifier(node) && node !== declaration.name && !this.isNonValueIdentifier(node) &&
+                    this.checker.getSymbolAtLocation(node) === symbol) referenced = true;
+                ts.forEachChild(node, child => { worklist.push(child); });
+            }
+        }
+        this.valueImportAliasFacts.set(declaration, referenced);
+        return referenced;
+    }
+
+    /** A value import alias's snapshot: a namespace segment's local, a
+     * module's var binding or a Script's global var, assigned its entity
+     * name's value at the declaration. */
+    private emitImportAliasBinding(buf: CBuf, declaration: ts.ImportEqualsDeclaration): void {
+        if (this.isExportedNamespaceMember(declaration) || !this.isValueImportAlias(declaration)) return;
+        const value = this.coerce(this.emitEntityNameValue(declaration.moduleReference as ts.EntityName), T_VALUE, declaration);
+        const segment = ts.isModuleBlock(declaration.parent) ? this.enclosingNamespaceSegment(declaration) : null;
+        const symbol = this.checker.getSymbolAtLocation(declaration.name);
+        const binding = segment ? this.namespaceLocalBinding(segment, declaration.name) : symbol ? this.moduleVarBindings.get(symbol) : undefined;
+        if (binding) {
+            buf.line(`${binding.cName} = ${value};`);
+            buf.line(`${binding.gcRoot} = tsc_value_gc_root(${binding.cName});`);
+            return;
+        }
+        if (this.isTest262ScriptGlobalTypeScriptDeclaration(declaration)) {
+            buf.line(`tsc_environment_reference_set(${this.test262GlobalBindingKey(declaration.name.text)}, ${value}, ${this.nodeIsInStrictMode(declaration) ? "true" : "false"});`);
+            return;
+        }
+        unsupported(declaration, "import alias requires a canonical binding");
+    }
+
+    /** An import alias's entity name (`X.y.z`) as a value: its leftmost name
+     * read as an identifier, then each property. */
+    private emitEntityNameValue(name: ts.EntityName): EmitResult {
+        if (ts.isIdentifier(name)) return this.emitExpr(name);
+        const base = this.emitEntityNameValue(name.left);
+        return { c: `tsc_value_get_prop(${this.coerce(base, T_VALUE, name.left)}, ${this.test262GlobalBindingKey(name.right.text)})`, ty: T_VALUE };
+    }
+
+    private entityNameHasValue(name: ts.EntityName): boolean {
+        const symbol = this.checker.getSymbolAtLocation(name);
+        const target = symbol && symbol.flags & ts.SymbolFlags.Alias ? this.checker.getAliasedSymbol(symbol) : symbol;
+        return !!target && (target.flags & ts.SymbolFlags.Value) !== 0 &&
+            (target.declarations ?? []).some(declaration => !this.isAmbientDeclaration(declaration) &&
+                !(ts.isModuleDeclaration(declaration) && !this.isRuntimeNamespaceDeclaration(declaration)) &&
+                !(ts.isEnumDeclaration(declaration) && this.isConstEnumDeclaration(declaration)));
+    }
+
+    /** One module-body statement of a straight-line module evaluation. */
+    private emitModuleStatementOnce(initBuf: CBuf, inner: ts.Statement): void {
+        if (ts.isFunctionDeclaration(inner)) return;
+        if (ts.isClassDeclaration(inner)) {
+            if (!this.shouldEmitClassDeclaration(inner)) return;
+            if (this.isCanonicalClassDeclaration(inner)) {
+                const value = this.emitClassDefinitionValue(inner);
+                if (!this.emitTest262ScriptGlobalClassLexicalInitializer(initBuf, inner, value) &&
+                    !this.emitModuleClassLexicalInitializer(initBuf, inner, value))
+                    unsupported(inner, "class declaration requires a canonical lexical binding");
+                return;
+            }
+            this.emitClassStaticInitializers(initBuf, inner);
+            const metadata = this.classHasDecorators(inner)
+                ? this.freshTemp("_decorator_metadata")
+                : null;
+            const initializers = metadata
+                ? this.freshTemp("_decorator_initializers")
+                : null;
+            if (metadata) {
+                initBuf.line(`tsc_object_t* ${metadata} = tsc_object_new();`);
+                initBuf.line(`tsc_array_t* ${initializers} = tsc_array_new(sizeof(tsc_value_t), 4);`);
+                this.emitClassFieldDecoratorInitializerSetup(initBuf, inner);
+            }
+            this.emitClassMemberDecorators(initBuf, inner, metadata, initializers);
+            this.emitClassDecorators(initBuf, inner, metadata, initializers);
+            this.emitDecoratorInitializers(initBuf, initializers);
+            if (this.emitTest262ScriptGlobalClassLexicalInitializer(initBuf, inner)) return;
+            this.emitModuleClassLexicalInitializer(initBuf, inner);
+            return;
+        }
+        if (ts.isInterfaceDeclaration(inner)) return;
+        if (ts.isTypeAliasDeclaration(inner)) return;
+        if (ts.isEnumDeclaration(inner)) { this.emitModuleEnumDeclaration(initBuf, inner); return; }
+        if (ts.isImportDeclaration(inner)) return;
+        if (ts.isExportDeclaration(inner)) return; // re-exports - metadata only
+        if (ts.isImportEqualsDeclaration(inner)) { this.emitImportAliasBinding(initBuf, inner); return; }
+        if (ts.isExportAssignment(inner)) {
+            this.emitDefaultExportAssignment(initBuf, inner);
+            return;
+        }
+        if (ts.isVariableStatement(inner)) {
+            this.emitTopLevelVarStmt(initBuf, inner);
+            return;
+        }
+        this.emitStmt(initBuf, inner);
+    }
+
     /**
      * Unwrap `export function x() {}` / `export class X {}` / `export const x = ...`
      * to the inner declaration. Returns null for plain export/import passthrough.
@@ -12769,6 +12879,9 @@ class Emitter {
             const inner = this.unwrapExportDecl(stmt);
             if (!inner) return;
             if (ts.isModuleDeclaration(inner)) {
+                // A namespace body runs in its segment: entering the segment
+                // is its own step (emitNamespaceEntry), then its statements.
+                if (this.isRuntimeNamespaceDeclaration(inner)) out.push(inner);
                 this.flattenNamespaceBody(inner, visit);
                 return;
             }
@@ -12793,7 +12906,7 @@ class Emitter {
             return;
         }
         if (ts.isModuleDeclaration(md.body)) {
-            this.flattenNamespaceBody(md.body, visit);
+            visit(md.body);
             return;
         }
         unsupported(md.body, `namespace body kind ${ts.SyntaxKind[md.body.kind]}`);
@@ -12855,7 +12968,12 @@ class Emitter {
     private emitModuleEnumDeclaration(buf: CBuf, declaration: ts.EnumDeclaration): void {
         const symbol = this.symbolForIdentifier(declaration.name);
         const binding = symbol ? this.moduleVarBindings.get(symbol) : undefined;
-        if (binding) {
+        const segment = ts.isModuleBlock(declaration.parent) ? this.enclosingNamespaceSegment(declaration) : null;
+        if (segment) {
+            const local = this.namespaceLocalBinding(segment, declaration.name);
+            this.emitNamespaceMemberObject(buf, declaration, segment, local, this.nodeIsInStrictMode(declaration));
+            this.emitEnumDeclarationInto(buf, declaration, local.cName, local.gcRoot);
+        } else if (binding) {
             this.emitEnumDeclarationInto(buf, declaration, binding.cName, binding.gcRoot);
         } else if (this.isTest262ScriptGlobalEnumDeclaration(declaration)) {
             const target = this.freshTemp("_enum");
@@ -12936,12 +13054,266 @@ class Emitter {
         return overrides;
     }
 
+    /** TypeScript's getModuleInstanceState: a namespace has a runtime
+     * object unless its body holds only types (interfaces, type aliases),
+     * const enums, non-exported import aliases and namespaces without one. */
+    private namespaceIsInstantiated(declaration: ts.ModuleDeclaration): boolean {
+        const known = this.namespaceInstantiationFacts.get(declaration);
+        if (known !== undefined) return known;
+        let instantiated = false;
+        const body = declaration.body;
+        if (body && ts.isModuleDeclaration(body)) instantiated = this.namespaceIsInstantiated(body);
+        else if (body && ts.isModuleBlock(body)) instantiated = body.statements.some(statement => {
+            if (ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) return false;
+            if (ts.isEnumDeclaration(statement) && this.isConstEnumDeclaration(statement)) return false;
+            if ((ts.isImportEqualsDeclaration(statement) || ts.isImportDeclaration(statement)) &&
+                !(ts.getCombinedModifierFlags(statement as ts.Node as ts.Declaration) & ts.ModifierFlags.Export)) return false;
+            if (ts.isModuleDeclaration(statement)) return this.namespaceIsInstantiated(statement);
+            return true;
+        });
+        this.namespaceInstantiationFacts.set(declaration, instantiated);
+        return instantiated;
+    }
+
+    /** A namespace declaration (one segment of a dotted `A.B.C` name) whose
+     * TypeScript emit is `(function (N) { ... })(N || (N = {}))`. */
+    private isRuntimeNamespaceDeclaration(node: ts.Node): node is ts.ModuleDeclaration & { name: ts.Identifier } {
+        return ts.isModuleDeclaration(node) && ts.isIdentifier(node.name) && !this.isAmbientDeclaration(node) &&
+            !this.isJavaScriptSourceFile(node.getSourceFile()) && this.namespaceIsInstantiated(node);
+    }
+
+    /** The namespace segment whose function a node belongs to: the nearest
+     * enclosing namespace declaration, if any. */
+    private enclosingNamespaceSegment(node: ts.Node): (ts.ModuleDeclaration & { name: ts.Identifier }) | null {
+        for (let current = node.parent; current; current = current.parent)
+            if (this.isRuntimeNamespaceDeclaration(current)) return current;
+        return null;
+    }
+
+    private namespaceSymbol(declaration: ts.ModuleDeclaration & { name: ts.Identifier }): ts.Symbol | undefined {
+        const symbol = this.checker.getSymbolAtLocation(declaration.name);
+        return symbol ? this.checker.getExportSymbolOfSymbol(symbol) : undefined;
+    }
+
+    /** A namespace member TypeScript publishes as a property of its
+     * namespace's object: an exported declaration in a namespace body, or the
+     * inner segment of a dotted namespace name. */
+    private isExportedNamespaceMember(declaration: ts.Node): boolean {
+        if (this.isAmbientDeclaration(declaration)) return false;
+        if (ts.isModuleDeclaration(declaration) && ts.isModuleDeclaration(declaration.parent)) return true;
+        let statement: ts.Node = declaration;
+        if (ts.isVariableDeclaration(statement)) statement = statement.parent.parent;
+        if (!statement.parent || !ts.isModuleBlock(statement.parent)) return false;
+        return (ts.getCombinedModifierFlags(statement as ts.Declaration) & ts.ModifierFlags.Export) !== 0;
+    }
+
+    /** The static slot holding one namespace segment's object (its
+     * function's parameter); a segment's body runs at most once. */
+    private namespaceSegmentPlan(declaration: ts.ModuleDeclaration & { name: ts.Identifier }): NamespaceSegmentPlan {
+        let plan = this.namespaceSegments.get(declaration);
+        if (!plan) {
+            const name = this.declaredName(declaration.name);
+            plan = { declaration, slot: this.freshTemp(`_${name}_namespace`), root: this.freshTemp(`_${name}_namespace_root`) };
+            this.namespaceSegments.set(declaration, plan);
+        }
+        return plan;
+    }
+
+    /** TypeScript's `let Inner;` for a nested namespace or enum in a
+     * namespace segment's function: one binding per segment and name. */
+    private namespaceLocalBinding(segment: ts.ModuleDeclaration & { name: ts.Identifier }, name: ts.Identifier): ModuleVarBindingPlan {
+        const symbol = this.symbolForIdentifier(name);
+        if (!symbol) unsupported(name, "namespace member requires a canonical retained cell");
+        const exported = this.checker.getExportSymbolOfSymbol(symbol);
+        let locals = this.namespaceLocals.get(segment);
+        if (!locals) this.namespaceLocals.set(segment, locals = new Map());
+        let plan = locals.get(exported);
+        if (!plan) {
+            const cName = `${this.declaredName(segment.name)}_${this.freshTemp(`_${name.text}_local`)}`;
+            plan = { symbol: exported, name, cName, gcRoot: `${cName}_root` };
+            locals.set(exported, plan);
+        }
+        this.symbolStorageTypes.set(symbol, T_VALUE);
+        this.symbolStorageTypes.set(exported, T_VALUE);
+        return plan;
+    }
+
+    /** Every namespace slot and namespace-local binding of a source file, in
+     * one worklist over its namespace segments. */
+    private collectNamespacePlans(sf: ts.SourceFile): Array<{ value: string; root: string }> {
+        const prepared = this.namespaceStorageBySource.get(sf);
+        if (prepared) return prepared;
+        const storage: Array<{ value: string; root: string }> = [];
+        this.namespaceStorageBySource.set(sf, storage);
+        const worklist: ts.Node[] = [...sf.statements];
+        while (worklist.length > 0) {
+            const node = worklist.pop()!;
+            if (this.isRuntimeNamespaceDeclaration(node)) {
+                const plan = this.namespaceSegmentPlan(node);
+                storage.push({ value: plan.slot, root: plan.root });
+                const parent = this.enclosingNamespaceSegment(node);
+                if (parent) {
+                    const local = this.namespaceLocalBinding(parent, node.name);
+                    if (!storage.some(entry => entry.value === local.cName)) storage.push({ value: local.cName, root: local.gcRoot });
+                }
+                if (node.body && ts.isModuleBlock(node.body)) worklist.push(...node.body.statements);
+                else if (node.body) worklist.push(node.body);
+                continue;
+            }
+            if (this.isValueImportAlias(node) && ts.isModuleBlock(node.parent) && !this.isExportedNamespaceMember(node)) {
+                const parent = this.enclosingNamespaceSegment(node);
+                if (!parent) continue;
+                const local = this.namespaceLocalBinding(parent, node.name);
+                if (!storage.some(entry => entry.value === local.cName)) storage.push({ value: local.cName, root: local.gcRoot });
+                continue;
+            }
+            if (ts.isEnumDeclaration(node) && ts.isModuleBlock(node.parent) && !this.isConstEnumDeclaration(node) && !this.isAmbientDeclaration(node)) {
+                const parent = this.enclosingNamespaceSegment(node);
+                if (!parent) continue;
+                this.enumStorageDeclarations.add(node);
+                const local = this.namespaceLocalBinding(parent, node.name);
+                if (!storage.some(entry => entry.value === local.cName)) storage.push({ value: local.cName, root: local.gcRoot });
+            }
+        }
+        return storage;
+    }
+
+    /** The namespace-local binding an identifier reads: a nested namespace's
+     * or enum's `let` in the segment whose function lexically contains the
+     * reference. */
+    private namespaceLocalForReference(id: ts.Identifier): ModuleVarBindingPlan | null {
+        const symbol = this.symbolForIdentifier(id);
+        if (!symbol) return null;
+        for (const declaration of symbol.declarations ?? []) {
+            if (!(this.isRuntimeNamespaceDeclaration(declaration) ||
+                ts.isEnumDeclaration(declaration) && ts.isModuleBlock(declaration.parent) && !this.isConstEnumDeclaration(declaration) ||
+                this.isValueImportAlias(declaration) && ts.isModuleBlock(declaration.parent) && !this.isExportedNamespaceMember(declaration))) continue;
+            const segment = this.enclosingNamespaceSegment(declaration);
+            if (!segment || !this.isNodeWithin(id, segment)) continue;
+            return this.namespaceLocals.get(segment)?.get(this.checker.getExportSymbolOfSymbol(symbol)) ?? null;
+        }
+        return null;
+    }
+
+    /** TypeScript rewrites a reference to an exported namespace member into
+     * `N.member` on the object of the innermost enclosing segment of that
+     * namespace: always for an exported variable or import alias, and for an
+     * exported function, class, enum or namespace outside the segment that
+     * declares it (inside, its own binding). */
+    private namespacePropertyReference(id: ts.Identifier): { slot: string; key: string } | null {
+        if (this.isJavaScriptSourceFile(id.getSourceFile())) return null;
+        const parent = id.parent;
+        if (parent && (ts.isPropertyAccessExpression(parent) && parent.name === id || ts.isQualifiedName(parent) && parent.right === id ||
+            (ts.isVariableDeclaration(parent) || ts.isFunctionDeclaration(parent) || ts.isClassDeclaration(parent) ||
+                ts.isEnumDeclaration(parent) || ts.isModuleDeclaration(parent) || ts.isImportEqualsDeclaration(parent)) && parent.name === id)) return null;
+        const local = this.checker.getSymbolAtLocation(id);
+        if (!local) return null;
+        const symbol = this.checker.getExportSymbolOfSymbol(local);
+        const owner = (symbol as ts.Symbol & { parent?: ts.Symbol }).parent;
+        if (!owner) return null;
+        const declarations = (symbol.declarations ?? []).filter(declaration => this.isExportedNamespaceMember(declaration));
+        if (declarations.length === 0) return null;
+        const variable = declarations.some(declaration => ts.isVariableDeclaration(declaration) || ts.isImportEqualsDeclaration(declaration));
+        if (!variable && declarations.some(declaration => {
+            const segment = this.enclosingNamespaceSegment(declaration);
+            return !!segment && this.isNodeWithin(id, segment);
+        })) return null;
+        for (let segment = this.enclosingNamespaceSegment(id); segment; segment = this.enclosingNamespaceSegment(segment)) {
+            if (this.namespaceSymbol(segment) === owner) return { slot: this.namespaceSegmentPlan(segment).slot, key: id.text };
+        }
+        return null;
+    }
+
+    private namespacePropertyReferencePlan(id: ts.Identifier, reference: { slot: string; key: string }): SourceReferencePlan {
+        const key = this.test262GlobalBindingKey(reference.key);
+        const strict = this.nodeIsInStrictMode(id) ? "true" : "false";
+        return {
+            get: `tsc_value_get_prop(${reference.slot}, ${key})`,
+            capture: `((tsc_reference_t){ .name = ${key}, .base = (void*)&${reference.slot}, .kind = TSC_REFERENCE_PROPERTY, .strict = ${strict} })`,
+            set: (captured, value) => this.emitSequencedExpr(T_VALUE, [
+                { value: { c: value, ty: T_VALUE } },
+            ], ([rooted]) => `tsc_environment_reference_set_captured(${captured}, ${rooted})`).c,
+            remove: `({ tsc_reference_t _ns_delete = ((tsc_reference_t){ .name = ${key}, .base = (void*)&${reference.slot}, .kind = TSC_REFERENCE_PROPERTY, .strict = ${strict} }); tsc_environment_reference_delete_captured(&_ns_delete); })`,
+        };
+    }
+
+    /** `(function (N) { ... })(N || (N = {}))` for one namespace segment:
+     * the binding's value is used when truthy, otherwise a new object is
+     * created and assigned (a nested exported segment's binding is the
+     * parent's property, `Inner = N.Inner || (N.Inner = {})`), and the result
+     * is the segment's object. */
+    private emitNamespaceEntry(buf: CBuf, declaration: ts.ModuleDeclaration): void {
+        if (!this.isRuntimeNamespaceDeclaration(declaration)) return;
+        const plan = this.namespaceSegmentPlan(declaration);
+        const strict = this.nodeIsInStrictMode(declaration);
+        const fresh = (target: string, root: string, publish = ""): void => {
+            buf.line(`if (!tsc_value_is_truthy(${target})) { ${target} = tsc_value_object(tsc_object_new()); ${root} = tsc_value_gc_root(${target}); ${publish} }`);
+        };
+        const parent = this.enclosingNamespaceSegment(declaration);
+        if (!parent) {
+            const symbol = this.symbolForIdentifier(declaration.name);
+            const binding = symbol ? this.moduleVarBindings.get(symbol) : undefined;
+            if (binding) {
+                fresh(binding.cName, binding.gcRoot);
+                buf.line(`${plan.slot} = ${binding.cName};`);
+            } else if (this.isTest262ScriptGlobalTypeScriptDeclaration(declaration)) {
+                const key = this.test262GlobalBindingKey(declaration.name.text);
+                buf.line(`${plan.slot} = tsc_environment_reference_get(${key});`);
+                buf.line(`${plan.root} = tsc_value_gc_root(${plan.slot});`);
+                fresh(plan.slot, plan.root, `tsc_environment_reference_set(${key}, ${plan.slot}, ${strict ? "true" : "false"});`);
+            } else unsupported(declaration, "namespace declaration requires a canonical binding");
+        } else {
+            const local = this.namespaceLocalBinding(parent, declaration.name);
+            this.emitNamespaceMemberObject(buf, declaration, parent, local, strict);
+            buf.line(`${plan.slot} = ${local.cName};`);
+        }
+        buf.line(`${plan.root} = tsc_value_gc_root(${plan.slot});`);
+    }
+
+    /** A nested namespace's or enum's local binding: `Inner = N.Inner ||
+     * (N.Inner = {})` when exported, `Inner || (Inner = {})` otherwise. */
+    private emitNamespaceMemberObject(buf: CBuf, declaration: ts.ModuleDeclaration | ts.EnumDeclaration,
+        parent: ts.ModuleDeclaration & { name: ts.Identifier }, local: ModuleVarBindingPlan, strict: boolean): void {
+        if (this.isExportedNamespaceMember(declaration)) {
+            const slot = this.namespaceSegmentPlan(parent).slot;
+            const key = this.test262GlobalBindingKey((declaration.name as ts.Identifier).text);
+            buf.line(`${local.cName} = tsc_value_get_prop(${slot}, ${key});`);
+            buf.line(`${local.gcRoot} = tsc_value_gc_root(${local.cName});`);
+            buf.line(`if (!tsc_value_is_truthy(${local.cName})) { ${local.cName} = tsc_value_object(tsc_object_new()); ${local.gcRoot} = tsc_value_gc_root(${local.cName}); ` +
+                `if (!tsc_value_set_prop(${slot}, ${key}, ${local.cName}) && ${strict ? "true" : "false"}) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("namespace member assignment failed")); }`);
+        } else {
+            buf.line(`if (!tsc_value_is_truthy(${local.cName})) { ${local.cName} = tsc_value_object(tsc_object_new()); ${local.gcRoot} = tsc_value_gc_root(${local.cName}); }`);
+        }
+    }
+
+    /** An exported namespace member's publication at its position:
+     * `N.x = value` (a variable's initializer, `export import` alias) or
+     * `N.f = f` after a function or class declaration. */
+    private emitNamespaceMemberPublication(buf: CBuf, declaration: ts.Node, name: ts.Identifier, value: EmitResult): void {
+        const segment = this.enclosingNamespaceSegment(declaration);
+        if (!segment) unsupported(declaration, "namespace member requires its namespace object");
+        const key = this.test262GlobalBindingKey(name.text);
+        const stored = this.freshTemp("_namespace_member");
+        buf.line(`tsc_value_t ${stored} = ${this.coerce(value, T_VALUE, declaration)};`);
+        buf.line(`void* volatile ${stored}_root = tsc_value_gc_root(${stored}); (void)${stored}_root;`);
+        buf.line(`if (!tsc_value_set_prop(${this.namespaceSegmentPlan(segment).slot}, ${key}, ${stored}) && ${this.nodeIsInStrictMode(declaration) ? "true" : "false"}) ` +
+            `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("namespace member assignment failed"));`);
+    }
+
     /** A Script's top-level enum (not `const enum`): TypeScript emits it as
      * `var E;` plus its initialization, so its name is one of the Script's
      * VarDeclaredNames, a global var binding. */
     private isTest262ScriptGlobalEnumDeclaration(declaration: ts.Node): declaration is ts.EnumDeclaration {
         return ts.isEnumDeclaration(declaration) && ts.isSourceFile(declaration.parent) &&
             !this.isAmbientDeclaration(declaration) && !this.isConstEnumDeclaration(declaration) &&
+            this.isTest262ScriptSourceFile(declaration.parent);
+    }
+
+    /** A Script's top-level enum or namespace: TypeScript's `var N;`, one of
+     * the Script's VarDeclaredNames. */
+    private isTest262ScriptGlobalTypeScriptDeclaration(declaration: ts.Node): declaration is ts.EnumDeclaration | (ts.ModuleDeclaration & { name: ts.Identifier }) | ts.ImportEqualsDeclaration {
+        return this.isTest262ScriptGlobalEnumDeclaration(declaration) ||
+            (this.isRuntimeNamespaceDeclaration(declaration) || this.isValueImportAlias(declaration)) && ts.isSourceFile(declaration.parent) &&
             this.isTest262ScriptSourceFile(declaration.parent);
     }
 
@@ -13008,6 +13380,8 @@ class Emitter {
     }
 
     private identifierName(id: ts.Identifier): string {
+        const namespaceLocal = this.namespaceLocalForReference(id);
+        if (namespaceLocal) return namespaceLocal.cName;
         const moduleFunction = this.moduleFunctionBindingForIdentifier(id);
         if (moduleFunction) return moduleFunction.cName;
         const aliasTarget = this.importAliasTargetDeclaration(id);
@@ -13046,26 +13420,6 @@ class Emitter {
                 unsupported(id, "ambient host export requires an ordinary runtime owner");
         }
         return mangleIdent(id.text);
-    }
-
-    private namespaceMemberName(id: ts.Identifier): string | null {
-        // ECMAScript sources have ordinary property names, not TypeScript
-        // namespace declarations. Resolving a member name asks the checker
-        // to infer the receiver's entire anonymous owner graph.
-        if (this.isJavaScriptSourceFile(id.getSourceFile())) return null;
-        const sym = this.symbolForIdentifier(id);
-        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-        if (decl && !this.isAmbientDeclaration(decl) && this.isNamespaceTopLevelDeclaration(decl)) {
-            const name = this.declarationName(decl);
-            return name ? this.declaredName(name) : null;
-        }
-        return null;
-    }
-
-    private isNamespaceReceiver(expr: ts.Expression): boolean {
-        const sym = this.checker.getSymbolAtLocation(expr);
-        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-        return !!decl && ts.isModuleDeclaration(decl);
     }
 
     private importAliasTargetDeclaration(id: ts.Identifier): ts.Node | null {
@@ -18534,6 +18888,9 @@ class Emitter {
             (sym.declarations ?? []).some(declaration =>
                 (ts.isVariableDeclaration(declaration) || ts.isParameter(declaration) || ts.isBindingElement(declaration)) &&
                 this.test262BindingNames(declaration.name).some(name => name.text === id.text))) return sym;
+        // A value import alias (`import a = X.y`) is its own snapshot
+        // binding, TypeScript's `var a = X.y`, not its target's.
+        if (sym && (sym.flags & ts.SymbolFlags.Alias) && sym.declarations?.some(declaration => this.isValueImportAlias(declaration))) return sym;
         if (sym && (sym.flags & ts.SymbolFlags.Alias)) {
             try {
                 return this.resolveAliasSymbol(sym);
@@ -18712,7 +19069,8 @@ class Emitter {
             return this.emitFunctionDeclarationReferenceClosure(declaration, type);
         }
         if (
-            (ts.isVariableDeclaration(declaration) || ts.isBindingElement(declaration) || ts.isEnumDeclaration(declaration)) &&
+            (ts.isVariableDeclaration(declaration) || ts.isBindingElement(declaration) || ts.isEnumDeclaration(declaration) ||
+                this.isRuntimeNamespaceDeclaration(declaration)) &&
             declaration.name &&
             ts.isIdentifier(declaration.name)
         ) {
@@ -20809,28 +21167,30 @@ class Emitter {
         const plans: ModuleVarBindingPlan[] = [];
         const visit = (node: ts.Node): void => {
             if (this.isAmbientDeclaration(node)) return;
-            if (
-                node !== sf &&
-                (ts.isFunctionLike(node) || ts.isClassLike(node) || ts.isModuleDeclaration(node))
-            ) {
-                return;
-            }
-            // A module-level enum declaration (not `const enum`) is TypeScript's
-            // `var E; (function (E) { ... })(E || (E = {}))`: a var binding,
-            // undefined until a declaration runs, that every merged declaration
-            // of the enum shares.
-            if (ts.isEnumDeclaration(node) && node.parent === sf && !this.isConstEnumDeclaration(node)) {
-                const symbol = this.symbolForIdentifier(node.name);
+            // A module-level enum declaration (not `const enum`) or namespace
+            // is TypeScript's `var E; (function (E) { ... })(E || (E = {}))`:
+            // a var binding, undefined until a declaration runs, that every
+            // merged declaration shares.
+            if ((ts.isEnumDeclaration(node) && !this.isConstEnumDeclaration(node) || this.isRuntimeNamespaceDeclaration(node) ||
+                this.isValueImportAlias(node) && !this.isExportedNamespaceMember(node)) && node.parent === sf) {
+                const symbol = ts.isImportEqualsDeclaration(node) ? this.checker.getSymbolAtLocation(node.name) : this.symbolForIdentifier(node.name as ts.Identifier);
                 if (!symbol) unsupported(node.name, "Module binding requires a canonical retained cell");
-                this.enumStorageDeclarations.add(node);
+                if (ts.isEnumDeclaration(node)) this.enumStorageDeclarations.add(node);
                 if (!this.moduleVarBindings.has(symbol)) {
-                    const cName = this.declaredName(node.name);
-                    const plan = { symbol, name: node.name, cName, gcRoot: this.freshTemp(`_${cName}_module_var_gc_root`) };
+                    const name = node.name as ts.Identifier;
+                    const cName = this.declaredName(name);
+                    const plan = { symbol, name, cName, gcRoot: this.freshTemp(`_${cName}_module_var_gc_root`) };
                     this.moduleVarBindings.set(symbol, plan);
                     this.symbolStorageTypes.set(symbol, T_VALUE);
                     this.globalDynamicRoots.set(symbol, plan.gcRoot);
                     plans.push(plan);
                 }
+                return;
+            }
+            if (
+                node !== sf &&
+                (ts.isFunctionLike(node) || ts.isClassLike(node) || ts.isModuleDeclaration(node))
+            ) {
                 return;
             }
             if (
@@ -20874,49 +21234,14 @@ class Emitter {
         return plans;
     }
 
-    /** A namespace body's enum (not `const enum`) is TypeScript's `let E;
-     * (function (E) { ... })(E || (E = {}))` in that namespace block's
-     * function (`E = N.E || (N.E = {})` when exported). The namespace is not a
-     * runtime object here: an exported member is one storage shared by every
-     * block of the namespace and a local one is its block's own
-     * (declaredName), so the enum is a binding of that storage, undefined
-     * until a declaration runs. */
-    private collectNamespaceEnumBindings(sf: ts.SourceFile): ModuleVarBindingPlan[] {
-        const prepared = this.namespaceEnumBindingsBySource.get(sf);
-        if (prepared) return prepared;
-        const plans: ModuleVarBindingPlan[] = [];
-        this.namespaceEnumBindingsBySource.set(sf, plans);
-        const worklist: ts.Statement[] = [...sf.statements];
-        while (worklist.length > 0) {
-            const statement = worklist.pop()!;
-            if (this.isAmbientDeclaration(statement)) continue;
-            if (ts.isModuleDeclaration(statement)) {
-                if (statement.body && ts.isModuleBlock(statement.body)) worklist.push(...statement.body.statements);
-                else if (statement.body && ts.isModuleDeclaration(statement.body)) worklist.push(statement.body);
-                continue;
-            }
-            if (!ts.isEnumDeclaration(statement) || !ts.isModuleBlock(statement.parent) || this.isConstEnumDeclaration(statement)) continue;
-            const local = this.symbolForIdentifier(statement.name);
-            if (!local) unsupported(statement.name, "Namespace enum requires a canonical retained cell");
-            const exported = this.checker.getExportSymbolOfSymbol(local);
-            this.enumStorageDeclarations.add(statement);
-            let plan = this.moduleVarBindings.get(local) ?? this.moduleVarBindings.get(exported);
-            if (!plan) {
-                const cName = this.declaredName(statement.name);
-                plan = { symbol: local, name: statement.name, cName, gcRoot: this.freshTemp(`_${cName}_namespace_enum_gc_root`) };
-                plans.push(plan);
-            }
-            for (const symbol of new Set([local, exported])) {
-                this.moduleVarBindings.set(symbol, plan);
-                this.symbolStorageTypes.set(symbol, T_VALUE);
-                this.globalDynamicRoots.set(symbol, plan.gcRoot);
-            }
-        }
-        return plans;
-    }
-
     private emitModuleVarDeclarationInstantiation(buf: CBuf, sf: ts.SourceFile): void {
-        for (const binding of [...this.collectModuleVarBindings(sf), ...this.collectNamespaceEnumBindings(sf)]) {
+        for (const storage of this.collectNamespacePlans(sf)) {
+            this.agentStorage.declare("tsc_value_t", storage.value);
+            this.agentStorage.declare("void* volatile", storage.root);
+            buf.line(`${storage.value} = tsc_value_undefined();`);
+            buf.line(`${storage.root} = NULL;`);
+        }
+        for (const binding of this.collectModuleVarBindings(sf)) {
             this.symbolStorageTypes.set(binding.symbol, T_VALUE);
             this.agentStorage.declare("tsc_value_t",binding.cName);
             this.agentStorage.declare("void* volatile",binding.gcRoot);
@@ -21184,7 +21509,7 @@ class Emitter {
             )) ||
                 this.isTest262ScriptGlobalVarDeclaration(declaration) ||
                 this.isTest262ScriptGlobalFunctionDeclaration(declaration) ||
-                this.isTest262ScriptGlobalEnumDeclaration(declaration) ||
+                this.isTest262ScriptGlobalTypeScriptDeclaration(declaration) ||
                 this.isTest262ScriptGlobalLexicalDeclaration(declaration)) {
                 return id.text;
             }
@@ -21291,10 +21616,10 @@ class Emitter {
             }
         }
 
-        const varDeclarations: Array<ts.VariableDeclaration | ts.FunctionDeclaration | ts.EnumDeclaration> = [];
+        const varDeclarations: Array<ts.VariableDeclaration | ts.FunctionDeclaration | ts.EnumDeclaration | ts.ModuleDeclaration | ts.ImportEqualsDeclaration> = [];
         const visit = (node: ts.Node): void => {
             if (this.isAmbientDeclaration(node)) return;
-            if (this.isTest262ScriptGlobalEnumDeclaration(node)) {
+            if (this.isTest262ScriptGlobalTypeScriptDeclaration(node)) {
                 varDeclarations.push(node);
                 return;
             }
@@ -21325,7 +21650,7 @@ class Emitter {
         const vars: ts.Identifier[] = [];
         for (const declaration of varDeclarations) {
             if (ts.isFunctionDeclaration(declaration)) continue;
-            for (const name of ts.isEnumDeclaration(declaration) ? [declaration.name] : this.test262BindingNames(declaration.name)) {
+            for (const name of ts.isEnumDeclaration(declaration) || ts.isModuleDeclaration(declaration) || ts.isImportEqualsDeclaration(declaration) ? [declaration.name as ts.Identifier] : this.test262BindingNames(declaration.name)) {
                 if (functionNames.has(name.text) || varNames.has(name.text)) continue;
                 varNames.add(name.text);
                 vars.push(name);
@@ -26074,6 +26399,8 @@ class Emitter {
                     const symbol = this.symbolForIdentifier(declaration.name);
                     return !!symbol && fieldBySymbol.has(symbol);
                 })) return false;
+            } else if (stateNode.kind === "sync" && this.isNamespaceBodyStatement(stateNode.statement)) {
+                // Emitted as in a straight-line module body (emitNamespaceBodyStatement).
             } else if (stateNode.kind === "sync" && ts.isVariableStatement(stateNode.statement)) {
                 for (const declaration of stateNode.statement.declarationList.declarations) {
                     if (!ts.isIdentifier(declaration.name)) return false;
@@ -26809,7 +27136,9 @@ class Emitter {
                     })) return false;
                     } finally { this.closureEnvScopes.pop(); }
                 } else if (stateNode.kind === "sync") {
-                    if (ts.isVariableStatement(stateNode.statement)) {
+                    if (this.isNamespaceBodyStatement(stateNode.statement)) {
+                        this.emitNamespaceBodyStatement(callback, stateNode.statement);
+                    } else if (ts.isVariableStatement(stateNode.statement)) {
                         for (const declaration of stateNode.statement.declarationList.declarations) {
                             if (!ts.isIdentifier(declaration.name)) return false;
                             const symbol = this.symbolForIdentifier(declaration.name);
@@ -28267,6 +28596,14 @@ class Emitter {
             this.emitModuleEnumDeclaration(buf, stmt);
             return;
         }
+        if (this.isRuntimeNamespaceDeclaration(stmt)) {
+            this.emitNamespaceEntry(buf, stmt);
+            return;
+        }
+        if (ts.isImportEqualsDeclaration(stmt)) {
+            this.emitImportAliasBinding(buf, stmt);
+            return;
+        }
         unsupported(stmt, `statement kind ${ts.SyntaxKind[stmt.kind]}`);
     }
 
@@ -28306,6 +28643,13 @@ class Emitter {
     ): void {
         const isConst = (vs.declarationList.flags & ts.NodeFlags.Const) !== 0;
         for (const d of vs.declarationList.declarations) {
+            // An exported namespace variable is `N.x = initializer` (no
+            // initializer, no property), read and written as `N.x`.
+            if (this.isExportedNamespaceMember(d)) {
+                if (!ts.isIdentifier(d.name)) unsupported(d, "destructuring at module scope");
+                if (d.initializer) this.emitNamespaceMemberPublication(initBuf, d, d.name, this.emitExpr(d.initializer));
+                continue;
+            }
             if (this.emitTest262ScriptGlobalLexicalInitializer(initBuf, d)) continue;
             if (this.emitTest262ScriptGlobalVarInitializer(initBuf, d)) continue;
             if (this.emitModuleVariableInitializer(initBuf, d)) continue;
@@ -31319,7 +31663,7 @@ class Emitter {
         if (ts.isPrivateIdentifier(expr)) return this.emitPrivateNameValue(expr);
         if (ts.isIdentifier(expr)) {
             const withName = this.withEnvironmentReferenceName(expr);
-            if (withName) return { c: this.sourceReferencePlan(expr)!.get, ty: T_VALUE };
+            if (withName || this.namespacePropertyReference(expr)) return { c: this.sourceReferencePlan(expr)!.get, ty: T_VALUE };
             const wrapperBinding = this.commonJsWrapperBindingName(expr);
             if (wrapperBinding) return { c: `tsc_environment_reference_get(${this.stringLit(wrapperBinding)})`, ty: T_VALUE };
             const imported = this.commonJsImportForIdentifier(expr);
@@ -31707,6 +32051,8 @@ class Emitter {
         // environment, whatever the checker resolves for the name.
         const implicitArguments = ts.isIdentifier(operand) && this.isImplicitArgumentsIdentifier(operand) &&
             !this.sourceEnvironmentEnabled(operand.getSourceFile());
+        if (ts.isIdentifier(operand) && this.namespacePropertyReference(operand))
+            return { c: `tsc_value_typeof(${this.sourceReferencePlan(operand)!.get})`, ty: T_STRING };
         if (ts.isIdentifier(operand) && !implicitArguments && !this.classNameBindingForIdentifier(operand) && (
             this.withEnvironmentReferenceName(operand) ||
             this.test262ScriptGlobalBindingName(operand) ||
@@ -31963,7 +32309,7 @@ class Emitter {
         if (unwrapTransparentExpression(tt.tag).flags & ts.NodeFlags.OptionalChain)
             return this.emitOrdinaryExpressionGraph(tt);
         const tag = unwrapTransparentExpression(tt.tag);
-        if (ts.isIdentifier(tag) && this.withEnvironmentReferenceName(tag)) return this.emitCapturedBindingCall(tt, tag);
+        if (ts.isIdentifier(tag) && (this.withEnvironmentReferenceName(tag) || this.namespacePropertyReference(tag))) return this.emitCapturedBindingCall(tt, tag);
         if (this.isSuperProperty(tag)) return this.emitSuperPropertyCall(tt, tag);
         if (ts.isPropertyAccessExpression(tag)) {
             if (ts.isPrivateIdentifier(tag.name)) return this.emitPrivatePropertyCall(tt, tag);
@@ -31982,6 +32328,8 @@ class Emitter {
     }
 
     private sourceReferencePlan(id: ts.Identifier): SourceReferencePlan | null {
+        const namespaceReference = this.namespacePropertyReference(id);
+        if (namespaceReference) return this.namespacePropertyReferencePlan(id, namespaceReference);
         const withName = this.withEnvironmentReferenceName(id);
         if (!withName && this.closureEnvBindingForSymbol(this.symbolForIdentifier(id))?.sourceSnapshot) return null;
         if (!withName && this.classNameBindingForIdentifier(id)) return null;
@@ -32667,7 +33015,7 @@ class Emitter {
     ): EmitResult | null {
         if (!(ts.isPropertyAccessExpression(operand) || ts.isElementAccessExpression(operand))) return null;
         if (ts.isPropertyAccessExpression(operand) &&
-            (!ts.isIdentifier(operand.name) && !ts.isPrivateIdentifier(operand.name) || ts.isIdentifier(operand.name) && this.namespaceMemberName(operand.name))) return null;
+            !ts.isIdentifier(operand.name) && !ts.isPrivateIdentifier(operand.name)) return null;
         return this.emitCapturedPropertyReference(operand, (base, rawName, receiver, superReference) => {
             const name = this.freshTemp("_reference_name"), nameRoot = this.freshTemp("_reference_name_root");
             const current = this.freshTemp("_reference_numeric"), currentRoot = this.freshTemp("_reference_numeric_root");
@@ -32992,7 +33340,6 @@ class Emitter {
         const field = ts.isPropertyAccessExpression(expr) ? expr.name.text
             : this.staticPropertyName(ts.factory.createComputedPropertyName(expr.argumentExpression));
         if (field === null) return null;
-        if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.name) && this.namespaceMemberName(expr.name)) return null;
         const receiver = this.emitExpr(expr.expression);
         if (receiver.ty.kind !== "class") return null;
         const receiverType = this.expressionDeclaredOrCurrentType(expr.expression);
@@ -33547,7 +33894,7 @@ class Emitter {
         const left = unwrapTransparentExpression(bin.left);
         if (!(ts.isPropertyAccessExpression(left) || ts.isElementAccessExpression(left))) return null;
         if (ts.isPropertyAccessExpression(left) &&
-            (!ts.isIdentifier(left.name) && !ts.isPrivateIdentifier(left.name) || ts.isIdentifier(left.name) && this.namespaceMemberName(left.name))) return null;
+            !ts.isIdentifier(left.name) && !ts.isPrivateIdentifier(left.name)) return null;
         const rhs = this.emitExpr(bin.right);
         const logicalOp = this.isLogicalAssignmentOperator(op);
         const compoundFn = this.dynamicCompoundAssignmentOperation(op);
@@ -33588,7 +33935,6 @@ class Emitter {
     private nativeBindingIdentifier(expr: ts.Expression): ts.Identifier | null {
         expr = unwrapTransparentExpression(expr);
         if (ts.isIdentifier(expr)) return expr;
-        if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.name) && this.namespaceMemberName(expr.name)) return expr.name;
         return null;
     }
 
@@ -33596,7 +33942,7 @@ class Emitter {
         expr=unwrapTransparentExpression(expr);
         expr=this.nativeBindingIdentifier(expr)??expr;
         if (ts.isIdentifier(expr)) {
-            if (this.test262ScriptGlobalBindingName(expr)) return T_VALUE;
+            if (this.test262ScriptGlobalBindingName(expr) || this.namespacePropertyReference(expr)) return T_VALUE;
             if (this.test262HostGlobalBindingName(expr)) return T_VALUE;
             const symbol = this.symbolForIdentifier(expr);
             if (symbol && this.catchValueSymbols.has(symbol)) return T_VALUE;
@@ -33612,10 +33958,6 @@ class Emitter {
         expr = unwrapTransparentExpression(expr);
         if (ts.isIdentifier(expr)) return this.identifierRead(expr);
         if (ts.isPropertyAccessExpression(expr)) {
-            if (ts.isIdentifier(expr.name)) {
-                const nsName = this.namespaceMemberName(expr.name);
-                if (nsName) return this.identifierRead(expr.name);
-            }
             const recv = this.emitExpr(expr.expression);
             if (recv.ty.kind === "class") {
                 if (this.objectFieldType(expr, this.expressionDeclaredOrCurrentType(expr.expression), expr.name.text, expr).kind === "value") {
@@ -33863,7 +34205,7 @@ class Emitter {
         const withTarget = unwrapTransparentExpression(call.expression);
         if (((call.flags | withTarget.flags) & ts.NodeFlags.OptionalChain) || withTarget !== call.expression)
             return this.emitOrdinaryExpressionGraph(call);
-        if (ts.isIdentifier(withTarget) && this.withEnvironmentReferenceName(withTarget)) {
+        if (ts.isIdentifier(withTarget) && (this.withEnvironmentReferenceName(withTarget) || this.namespacePropertyReference(withTarget))) {
             return this.emitCapturedBindingCall(call, withTarget);
         }
         if ((this.options.sourceEval || this.options.test262Observation) && this.isDirectEvalSyntax(call)) return this.emitDynamicValueCall(call,this.emitExpr(call.expression));
@@ -35434,9 +35776,6 @@ class Emitter {
         const memberName = pa.name.text;
         if (ts.isPrivateIdentifier(pa.name)) return this.emitPrivatePropertyCall(call, pa);
         const recvExpr = pa.expression;
-        if (ts.isIdentifier(pa.name) && this.isNamespaceReceiver(recvExpr) && this.namespaceMemberName(pa.name)) {
-            return this.emitDynamicValueCall(call,this.emitExpr(pa));
-        }
         const processWritableStreamName = memberName === "write"
             ? this.processWritableStreamReceiverName(recvExpr)
             : null;
@@ -39512,7 +39851,7 @@ class Emitter {
         if (unwrapTransparentExpression(n.expression).flags & ts.NodeFlags.OptionalChain)
             return this.emitOrdinaryExpressionGraph(n);
         const target = unwrapTransparentExpression(n.expression);
-        if (ts.isIdentifier(target) && this.withEnvironmentReferenceName(target)) return this.emitDynamicValueConstruct(n, this.emitExpr(target));
+        if (ts.isIdentifier(target) && (this.withEnvironmentReferenceName(target) || this.namespacePropertyReference(target))) return this.emitDynamicValueConstruct(n, this.emitExpr(target));
         if (
             ts.isPropertyAccessExpression(n.expression) &&
             ts.isIdentifier(n.expression.expression) &&
@@ -39773,10 +40112,6 @@ class Emitter {
         }
         const importedHostModuleOwner = this.importedHostModuleOwner(pa);
         if (importedHostModuleOwner) return importedHostModuleOwner;
-        if (ts.isIdentifier(pa.name)) {
-            const name=this.namespaceMemberName(pa.name);
-            if (name) return this.emitExpr(pa.name);
-        }
         if (this.isSuperProperty(pa)) return this.emitSuperPropertyGet(pa);
         const enumValue = this.enumConstantValue(pa);
         if (typeof enumValue === "number") {

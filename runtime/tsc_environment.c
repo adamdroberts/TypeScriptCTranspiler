@@ -428,6 +428,8 @@ tsc_reference_t tsc_environment_reference_capture(tsc_str_t* key, bool strict) {
 }
 
 tsc_value_t tsc_environment_reference_get_captured(const tsc_reference_t* reference) {
+    if (reference->kind == TSC_REFERENCE_PROPERTY)
+        return tsc_value_get_prop(*(const tsc_value_t*)reference->base, reference->name);
     if (reference->kind == TSC_REFERENCE_OBJECT) {
         tsc_environment_t* environment = reference->base;
         if (!tsc_value_has_prop(environment->binding_object, reference->name)) {
@@ -453,6 +455,11 @@ tsc_async_cell_ref_t tsc_environment_reference_cell(const tsc_reference_t* refer
 }
 
 tsc_value_t tsc_environment_reference_set_captured(const tsc_reference_t* reference, tsc_value_t value) {
+    if (reference->kind == TSC_REFERENCE_PROPERTY) {
+        if (!tsc_value_set_prop(*(const tsc_value_t*)reference->base, reference->name, value) && reference->strict)
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_concat(tsc_str_from_cstr("Cannot assign to property "), reference->name));
+        return value;
+    }
     if (reference->kind == TSC_REFERENCE_OBJECT) {
         tsc_environment_t* environment = reference->base;
         if (!tsc_value_has_prop(environment->binding_object, reference->name) && reference->strict)
@@ -479,6 +486,12 @@ tsc_value_t tsc_environment_reference_set_captured(const tsc_reference_t* refere
 }
 
 bool tsc_environment_reference_delete_captured(const tsc_reference_t* reference) {
+    if (reference->kind == TSC_REFERENCE_PROPERTY) {
+        bool deleted = tsc_value_delete_prop(*(const tsc_value_t*)reference->base, reference->name);
+        if (!deleted && reference->strict)
+            tsc_throw_error(TSC_ERROR_TYPE, tsc_str_concat(tsc_str_from_cstr("Cannot delete property "), reference->name));
+        return deleted;
+    }
     if (reference->kind == TSC_REFERENCE_OBJECT) {
         tsc_environment_t* environment = reference->base;
         return tsc_value_delete_prop(environment->binding_object, reference->name);
@@ -497,6 +510,7 @@ bool tsc_environment_reference_delete_captured(const tsc_reference_t* reference)
 }
 
 tsc_value_t tsc_environment_reference_receiver(const tsc_reference_t* reference) {
+    if (reference->kind == TSC_REFERENCE_PROPERTY) return *(const tsc_value_t*)reference->base;
     return reference->kind == TSC_REFERENCE_OBJECT
         ? ((tsc_environment_t*)reference->base)->binding_object : tsc_value_undefined();
 }

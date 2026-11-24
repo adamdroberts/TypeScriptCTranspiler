@@ -999,6 +999,11 @@ typedef enum {
     TSC_REFERENCE_GLOBAL_LEXICAL,
     TSC_REFERENCE_GLOBAL_OBJECT,
     TSC_REFERENCE_UNRESOLVABLE,
+    /* A TypeScript namespace export (`N.x` in TypeScript's emit): base is
+     * the address of the rooted slot holding the namespace block's object
+     * (its function's parameter); Get, Set and Delete are the ordinary
+     * property operations on that value, which is also the call receiver. */
+    TSC_REFERENCE_PROPERTY,
 } tsc_reference_kind_t;
 typedef struct {
     tsc_str_t* name;
