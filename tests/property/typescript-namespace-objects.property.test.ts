@@ -64,6 +64,17 @@ console.log(new Sub().m(), new N.K() instanceof N.K);
 namespace ${dotted} { export const leaf = "leaf"; }
 ${merged}
 console.log(${dotted}.leaf, Object.keys(D0).join(), Many.total);
+const source = { a: 1, b: [2, 3], c: { d: "d" } };
+namespace Destructured {
+  export const { a, b: [b0, ...rest], c: { d = "z" } } = source;
+  const { a: la, b: [lb] } = source;
+  let [p, q = 7] = [10];
+  export function read() { return [a, b0, rest.join("+"), d, la, lb, p, q].join(); }
+  p = 11;
+}
+namespace Destructured { const { a: other } = { a: 99 }; export function readOther() { return other + a; } }
+(Destructured as any).a = 5;
+console.log(Destructured.read(), Destructured.readOther(), Object.keys(Destructured).join());
 `;
 
 const modules:Record<string,string>={

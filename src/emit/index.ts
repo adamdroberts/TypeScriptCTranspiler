@@ -13101,7 +13101,7 @@ class Emitter {
     private isExportedNamespaceMember(declaration: ts.Node): boolean {
         if (this.isAmbientDeclaration(declaration)) return false;
         if (ts.isModuleDeclaration(declaration) && ts.isModuleDeclaration(declaration.parent)) return true;
-        let statement: ts.Node = declaration;
+        let statement: ts.Node = ts.isBindingElement(declaration) ? ts.walkUpBindingElementsAndPatterns(declaration) : declaration;
         if (ts.isVariableDeclaration(statement)) statement = statement.parent.parent;
         if (!statement.parent || !ts.isModuleBlock(statement.parent)) return false;
         return (ts.getCombinedModifierFlags(statement as ts.Declaration) & ts.ModifierFlags.Export) !== 0;
@@ -13204,7 +13204,7 @@ class Emitter {
         if (this.isJavaScriptSourceFile(id.getSourceFile())) return null;
         const parent = id.parent;
         if (parent && (ts.isPropertyAccessExpression(parent) && parent.name === id || ts.isQualifiedName(parent) && parent.right === id ||
-            (ts.isVariableDeclaration(parent) || ts.isFunctionDeclaration(parent) || ts.isClassDeclaration(parent) ||
+            (ts.isVariableDeclaration(parent) || ts.isBindingElement(parent) || ts.isFunctionDeclaration(parent) || ts.isClassDeclaration(parent) ||
                 ts.isEnumDeclaration(parent) || ts.isModuleDeclaration(parent) || ts.isImportEqualsDeclaration(parent)) && parent.name === id)) return null;
         const local = this.checker.getSymbolAtLocation(id);
         if (!local) return null;
@@ -13213,7 +13213,7 @@ class Emitter {
         if (!owner) return null;
         const declarations = (symbol.declarations ?? []).filter(declaration => this.isExportedNamespaceMember(declaration));
         if (declarations.length === 0) return null;
-        const variable = declarations.some(declaration => ts.isVariableDeclaration(declaration) || ts.isImportEqualsDeclaration(declaration));
+        const variable = declarations.some(declaration => ts.isVariableDeclaration(declaration) || ts.isBindingElement(declaration) || ts.isImportEqualsDeclaration(declaration));
         if (!variable && declarations.some(declaration => {
             const segment = this.enclosingNamespaceSegment(declaration);
             return !!segment && this.isNodeWithin(id, segment);
@@ -13284,6 +13284,36 @@ class Emitter {
         } else {
             buf.line(`if (!tsc_value_is_truthy(${local.cName})) { ${local.cName} = tsc_value_object(tsc_object_new()); ${local.gcRoot} = tsc_value_gc_root(${local.cName}); }`);
         }
+    }
+
+    /** A destructuring declaration in a namespace body: each bound name of
+     * an exported declaration is the property `N.a` (TypeScript's `N.a =
+     * _a.a`), each of a local one its block's own binding. */
+    private emitNamespaceDestructuring(buf: CBuf, declaration: ts.VariableDeclaration): void {
+        if (!declaration.initializer) unsupported(declaration, "a destructuring declaration requires an initializer");
+        const exported = this.isExportedNamespaceMember(declaration);
+        const segment = this.enclosingNamespaceSegment(declaration);
+        if (!segment) unsupported(declaration, "namespace member requires its namespace object");
+        const slot = this.namespaceSegmentPlan(segment).slot;
+        const strict = this.nodeIsInStrictMode(declaration) ? "true" : "false";
+        const value = this.coerce(this.emitExpr(declaration.initializer), T_VALUE, declaration.initializer);
+        this.emitBindingInitialization(buf, declaration.name, value, (target, identifier, source) => {
+            if (exported) {
+                target.line(`if (!tsc_value_set_prop(${slot}, ${this.test262GlobalBindingKey(identifier.text)}, ${source}) && ${strict}) ` +
+                    `tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("namespace member assignment failed"));`);
+                return;
+            }
+            // The same typed storage as an identifier declaration's.
+            const symbol = this.symbolForIdentifier(identifier);
+            const name = this.declaredName(identifier);
+            const element = identifier.parent;
+            const storage = this.variableStorageType(this.prepareType(mapType(ts.isBindingElement(element) ? element : declaration, this.checker)));
+            this.agentStorage.declare(storage.c, name);
+            if (symbol) this.symbolStorageTypes.set(symbol, storage);
+            const root = symbol && storage.kind === "value" ? this.ensureGlobalDynamicRoot(symbol, name) : null;
+            target.line(`${name} = ${this.coerce({ c: source, ty: T_VALUE }, storage, identifier)};`);
+            if (root) target.line(`${root} = tsc_value_gc_root(${name});`);
+        });
     }
 
     /** An exported namespace member's publication at its position:
@@ -28646,7 +28676,7 @@ class Emitter {
             // An exported namespace variable is `N.x = initializer` (no
             // initializer, no property), read and written as `N.x`.
             if (this.isExportedNamespaceMember(d)) {
-                if (!ts.isIdentifier(d.name)) unsupported(d, "destructuring at module scope");
+                if (!ts.isIdentifier(d.name)) { this.emitNamespaceDestructuring(initBuf, d); continue; }
                 if (d.initializer) this.emitNamespaceMemberPublication(initBuf, d, d.name, this.emitExpr(d.initializer));
                 continue;
             }
@@ -28665,6 +28695,7 @@ class Emitter {
                     this.emitTopLevelRequireDestructuring(initBuf, d, spec);
                     continue;
                 }
+                if (ts.isModuleBlock(vs.parent)) { this.emitNamespaceDestructuring(initBuf, d); continue; }
                 unsupported(d, "destructuring at module scope");
             }
             const sym = this.checker.getSymbolAtLocation(d.name);
