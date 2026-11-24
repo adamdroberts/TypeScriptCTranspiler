@@ -38,7 +38,9 @@ import {nodeReferenceSync} from './node-reference';
  * (listed), and @@split's limit is converted (listed). A match's indices
  * (the d flag) are an Array of undefined or [start, end] Arrays with a
  * null-prototype groups object: their keys are no unknown code (exact), and a
- * pair is an ordinary Array whose own toString runs (listed). The stress makes 256
+ * pair is an ordinary Array whose own toString runs (listed). A descriptor of
+ * a match result's named property is that of a data property, though its
+ * elements are defined under unknown index keys (exact). The stress makes 256
  * dispatching calls. */
 
 const P=`eval("print('"+w+"')");`;
@@ -88,6 +90,7 @@ const shapes:Record<string,{source:string;exact:string[]|null}>={
  regexpSplitLimit:{source:`var w='1';"a.b".split(/\\./,{valueOf(){w='7';return 1}});${P}`,exact:null},
  matchIndicesKeys:{source:`var w='1';var hit=/(?<part>a)(b)?/d.exec("xa");var k=Object.keys(hit.indices).join(",")+hit.indices[1][0]+Object.getPrototypeOf(hit.indices.groups);${P}`,exact:["print('1')"]},
  matchIndicesPair:{source:`var w='1';var hit=/(a)/d.exec("xa");hit.indices[0].toString=function(){w='2';return ''};""+hit.indices[0];${P}`,exact:null},
+ matchResultDescriptor:{source:`var w='1';var hit=/(a)/dg.exec("a");for(var key of ["index","input","groups","indices"]){var d=Object.getOwnPropertyDescriptor(hit,key);var t=key+":"+d.writable}${P}`,exact:["print('1')"]},
  stress:{source:`var w='1';var m={[Symbol.match](s){return null}};${Array.from({length:256},(_,k)=>['"ab".match(m);','"ab".search({[Symbol.search](){return 0}});','"ab".padStart(4);','"ab".split({[Symbol.split](){return []}});'][k%4]).join('')}${P}`,exact:["print('1')"]},
 };
 

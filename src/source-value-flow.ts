@@ -3546,6 +3546,11 @@ class SourceValueFlow {
     private borrowUnknownProperty(record:UnknownOwnPropertyRecord,key:SourcePropertyKey,result:Cell):void {
         let rule!:Rule;rule=this.rule([record.keys],()=>{if(this.keyMayContain(record.keys,key,rule))this.copy(record.value,result);});
     }
+    private unknownDefinitionMayContain(owner:ObjectOwner,key:SourcePropertyKey|null,rule:Rule):boolean {
+        const record=this.unknownPropertyLocations.get(owner);
+        if(!record||![...record.events.values()].some(event=>event.mode!=="delete"))return false;
+        this.watch(rule,record.keys);return this.keyMayContain(record.keys,key,rule);
+    }
     private hasUnknownPropertyDefinitions(owner:ObjectOwner):boolean {
         return [...this.unknownPropertyLocations.get(owner)?.events.values()??[]].some(event=>event.mode!=="delete");
     }
@@ -5356,8 +5361,12 @@ class SourceValueFlow {
                 if(!owner){incomplete(atom);if(atom.tag==="unknown"||atom.tag==="opaque-object")this.activateOpaqueEffect(context);continue;}
                 this.watch(rule,owner.shape);
                 if(!this.definitionsReady(owner,rule))continue;
-                if(this.opaqueShape(owner,context)||this.hasUnknownPropertyDefinitions(owner)){if(owner.proxy)incomplete(atom);incomplete();continue;}
+                // Definitions under unknown keys leave a queried key open only
+                // when their key domain may contain it (an Array's index keys
+                // never name `index` or `groups`).
+                if(this.opaqueShape(owner,context)||!key&&this.hasUnknownPropertyDefinitions(owner)){if(owner.proxy)incomplete(atom);incomplete();continue;}
                 const names=key?keys!:this.ownerKeys(owner,rule);if(names===undefined)continue;if(names===null){incomplete();continue;}
+                if(key&&names.some(name=>this.unknownDefinitionMayContain(owner,name,rule))){if(owner.proxy)incomplete(atom);incomplete();continue;}
                 // Intrinsic/function metadata and exotic own-key collections
                 // stay incomplete until represented by the shared owner graph.
                 if(!key && atom.tag!=="object")incomplete();
