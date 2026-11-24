@@ -6446,12 +6446,10 @@ class SourceValueFlow {
         let inputs=this.functionThisBindings.get(owner);if(!inputs){inputs=new Map();this.functionThisBindings.set(owner,inputs);}const prior=inputs.get(receiver);if(prior)return prior;
         const result=this.newCell(),objects=this.newCell();inputs.set(receiver,result);
         const conversion=ts.setTextRange(ts.factory.createEmptyStatement(),context);(conversion as ts.Node&{parent:ts.Node}).parent=context;
-        const atoms=new Map<Atom,Cell>();
         this.rule([receiver],()=>{for(const atom of receiver.values){
             if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
             if(atom.tag==="unknown"){this.publish(result,this.global);this.publish(objects,atom);continue;}
-            let value=atoms.get(atom);if(!value){value=this.newCell();atoms.set(atom,value);this.publish(value,atom);}
-            const kinds=this.primitiveKinds(value);
+            const kinds=this.primitiveKinds(this.atomCell(atom));
             if(kinds&(KIND_NULL|KIND_UNDEFINED))this.publish(result,this.global);
             if(kinds&~(KIND_NULL|KIND_UNDEFINED))this.publish(objects,atom);
         }});
