@@ -116,6 +116,7 @@ const shapes:Record<string,{source:string;exact:string[]|null}>={
  typeofFallthrough:{source:`var w='1';function f(v){switch(typeof v){case 'object':v;case 'string':return String(v);}}f({toString(){w='3';return ''}});${P}`,exact:null},
  nativeThrown:{source:`var w='1';var v=Object.getOwnPropertyDescriptors(Math).abs.value;Function.prototype.valueOf=function(){throw 'q'};try{var t=1/v}catch(e){w=typeof e}${P}`,exact:null},
  nativeConversionError:{source:`var w='1';var v=Object.getOwnPropertyDescriptors(Math).abs.value;try{var t=1/v;var u=v.zz}catch(e){w=typeof e}${P}`,exact:["print('1')","print('object')"]},
+ mixedWrappers:{source:`var w='1';var o=[Number,Boolean];for(var i=0;i<2;i++){var c=o[i];var x=new c(1);x.valueOf();}${P}`,exact:["print('1')"]},
  stress:{source:`var w='1';var m={[Symbol.match](s){return null}};${Array.from({length:256},(_,k)=>['"ab".match(m);','"ab".search({[Symbol.search](){return 0}});','"ab".padStart(4);','"ab".split({[Symbol.split](){return []}});'][k%4]).join('')}${P}`,exact:["print('1')"]},
 };
 

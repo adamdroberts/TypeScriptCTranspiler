@@ -8120,6 +8120,9 @@ class SourceValueFlow {
                     const inherited = this.ordinaryOwner(prototype);
                     if (inherited) worklist.push(prototype);
                     else if (prototype.tag === "primitive" && prototype.value === null) this.publish(result,this.primitive(undefined));
+                    // An abrupt Get(newTarget, "prototype") throws before the
+                    // object exists: no object has that prototype.
+                    else if (prototype.tag === "abrupt") continue;
                     else this.publish(result, prototype.tag === "pending-source" || this.isNativeValue(prototype) ? prototype : this.unknown);
                 }
             };
