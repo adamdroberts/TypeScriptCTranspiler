@@ -9198,9 +9198,13 @@ class SourceValueFlow {
                                 for (const part of parts) if (part.spread) {
                                     const acyclic = this.newCell();
                                     this.rule([part.cell], () => {for (const atom of part.cell.values) if (!(atom.tag === "object" && this.listReaches(atom.owner, owner))) this.publish(acyclic, atom);});
-                                    this.writeProperty(result, null, this.iteratorElements(acyclic, node), true, "define", node);
+                                    this.writeProperty(result, null, this.iteratorElements(acyclic, node), true, "define", node, result, this.anyNumberKey());
                                 }
-                                for (const part of parts) if (!part.spread && !holes.has(part.cell)) this.writeProperty(result, null, part.cell, true, "define", node);
+                                // The literal defines only index properties: its
+                                // length is the List's, never an element written
+                                // through an unknown key (ArraySetLength would
+                                // convert the element).
+                                for (const part of parts) if (!part.spread && !holes.has(part.cell)) this.writeProperty(result, null, part.cell, true, "define", node, result, this.anyNumberKey());
                             }
                             continue;
                         }
@@ -9500,6 +9504,28 @@ class SourceValueFlow {
                     }
                     if(atom.tag==="operation"&&atom.operation==="iterator-helper:from"&&!invocation.construct){
                         if(!handled(atom,signature))this.copy(this.iteratorFrom((invocation.args?invocation.args[0]:invocation.sequence?this.argumentPosition(invocation.sequence,0):undefined)??omittedArgument,node),result);
+                        continue;
+                    }
+                    // Iterator.prototype.reduce (sec-iterator.prototype.reduce):
+                    // GetIteratorDirect(this), then reducer(accumulator, value,
+                    // counter) for each value the iterator's next returns; the
+                    // accumulator starts as the initial value or, without one,
+                    // the first value. A non-Object receiver, a non-callable
+                    // reducer or an empty iterator without an initial value
+                    // throws a TypeError.
+                    if(atom.tag==="operation"&&atom.operation==="iterator-helper:reduce"&&!invocation.construct){
+                        if(handled(atom,signature))continue;
+                        const position=(index:number):Cell|undefined=>invocation.args?invocation.args[index]:invocation.sequence?this.argumentPosition(invocation.sequence,index):undefined;
+                        const reducer=position(0)??omittedArgument,initial=position(1);
+                        const elements=this.directIteratorElements(invocation.receiver,node);
+                        const accumulator=this.newCell(),counter=this.newCell(),returned=this.newCell(),thisValue=this.newCell();
+                        this.publish(counter,this.numberValue());this.publish(thisValue,this.primitive(undefined));
+                        if(initial)this.copy(initial,accumulator);
+                        if(!initial||!invocation.args)this.copy(elements,accumulator);
+                        this.copy(returned,accumulator);
+                        this.invoke(node,reducer,thisValue,[{cell:accumulator,spread:false},{cell:elements,spread:false},{cell:counter,spread:false}],returned);
+                        this.copy(accumulator,result);this.publish(result,this.abrupt);
+                        const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node,"TypeError"));
                         continue;
                     }
                     // Iterator.from and the Iterator.prototype helpers and
