@@ -91,11 +91,10 @@ test('TypeScript namespace members and type exports link and run',async()=>{
   const rejected=await compile({entry:invalid,output:join(directory,'invalid.out'),buildDir:join(directory,'invalid-build'),diagnosticWriter:message=>diagnostics.push(message)});
   expect(rejected.exitCode).not.toBe(0);
   expect(diagnostics.join('\n')).toContain('only permitted at the top level of a module');
-  // An enum has no runtime object yet: constant member reads (also through a
-  // namespace) are folded, and every other value use fails closed with one
-  // stable diagnostic instead of naming an undeclared C variable.
-  for(const [name,source] of [['reverse','enum Kind { First = 1 }\nconsole.log(Kind[1]);\n'],
-   ['alias','namespace Outer { export enum Kind { First = 1 } }\nconst K = Outer.Kind;\nconsole.log(K.First);\n']] as const){
+  // An enum in a namespace body has no runtime object yet: constant member
+  // reads through the namespace are folded, and a value use fails closed with
+  // one stable diagnostic instead of naming an undeclared C variable.
+  for(const [name,source] of [['alias','namespace Outer { export enum Kind { First = 1 } }\nconst K = Outer.Kind;\nconsole.log(K.First);\n']] as const){
    const entry=join(directory,`enum-${name}.ts`),messages:string[]=[];
    await writeFile(entry,source);
    const built=await compile({entry,output:join(directory,`enum-${name}.out`),buildDir:join(directory,`enum-${name}-build`),diagnosticWriter:message=>messages.push(message)});

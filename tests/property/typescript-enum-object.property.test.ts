@@ -19,9 +19,13 @@ const NODE=process.env.TSC2C_NODE_REFERENCE??'node';
  * constant expressions over earlier members, merged declarations, an enum
  * exported to another module, value uses (Object.keys, entries, JSON,
  * reverse lookup, typeof, an argument), a write through an alias, and a
- * const enum (inlined, no object). The stress is a 300-member enum. A member
- * whose value is not a compile-time constant, and a function-local enum used
- * as a value, still fail closed with a diagnostic. */
+ * const enum (inlined, no object). In a Script (a TypeScript file without
+ * module syntax) the enum is a global var binding: a property of the global
+ * object, the same object in a function, merged declarations sharing it; the
+ * reference is TypeScript's emit run as a Script. The stress is a 300-member
+ * enum in each. A member whose value is not a compile-time constant, and a
+ * function-local enum used as a value, still fail closed with a
+ * diagnostic. */
 
 const generated=Array.from({length:300},(_,k)=>k%3===0?`M${k} = "s${k}"`:`M${k} = ${k*7-500}`).join(', ');
 const modules:Record<string,string>={
@@ -47,6 +51,18 @@ console.log(out.join("\\n"));
 `,
 };
 
+const scriptSource=`enum Kind { First = 1, Second, Name = "n" }
+enum Kind { Third = Second * 3 }
+const enum Inline { One = 1 }
+enum Big { ${generated} }
+const g: any = globalThis;
+function later(): string { return Object.keys(Kind).join("|") + Kind[2]; }
+const before = Object.getOwnPropertyDescriptor(g, "Kind");
+console.log(Kind[1], Kind.Third, Object.keys(Kind).join(), JSON.stringify(Kind), typeof g.Kind, g.Kind === Kind, later());
+console.log(String(before?.configurable), String(before?.writable), String(Inline.One), String(Object.keys(g.Big).length), (Big as any)[1593]);
+g.Kind.Extra = 9; console.log(String((Kind as any).Extra));
+`;
+
 test('module-level TypeScript enums are runtime objects, as TypeScript emits them',async()=>{
  const root=await mkdtemp(join(tmpdir(),'tsc2c-enum-object-'));
  try{
@@ -64,6 +80,21 @@ test('module-level TypeScript enums are runtime objects, as TypeScript emits the
   const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:60_000});
   expect({code:native.exitCode,stderr:native.stderr.toString()}).toEqual({code:0,stderr:''});
   expect(native.stdout.toString()).toBe(reference.stdout.toString());
+  // A Script's enum is a global var binding.
+  const scriptRoot=join(root,'script');
+  await Bun.write(join(scriptRoot,'package.json'),'{"type":"commonjs"}\n');
+  const script=join(scriptRoot,'main.ts');
+  await writeFile(script,scriptSource);
+  const scriptEmit=join(scriptRoot,'main.js');
+  await writeFile(scriptEmit,ts.transpileModule(scriptSource,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText);
+  const scriptReference=nodeReferenceSync([NODE,'-e','require("node:vm").runInThisContext(require("node:fs").readFileSync(process.argv[1],"utf8"))',scriptEmit],{stdout:'pipe',stderr:'pipe',timeout:60_000});
+  expect({code:scriptReference.exitCode,stderr:scriptReference.stderr.toString()}).toEqual({code:0,stderr:''});
+  const scriptDiagnostics:string[]=[];
+  const scriptBuilt=await compile({entry:script,output:join(scriptRoot,'program'),buildDir:join(scriptRoot,'build'),diagnosticWriter:message=>scriptDiagnostics.push(message)});
+  expect({code:scriptBuilt.exitCode,diagnostics:scriptDiagnostics}).toEqual({code:0,diagnostics:[]});
+  const scriptNative=Bun.spawnSync([join(scriptRoot,'program')],{stdout:'pipe',stderr:'pipe',timeout:60_000});
+  expect({code:scriptNative.exitCode,stderr:scriptNative.stderr.toString()}).toEqual({code:0,stderr:''});
+  expect(scriptNative.stdout.toString()).toBe(scriptReference.stdout.toString());
   // Still fail closed: a non-constant member, a function-local enum value.
   for(const [name,source,message] of [
    ['computed',`export {};\nenum E { A = "abc".length }\nconsole.log(Object.keys(E).join());\n`,'compile-time constant'],

@@ -12840,22 +12840,39 @@ class Emitter {
     }
 
     /** TypeScript's enum declaration emit, `(function (E) { E[E["A"] = 0] =
-     * "A"; E["B"] = "b"; })(E || (E = {}))`, over the module var binding: the
-     * object is created unless a merged declaration already made it, then each
-     * member is stored with [[Set]] in source order (a numeric member also
-     * stores its reverse mapping). Member values are the checker's constant
-     * values; a member whose value is not a compile-time constant fails
-     * closed. Constant member reads stay folded (enumConstantValue). */
+     * "A"; E["B"] = "b"; })(E || (E = {}))`: the binding's value is used
+     * when it is truthy, otherwise a new object is created and assigned, then
+     * each member is stored with [[Set]] in source order (a numeric member
+     * also stores its reverse mapping); a failed [[Set]] throws a TypeError
+     * in strict code. The binding is a module-level enum's module var binding
+     * or, in a Script, the global var binding GlobalDeclarationInstantiation
+     * created, read and written through the environment. Member values are
+     * the checker's constant values; a member whose value is not a
+     * compile-time constant fails closed. Constant member reads stay folded
+     * (enumConstantValue). */
     private emitModuleEnumDeclaration(buf: CBuf, declaration: ts.EnumDeclaration): void {
         const symbol = this.symbolForIdentifier(declaration.name);
         const binding = symbol ? this.moduleVarBindings.get(symbol) : undefined;
-        if (!binding) return;
-        const target = binding.cName;
-        buf.line(`if (!tsc_value_is_object(${target})) { ${target} = tsc_value_object(tsc_object_new()); ${binding.gcRoot} = tsc_value_gc_root(${target}); }`);
+        const strict = this.nodeIsInStrictMode(declaration);
+        let target: string;
+        if (binding) {
+            target = binding.cName;
+            buf.line(`if (!tsc_value_is_truthy(${target})) { ${target} = tsc_value_object(tsc_object_new()); ${binding.gcRoot} = tsc_value_gc_root(${target}); }`);
+        } else if (this.isTest262ScriptGlobalEnumDeclaration(declaration)) {
+            target = this.freshTemp("_enum");
+            const root = this.freshTemp("_enum_root");
+            const key = this.test262GlobalBindingKey(declaration.name.text);
+            buf.line(`tsc_value_t ${target} = tsc_environment_reference_get(${key});`);
+            buf.line(`void* volatile ${root} = tsc_value_gc_root(${target}); (void)${root};`);
+            buf.line(`if (!tsc_value_is_truthy(${target})) { ${target} = tsc_value_object(tsc_object_new()); ${root} = tsc_value_gc_root(${target}); ` +
+                `tsc_environment_reference_set(${key}, ${target}, ${strict ? "true" : "false"}); }`);
+        } else return;
         const double = (value: number): string => Number.isNaN(value) ? "NAN" : value === Infinity ? "INFINITY" : value === -Infinity ? "(-INFINITY)"
             : Object.is(value, -0) ? "(-0.0)" : String(value);
         const store = (key: string, value: string): void => {
-            buf.line(`if (!tsc_value_set_computed_prop(${target}, ${key}, ${value})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("enum member assignment failed"));`);
+            buf.line(strict
+                ? `if (!tsc_value_set_computed_prop(${target}, ${key}, ${value})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("enum member assignment failed"));`
+                : `(void)tsc_value_set_computed_prop(${target}, ${key}, ${value});`);
         };
         for (const member of declaration.members) {
             const value = this.checker.getConstantValue(member);
@@ -12871,6 +12888,15 @@ class Emitter {
         }
     }
 
+    /** A Script's top-level enum (not `const enum`): TypeScript emits it as
+     * `var E;` plus its initialization, so its name is one of the Script's
+     * VarDeclaredNames, a global var binding. */
+    private isTest262ScriptGlobalEnumDeclaration(declaration: ts.Node): declaration is ts.EnumDeclaration {
+        return ts.isEnumDeclaration(declaration) && ts.isSourceFile(declaration.parent) &&
+            !this.isAmbientDeclaration(declaration) && !this.isConstEnumDeclaration(declaration) &&
+            this.isTest262ScriptSourceFile(declaration.parent);
+    }
+
     private unsupportedEnumValue(node: ts.Node): never {
         unsupported(node, "a TypeScript enum used as a value requires a runtime enum object; only constant member reads are supported");
     }
@@ -12879,7 +12905,8 @@ class Emitter {
         // An enum has storage only as a module-level enum's module var binding;
         // naming any other enum (in a function or namespace body, or a
         // Script) fails closed rather than naming an undeclared C variable.
-        if (ts.isEnumDeclaration(name.parent) && !this.enumStorageDeclarations.has(name.parent)) this.unsupportedEnumValue(name);
+        if (ts.isEnumDeclaration(name.parent) && !this.enumStorageDeclarations.has(name.parent) &&
+            !this.isTest262ScriptGlobalEnumDeclaration(name.parent)) this.unsupportedEnumValue(name);
         const parts = [...this.declarationNamespaceParts(name), name.text];
         const source = name.getSourceFile();
         const moduleId = this.graph.fileToModuleId.get(source.fileName);
@@ -21057,6 +21084,7 @@ class Emitter {
             )) ||
                 this.isTest262ScriptGlobalVarDeclaration(declaration) ||
                 this.isTest262ScriptGlobalFunctionDeclaration(declaration) ||
+                this.isTest262ScriptGlobalEnumDeclaration(declaration) ||
                 this.isTest262ScriptGlobalLexicalDeclaration(declaration)) {
                 return id.text;
             }
@@ -21163,9 +21191,13 @@ class Emitter {
             }
         }
 
-        const varDeclarations: Array<ts.VariableDeclaration | ts.FunctionDeclaration> = [];
+        const varDeclarations: Array<ts.VariableDeclaration | ts.FunctionDeclaration | ts.EnumDeclaration> = [];
         const visit = (node: ts.Node): void => {
             if (this.isAmbientDeclaration(node)) return;
+            if (this.isTest262ScriptGlobalEnumDeclaration(node)) {
+                varDeclarations.push(node);
+                return;
+            }
             if (ts.isFunctionDeclaration(node)) {
                 if (this.isTest262ScriptGlobalFunctionDeclaration(node)) {
                     varDeclarations.push(node);
@@ -21192,8 +21224,8 @@ class Emitter {
         const varNames = new Set<string>();
         const vars: ts.Identifier[] = [];
         for (const declaration of varDeclarations) {
-            if (!ts.isVariableDeclaration(declaration)) continue;
-            for (const name of this.test262BindingNames(declaration.name)) {
+            if (ts.isFunctionDeclaration(declaration)) continue;
+            for (const name of ts.isEnumDeclaration(declaration) ? [declaration.name] : this.test262BindingNames(declaration.name)) {
                 if (functionNames.has(name.text) || varNames.has(name.text)) continue;
                 varNames.add(name.text);
                 vars.push(name);
@@ -39982,6 +40014,7 @@ class Emitter {
         // when the enum has one (a module-level enum's binding).
         if (sym && this.moduleVarBindings.has(this.checker.getExportSymbolOfSymbol(sym))) return undefined;
         if (sym && this.moduleVarBindings.has(sym)) return undefined;
+        if (this.isTest262ScriptGlobalEnumDeclaration(decl)) return undefined;
         unsupported(pa, `enum member ${pa.name.text} has no compile-time value and its enum has no runtime object`);
     }
 
