@@ -2,7 +2,18 @@ import ts from "typescript";
 
 export type NamedScopeLexicalDeclaration =
     | (ts.FunctionDeclaration & { readonly name: ts.Identifier })
-    | (ts.ClassDeclaration & { readonly name: ts.Identifier });
+    | (ts.ClassDeclaration & { readonly name: ts.Identifier })
+    | ts.EnumDeclaration;
+
+/** A TypeScript enum declaration in a Block or CaseBlock (not `const enum`,
+ * which has no runtime binding) is TypeScript's `let E;` followed by its
+ * initialization: one lexical binding that every merged declaration of the
+ * enum in that scope shares. */
+export function isScopeEnumDeclaration(node: ts.Node): node is ts.EnumDeclaration {
+    return ts.isEnumDeclaration(node) &&
+        (ts.getCombinedModifierFlags(node) & (ts.ModifierFlags.Const | ts.ModifierFlags.Ambient)) === 0 &&
+        (ts.isBlock(node.parent) || ts.isCaseClause(node.parent) || ts.isDefaultClause(node.parent));
+}
 
 export type ScopeLexicalDeclaration = ts.VariableDeclaration | NamedScopeLexicalDeclaration;
 
@@ -23,6 +34,8 @@ export function directLexicalDeclarations(statements: readonly ts.Statement[]): 
             declarations.push(...lexicalDeclarationsFromList(statement.declarationList));
         } else if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) && statement.name) {
             declarations.push(statement as NamedScopeLexicalDeclaration);
+        } else if (isScopeEnumDeclaration(statement)) {
+            declarations.push(statement);
         }
     }
     return declarations;

@@ -17,7 +17,7 @@ import { typeScriptModuleFormat } from "../source-unit-format";
 import { runtimeGlobalBindings, runtimeUtilExports, runtimeFsExports, runtimePathPosixOperations, runtimeBufferExports, runtimeChildProcessOperations } from "../global-bindings";
 import { canonicalParameterBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding } from "../source-bindings";
 import { timersPromiseOperations, callbackTimerOperations } from "../timers-promises-operations";
-import { directLexicalDeclarations, lexicalDeclarationsFromList, type ScopeLexicalDeclaration, type NamedScopeLexicalDeclaration } from "./lexical-declarations";
+import { directLexicalDeclarations, isScopeEnumDeclaration, lexicalDeclarationsFromList, type ScopeLexicalDeclaration, type NamedScopeLexicalDeclaration } from "./lexical-declarations";
 type NamedScopeFunctionDeclaration = Extract<ScopeLexicalDeclaration, ts.FunctionDeclaration>;
 import { escapeRegExpString } from "../regexp-escape";
 import * as path from "node:path";
@@ -12855,20 +12855,25 @@ class Emitter {
     private emitModuleEnumDeclaration(buf: CBuf, declaration: ts.EnumDeclaration): void {
         const symbol = this.symbolForIdentifier(declaration.name);
         const binding = symbol ? this.moduleVarBindings.get(symbol) : undefined;
-        const strict = this.nodeIsInStrictMode(declaration);
-        let target: string;
         if (binding) {
-            target = binding.cName;
-            buf.line(`if (!tsc_value_is_truthy(${target})) { ${target} = tsc_value_object(tsc_object_new()); ${binding.gcRoot} = tsc_value_gc_root(${target}); }`);
+            this.emitEnumDeclarationInto(buf, declaration, binding.cName, binding.gcRoot);
         } else if (this.isTest262ScriptGlobalEnumDeclaration(declaration)) {
-            target = this.freshTemp("_enum");
+            const target = this.freshTemp("_enum");
             const root = this.freshTemp("_enum_root");
             const key = this.test262GlobalBindingKey(declaration.name.text);
             buf.line(`tsc_value_t ${target} = tsc_environment_reference_get(${key});`);
             buf.line(`void* volatile ${root} = tsc_value_gc_root(${target}); (void)${root};`);
-            buf.line(`if (!tsc_value_is_truthy(${target})) { ${target} = tsc_value_object(tsc_object_new()); ${root} = tsc_value_gc_root(${target}); ` +
-                `tsc_environment_reference_set(${key}, ${target}, ${strict ? "true" : "false"}); }`);
-        } else return;
+            this.emitEnumDeclarationInto(buf, declaration, target, root,
+                `tsc_environment_reference_set(${key}, ${target}, ${this.nodeIsInStrictMode(declaration) ? "true" : "false"});`);
+        }
+    }
+
+    /** `(function (E) { members })(E || (E = {}))` over one binding: `target`
+     * is its value lvalue, `root` its GC root, and `publish` writes a new
+     * object back where the binding lives outside C storage. */
+    private emitEnumDeclarationInto(buf: CBuf, declaration: ts.EnumDeclaration, target: string, root: string, publish = ""): void {
+        const strict = this.nodeIsInStrictMode(declaration);
+        buf.line(`if (!tsc_value_is_truthy(${target})) { ${target} = tsc_value_object(tsc_object_new()); ${root} = tsc_value_gc_root(${target}); ${publish} }`);
         const double = (value: number): string => Number.isNaN(value) ? "NAN" : value === Infinity ? "INFINITY" : value === -Infinity ? "(-INFINITY)"
             : Object.is(value, -0) ? "(-0.0)" : String(value);
         const store = (key: string, value: string): void => {
@@ -13027,7 +13032,7 @@ class Emitter {
             const name = this.declarationName(decl);
             return name ? this.declaredName(name) : mangleIdent(id.text);
         }
-        if (decl && !this.isAmbientDeclaration(decl) && ts.isEnumDeclaration(decl)) this.unsupportedEnumValue(id);
+        if (decl && !this.isAmbientDeclaration(decl) && ts.isEnumDeclaration(decl) && !isScopeEnumDeclaration(decl)) this.unsupportedEnumValue(id);
         // An import binding whose target is only an ambient host declaration,
         // or that the checker cannot resolve (a host module without a runtime
         // owner or library declaration, such as node:module), has no
@@ -19320,7 +19325,7 @@ class Emitter {
                 declaration: symbolDeclaration, identifier: symbolDeclaration.name };
         }
         const directNamedDeclaration =
-            (ts.isFunctionDeclaration(symbolDeclaration) || ts.isClassDeclaration(symbolDeclaration)) &&
+            (ts.isFunctionDeclaration(symbolDeclaration) || ts.isClassDeclaration(symbolDeclaration) || ts.isEnumDeclaration(symbolDeclaration)) &&
             symbolDeclaration.name &&
             this.isDirectScopeLexicalDeclaration(symbolDeclaration)
                 ? symbolDeclaration as NamedScopeLexicalDeclaration
@@ -19353,7 +19358,7 @@ class Emitter {
         const declaration = directNamedDeclaration ??
             this.test262BindingVariableDeclaration(symbolDeclaration);
         if (!identifier || !declaration) return null;
-        if (ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration)) {
+        if (ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration) || ts.isEnumDeclaration(declaration)) {
             return {
                 name: identifier.text,
                 immutable: this.closureEnvBindingForSymbol(symbol)?.immutable ?? false,
@@ -19382,6 +19387,7 @@ class Emitter {
     private isDirectSwitchLexicalDeclaration(
         declaration: ts.Declaration,
     ): declaration is ScopeLexicalDeclaration {
+        if (isScopeEnumDeclaration(declaration)) return ts.isCaseClause(declaration.parent) || ts.isDefaultClause(declaration.parent);
         if (ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration)) {
             const container = declarationContainer(declaration);
             return !!declaration.name && (ts.isCaseClause(container) || ts.isDefaultClause(container));
@@ -19409,6 +19415,8 @@ class Emitter {
             ? declaration.parent.parent.parent
             : (ts.isFunctionDeclaration(declaration) || ts.isClassDeclaration(declaration)) && declaration.name
                 ? declarationContainer(declaration)
+                : isScopeEnumDeclaration(declaration)
+                ? declaration.parent
                 : null;
         // B.3.3: a FunctionDeclaration as an IfStatement clause is the sole
         // declaration of a Block of its own.
@@ -22620,7 +22628,8 @@ class Emitter {
             ts.isFunctionDeclaration(decl) &&
                 this.isSupportedLexicalFunctionDeclaration(decl) ||
             ts.isClassDeclaration(decl) &&
-                this.isSupportedScopeClassDeclaration(decl) || ts.isClassExpression(decl)
+                this.isSupportedScopeClassDeclaration(decl) || ts.isClassExpression(decl) ||
+            isScopeEnumDeclaration(decl)
         );
     }
 
@@ -26073,6 +26082,9 @@ class Emitter {
                 }
             } else if (stateNode.kind === "module-export") {
                 if (!moduleSource || !expressionResultTypes[stateNode.valueSlot]) return false;
+            } else if (stateNode.kind === "sync" && isScopeEnumDeclaration(stateNode.statement)) {
+                const symbol = this.symbolForIdentifier(stateNode.statement.name);
+                if (!symbol || !fieldBySymbol.has(symbol)) return false;
             } else if (stateNode.kind === "sync" && ts.isClassDeclaration(stateNode.statement)) {
                 const declaration = stateNode.statement;
                 if (!declaration.name || !this.isSupportedScopeClassDeclaration(declaration) &&
@@ -26824,6 +26836,25 @@ class Emitter {
                                 );
                             }
                         }
+                    } else if (isScopeEnumDeclaration(stateNode.statement)) {
+                        // `let E;` is initialized by the scope's first
+                        // declaration of the enum, which creates the object;
+                        // a merged declaration stores into the binding's
+                        // object (an enum binding is never reassigned).
+                        const declaration = stateNode.statement;
+                        const symbol = this.symbolForIdentifier(declaration.name);
+                        const local = symbol ? fieldBySymbol.get(symbol) : undefined;
+                        if (!symbol || !local) return false;
+                        const target = this.freshTemp("_enum"), root = this.freshTemp("_enum_root");
+                        if (this.firstScopeEnumDeclaration(symbol) === declaration) {
+                            callback.line(`tsc_value_t ${target} = tsc_value_object(tsc_object_new());`);
+                            callback.line(`void* volatile ${root} = tsc_value_gc_root(${target}); (void)${root};`);
+                            emitCfgFieldAssignment(callback, local, { c: target, ty: T_VALUE }, declaration, "state", true);
+                        } else {
+                            callback.line(`tsc_value_t ${target} = ${this.coerce({ c: cfgFieldValue(local, "state"), ty: local.type }, T_VALUE, declaration)};`);
+                            callback.line(`void* volatile ${root} = tsc_value_gc_root(${target}); (void)${root};`);
+                        }
+                        this.emitEnumDeclarationInto(callback, declaration, target, root);
                     } else if (ts.isClassDeclaration(stateNode.statement)) {
                         const declaration = stateNode.statement;
                         if (!declaration.name || !this.isSupportedScopeClassDeclaration(declaration) &&
@@ -28145,6 +28176,10 @@ class Emitter {
             // Supported local declarations are emitted as scope-qualified
             // file-scope C functions.  The declaration itself has no runtime
             // statement to execute; direct references resolve to that symbol.
+            return;
+        }
+        if (isScopeEnumDeclaration(stmt)) {
+            if (!this.emitScopeEnumDeclaration(buf, stmt)) unsupported(stmt, "enum declaration is missing its canonical lexical cell");
             return;
         }
         if (ts.isClassDeclaration(stmt)) {
@@ -30522,6 +30557,31 @@ class Emitter {
         return true;
     }
 
+    /** A Block or CaseBlock enum declaration: TypeScript's `let E;` (the
+     * scope's shared lexical binding, initialized by its first declaration)
+     * and `(function (E) { ... })(E || (E = {}))` over that binding. */
+    private emitScopeEnumDeclaration(buf: CBuf, declaration: ts.EnumDeclaration): boolean {
+        if (!this.isDirectScopeLexicalDeclaration(declaration) || this.lexicalBindingScopes.length === 0) return false;
+        const binding = this.lexicalBindingForSymbol(this.symbolForIdentifier(declaration.name));
+        if (!binding) return false;
+        if (binding.declaration === declaration) {
+            buf.line(`${binding.value} = tsc_value_undefined();`);
+            buf.line(`${binding.initialized} = true;`);
+        }
+        this.emitEnumDeclarationInto(buf, declaration, binding.value, binding.gcRoot);
+        return true;
+    }
+
+    /** The declaration of a Block or CaseBlock enum that initializes its
+     * scope's binding: the first in source order (merged declarations of a
+     * local enum all belong to one scope). */
+    private firstScopeEnumDeclaration(symbol: ts.Symbol): ts.EnumDeclaration | undefined {
+        let first: ts.EnumDeclaration | undefined;
+        for (const declaration of symbol.declarations ?? [])
+            if (isScopeEnumDeclaration(declaration) && (!first || declaration.pos < first.pos)) first = declaration;
+        return first;
+    }
+
     private scopeLexicalDeclarationNames(
         declaration: ScopeLexicalDeclaration,
     ): readonly ts.Identifier[] {
@@ -30579,7 +30639,7 @@ class Emitter {
      * Dynamic environments and block functions with possible legacy aliases
      * retain their binding collection even without a direct value reference. */
     private scopeLexicalDeclarationNeeded(
-        declaration: ts.VariableDeclaration | ts.FunctionDeclaration | ts.ClassDeclaration,
+        declaration: ts.VariableDeclaration | ts.FunctionDeclaration | ts.ClassDeclaration | ts.EnumDeclaration,
     ): boolean {
         if (this.sourceEnvironmentEnabled(declaration.getSourceFile())) return true;
         if (ts.isVariableDeclaration(declaration)) return this.shouldEmitLocalVariable(declaration);
@@ -40113,7 +40173,7 @@ class Emitter {
         // when the enum has one (a module-level enum's binding).
         if (sym && this.moduleVarBindings.has(this.checker.getExportSymbolOfSymbol(sym))) return undefined;
         if (sym && this.moduleVarBindings.has(sym)) return undefined;
-        if (this.isTest262ScriptGlobalEnumDeclaration(decl)) return undefined;
+        if (this.isTest262ScriptGlobalEnumDeclaration(decl) || isScopeEnumDeclaration(decl)) return undefined;
         unsupported(pa, `enum member ${pa.name.text} has no compile-time value and its enum has no runtime object`);
     }
 

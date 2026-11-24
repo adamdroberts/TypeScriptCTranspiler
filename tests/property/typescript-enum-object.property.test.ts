@@ -26,9 +26,9 @@ const NODE=process.env.TSC2C_NODE_REFERENCE??'node';
  * module syntax) the enum is a global var binding: a property of the global
  * object, the same object in a function, merged declarations sharing it; the
  * reference is TypeScript's emit run as a Script. The stress is a 300-member
- * enum in each. A member read in a closure inside a member initializer, and
- * a function-local enum used as a value, still fail closed with a
- * diagnostic. */
+ * enum in each. A member read in a closure inside a member initializer
+ * still fails closed with a diagnostic (Block enums:
+ * typescript-local-enum). */
 
 const generated=Array.from({length:300},(_,k)=>k%3===0?`M${k} = "s${k}"`:`M${k} = ${k*7-500}`).join(', ');
 const modules:Record<string,string>={
@@ -107,11 +107,9 @@ test('module-level TypeScript enums are runtime objects, as TypeScript emits the
   const scriptNative=Bun.spawnSync([join(scriptRoot,'program')],{stdout:'pipe',stderr:'pipe',timeout:60_000});
   expect({code:scriptNative.exitCode,stderr:scriptNative.stderr.toString()}).toEqual({code:0,stderr:''});
   expect(scriptNative.stdout.toString()).toBe(scriptReference.stdout.toString());
-  // Still fail closed: a member read in a closure inside an initializer, a
-  // function-local enum value.
+  // Still fails closed: a member read in a closure inside an initializer.
   for(const [name,source,message] of [
    ['closure',`export {};\nenum E { A = 1, C = ((): number => A)() }\nconsole.log(Object.keys(E).join());\n`,'enum member read in a function'],
-   ['local',`export {};\nfunction f(): string { enum L { A } return Object.keys(L).join(); }\nconsole.log(f());\n`,'enum'],
   ] as const){
    const entry=join(root,name+'.ts'),failed:string[]=[];
    await writeFile(entry,source);
