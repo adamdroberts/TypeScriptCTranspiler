@@ -5807,6 +5807,13 @@ class SourceValueFlow {
             this.onActive(context,()=>{this.escapeCallableArgument(receiver,context);if(exec)this.escapeCallableArgument(exec,context);});
         });
     }
+    /** An owner that is certainly an ordinary object without internal slots:
+     * one an object or array literal created, or %RegExp.prototype%. */
+    private literalOrdinaryOwner(owner:ObjectOwner,atom:Atom):boolean {
+        if(this.regexpPrototypeCell?.values.has(atom))return true;
+        const creation=this.ownerCreations.get(owner);
+        return !!creation&&(ts.isObjectLiteralExpression(creation)||ts.isArrayLiteralExpression(creation))&&!owner.proxy;
+    }
     private regexpOwnerData(atom:Atom):{readonly source:Cell;readonly flags:Cell}|null {
         const owner=this.ordinaryOwner(atom);return owner?this.regexpData.get(owner)??null:null;
     }
@@ -6073,10 +6080,20 @@ class SourceValueFlow {
                 continue;
             }
             if(!data){
-                // A receiver without [[RegExpMatcher]] (RegExp.prototype itself, a
-                // subclass instance the model cannot see): the method reads the
-                // receiver's own and inherited members, so only code reachable
-                // from the receiver and arguments runs; the result is native.
+                // An object the program made with a literal, or %RegExp.prototype%
+                // (an ordinary object), has no [[RegExpMatcher]]: exec's
+                // RequireInternalSlot throws a TypeError before any conversion
+                // (22.2.6.2), and test's RegExpExec calls the receiver's exec
+                // (invoked above) or throws one; test's result is a Boolean.
+                if(owner&&(name==="exec"||name==="test")&&this.literalOrdinaryOwner(owner,atom)){
+                    this.publish(result,this.abrupt);
+                    if(name==="test"){this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));}
+                    continue;
+                }
+                // A receiver without [[RegExpMatcher]] (a subclass instance the
+                // model cannot see): the method reads the receiver's own and
+                // inherited members, so only code reachable from the receiver
+                // and arguments runs; the result is native.
                 if(owner||atom.tag==="unknown"||atom.tag==="opaque-object"){
                     // @@matchAll returns CreateRegExpStringIterator's object
                     // whenever it completes normally.

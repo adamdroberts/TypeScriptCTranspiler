@@ -40,7 +40,9 @@ import {nodeReferenceSync} from './node-reference';
  * null-prototype groups object: their keys are no unknown code (exact), and a
  * pair is an ordinary Array whose own toString runs (listed). A descriptor of
  * a match result's named property is that of a data property, though its
- * elements are defined under unknown index keys (exact). The stress makes 256
+ * elements are defined under unknown index keys (exact). RegExp exec on an
+ * object literal, an array literal or %RegExp.prototype% throws a TypeError
+ * (no [[RegExpMatcher]]) and test runs the receiver's own exec (listed). The stress makes 256
  * dispatching calls. */
 
 const P=`eval("print('"+w+"')");`;
@@ -91,6 +93,8 @@ const shapes:Record<string,{source:string;exact:string[]|null}>={
  matchIndicesKeys:{source:`var w='1';var hit=/(?<part>a)(b)?/d.exec("xa");var k=Object.keys(hit.indices).join(",")+hit.indices[1][0]+Object.getPrototypeOf(hit.indices.groups);${P}`,exact:["print('1')"]},
  matchIndicesPair:{source:`var w='1';var hit=/(a)/d.exec("xa");hit.indices[0].toString=function(){w='2';return ''};""+hit.indices[0];${P}`,exact:null},
  matchResultDescriptor:{source:`var w='1';var hit=/(a)/dg.exec("a");for(var key of ["index","input","groups","indices"]){var d=Object.getOwnPropertyDescriptor(hit,key);var t=key+":"+d.writable}${P}`,exact:["print('1')"]},
+ regexpBrand:{source:`var w='1';var base=Object.getPrototypeOf(/a/);var names=[];for(var receiver of [{},base,[]]){try{base.exec.call(receiver,"a")}catch(e){names.push(e.name)}}try{base.test.call({},"a")}catch(e){}${P}`,exact:["print('1')"]},
+ regexpTestExec:{source:`var w='1';var base=Object.getPrototypeOf(/a/);var r={exec(){w='2';return {}}};base.test.call(r,"a");${P}`,exact:null},
  stress:{source:`var w='1';var m={[Symbol.match](s){return null}};${Array.from({length:256},(_,k)=>['"ab".match(m);','"ab".search({[Symbol.search](){return 0}});','"ab".padStart(4);','"ab".split({[Symbol.split](){return []}});'][k%4]).join('')}${P}`,exact:["print('1')"]},
 };
 
@@ -116,6 +120,7 @@ test('String prototype methods dispatch to their argument protocol, sound agains
  expect(observed[names.indexOf('regexpSplitExec')]).toEqual(["print('5')"]);
  expect(observed[names.indexOf('regexpSplitLimit')]).toEqual(["print('7')"]);
  expect(observed[names.indexOf('matchIndicesPair')]).toEqual(["print('2')"]);
+ expect(observed[names.indexOf('regexpTestExec')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('constantWrite')]).toEqual(["print('3.141592653589793:2.220446049250313e-16')"]);
  expect(observed[names.indexOf('localeInvokesToString')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('arrayFromGetter')]).toEqual(["print('13')"]);
