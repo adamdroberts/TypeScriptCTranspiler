@@ -447,8 +447,8 @@ class SourceFactEdges extends Map<SourceFacts,"value"|"origin"> {
     }
 }
 const noAtoms:ReadonlySet<Atom>=new Set();
-let flattenEpoch=0,captureWalkEpoch=0;
-const flattenStack:SourceFacts[]=[],flattenModes:boolean[]=[];
+let flattenEpoch=0,captureWalkEpoch=0,hasEpoch=0;
+const flattenStack:SourceFacts[]=[],flattenModes:boolean[]=[],hasStack:SourceFacts[]=[];
 const noEdges:ReadonlyMap<SourceFacts,"value"|"origin">=new Map<SourceFacts,"value"|"origin">();
 /** A fact collection is not a Set subclass: engines fast-path array spread
  * and iteration of Set instances by copying raw entries, which would bypass
@@ -477,6 +477,8 @@ class SourceFacts implements Iterable<Atom> {
     // This collection's mark in the current traversal (see flatten).
     private visitEpoch=0;
     private visitBits=0;
+    // This collection's mark in the current membership query (see has).
+    private hasVisit=0;
     add(atom:Atom):this{if(this.own.has(atom))return this;sourceFactsEpoch++;this.own.add(atom);if(atom.tag==="unknown")(this.ownUnknown??=new Set()).add(atom);this.changed();return this;}
     addDependent(facts:SourceFacts):void{(this.dependents??=[]).push(facts);}
     /** Invalidate the flattened traversal of this collection and of every
@@ -521,14 +523,17 @@ class SourceFacts implements Iterable<Atom> {
     [Symbol.iterator](): IterableIterator<Atom> {return this.flatten()[Symbol.iterator]();}
     has(atom: Atom): boolean {
         if (this.own.has(atom) || this.memberships?.has(atom)) return true;
-        const pending:SourceFacts[] = [this], visited = new Set<SourceFacts>();
+        // The walk runs no other code, so, as flatten does, it shares one
+        // stack and stamps visits with an epoch instead of allocating a
+        // visited set and a stack per query.
+        const epoch=++hasEpoch,pending=hasStack;pending.length=0;pending.push(this);
         while (pending.length) {
             const facts = pending.pop()!;
-            if (visited.has(facts)) continue; visited.add(facts);
+            if (facts.hasVisit === epoch) continue; facts.hasVisit = epoch;
             if (facts.own.has(atom) || facts.memberships?.has(atom)) {
                 // Facts and copy edges only grow. A positive membership proof
                 // remains valid throughout this graph's monotone solution.
-                (this.memberships ??= new Set()).add(atom); return true;
+                pending.length=0;(this.memberships ??= new Set()).add(atom); return true;
             }
             for(const [source,kind]of facts.sources)if(kind==="value"||atom.tag==="unknown")pending.push(source);
         }
