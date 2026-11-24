@@ -8,20 +8,22 @@ import {sourceEvaluationInvocations} from '../../src/source-value-flow';
 import {nodeReferenceSync} from './node-reference';
 
 /* Array.prototype.join (and toString through it), toLocaleString and the
- * %TypedArray% forms convert a receiver this agent is already joining to the
- * empty String, as Node and Bun do (the spec text recurses until the stack is
- * exhausted). Node's order: the length read and the separator conversion run
- * before the check; a Proxy is its own identity; a join a throw leaves no
- * longer counts. The runtime partitions are the cycle's path (the element
- * itself, a nested Array, an object's toString, an array-like receiver, an
- * own join override, a sibling re-entry), the operation (join with and
- * without a separator, toLocaleString, a typed array's toLocaleString through
- * Number.prototype.toLocaleString), Proxy identity, cleanup after a throw and
- * the evaluation order; the stress is a 2048-deep chain of nested Arrays whose
- * innermost element is the outermost. The source analysis gives one join
+ * %TypedArray% forms have no cycle check (ES2026 23.1.3.18, 23.1.3.32): a
+ * receiver an element reaches is joined again, and the recursion ends in the
+ * stack-exhaustion RangeError, an implementation limit (Node and Bun give the
+ * empty String instead, which the spec does not allow). The runtime
+ * partitions are the cycle's path (the element itself, a nested Array, an
+ * object's toString, an array-like receiver, an own join override), the
+ * operation (join with and without a separator, toLocaleString, a typed
+ * array's toLocaleString through Number.prototype.toLocaleString), a Proxy of
+ * the receiver, a cycle made after a throw, and two non-cyclic re-entries (a
+ * sibling join, an empty join), whose values are exact; the stress is a
+ * 2048-deep chain of nested Arrays whose innermost element is the outermost. The source analysis gives one join
  * text per receiver object at a site, so a cyclic receiver closes a cycle in
- * the text graph (an unproven text) instead of unrolling a join per level:
- * the shapes stay sound against Node and a non-cyclic join stays exact. */
+ * the text graph (an unproven text) instead of unrolling a join per level: a
+ * non-cyclic join stays exact, and the listed texts include what Node prints
+ * (its empty String for the cycle, a superset of the spec run, which throws
+ * before the eval). */
 
 const N=(name:string,body:string)=>`t(${JSON.stringify(name)},()=>{${body}});`;
 const runtimeShapes=[
@@ -45,18 +47,20 @@ ${runtimeShapes.join('\n')}
 console.log(out.join("\\n"));
 `;
 
-test('a receiver already being joined converts to the empty String, as in Node',async()=>{
+// Expected per ES2026: each cyclic join throws the stack-exhaustion RangeError.
+const expectedRuntime=['self!RangeError','nested!RangeError','viaObject!RangeError','arrayLike!RangeError','locale!RangeError','mixed!RangeError',
+ 'throwCleanup!RangeError','sibling=["1,1","1"]','ownJoin!RangeError','order!RangeError','typedLocale!RangeError','proxy!RangeError','empty="x"','stress!RangeError'].join('\n')+'\n';
+
+test('a cyclic join recurses to the stack-exhaustion RangeError, per the spec',async()=>{
  const root=await mkdtemp(join(tmpdir(),'tsc2c-join-cycle-'));
  try{
   const entry=join(root,'main.js'),output=join(root,'program');await writeFile(entry,runtimeProgram);
-  const node=nodeReferenceSync(['node',entry],{stdout:'pipe',stderr:'pipe',timeout:60_000});
-  expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});
   const diagnostics:string[]=[];
   const built=await compile({entry,output,buildDir:join(root,'build'),diagnosticWriter:message=>diagnostics.push(message)});
   expect({code:built.exitCode,diagnostics:diagnostics.join('')}).toEqual({code:0,diagnostics:''});
   const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:60_000});
   expect({code:native.exitCode,stderr:native.stderr.toString()}).toEqual({code:0,stderr:''});
-  expect(native.stdout.toString()).toBe(node.stdout.toString());
+  expect(native.stdout.toString()).toBe(expectedRuntime);
  }finally{await rm(root,{recursive:true,force:true});}
 },600_000);
 

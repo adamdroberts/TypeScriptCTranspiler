@@ -10279,8 +10279,9 @@ class SourceValueFlow {
                                 // text again instead of a fresh activation's,
                                 // so a cyclic receiver closes a cycle the text
                                 // proof leaves incomplete rather than
-                                // unrolling a new join per level. The runtime
-                                // gives such a nested join "" (as Node does).
+                                // unrolling a new join per level (the runtime
+                                // recurses to the stack-exhaustion RangeError,
+                                // as the spec's unbounded recursion does).
                                 for(const value of invocation.receiver.values){
                                     const owner=this.representedOwner(value),receiverKey=owner?"o"+owner.shape.id:"other";
                                     if(!owner){

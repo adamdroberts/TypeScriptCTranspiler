@@ -2136,19 +2136,6 @@ typedef struct tsc_throw_completion {
     bool initialized;
 } tsc_throw_completion_t;
 
-/* One Array join (join, toLocaleString, %TypedArray% join/toLocaleString)
- * in progress on this agent. A receiver already being joined converts to the
- * empty String, as Node and Bun do, instead of recursing until the stack is
- * exhausted. Frames live on the C stack; a throw restores the try frame's
- * saved top, so a join left by a throw no longer counts. */
-typedef struct tsc_join_frame {
-    tsc_value_t receiver;
-    struct tsc_join_frame* prev;
-    bool entered;
-} tsc_join_frame_t;
-bool tsc_join_enter(tsc_join_frame_t* frame, tsc_value_t receiver);
-void tsc_join_leave(tsc_join_frame_t* frame);
-
 typedef struct tsc_try_frame {
     jmp_buf jb;
     struct tsc_try_frame* prev;
@@ -2157,7 +2144,6 @@ typedef struct tsc_try_frame {
     tsc_environment_t* lexical_environment;
     tsc_call_activation_t* activation_top;
     void* callee_top;
-    tsc_join_frame_t* join_top;
     /* NaN-boxed pointer payloads and TLS slots are invisible to conservative
      * GC.  This cell is allocated before setjmp, so longjmp cannot make its
      * subsequently updated contents indeterminate with the frame's locals. */
