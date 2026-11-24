@@ -102,7 +102,6 @@ typedef struct tsc_re_node {
             int32_t set;      /* index into tsc_ucd_sets */
             int32_t strings;  /* index into tsc_ucd_string_properties, or -1 */
             bool negated;
-            bool ascii;
         } prop;
         struct {
             struct tsc_re_node** items;
@@ -2148,7 +2147,6 @@ static tsc_re_node_t* re_parse_property(tsc_re_parser_t* p, bool negated) {
     tsc_re_node_t* node = re_new_node(p, RE_N_PROP);
     node->u.prop.negated = negated;
     node->u.prop.strings = -1;
-    node->u.prop.ascii = false;
     char* eq = strchr(text, '=');
     int32_t set = -1;
     if (eq) {
@@ -2171,7 +2169,6 @@ static tsc_re_node_t* re_parse_property(tsc_re_parser_t* p, bool negated) {
                 node->u.prop.strings = strings;
             }
         }
-        node->u.prop.ascii = !strcmp(text, "ASCII");
     }
     if (set < 0) { re_fail(p, start); return NULL; }
     node->u.prop.set = set;
@@ -2708,13 +2705,13 @@ static USet* re_escape_set(tsc_re_class_escape_t escape) {
     }
     return set;
 }
-/* UnicodeSets-mode ignoreCase follows Node.js (V8) rather than folding both
- * sides: each operand is closed under simple case folding and matched against
- * the raw input, except that \p{ASCII}/\P{ASCII} contribute the raw ASCII set
- * and a one-code-point \q{c} contributes only scf(c), neither closed. So
- * /\p{ASCII}/iv and /[\q{k}]/iv do not match U+212A KELVIN SIGN, while
- * /[a-z]/iv and /\p{L}/iv do. Every other operand gives the specification's
- * result, because raw membership in a closed set equals folded membership. */
+/* UnicodeSets-mode ignoreCase: CompileToCharSet's sets are simple-case-folded
+ * (MaybeSimpleCaseFolding) and CharacterSetMatcher compares Canonicalize of
+ * each member with Canonicalize of the input (ES2026 22.2.2.9). Each operand
+ * is closed under simple case folding and matched against the raw input, which
+ * gives that result, because raw membership in a closed set equals folded
+ * membership: /\p{ASCII}/iv, /[\q{k}]/iv and /[a-z]/iv all match U+212A
+ * KELVIN SIGN. */
 static bool re_normalize_set(tsc_re_parser_t* p, tsc_re_node_t* node, const USet* universe) {
     bool v = node->flags.unicode_sets, unicode = re_is_unicode(p);
     bool closed = v && node->flags.ignore_case;
@@ -2725,7 +2722,7 @@ static bool re_normalize_set(tsc_re_parser_t* p, tsc_re_node_t* node, const USet
         uset_close(raw); raw = re_property_set(node, v);
         node->may_strings = node->u.prop.strings >= 0;
         negate_after = v && node->u.prop.negated;
-        if (closed) result = node->u.prop.ascii ? uset_clone(raw) : re_case_closure(raw);
+        if (closed) result = re_case_closure(raw);
         else result = re_fold_set(raw, node->flags.ignore_case, unicode);
     } else if (node->kind == RE_N_CLASS_ESCAPE) {
         uset_close(raw); raw = re_escape_set(node->u.class_escape.escape);
@@ -2735,17 +2732,14 @@ static bool re_normalize_set(tsc_re_parser_t* p, tsc_re_node_t* node, const USet
     } else {
         for (size_t i = 0; i < node->u.cls.nranges; i++)
             uset_addRange(raw, node->u.cls.ranges[i].lo, node->u.cls.ranges[i].hi);
-        USet* single = closed ? uset_openEmpty() : NULL;
         for (size_t i = 0; i < node->u.cls.nstrs; i++) {
             tsc_re_qstr_t text = node->u.cls.strs[i];
-            size_t cps = 0; uint32_t only = 0;
-            for (size_t at = 0; at < text.len;) { size_t w; only = re_read_cp(text.units, text.len, at, true, &w); at += w; cps++; }
+            size_t cps = 0;
+            for (size_t at = 0; at < text.len;) { size_t w; re_read_cp(text.units, text.len, at, true, &w); at += w; cps++; }
             if (cps != 1) node->may_strings = true;
-            if (single && cps == 1) uset_add(single, (UChar32)re_canon(only, true, true));
-            else uset_addString(raw, text.units, (int32_t)text.len);
+            uset_addString(raw, text.units, (int32_t)text.len);
         }
         result = closed ? re_case_closure(raw) : re_fold_set(raw, node->flags.ignore_case, unicode);
-        if (single) { uset_addAll(result, single); uset_close(single); }
         for (size_t i = 0; i < node->u.cls.nitems; i++) {
             tsc_re_node_t* child = node->u.cls.items[i];
             if (node->u.cls.op == RE_CLS_UNION) {

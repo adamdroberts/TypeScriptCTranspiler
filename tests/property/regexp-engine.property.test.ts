@@ -167,8 +167,13 @@ test("RegExp continuation graph preserves branches, captures, assertions and UTF
         expect(compiler.stderr.toString()).toBe("");
         expect(compiler.exitCode).toBe(0);
         const cases = probes();
-        // Node.js is the oracle: where JavaScriptCore deviates (for example
-        // /[A-Z]/iu against U+212A KELVIN SIGN), the engine follows Node.
+        // Node.js is the oracle except where V8 departs from ES2026: in
+        // UnicodeSets mode with ignoreCase, CharacterSetMatcher compares the
+        // Canonicalize (simple case folding) of each MaybeSimpleCaseFolding'd
+        // member with that of the input (22.2.2.9), so \p{ASCII} matches
+        // U+212A KELVIN SIGN and U+017F LONG S (folding to k and s) and a
+        // one-code-point \q{a} under (?i:) matches A. V8 leaves those two
+        // operands unfolded; the specification's results are listed here.
         const casesFile = path.join(temporary, "cases.json");
         await fs.writeFile(casesFile, JSON.stringify(cases));
         const reference = nodeReferenceSync(["node", "-e", `
@@ -187,7 +192,12 @@ test("RegExp continuation graph preserves branches, captures, assertions and UTF
             });
             process.stdout.write(JSON.stringify(results));`, casesFile], { stdout: "pipe", stderr: "pipe" });
         expect({ exitCode: reference.exitCode, stderr: reference.stderr.toString() }).toEqual({ exitCode: 0, stderr: "" });
-        const expected = JSON.parse(reference.stdout.toString()) as string[];
+        const specification = new Map([["\\p{ASCII}\0iv\0\u212a", "0,1"], ["\\p{ASCII}\0iv\0\u017f", "0,1"],
+            ["(?i:[\\q{ab|a}])b\0v\0Ab", "0,2"], ["(?i:[\\q{ab|a}])b\0v\0AbB", "0,2"]]);
+        const expected = (JSON.parse(reference.stdout.toString()) as string[]).map((result, index) => {
+            const { pattern, flags, subject, start = 0 } = cases[index]!;
+            return start === 0 ? specification.get(pattern + "\0" + flags + "\0" + subject) ?? result : result;
+        });
         const native = Bun.spawnSync([executable], { stdin: Buffer.from(input(cases)), stdout: "pipe", stderr: "pipe" });
         expect(native.stderr.toString()).toBe("");
         expect(native.exitCode).toBe(0);
