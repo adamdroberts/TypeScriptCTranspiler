@@ -680,6 +680,10 @@ const NATIVE_INSTANCE_OWN_KEYS:ReadonlyMap<string,ReadonlySet<string>>=new Map([
     ...["Error","EvalError","RangeError","ReferenceError","SyntaxError","TypeError","URIError"].map(name=>[name,new Set(["message","cause","stack"])] as const),
     ["AggregateError",new Set(["message","cause","stack","errors"])],
     ...["Date","WeakRef","FinalizationRegistry","ArrayBuffer","SharedArrayBuffer","DataView"].map(name=>[name,new Set<string>()] as const),
+    // A Number or Boolean wrapper has no own property, only its
+    // [[NumberData]] or [[BooleanData]] slot (sec-number-constructor-number-value,
+    // sec-boolean-constructor-boolean-value): its members are its prototype's.
+    ...["Number","Boolean"].map(name=>[name,new Set<string>()] as const),
 ]);
 /** Loop conditions a counter's values are filtered by; each compares the
  * counter with the other operand's values by the host's own operator on

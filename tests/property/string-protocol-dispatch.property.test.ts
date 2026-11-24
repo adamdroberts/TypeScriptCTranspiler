@@ -20,8 +20,9 @@ import {nodeReferenceSync} from './node-reference';
  * method's result from a user @@match flowing into the evaluated text. Number
  * toString and toFixed check thisNumberValue before converting their
  * argument: a non-Number receiver throws without running the radix's valueOf
- * (exact); a valid one runs it (listed). The stress makes 256 dispatching
- * calls. */
+ * (exact); a valid one runs it (listed). A Number or Boolean wrapper has no own
+ * members, so its toString is its prototype's (exact). The stress makes 256
+ * dispatching calls. */
 
 const P=`eval("print('"+w+"')");`;
 const shapes:Record<string,{source:string;exact:string[]|null}>={
@@ -33,6 +34,7 @@ const shapes:Record<string,{source:string;exact:string[]|null}>={
  splitConverted:{source:`var w='1';"a,b".split({toString(){w='2';return ','}});${P}`,exact:null},
  numberReceiverFirst:{source:`var w='1';try{Reflect.apply((1).toString,{},[{valueOf(){w='2';return 10}}])}catch(e){}${P}`,exact:["print('1')"]},
  numberRadix:{source:`var w='1';(255).toString({valueOf(){w='2';return 16}});new Number(255).toFixed({valueOf(){w+='3';return 1}});${P}`,exact:null},
+ wrapperMethod:{source:`var w='1';var radix={valueOf(){return 16}};for(var i=0;i<2;i++){new Number(255).toString(radix);new Boolean(true).toString();}${P}`,exact:["print('1')"]},
  stress:{source:`var w='1';var m={[Symbol.match](s){return null}};${Array.from({length:256},(_,k)=>['"ab".match(m);','"ab".search({[Symbol.search](){return 0}});','"ab".padStart(4);','"ab".split({[Symbol.split](){return []}});'][k%4]).join('')}${P}`,exact:["print('1')"]},
 };
 
