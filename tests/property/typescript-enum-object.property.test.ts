@@ -27,9 +27,11 @@ const NODE=process.env.TSC2C_NODE_REFERENCE??'node';
  * object, the same object in a function, merged declarations sharing it; the
  * reference is TypeScript's emit run as a Script. The stress is a 300-member
  * enum in each. A bare member name read in a closure inside a member
- * initializer reads the module's or namespace's enum binding (static storage
- * nothing reassigns); in a Block enum it still fails closed with a
- * diagnostic (Block enums: typescript-local-enum). */
+ * initializer, and the enum's own name there, read the declaration's object
+ * (TypeScript's function parameter): a module's or namespace's binding, or a
+ * Script declaration's static slot, so a later reassignment of the Script's
+ * global changes nothing; in a Block enum such a read still fails closed with
+ * a diagnostic (Block enums: typescript-local-enum). */
 
 const generated=Array.from({length:300},(_,k)=>k%3===0?`M${k} = "s${k}"`:`M${k} = ${k*7-500}`).join(', ');
 const modules:Record<string,string>={
@@ -76,6 +78,10 @@ const before = Object.getOwnPropertyDescriptor(g, "Kind");
 console.log(Kind[1], Kind.Third, Object.keys(Kind).join(), JSON.stringify(Kind), typeof g.Kind, g.Kind === Kind, later());
 console.log(String(before?.configurable), String(before?.writable), String(Inline.One), String(Object.keys(g.Big).length), (Big as any)[1593]);
 g.Kind.Extra = 9; console.log(String((Kind as any).Extra));
+let counter = 5; const kept: Array<() => number> = [];
+enum Later { A = counter++, C = ((): number => { kept.push(() => Later.A + A); return 10; })() }
+const savedLater = Later; g.Later = { A: 100 };
+console.log(JSON.stringify(savedLater), kept.map(f => f()).join());
 `;
 
 test('module-level TypeScript enums are runtime objects, as TypeScript emits them',async()=>{

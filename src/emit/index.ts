@@ -12976,13 +12976,18 @@ class Emitter {
         } else if (binding) {
             this.emitEnumDeclarationInto(buf, declaration, binding.cName, binding.gcRoot, "", true);
         } else if (this.isTest262ScriptGlobalEnumDeclaration(declaration)) {
-            const target = this.freshTemp("_enum");
-            const root = this.freshTemp("_enum_root");
+            // A Script's top-level declaration runs once: its object (the
+            // emit's function parameter) is held in static storage, which a
+            // closure in a member initializer reads later.
+            const target = this.freshTemp("_script_enum");
+            const root = this.freshTemp("_script_enum_root");
+            this.agentStorage.declare("tsc_value_t", target);
+            this.agentStorage.declare("void* volatile", root);
             const key = this.test262GlobalBindingKey(declaration.name.text);
-            buf.line(`tsc_value_t ${target} = tsc_environment_reference_get(${key});`);
-            buf.line(`void* volatile ${root} = tsc_value_gc_root(${target}); (void)${root};`);
+            buf.line(`${target} = tsc_environment_reference_get(${key});`);
+            buf.line(`${root} = tsc_value_gc_root(${target});`);
             this.emitEnumDeclarationInto(buf, declaration, target, root,
-                `tsc_environment_reference_set(${key}, ${target}, ${this.nodeIsInStrictMode(declaration) ? "true" : "false"});`);
+                `tsc_environment_reference_set(${key}, ${target}, ${this.nodeIsInStrictMode(declaration) ? "true" : "false"});`, true);
         }
     }
 
@@ -13039,6 +13044,15 @@ class Emitter {
         const overrides = new Map<ts.Expression, EmitResult>();
         const owner = this.checker.getSymbolAtLocation(declaration.name);
         const visit = (node: ts.Node, nested: boolean): void => {
+            // The enum's own name in an initializer is the emit's function
+            // parameter: the declaration's object, whatever the binding holds
+            // later (a Block enum's closures capture its never-reassigned
+            // binding instead).
+            if (ts.isIdentifier(node) && !this.isNonValueIdentifier(node) && this.checker.getSymbolAtLocation(node) === owner &&
+                (staticTarget || !nested)) {
+                overrides.set(node, { c: target, ty: T_VALUE });
+                return;
+            }
             if (ts.isIdentifier(node)) {
                 const member = this.checker.getSymbolAtLocation(node)?.valueDeclaration;
                 if (member && ts.isEnumMember(member) && !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node) &&
