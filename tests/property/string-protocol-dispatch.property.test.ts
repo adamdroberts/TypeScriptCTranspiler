@@ -68,6 +68,8 @@ const shapes:Record<string,{source:string;exact:string[]|null}>={
  proxyOwnKeysResult:{source:`var w='1';var p=new Proxy({},{ownKeys(t){return {length:1,get 0(){w+='3';return 'k'}}}});try{Reflect.ownKeys(p)}catch(e){}${P}`,exact:null},
  proxyValuesTrapless:{source:`var w='1';var p=new Proxy({a:1,b:2},{});Object.values(p).join(",");${P}`,exact:["print('1')"]},
  proxyValuesGetTrap:{source:`var w='1';var o={toString(){w='2';return 'x'}};var p=new Proxy({a:1},{get(t,k){return o}});Object.values(p).join(",");${P}`,exact:null},
+ entriesComputedKeys:{source:`var w='1';var o={};for(var i=0;i<3;i++)Object.defineProperty(o,"k"+i,{enumerable:true,get(){return {index:1}}});var sum=0;var e=Object.entries(o);for(var j=0;j<e.length;j++)sum+=e[j][1].index;${P}`,exact:["print('1')"]},
+ entriesGetterWrites:{source:`var w='1';var o={};for(var i=0;i<2;i++)Object.defineProperty(o,"k"+i,{enumerable:true,get(){w='2';return 1}});Object.entries(o);${P}`,exact:null},
  stress:{source:`var w='1';var m={[Symbol.match](s){return null}};${Array.from({length:256},(_,k)=>['"ab".match(m);','"ab".search({[Symbol.search](){return 0}});','"ab".padStart(4);','"ab".split({[Symbol.split](){return []}});'][k%4]).join('')}${P}`,exact:["print('1')"]},
 };
 
@@ -88,6 +90,7 @@ test('String prototype methods dispatch to their argument protocol, sound agains
  expect(observed[names.indexOf('proxyOwnKeysWrites')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('proxyOwnKeysResult')]).toEqual(["print('13')"]);
  expect(observed[names.indexOf('proxyValuesGetTrap')]).toEqual(["print('2')"]);
+ expect(observed[names.indexOf('entriesGetterWrites')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('arrayFromGetter')]).toEqual(["print('13')"]);
  expect(observed[names.indexOf('arrayFromElements')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('arrayFromArrayLike')]).toEqual(["print('13')"]);

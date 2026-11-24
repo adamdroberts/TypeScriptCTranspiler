@@ -5082,8 +5082,22 @@ class SourceValueFlow {
         this.defineField(owner,null,values,true,indices);
         const unknownNumber:Atom={tag:"non-string",kinds:KIND_NUMBER},unknownSymbol:Atom={tag:"non-string",kinds:KIND_SYMBOL};
         let escaped=false;const escapedTrapResults=new Set<Cell>();
-        const incomplete=(effects:boolean,valuesKnown=false):void=>{
-            if(projection==="entries"||projection==="values"&&!valuesKnown)this.publish(values,this.unknown);
+        // With an incomplete key List, an ordinary object's values are still
+        // its string-keyed property values read by [[Get]] (accessors run),
+        // and its entries fresh [key, value] pairs of them.
+        let ordinaryValues:Cell|undefined;
+        const ordinaryElements=():Cell=>{
+            if(!ordinaryValues){
+                const key=this.newCell();this.publish(key,this.unknownString);
+                const read=this.computedProperty(objects,key,context);
+                if(projection==="entries"){const pair=this.newCell();this.copy(key,pair);this.copy(read,pair);ordinaryValues=this.arrayOfValues(context,"entry",pair);}
+                else ordinaryValues=read;
+            }
+            return ordinaryValues;
+        };
+        const incomplete=(effects:boolean,valuesKnown=false,ordinary=false):void=>{
+            if((projection==="entries"||projection==="values")&&ordinary&&!effects)this.copy(ordinaryElements(),values);
+            else if(projection==="entries"||projection==="values"&&!valuesKnown)this.publish(values,this.unknown);
             else{if(kind!=="symbol")this.publish(values,this.unknownString);if(kind!=="string")this.publish(values,unknownSymbol);}
             this.publish(length,unknownNumber);
             if(effects){this.activateOpaqueEffect(context);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.unknown);
@@ -5149,7 +5163,7 @@ class SourceValueFlow {
                     }
                 }
                 incomplete(nested,valuesKnown);
-            }else if(uncertain)incomplete(false);else if(!pending)this.publish(length,this.primitive(count));
+            }else if(uncertain)incomplete(false,false,true);else if(!pending)this.publish(length,this.primitive(count));
         }});
         return result;
     }
