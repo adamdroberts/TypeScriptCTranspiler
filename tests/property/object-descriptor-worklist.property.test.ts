@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import ts from "typescript";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -176,8 +177,8 @@ collect(); check(cursor.end === marker, "deep-descriptor-owner-graph");
 
 test("Ordinary descriptors preserve actual values, ordered key partitions and live native fields", async () => {
     const expected: string[] = [];
-    new Function("globalThis", ts.transpileModule(source.replaceAll("NATIVE_GC", "false"),
-        { compilerOptions: { target: ts.ScriptTarget.ESNext } }).outputText)({ print: (value: unknown) => expected.push(String(value)) });
+    expected.push(...nodePrintProgram(ts.transpileModule(source.replaceAll("NATIVE_GC", "false"),
+        { compilerOptions: { target: ts.ScriptTarget.ESNext } }).outputText, "globalThis"));
     expect(expected.filter(line => !line.endsWith(":true"))).toEqual([]);
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-descriptor-worklist-"));
     try {

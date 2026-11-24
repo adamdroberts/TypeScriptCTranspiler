@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import ts from "typescript";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -112,7 +113,7 @@ test("native aggregate fields own boxed referents through construction, writes a
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-native-field-roots-"));
     const program = source(), expected: string[] = [];
     const oracle = ts.transpileModule(program.replaceAll("NATIVE_GC", "false"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-    new Function("globalThis", oracle)({ print: (value: unknown) => expected.push(String(value)) });
+    expected.push(...nodePrintProgram(oracle, "globalThis"));
     try {
         for (const noGc of [false, true]) {
             const name = noGc ? "no-gc" : "gc", entry = path.join(temporary, name + ".ts"), driver = path.join(temporary, name + "-driver.js"), output = path.join(temporary, name);

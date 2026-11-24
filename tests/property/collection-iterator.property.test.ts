@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -202,7 +203,7 @@ print("stress:" + valid + ":" + final.value[0] + ":" + cursor.next().done);
 
 test("Map and Set share ordinary live insertion-link iterators and actual constructor/callback protocols", async () => {
     const expected: string[] = [];
-    new Function("print", source.replaceAll("NATIVE_GC", "false"))((value: unknown) => expected.push(String(value)));
+    expected.push(...nodePrintProgram(source.replaceAll("NATIVE_GC", "false")));
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-collection-iterator-"));
     try {
         for (const noGc of [false, true]) {

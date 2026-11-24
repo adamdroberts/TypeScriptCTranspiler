@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import ts from "typescript";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -67,8 +68,8 @@ check(remaining === -1 && total === 4095 * 4096 / 2 && Link.method() === -1, "re
 test("native member identity preserves scope, member kind and property-key domains", async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-native-member-identity-"));
     const expected: string[] = [];
-    new Function("globalThis", ts.transpileModule(source.replaceAll("NATIVE_GC", "false"),
-        { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)({ print: (value: unknown) => expected.push(String(value)) });
+    expected.push(...nodePrintProgram(ts.transpileModule(source.replaceAll("NATIVE_GC", "false"),
+        { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, "globalThis"));
     try {
         for (const noGc of [false, true]) {
             const name = noGc ? "no-gc" : "gc", subject = path.join(temporary, name + ".ts"), driver = path.join(temporary, name + "-driver.js"), output = path.join(temporary, name);

@@ -1,4 +1,4 @@
-import {nodeReferenceSync} from './node-reference';
+import {nodeReferenceSync, nodePrintProgram } from './node-reference';
 import { expect, test } from "bun:test";
 import ts from "typescript";
 import * as fs from "node:fs/promises";
@@ -161,7 +161,7 @@ try { descend(depth - 1); } catch (error) { print("stress:" + (error === marker)
 test("for-of steps one ordinary iterator between bodies and closes lexical scopes in completion order", async () => {
     const source = plans + partitions;
     const expected: string[] = [];
-    new Function("print", source.replaceAll("NATIVE_GC", "false"))((value: unknown) => expected.push(String(value)));
+    expected.push(...nodePrintProgram(source.replaceAll("NATIVE_GC", "false")));
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-for-of-"));
     try {
         for (const noGc of [false, true]) {

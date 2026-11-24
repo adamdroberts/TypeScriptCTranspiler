@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -102,7 +103,7 @@ check(valid && sum === depth * (depth - 1) / 2, "retained-key-list");
 test("ordinary reflection shares actual lookup and ordered descriptor/Get traversal", async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-ordinary-reflection-"));
     const expected: string[] = [];
-    new Function("print", "$262", source.replaceAll("NATIVE_GC", "false"))((value: unknown) => expected.push(String(value)), { gc() {} });
+    expected.push(...nodePrintProgram("const $262 = { gc() {} };\n" + source.replaceAll("NATIVE_GC", "false")));
     try {
         for (const noGc of [false, true]) {
             const name = noGc ? "no-gc" : "gc", entry = path.join(temporary, name + ".js"), output = path.join(temporary, name);

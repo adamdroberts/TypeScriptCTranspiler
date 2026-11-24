@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import ts from "typescript";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -91,7 +92,7 @@ test("for declaration lists retain storage, TDZ and source-ordered iteration env
         for (const strict of [false, true]) {
             const program = (strict ? '"use strict";\n' : "") + partitions + generated;
             const expected: string[] = [];
-            new Function("print", program.replaceAll("NATIVE_GC", "false"))((value: unknown) => expected.push(String(value)));
+            expected.push(...nodePrintProgram(program.replaceAll("NATIVE_GC", "false")));
             for (const noGc of [false, true]) {
                 const name = `${strict ? "strict" : "sloppy"}-${noGc ? "no-gc" : "gc"}`;
                 const entry = path.join(temporary, name + ".js"), output = path.join(temporary, name);
@@ -159,7 +160,7 @@ test("suspended for heads project the same declaration cells onto CFG entry and 
     const expected: string[] = [];
     const javascript = ts.transpileModule(suspendedSource.replaceAll("NATIVE_GC", "false"),
         { compilerOptions: { target: ts.ScriptTarget.ESNext } }).outputText;
-    await new Function("globalThis", javascript + "\nreturn completion;")({ print: (value: unknown) => expected.push(String(value)) });
+    expected.push(...nodePrintProgram(javascript + "\nreturn completion;", "globalThis"));
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-for-suspended-"));
     try {
         for (const noGc of [false, true]) {

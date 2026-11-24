@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -70,7 +71,7 @@ test("RegExp escaping and source serialization consume the same UTF-16 sequence"
     const source = script.replace("ESCAPE_PLANS", JSON.stringify(JSON.stringify(escapePlans)))
         .replace("SOURCE_PLANS", JSON.stringify(JSON.stringify(sourcePlans)));
     const expected: string[] = [];
-    new Function("print", source)((value: unknown) => expected.push(String(value)));
+    expected.push(...nodePrintProgram(source));
     try {
         const entry = path.join(temporary, "subject.js"); await fs.writeFile(entry, source);
         for (const noGc of [false, true]) {

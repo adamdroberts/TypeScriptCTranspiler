@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -129,7 +130,7 @@ test("RegExp match/search protocols share mutable lookup, RegExpExec and ordered
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-regexp-symbols-"));
     const source = script.replace("PLAN_JSON", JSON.stringify(JSON.stringify(plans())));
     const expected: string[] = [];
-    new Function("print", source)((value: unknown) => expected.push(String(value)));
+    expected.push(...nodePrintProgram(source));
     try {
         const entry = path.join(temporary, "subject.js"); await fs.writeFile(entry, source);
         for (const noGc of [false, true]) {

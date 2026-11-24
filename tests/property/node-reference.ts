@@ -58,3 +58,27 @@ fs.writeFileSync(1, JSON.stringify(out));`, input], {stdout: 'pipe', stderr: 'pi
         return accepted;
     } finally { rmSync(root, {recursive: true, force: true}); }
 }
+
+/** The lines a program prints under the reference Node, run as the body of
+ * `new Function("print", program)(print)` or, for parameter "globalThis",
+ * `new Function("globalThis", program)({ print })`: the shapes the property
+ * oracles used inside the Bun test process. Output is collected until the
+ * event loop drains, so asynchronous prints are included; an uncaught error
+ * fails the oracle. */
+export function nodePrintProgram(program: string, parameter: 'print' | 'globalThis' = 'print'): string[] {
+    const root = mkdtempSync(join(tmpdir(), 'tsc2c-node-print-'));
+    try {
+        const input = join(root, 'program.js');
+        writeFileSync(input, program);
+        // V8's default stack (about 1 MB) is far below the 8 MB thread stack;
+        // deep-recursion oracles need the larger limit, still within it.
+        const result = nodeReferenceSync(['node', '--stack-size=7000', '-e', `const fs = require("node:fs"), lines = [];
+const print = value => { lines.push(String(value)); };
+let written = false;
+process.on("beforeExit", () => { if (!written) { written = true; fs.writeFileSync(1, JSON.stringify(lines)); } });
+new Function(process.argv[2], fs.readFileSync(process.argv[1], "utf8"))(process.argv[2] === "print" ? print : { print });`, input, parameter],
+            {stdout: 'pipe', stderr: 'pipe', timeout: 120_000});
+        if (result.exitCode !== 0) throw new Error(`Node print oracle failed: ${result.stderr.toString()}`);
+        return JSON.parse(result.stdout.toString()) as string[];
+    } finally { rmSync(root, {recursive: true, force: true}); }
+}

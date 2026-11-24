@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -75,9 +76,7 @@ print("stress:" + visited + ":" + valid);
 
 test("JavaScript declarations and escaped captures share one physical value storage contract", async () => {
     const expected: string[] = [];
-    new Function("print", source.replaceAll("NATIVE_GC", "false"))(
-        (value: unknown) => expected.push(String(value)),
-    );
+    expected.push(...nodePrintProgram(source.replaceAll("NATIVE_GC", "false")));
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-declaration-storage-"));
     try {
         for (const noGc of [false, true]) {

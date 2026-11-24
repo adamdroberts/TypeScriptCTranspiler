@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import ts from "typescript";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -103,8 +104,8 @@ host.print("stress:" + ((255).toString(deepRadix(1200)) === "ff"));
 
 test("Number text calls preserve actual lookup, ToNumber, argument Lists and optional boundaries", async () => {
     const expected: string[] = [];
-    new Function("globalThis", ts.transpileModule(source.replaceAll("NATIVE_GC", "false"),
-        { compilerOptions: { target: ts.ScriptTarget.ESNext } }).outputText)({ print: (value: unknown) => expected.push(String(value)) });
+    expected.push(...nodePrintProgram(ts.transpileModule(source.replaceAll("NATIVE_GC", "false"),
+        { compilerOptions: { target: ts.ScriptTarget.ESNext } }).outputText, "globalThis"));
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-number-call-"));
     try {
         for (const noGc of [false, true]) {
@@ -146,7 +147,7 @@ test("ordinary Number method lookup retains strict and sloppy callback receiver 
     try {
         for (const strict of [false, true]) {
             const source = (strict ? '"use strict";\n' : "") + program, expected: string[] = [];
-            new Function("print", source)((value: unknown) => expected.push(String(value)));
+            expected.push(...nodePrintProgram(source));
             const name = strict ? "strict" : "sloppy", entry = path.join(temporary, name + ".js"), output = path.join(temporary, name);
             await fs.writeFile(entry, source);
             const diagnostics: string[] = [];

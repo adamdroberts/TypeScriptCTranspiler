@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -145,7 +146,7 @@ print("depth:" + snapshot(target, "deep"));
 test("property descriptors use ordinary objects and one ordered runtime conversion", async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-property-descriptor-"));
     const expected: string[] = [];
-    new Function("print", source.replaceAll("NATIVE_GC", "false"))((value: unknown) => expected.push(String(value)));
+    expected.push(...nodePrintProgram(source.replaceAll("NATIVE_GC", "false")));
     try {
         const entry = path.join(temporary, "subject.js");
         for (const noGc of [false, true]) {

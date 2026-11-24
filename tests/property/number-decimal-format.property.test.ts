@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import ts from "typescript";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -154,8 +155,8 @@ host.print("stress:" + ((1.125).toFixed(deepOption(1200)) === "1.13"));
 
 test("Number decimal methods preserve exact rounding cells, option order and ordinary method boundaries", async () => {
     const expected: string[] = [];
-    new Function("globalThis", ts.transpileModule(source.replaceAll("NATIVE_GC", "false"),
-        { compilerOptions: { target: ts.ScriptTarget.ESNext } }).outputText)({ print: (value: unknown) => expected.push(String(value)) });
+    expected.push(...nodePrintProgram(ts.transpileModule(source.replaceAll("NATIVE_GC", "false"),
+        { compilerOptions: { target: ts.ScriptTarget.ESNext } }).outputText, "globalThis"));
     function failures(lines: string[]): unknown[] {
         return lines.flatMap((line, index) => {
             const parts = line.split(":"), method = parts[0]!;

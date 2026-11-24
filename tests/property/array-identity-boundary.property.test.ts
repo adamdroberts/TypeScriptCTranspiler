@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import ts from "typescript";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -86,7 +87,7 @@ async function run(program: string, scenario: string): Promise<string[]> {
 
 test("Array native boundaries preserve identity, aliases, metadata and getter order", async () => {
     const program = source(), expected: string[] = [];
-    new Function("globalThis", ts.transpileModule(program.replaceAll("NATIVE_GC", "false"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)({ print: (value: unknown) => expected.push(String(value)) });
+    expected.push(...nodePrintProgram(ts.transpileModule(program.replaceAll("NATIVE_GC", "false"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, "globalThis"));
     for (const output of await run(program, "property/array-identity.ts#strict")) {
         const actual = output.trimEnd().split("\n"); expect(actual.length).toBe(expected.length);
         expect(expected.flatMap((line, index) => line === actual[index] ? [] : [{ index, expected: line, actual: actual[index] }]).slice(0, 12)).toEqual([]);
@@ -105,7 +106,7 @@ test("ordinary class calls preserve actual Array owners without element coercion
         host.print("unchanged:" + calls + ":" + Object.is(source[0], value) + ":" + Object.is(alias, source));
     `;
     const observed: string[] = [];
-    new Function("globalThis", ts.transpileModule(program, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)({print: (value: unknown) => observed.push(String(value))});
+    observed.push(...nodePrintProgram(ts.transpileModule(program, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, "globalThis"));
     const expected = observed.join("\n") + "\n";
     expect(expected).toBe("result:true\nunchanged:0:true:true\n");
     for (const output of await run(program, "property/array-native-layout.ts#strict")) expect(output).toBe(expected);

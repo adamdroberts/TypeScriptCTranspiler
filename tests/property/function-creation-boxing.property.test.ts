@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -34,7 +35,7 @@ print("retained-environments:" + valid + ":" + expected);
 
 test("fresh functions box without contextual property resolution and retain their captured values", async () => {
     const expected: string[] = [];
-    new Function("print", source.replaceAll("NATIVE_GC", "false"))((value: unknown) => expected.push(String(value)));
+    expected.push(...nodePrintProgram(source.replaceAll("NATIVE_GC", "false")));
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-function-creation-"));
     try {
         for (const noGc of [false, true]) {

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -107,7 +108,7 @@ test("RegExp uses ordinary constructor identity, argument Lists and ordered allo
     const oracleSource = script.replace("PLAN_JSON", JSON.stringify(JSON.stringify(plans)));
     const source = oracleSource + realmScript;
     const expected: string[] = [];
-    new Function("print", oracleSource)((value: unknown) => expected.push(String(value)));
+    expected.push(...nodePrintProgram(oracleSource));
     // JSC converts P/F before RegExpAlloc, unlike the pinned algorithm and V8.
     // Derive these observable traces directly from RegExpAlloc preceding
     // RegExpInitialize; retain the independent engine oracle for other values.

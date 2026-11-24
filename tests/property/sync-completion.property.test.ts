@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -165,7 +166,7 @@ test("try and finalizer completion values follow UpdateEmpty through the Script 
 test("synchronous completions leave one lexical scope worklist and preserve finalizer overrides", async () => {
     const source = preamble + plans + partitions;
     const expected: string[] = [];
-    new Function("print", source.replaceAll("NATIVE_GC", "false"))((value: unknown) => expected.push(String(value)));
+    expected.push(...nodePrintProgram(source.replaceAll("NATIVE_GC", "false")));
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-sync-completion-"));
     try {
         for (const noGc of [false, true]) {

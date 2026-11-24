@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -90,7 +91,7 @@ test("uncaught diagnostics inspect intrinsic storage without coercing the thrown
 test("throw transports one rooted value without user coercion across handlers and iterator finalizers", async () => {
     const source = plans + partitions;
     const expected: string[] = [];
-    new Function("print", source.replaceAll("NATIVE_GC", "false"))((value: unknown) => expected.push(String(value)));
+    expected.push(...nodePrintProgram(source.replaceAll("NATIVE_GC", "false")));
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-throw-payload-"));
     try {
         for (const noGc of [false, true]) {

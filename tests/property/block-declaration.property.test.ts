@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -74,7 +75,7 @@ test("block declaration lists create fresh function identities over shared lexic
         for (const strict of [false, true]) {
             const program = (strict ? '"use strict";\n' : "") + source;
             const expected: string[] = [];
-            new Function("print", program.replaceAll("NATIVE_GC", "false"))((value: unknown) => expected.push(String(value)));
+            expected.push(...nodePrintProgram(program.replaceAll("NATIVE_GC", "false")));
             for (const noGc of [false, true]) {
                 const name = `${strict ? "strict" : "sloppy"}-${noGc ? "no-gc" : "gc"}`;
                 const entry = path.join(temporary, name + ".js"), output = path.join(temporary, name);

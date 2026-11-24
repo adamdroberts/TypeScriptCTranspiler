@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -155,11 +156,9 @@ sealed = true;
 
 test("Promise combinators consume live iterator records with actual capabilities and shared element gates", async () => {
     const expected: string[] = [];
-    await new Promise<void>((finish, reject) => {
-        try { new Function("print", "finish", source.replaceAll("NATIVE_GC", "false"))(
-            (value: unknown) => expected.push(String(value)), finish); }
-        catch (error) { reject(error); }
-    });
+    // The native subject's `finish` is a no-op; the oracle runs until its
+    // event loop drains.
+    expected.push(...nodePrintProgram("function finish() {}\n" + source.replaceAll("NATIVE_GC", "false")));
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-promise-combinator-"));
     try {
         for (const noGc of [false, true]) {

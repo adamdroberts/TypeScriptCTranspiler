@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import ts from "typescript";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -175,8 +176,8 @@ host.print("stress:" + (Reflect.apply(arrayMethod, stress, reserved) === expecte
 
 test("locale invocation preserves generic results, live indexed access and the ECMA-262 fallback", async () => {
     const expected: string[] = [];
-    new Function("globalThis", ts.transpileModule(source.replaceAll("NATIVE_GC", "false").replaceAll("ORACLE_MODE", "true"),
-        { compilerOptions: { target: ts.ScriptTarget.ESNext } }).outputText)({ print: (value: unknown) => expected.push(String(value)) });
+    expected.push(...nodePrintProgram(ts.transpileModule(source.replaceAll("NATIVE_GC", "false").replaceAll("ORACLE_MODE", "true"),
+        { compilerOptions: { target: ts.ScriptTarget.ESNext } }).outputText, "globalThis"));
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-locale-invoke-"));
     try {
         for (const noGc of [false, true]) {
@@ -216,7 +217,7 @@ test("Object locale Invoke preserves strict and sloppy primitive receivers", asy
     try {
         for (const strict of [false, true]) {
             const source = (strict ? '"use strict";\n' : "") + program, expected: string[] = [];
-            new Function("print", source)((value: unknown) => expected.push(String(value)));
+            expected.push(...nodePrintProgram(source));
             const name = strict ? "strict" : "sloppy", entry = path.join(temporary, name + ".js"), output = path.join(temporary, name);
             await fs.writeFile(entry, source);
             const diagnostics: string[] = [];

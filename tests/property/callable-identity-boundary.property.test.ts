@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { nodePrintProgram } from "./node-reference";
 import ts from "typescript";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -76,7 +77,7 @@ host.print("owner-graph:" + valid + ":" + expected);
 
 test("native callable owners preserve identity, parameter plans and rooted argument values", async () => {
     const expected: string[] = [];
-    new Function("globalThis", ts.transpileModule(source.replaceAll("NATIVE_GC", "false"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)({ print: (value: unknown) => expected.push(String(value)) });
+    expected.push(...nodePrintProgram(ts.transpileModule(source.replaceAll("NATIVE_GC", "false"), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, "globalThis"));
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-callable-identity-"));
     try {
         for (const noGc of [false, true]) {
