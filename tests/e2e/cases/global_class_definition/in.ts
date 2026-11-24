@@ -1,4 +1,4 @@
-import Default, {Base,Derived,Forward,ObjectReturn,events} from './owner.js';
+import Default, {Base,Derived,Forward,ObjectReturn,events} from './owner.mjs';
 const Cjs: any=require('./common-owner.cjs');
 const owner=new Derived([],1,2),reader:any=owner.reader();
 console.log('module:'+(owner.value===17&&owner.tail.join(',')==='1,2'&&owner.field()===3&&reader[0]===owner&&reader[1]===Derived&&reader[2]===Derived&&reader[3].length===3));

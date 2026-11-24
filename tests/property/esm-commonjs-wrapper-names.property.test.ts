@@ -1,5 +1,5 @@
 import {expect,test} from 'bun:test';
-import {mkdtemp,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {compile} from '../../src/compile';
@@ -10,15 +10,20 @@ import {nodeReferenceSync} from './node-reference';
 // ambient host declarations, but at runtime an unbound name resolves through
 // the global environment: `typeof` gives "undefined" (or the type of a global
 // property the program created) and a read or call throws ReferenceError.
-// JavaScript modules follow Node 26 for all five names; TypeScript modules keep
-// Bun's host `require`, `__filename` and `__dirname` (developer decision
-// 2026-11-16), so they are compared with Bun. Partitions: each name, each form
+// That holds for every JavaScript module and for a TypeScript file TypeScript
+// emits as an ECMAScript module (.mts, or .ts in a "type": "module" package
+// scope); their expected lines come from an .mjs twin run by Node, whose
+// unbound-name behaviour is the spec's. A TypeScript file TypeScript emits as
+// CommonJS (a .ts file in any other package scope) lowers its imports to
+// `require` inside the CommonJS wrapper, so `require`, `__filename` and
+// `__dirname` are bound there, while `module` and `exports` stay unbound; its
+// lines are derived from those rules. Partitions: each name, each form
 // (typeof, read, call, read after defining the global property), each module
-// kind (.mjs, .js with module syntax; .ts with module syntax against Bun), and
-// a .cjs module that binds the names as the control. A TypeScript module that
-// reads a global created only by a JavaScript `globalThis.name = v` assignment
-// resolves it at runtime too. One 128-deep nesting of arrows and blocks around
-// the reads is the stress.
+// kind (.mjs, .js with module syntax, .mts, .ts in a module scope, .ts in a
+// CommonJS scope), and a .cjs module that binds the names as the control. A
+// TypeScript module that reads a global created only by a JavaScript
+// `globalThis.name = v` assignment resolves it at runtime too. One 128-deep
+// nesting of arrows and blocks around the reads is the stress.
 const names=['exports','require','module','__filename','__dirname'];
 function observations(label:string,names:readonly string[],catchBinding='e',unread:readonly string[]=[]):string{
  const lines:string[]=[];
@@ -28,17 +33,18 @@ function observations(label:string,names:readonly string[],catchBinding='e',unre
  }
  return lines.join('\n');
 }
-async function run(entry:string,directory:string,oracle:Bun.SyncSubprocess<'pipe','pipe'>):Promise<void>{
- expect({entry,exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({entry,exitCode:0,stderr:''});
+async function run(entry:string,directory:string,oracle:Bun.SyncSubprocess<'pipe','pipe'>|string):Promise<void>{
+ if(typeof oracle!=='string')expect({entry,exitCode:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({entry,exitCode:0,stderr:''});
+ const expected=typeof oracle==='string'?oracle:oracle.stdout.toString();
  const output=entry+'.out',diagnostics:string[]=[];
  const built=await compile({entry,output,buildDir:entry+'.build',diagnosticWriter:message=>diagnostics.push(message)});
  expect({entry,code:built.exitCode,diagnostics}).toEqual({entry,code:0,diagnostics:[]});
  const native=Bun.spawnSync([output],{stdout:'pipe',stderr:'pipe',timeout:60_000});
  expect({entry,code:native.exitCode,stderr:native.stderr.toString()}).toEqual({entry,code:0,stderr:''});
- expect(native.stdout.toString().replaceAll(directory,'<dir>').split('\n')).toEqual(oracle.stdout.toString().replaceAll(directory,'<dir>').split('\n'));
+ expect(native.stdout.toString().replaceAll(directory,'<dir>').split('\n')).toEqual(expected.replaceAll(directory,'<dir>').split('\n'));
 }
 
-test('CommonJS wrapper names are unbound in JavaScript modules and Bun hosts in TypeScript modules',async()=>{
+test('CommonJS wrapper names are unbound in ECMAScript modules and bound in TypeScript CommonJS files',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'tsc2c-esm-wrapper-names-'));
  try{
   await writeFile(join(directory,'out.mjs'),'export const out = [];\n');
@@ -58,20 +64,40 @@ test('CommonJS wrapper names are unbound in JavaScript modules and Bun hosts in 
    'console.log(out.concat(cjs.out).join("\\n"));',
   ].join('\n')+'\n');
   await run(entry,directory,nodeReferenceSync(['node',entry],{stdout:'pipe',stderr:'pipe',timeout:30_000}));
-  // TypeScript modules: Bun is the oracle. `exports` has no host declaration
-  // in the checker's library, so the TypeScript partition omits it; a global
-  // created by a JavaScript module's globalThis assignment is read instead.
+  // TypeScript. `exports` has no host declaration in the checker's library,
+  // so the TypeScript partitions omit it; a global created by a JavaScript
+  // module's globalThis assignment is read instead.
   await writeFile(join(directory,'globals.mjs'),'globalThis.created = "created-global";\nexport {};\n');
-  const typed=join(directory,'typed.ts');
-  await writeFile(typed,[
-   'import "./globals.mjs";','export const marker: number = 1;','const out: string[] = [];',
-   // Only calls of the host require are supported there; its value fails closed.
-   observations('ts',names.filter(name=>name!=='exports'),'e: any',['require']),
-   'out.push("ts file " + __filename.endsWith("typed.ts") + " " + (__dirname.length > 0));',
-   'out.push("ts created " + typeof created + " " + created);',
+  const typedNames=names.filter(name=>name!=='exports');
+  const typedBody=(label:string,bound:boolean)=>[
+   'export const marker: number = 1;','const out: string[] = [];',
+   observations(label,typedNames,'e: any',bound?['require']:[]),
+   ...(bound?['out.push("'+label+' file " + __filename.endsWith(".ts") + " " + (__dirname.length > 0));']:[]),
+   'out.push("'+label+' created " + typeof (globalThis as any).created + " " + (globalThis as any).created);',
    nested,
    'console.log(out.join("\\n"));',
-  ].join('\n')+'\n');
-  await run(typed,directory,Bun.spawnSync([process.execPath,typed],{stdout:'pipe',stderr:'pipe',timeout:30_000}));
+  ];
+  // ECMAScript-module TypeScript: .mts, and .ts in a "type": "module" scope.
+  await mkdir(join(directory,'esm'));await writeFile(join(directory,'esm','package.json'),'{"type":"module"}\n');
+  await writeFile(join(directory,'esm','globals.mjs'),'globalThis.created = "created-global";\nexport {};\n');
+  for(const [file,label] of [['esm/typed.ts','tsm'],['typed.mts','mts']] as const){
+   const typed=join(directory,file),twin=typed.replace(/\.m?ts$/,'.twin.mjs');
+   const body=typedBody(label,false);
+   await writeFile(typed,['import "./globals.mjs";',...body].join('\n')+'\n');
+   await writeFile(twin,['import "./globals.mjs";',...body.map(line=>line.replace(': number','').replace(': string[]','').replaceAll('(globalThis as any)','globalThis').replaceAll('e: any','e'))].join('\n')+'\n');
+   await run(typed,directory,nodeReferenceSync(['node',twin],{stdout:'pipe',stderr:'pipe',timeout:30_000}));
+  }
+  // CommonJS-format TypeScript (.ts outside a module scope): require,
+  // __filename and __dirname are bound; module is unbound, with the same
+  // ReferenceError line an ECMAScript module gives.
+  const typed=join(directory,'typed.ts');
+  await writeFile(typed,['import "./globals.mjs";',...typedBody('ts',true)].join('\n')+'\n');
+  const moduleTwin=join(directory,'module-twin.mjs');
+  await writeFile(moduleTwin,'const out=[];\n'+observations('ts',['module'])+'\nconsole.log(out.join("\\n"));\n');
+  const moduleLines=nodeReferenceSync(['node',moduleTwin],{stdout:'pipe',stderr:'pipe',timeout:30_000}).stdout.toString().trimEnd().split('\n');
+  const nestedLines=Array.from({length:1},()=>'nested undefined function');
+  const expectedTyped=['ts typeof require function',...moduleLines,'ts typeof __filename string','ts read __filename bound','ts typeof __dirname string','ts read __dirname bound',
+   'ts file true true','ts created string created-global',...nestedLines].join('\n')+'\n';
+  await run(typed,directory,expectedTyped);
  }finally{await rm(directory,{recursive:true,force:true});}
 },600_000);

@@ -13,6 +13,7 @@ import ts from "typescript";
 import {moduleLinkRecord} from "../module-source-record";
 import { ecmaDirectivePrologueHasUseStrict, ecmaParseGoal, literalPropertyKey } from "../ecmascript-source";
 import { sourceUnitFormat } from "../program";
+import { typeScriptModuleFormat } from "../source-unit-format";
 import { runtimeGlobalBindings, runtimeUtilExports, runtimeFsExports, runtimePathPosixOperations, runtimeBufferExports, runtimeChildProcessOperations } from "../global-bindings";
 import { canonicalParameterBindingSymbol, isAmbientSourceDeclaration, sourceDeclarationIntroducesBinding } from "../source-bindings";
 import { timersPromiseOperations, callbackTimerOperations } from "../timers-promises-operations";
@@ -12373,12 +12374,16 @@ class Emitter {
     /** A CommonJS wrapper name in an ECMAScript module is not bound by the
      * module: when the checker knows it only from an ambient host declaration,
      * it resolves through the global environment like any unbound identifier.
-     * JavaScript modules follow Node 26 (none of the five names); TypeScript
-     * modules keep Bun's `require`, `__filename` and `__dirname` (developer
-     * decision 2026-11-16), so only `module` and `exports` are unbound there. */
+     * An ECMAScript module binds none of the five names (ECMA-262 module
+     * code): every JavaScript module, and a TypeScript file that TypeScript
+     * itself emits as one (.mts, or a .ts file in a "type": "module" package
+     * scope). A TypeScript file TypeScript emits as CommonJS (the other .ts
+     * files and .cts) lowers its imports to `require` inside the CommonJS
+     * wrapper, so `require`, `__filename` and `__dirname` are bound there;
+     * `module` and `exports` stay unbound. */
     private isUnboundCommonJsWrapperName(id: ts.Identifier): boolean {
         const source = id.getSourceFile();
-        const names = this.isJavaScriptSourceFile(source)
+        const names = this.isJavaScriptSourceFile(source) || typeScriptModuleFormat(source.fileName) === "module"
             ? ["exports", "require", "module", "__filename", "__dirname"] : ["exports", "module"];
         if (!names.includes(id.text) || this.isCommonJsSourceFile(source) || !ts.isExternalModule(source)) return false;
         // A JavaScript assignment to a global object property (`globalThis.module

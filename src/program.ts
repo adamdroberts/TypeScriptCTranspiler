@@ -1,4 +1,4 @@
-import {sourceUnitFormats,type SourceUnitFormat} from './source-unit-format';
+import {sourceUnitFormats,packageScopeType,type SourceUnitFormat} from './source-unit-format';
 export {sourceUnitFormat} from './source-unit-format';
 import ts from "typescript";
 import { resilientTypeChecker } from "./resilient-checker";
@@ -130,26 +130,9 @@ export function buildProgram(opts: BuildProgramOpts): BuiltProgram {
     // An import request can load a host CommonJS wrapper. Its Script body is
     // distinct from an ECMAScript Module, even though TypeScript resolves both
     // through the same import edge. Explicit ECMAScript roots keep their goal.
-    const packageTypes = new Map<string, string | undefined>();
-    // Node's package scope: the nearest package.json "type" governs .js/.ts
-    // files that have no explicit .mjs/.mts/.cjs/.cts format extension.
-    const packageType = (source: string): string | undefined => {
-        let directory = path.dirname(source), type: string | undefined;
-        const visited: string[] = [];
-        for (;;) {
-            if (packageTypes.has(directory)) { type = packageTypes.get(directory); break; }
-            visited.push(directory);
-            const metadata = ts.sys.readFile(path.join(directory,"package.json"));
-            if (metadata !== undefined) {
-                try { type = JSON.parse(metadata).type; } catch { /* no declared format */ }
-                break;
-            }
-            const parent = path.dirname(directory); if (parent === directory) break;
-            directory = parent;
-        }
-        for (const directory of visited) packageTypes.set(directory,type);
-        return type;
-    };
+    // The nearest package.json "type" governs .js/.ts files that have no
+    // explicit .mjs/.mts/.cjs/.cts format extension.
+    const packageType = packageScopeType;
     // Compile roots follow the same Node module detection as imported files:
     // .mjs/.mts, or a "type": "module" package scope, selects the Module goal;
     // a JavaScript root (.cjs, or .js/.jsx outside a module scope) is a
