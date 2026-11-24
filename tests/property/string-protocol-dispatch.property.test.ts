@@ -17,8 +17,11 @@ import {nodeReferenceSync} from './node-reference';
  * return a value (exact); a @@replace method, a replacer function, a
  * receiver's toString and a split argument without @@split (converted by
  * toString) that write the global (listed or the site unproven); a String
- * method's result from a user @@match flowing into the evaluated text. The
- * stress makes 256 dispatching calls. */
+ * method's result from a user @@match flowing into the evaluated text. Number
+ * toString and toFixed check thisNumberValue before converting their
+ * argument: a non-Number receiver throws without running the radix's valueOf
+ * (exact); a valid one runs it (listed). The stress makes 256 dispatching
+ * calls. */
 
 const P=`eval("print('"+w+"')");`;
 const shapes:Record<string,{source:string;exact:string[]|null}>={
@@ -28,6 +31,8 @@ const shapes:Record<string,{source:string;exact:string[]|null}>={
  replacer:{source:`var w='1';"ab".replace(/a/,function(){w='2';return ''});${P}`,exact:null},
  receiverText:{source:`var w='1';String.prototype.padEnd.call({toString(){w='2';return 'a'}},3);${P}`,exact:null},
  splitConverted:{source:`var w='1';"a,b".split({toString(){w='2';return ','}});${P}`,exact:null},
+ numberReceiverFirst:{source:`var w='1';try{Reflect.apply((1).toString,{},[{valueOf(){w='2';return 10}}])}catch(e){}${P}`,exact:["print('1')"]},
+ numberRadix:{source:`var w='1';(255).toString({valueOf(){w='2';return 16}});new Number(255).toFixed({valueOf(){w+='3';return 1}});${P}`,exact:null},
  stress:{source:`var w='1';var m={[Symbol.match](s){return null}};${Array.from({length:256},(_,k)=>['"ab".match(m);','"ab".search({[Symbol.search](){return 0}});','"ab".padStart(4);','"ab".split({[Symbol.split](){return []}});'][k%4]).join('')}${P}`,exact:["print('1')"]},
 };
 
@@ -37,6 +42,7 @@ test('String prototype methods dispatch to their argument protocol, sound agains
   JSON.stringify(names.map(name=>shapes[name]!.source))],{stdout:'pipe',stderr:'pipe',timeout:60_000});
  expect({code:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({code:0,stderr:''});
  const observed:string[][]=JSON.parse(oracle.stdout.toString());
+ expect(observed[names.indexOf('numberRadix')]).toEqual(["print('23')"]);
  for(const name of ['replaceWrites','replacer','receiverText','splitConverted'])expect({name,observed:observed[names.indexOf(name)]}).toEqual({name,observed:["print('2')"]});
  const directory=await mkdtemp(join(tmpdir(),'tsc2c-string-protocol-'));
  try{

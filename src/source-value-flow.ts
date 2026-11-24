@@ -6624,9 +6624,17 @@ class SourceValueFlow {
         }});
         if(role==="primitive-value")this.copy(payload,result);
         else {
-            const numeric=kind==="number"||kind==="bigint",parts=numeric?[payload,this.primitiveConversion(radix,context,"number")]:[payload];
+            // thisNumberValue (thisBigIntValue) precedes ToIntegerOrInfinity(radix):
+            // the radix is converted only once the receiver has a value of the
+            // method's kind, so an invalid receiver throws without running the
+            // radix's valueOf or @@toPrimitive.
+            const numeric=kind==="number"||kind==="bigint";
+            let started=false;
+            this.rule([payload],()=>{if(started||!payload.values.nonempty)return;started=true;
+            const parts=numeric?[payload,this.primitiveConversion(radix,context,"number")]:[payload];
             this.publish(result,{tag:"text-operation",operation:"primitive-string",parts});
             const handler=this.exceptionHandlers.get(context);if(handler){let exceptions!:Rule;exceptions=this.rule(parts,()=>{const states=parts.map(part=>this.primitiveState(part,exceptions,true));if(states.some(state=>state.pending&&!state.unresolved))return;for(const tuple of sourceChoiceTuples(states.map(state=>state.proof.values)))try{numeric?(tuple[0] as number|bigint).toString(tuple[1] as number|undefined):String(tuple[0]);}catch{this.publish(handler,this.nativeException(context));}});}
+            });
         }
         return result;
     }
@@ -9851,6 +9859,38 @@ class SourceValueFlow {
                                     else{this.publish(result,this.unknown);this.activateOpaqueEffect(node);if(handler)this.publish(handler,this.unknown);}
                                 }
                             });
+                            continue;
+                        }
+                        // Number and BigInt toString, toFixed, toExponential and
+                        // toPrecision: thisNumberValue (thisBigIntValue) reads a
+                        // Number or a wrapper's [[NumberData]] and throws a TypeError
+                        // for any other receiver before any argument is converted;
+                        // then each argument is ToIntegerOrInfinity (ToNumber's
+                        // ordered conversion, which runs a valueOf or @@toPrimitive
+                        // and writes nothing).
+                        const numericMember=member.slice(member.indexOf(":")+1);
+                        const numericArguments=argv??(invocation.sequence?[this.allArgumentValues(invocation.sequence)]:null);
+                        if((memberKind==="number"||memberKind==="bigint")&&kind&&numericArguments&&!pendingArgument&&
+                            (numericMember==="toString"||numericMember==="toFixed"||numericMember==="toExponential"||numericMember==="toPrecision")){
+                            let valid=(receiverKinds&normalKinds)!==0,invalid=(receiverKinds&KIND_PRIMITIVE&~normalKinds)!==0;
+                            if(receiverKinds&~KIND_PRIMITIVE)for(const value of invocation.receiver.values){
+                                if(value.tag==="primitive"||value.tag==="non-string"||value.tag==="unknown-string"||value.tag==="text-operation"||value.tag==="abrupt"||value.tag==="pending-source")continue;
+                                const payload=this.ordinaryOwner(value)?.boxed?.get(memberKind);
+                                if(payload){this.watch(rule,payload);const kinds=this.primitiveKinds(payload);if(kinds&normalKinds)valid=true;if(kinds&~normalKinds)invalid=true;}
+                                else if(this.ordinaryOwner(value)||value.tag==="function"||value.tag==="bound")invalid=true;
+                                else{valid=true;invalid=true;this.publish(result,this.unknown);this.activateOpaqueEffect(node);if(handler)this.publish(handler,this.unknown);}
+                            }
+                            if(invalid){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.nativeException(node,"TypeError"));}
+                            if(valid&&numericArguments.length){
+                                const converted=this.convertList(numericArguments,node,"number");
+                                for(const cell of converted)this.watch(rule,cell);
+                                if(converted.some(cell=>[...cell.values].some(value=>value.tag==="abrupt")))this.publish(result,this.abrupt);
+                            }
+                            if(valid){
+                                if(handler)this.publish(handler,this.nativeException(node));
+                                if(kind.string)this.publish(result,this.unknownString);
+                                if(kind.number){let number=this.numericValues.get(KIND_NUMBER);if(!number){number={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,number);}this.publish(result,number);}
+                            }
                             continue;
                         }
                         // A String, Number or BigInt prototype method runs user code only through
