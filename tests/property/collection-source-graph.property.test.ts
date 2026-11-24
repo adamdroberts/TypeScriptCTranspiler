@@ -55,7 +55,10 @@ test('canonical collection records contain independent Node read, iteration and 
  for(const [index,source]of proxyPartitions.entries()){
   const proof=await facts(join(directory,'proxy-'+index+'.mjs'),'export {};'+source),node=nodeReferenceSync(['node','-e',source+'require("node:fs").writeSync(1,String(query));'],{stdout:'pipe',stderr:'pipe'});
   expect({code:node.exitCode,stderr:node.stderr.toString()}).toEqual({code:0,stderr:''});if(proof!==null)expect(proof).toContain(node.stdout.toString());
-  if(index===0)expect(proof).toBeNull();
+  // A trapless Proxy of a function that writes the Map is its target's call:
+  // the read lists that write (a Map's [[MapData]] is not an opaque shape
+  // since its instance has no own members, 2026-11-24).
+  if(index===0)expect(proof).toContain('53;');
  }
  }finally{await rm(directory,{recursive:true,force:true})}
 },900000);

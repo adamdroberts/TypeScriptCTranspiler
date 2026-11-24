@@ -693,6 +693,10 @@ const NATIVE_INSTANCE_OWN_KEYS:ReadonlyMap<string,ReadonlySet<string>>=new Map([
     // [[NumberData]] or [[BooleanData]] slot (sec-number-constructor-number-value,
     // sec-boolean-constructor-boolean-value): its members are its prototype's.
     ...["Number","Boolean"].map(name=>[name,new Set<string>()] as const),
+    // A Map, Set, WeakMap or WeakSet has no own property either, only its
+    // [[MapData]] or [[SetData]] (or weak) slot: its members are its
+    // prototype's.
+    ...["Map","Set","WeakMap","WeakSet"].map(name=>[name,new Set<string>()] as const),
 ]);
 /** Loop conditions a counter's values are filtered by; each compares the
  * counter with the other operand's values by the host's own operator on
@@ -3825,7 +3829,11 @@ class SourceValueFlow {
                     // A value-less (opaque) mutation already marks the shape.
                     if(mode!=="delete"&&value!==this.empty&&owner.listLength&&this.keyMayContain(keys,"length",rule))this.copyWrite(this.arraySetLength(owner,value,context),this.field(owner,"length"),context);
                     if(mode==="set"&&value!==this.empty&&this.keyMayContain(keys,"__proto__",rule))this.unknownSetPrototype(owner,value);
-                    for(const record of owner.collections?.values()??[])this.copy(mutation,record.shape);
+                    // An ordinary property write never reaches a collection's
+                    // [[SetData]] or [[MapData]]; only unknown code (a
+                    // value-less mutation) may, through the collection's own
+                    // methods.
+                    if(value===this.empty)for(const record of owner.collections?.values()??[])this.copy(mutation,record.shape);
                 }
                 else {
                     const presence=this.presence(owner,key);
