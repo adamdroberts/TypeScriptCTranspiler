@@ -10427,7 +10427,16 @@ class SourceValueFlow {
                                 }
                                 const rest = location.value, restOwner = location.owner;
                                 if (argv) this.publish(restOwner.listLength!, this.primitive(Math.max(0, argv.length - index)));
-                                else {this.publish(restOwner.listLength!, this.unknown); this.publish(restOwner.shape, this.unknown);}
+                                else {
+                                    // An argument List of unknown extent still makes a fresh
+                                    // Array (10.2.11 step 26): some length, whose elements
+                                    // are the List's values from this position on.
+                                    this.publish(restOwner.listLength!, this.numberValue());
+                                    const values=invocation.sequence?this.allArgumentValues(index?this.transformArguments(invocation.sequence,{offset:index}):invocation.sequence):this.newCell();
+                                    if(!invocation.sequence)this.publish(values,this.unknown);
+                                    const indices=this.newCell();this.publish(indices,this.numberValue());
+                                    this.defineField(restOwner,null,values,true,indices);
+                                }
                                 for(const [offset,value] of (argv?.slice(index) ?? []).entries())this.defineField(restOwner,String(offset),value,true);
                                 this.bind(parameter.name, rest);
                             } else {

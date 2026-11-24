@@ -34,9 +34,11 @@ test("Iterator argument domains retain forwarding and conservative effects", () 
         'let body="17;";const iter={[Symbol.iterator](){return {next(){body=opaque();return {done:true};}};}};function ignore(){}ignore(...iter);eval(body);',
         'const iter={[Symbol.iterator](){return opaque();}};eval(...iter);',
         'const iter={[Symbol.iterator](){return {next:opaque()};}};eval(...iter);',
-        iterable('["17;"]')+'function forward(...args){return eval(args[0]);}forward(...iterable);',
     ]) expect({source,error:graph([{path:"main.js",source}]).error})
         .toMatchObject({error:expect.stringContaining("direct eval source is not a finite static string expression")});
+    // A rest parameter of the iterated List is a fresh Array of its values.
+    const rest=graph([{path:"main.js",source:iterable('["17;"]')+'function forward(...args){return eval(args[0]);}forward(...iterable);'}]);
+    expect({error:rest.error,bodies:rest.directEvalSources.map(entry=>entry.source)}).toEqual({error:null,bodies:["17;"]});
     // A terminal result never reads its value getter.
     expect(graph([{path:"main.js",source:'const iter={[Symbol.iterator](){return {next(){return {done:true,get value(){return opaque();}};}};}};eval(...iter);'}]).error).toBeNull();
 });
