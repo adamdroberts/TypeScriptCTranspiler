@@ -12878,16 +12878,57 @@ class Emitter {
         };
         for (const member of declaration.members) {
             const value = this.checker.getConstantValue(member);
-            if (value === undefined) unsupported(member, "an enum member whose value is not a compile-time constant requires a runtime initializer");
             const name = this.staticPropertyName(member.name);
             if (name === null || name === undefined) unsupported(member, "an enum member requires a static name");
             const key = `tsc_value_string(${this.stringLit(String(name))})`;
+            if (value === undefined) {
+                // TypeScript's `E[E["C"] = expr] = "C"`: the initializer is
+                // evaluated once, in order, with each bare member name read
+                // from the enum object (`E.B`).
+                if (!member.initializer) unsupported(member, "an enum member after a computed member requires an initializer");
+                const computed = this.freshTemp("_enum_member");
+                const overrides = this.enumMemberReferenceOverrides(declaration, member.initializer, target);
+                this.conditionValueScopes.push(overrides);
+                try {
+                    buf.line(`tsc_value_t ${computed} = ${this.coerce(this.emitExpr(member.initializer), T_VALUE, member.initializer)};`);
+                } finally { this.conditionValueScopes.pop(); }
+                buf.line(`void* volatile ${computed}_root = tsc_value_gc_root(${computed}); (void)${computed}_root;`);
+                store(key, computed);
+                store(computed, key);
+                continue;
+            }
             if (typeof value === "number") {
                 const number = `tsc_value_num(${double(value)})`;
                 store(key, number);
                 store(number, key);
             } else store(key, `tsc_value_string(${this.stringLit(value)})`);
         }
+    }
+
+    /** Each bare identifier in an enum member's initializer that names a
+     * member of the same (possibly merged) enum reads that member from the
+     * enum object, as TypeScript's emit rewrites it to `E.B`. A reference in a
+     * function or class inside the initializer would read the object later,
+     * from a different C function, and fails closed. */
+    private enumMemberReferenceOverrides(declaration: ts.EnumDeclaration, initializer: ts.Expression, target: string): Map<ts.Expression, EmitResult> {
+        const overrides = new Map<ts.Expression, EmitResult>();
+        const owner = this.checker.getSymbolAtLocation(declaration.name);
+        const visit = (node: ts.Node, nested: boolean): void => {
+            if (ts.isIdentifier(node)) {
+                const member = this.checker.getSymbolAtLocation(node)?.valueDeclaration;
+                if (member && ts.isEnumMember(member) && !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node) &&
+                    this.checker.getSymbolAtLocation(member.parent.name) === owner) {
+                    if (nested) unsupported(node, "an enum member read in a function or class inside an enum member initializer");
+                    const name = this.staticPropertyName(member.name);
+                    if (name === null || name === undefined) unsupported(member, "an enum member requires a static name");
+                    overrides.set(node, { c: `tsc_value_get_computed_prop(${target}, tsc_value_string(${this.stringLit(String(name))}))`, ty: T_VALUE });
+                }
+                return;
+            }
+            ts.forEachChild(node, child => visit(child, nested || ts.isFunctionLike(node) || ts.isClassLike(node)));
+        };
+        visit(initializer, false);
+        return overrides;
     }
 
     /** A Script's top-level enum (not `const enum`): TypeScript emits it as
@@ -28184,6 +28225,13 @@ class Emitter {
             return;
         }
         if (stmt.kind === ts.SyntaxKind.EmptyStatement) return;
+        // A module, namespace-body or Script enum reached through a
+        // statement graph (a module with top-level await) initializes its
+        // binding as in the straight-line module body.
+        if (ts.isEnumDeclaration(stmt) && (this.enumStorageDeclarations.has(stmt) || this.isTest262ScriptGlobalEnumDeclaration(stmt))) {
+            this.emitModuleEnumDeclaration(buf, stmt);
+            return;
+        }
         unsupported(stmt, `statement kind ${ts.SyntaxKind[stmt.kind]}`);
     }
 
