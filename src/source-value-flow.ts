@@ -697,6 +697,9 @@ const NATIVE_INSTANCE_OWN_KEYS:ReadonlyMap<string,ReadonlySet<string>>=new Map([
     // [[MapData]] or [[SetData]] (or weak) slot: its members are its
     // prototype's.
     ...["Map","Set","WeakMap","WeakSet"].map(name=>[name,new Set<string>()] as const),
+    // `new Object()` is OrdinaryObjectCreate(%Object.prototype%): its own
+    // properties are exactly those the program defines.
+    ["Object",new Set<string>()],
 ]);
 /** Loop conditions a counter's values are filtered by; each compares the
  * counter with the other operand's values by the host's own operator on
