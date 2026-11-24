@@ -1064,6 +1064,7 @@ class SourceValueFlow {
     private readonly symbolDescriptionInputs = new Map<Cell, Cell>();
     private readonly symbolRegistry = new Map<string, symbol>();
     private readonly stringProtocolCalls = new Set<ts.Node>();
+    private readonly proxyTrapResults = new Map<Cell, Cell>();
     private readonly wellKnownSymbols = new Map([...runtimeWellKnownSymbolDescriptions].map(([name, description]) => [name, Symbol(description)]));
     private readonly nonString: Atom = { tag: "non-string" };
     private readonly numericValues = new Map<number, Atom>();
@@ -4888,7 +4889,8 @@ class SourceValueFlow {
         this.publish(operand,this.nativeUnknown);
         const operands:ListPart[]=[{cell:proxy.target,spread:false}];
         for(let index=0;index<(PROXY_TRAP_OPERANDS.get(trap)??0);index++)operands.push({cell:operand,spread:false});
-        this.invoke(context,callee,proxy.handler,operands,this.newCell());
+        const returned=this.newCell();this.proxyTrapResults.set(method,returned);
+        this.invoke(context,callee,proxy.handler,operands,returned);
         return method;
     }
     /** Run a Proxy's traps and hand its target what the handler selects: an
@@ -5079,7 +5081,7 @@ class SourceValueFlow {
         this.defineField(owner,"length",length,false);this.publish(indices,{tag:"non-string",kinds:KIND_NUMBER});
         this.defineField(owner,null,values,true,indices);
         const unknownNumber:Atom={tag:"non-string",kinds:KIND_NUMBER},unknownSymbol:Atom={tag:"non-string",kinds:KIND_SYMBOL};
-        let escaped=false;
+        let escaped=false;const escapedTrapResults=new Set<Cell>();
         const incomplete=(effects:boolean):void=>{
             if(projection==="values"||projection==="entries")this.publish(values,this.unknown);
             else{if(kind!=="symbol")this.publish(values,this.unknownString);if(kind!=="string")this.publish(values,unknownSymbol);}
@@ -5118,7 +5120,20 @@ class SourceValueFlow {
             // A builtin's exotic [[OwnPropertyKeys]] (a String wrapper, a
             // TypedArray) is native and runs no code; only a Proxy's ownKeys
             // trap does.
-            if(uncertain)incomplete(!!source.proxy);else if(!pending)this.publish(length,this.primitive(count));
+            // A Proxy's [[OwnPropertyKeys]] (sec-proxy-object-internal-methods-
+            // and-internal-slots-ownpropertykeys) calls handler.ownKeys(target)
+            // when present, else the target's; the trap call is modelled with
+            // its effects and its result, read by CreateListFromArrayLike
+            // (length and index getters), escapes. The invariant checks run
+            // the target's own internal methods, native unless the target
+            // may itself be a Proxy or unknown, which keeps the opaque effect.
+            if(uncertain&&source.proxy){
+                const proxy=source.proxy;this.watch(rule,proxy.target);
+                const nested=[...proxy.target.values].some(value=>!!this.ordinaryOwner(value)?.proxy||value.tag==="unknown"||value.tag==="opaque-object");
+                const method=this.proxyTrapCall(source,"ownKeys",context),returned=this.proxyTrapResults.get(method);
+                if(returned&&!escapedTrapResults.has(returned)){escapedTrapResults.add(returned);this.onActive(context,()=>this.escapeCallableArgument(returned,context));}
+                incomplete(nested);
+            }else if(uncertain)incomplete(false);else if(!pending)this.publish(length,this.primitive(count));
         }});
         return result;
     }

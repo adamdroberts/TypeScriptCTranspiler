@@ -63,6 +63,9 @@ const shapes:Record<string,{source:string;exact:string[]|null}>={
  mapPropertyWrite:{source:`var w='1';var m=new Map([[1,2]]);var k='x';m[k]=3;var v=m.get(1);${P}`,exact:["print('1')"]},
  newObject:{source:`var o=new Object();o.x='1';var w=o.x;${P}`,exact:["print('1')"]},
  newObjectWriter:{source:`var o=new Object();o.toString=function(){w='2';return 'x'};var w='1';String(o);${P}`,exact:null},
+ proxyTrapless:{source:`var w='1';var p=new Proxy({a:1},{});Object.getOwnPropertySymbols(p);Object.keys(p);${P}`,exact:["print('1')"]},
+ proxyOwnKeysWrites:{source:`var w='1';var p=new Proxy({},{ownKeys(t){w='2';return []}});Object.getOwnPropertySymbols(p);${P}`,exact:null},
+ proxyOwnKeysResult:{source:`var w='1';var p=new Proxy({},{ownKeys(t){return {length:1,get 0(){w+='3';return 'k'}}}});try{Reflect.ownKeys(p)}catch(e){}${P}`,exact:null},
  stress:{source:`var w='1';var m={[Symbol.match](s){return null}};${Array.from({length:256},(_,k)=>['"ab".match(m);','"ab".search({[Symbol.search](){return 0}});','"ab".padStart(4);','"ab".split({[Symbol.split](){return []}});'][k%4]).join('')}${P}`,exact:["print('1')"]},
 };
 
@@ -80,6 +83,8 @@ test('String prototype methods dispatch to their argument protocol, sound agains
  expect(observed[names.indexOf('reduceReducer')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('reduceNext')]).toEqual(["print('13')"]);
  expect(observed[names.indexOf('newObjectWriter')]).toEqual(["print('2')"]);
+ expect(observed[names.indexOf('proxyOwnKeysWrites')]).toEqual(["print('2')"]);
+ expect(observed[names.indexOf('proxyOwnKeysResult')]).toEqual(["print('13')"]);
  expect(observed[names.indexOf('arrayFromGetter')]).toEqual(["print('13')"]);
  expect(observed[names.indexOf('arrayFromElements')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('arrayFromArrayLike')]).toEqual(["print('13')"]);
