@@ -5653,7 +5653,12 @@ class SourceValueFlow {
                     this.defineField(fields,"prototype",this.iteratorPrototype());
                     const from=this.newCell();this.publish(from,this.operation("iterator-helper:from"));this.defineField(fields,"from",from,false);
                 }
-                if(key==="RegExp")this.defineField(fields,"prototype",this.regexpPrototype(),false);
+                if(key==="RegExp"){
+                    this.defineField(fields,"prototype",this.regexpPrototype(),false);
+                    const getter=this.newCell();this.publish(getter,this.operation("species-getter"));
+                    this.defineAccessor(fields,this.wellKnownSymbols.get("species")!,"get",getter);
+                    this.ownPresence(fields,this.wellKnownSymbols.get("species")!).initial=true;
+                }
                 if(runtimePrimitiveDescriptors.has(key))this.defineField(fields,"prototype",this.primitivePrototype(key),false);
                 const element=runtimeTypedArrayDescriptors.get(key);
                 if(element){
@@ -5774,6 +5779,24 @@ class SourceValueFlow {
         for(const name of REGEXP_ACCESSORS){const getter=this.newCell();this.publish(getter,this.operation(`regexp-flag:${name}`));this.defineAccessor(owner,name,"get",getter);}
         for(const [name,descriptor] of REGEXP_METHODS){const method=this.newCell();this.publish(method,this.operation(`regexp-member:${name}`));this.defineField(owner,descriptor.symbol?this.wellKnownSymbols.get(name)!:name,method,false);}
         return value;
+    }
+    private regexpSpeciesConstruction(receiver:Cell,name:string,context:ts.Node):void {
+        const constructor=this.property(receiver,"constructor",context),species=this.property(constructor,this.wellKnownSymbols.get("species")!,context);
+        const intrinsic=this.initialGlobalValues.get(this.globalBinding("RegExp"))??new Set<Atom>();
+        this.property(receiver,this.wellKnownSymbols.get("match")!,context);
+        const exec=name==="split"?this.property(this.regexpPrototype(),"exec",context):undefined;
+        let escaped=false;
+        const rule=this.rule([constructor,species,...(exec?[exec]:[])],()=>{
+            if(escaped)return;
+            const other=(atom:Atom,absent:boolean)=>atom.tag!=="abrupt"&&atom.tag!=="pending-source"&&!intrinsic.has(atom)&&!(absent&&(atom===this.primitive(undefined)||atom===this.primitive(null)));
+            // A constructor that is not an Object throws a TypeError (the
+            // call's handler already holds one); an Object's @@species decides.
+            const custom=[...species.values].some(atom=>other(atom,true))||
+                !!exec&&[...exec.values].some(atom=>atom.tag!=="abrupt"&&atom.tag!=="pending-source"&&!(atom.tag==="operation"&&atom.operation==="regexp-member:exec"));
+            if(!custom)return;
+            escaped=true;this.retire(rule);
+            this.onActive(context,()=>{this.escapeCallableArgument(receiver,context);if(exec)this.escapeCallableArgument(exec,context);});
+        });
     }
     private regexpOwnerData(atom:Atom):{readonly source:Cell;readonly flags:Cell}|null {
         const owner=this.ordinaryOwner(atom);return owner?this.regexpData.get(owner)??null:null;
@@ -5967,7 +5990,8 @@ class SourceValueFlow {
         if(construct){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.nativeException(context,"TypeError"));return result;}
         const omitted=this.newCell();this.publish(omitted,this.primitive(undefined));
         const first=args?.[0]??omitted,second=args?.[1]??omitted;
-        const [text]=name==="toString"||name==="compile"?[first]:this.convertList([first],context,"text");
+        // @@split converts its limit with ToUint32 after the string.
+        const [text]=name==="toString"||name==="compile"?[first]:name==="split"&&args&&args.length>1?this.convertList([first,second],context,["text","number"]):this.convertList([first],context,"text");
         if(name==="replace")this.escapeCallableArgument(second,context);
         if(name==="compile"){for(const input of this.convertList([first,second],context,"text"))this.watchText(this.rule([input],()=>{}),input);}
         // An unlisted argument sequence (spread, forwarded arguments) still
@@ -6001,9 +6025,15 @@ class SourceValueFlow {
                 this.onActive(context,()=>this.escapeCallableArgument(returned,context,false,"argument"));
             }
             if(name==="match"||name==="matchAll"||name==="replace"||name==="split")this.property(receiver,"flags",context);
-            // SpeciesConstructor(R, %RegExp%): @@split and @@matchAll construct
-            // their matcher through the receiver's constructor.
-            if(name==="split"||name==="matchAll")this.onActive(context,()=>this.escapeCallableArgument(receiver,context));
+            // SpeciesConstructor(R, %RegExp%) (7.3.22): @@split and @@matchAll
+            // read R.constructor and its @@species, then construct their
+            // matcher from it. With %RegExp% (an undefined constructor or
+            // species selects it) construction runs only IsRegExp(R), a Get
+            // of R[@@match], and the matcher inherits %RegExp.prototype%, so
+            // @@split's RegExpExec calls the intrinsic exec unless the program
+            // replaced it. Any other constructor or exec is code the model
+            // does not run here: the receiver escapes to it.
+            if(name==="split"||name==="matchAll")this.regexpSpeciesConstruction(receiver,name,context);
         }
         this.rule([receiver],()=>{for(const atom of receiver.values){
             if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}

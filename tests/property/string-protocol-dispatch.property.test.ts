@@ -32,7 +32,10 @@ import {nodeReferenceSync} from './node-reference';
  * object keeps a later eval exact, a writing toString is listed.
  * Number's and Math's value properties are non-writable Numbers: their
  * toLocaleString ignores its reserved arguments (exact), and a sloppy write
- * or delete keeps them. The stress makes 256
+ * or delete keeps them. A RegExp's @@split and @@matchAll construct their
+ * matcher through SpeciesConstructor: with %RegExp% and its intrinsic exec no
+ * other code runs (exact), a defined @@species or a replaced exec runs
+ * (listed), and @@split's limit is converted (listed). The stress makes 256
  * dispatching calls. */
 
 const P=`eval("print('"+w+"')");`;
@@ -76,6 +79,10 @@ const shapes:Record<string,{source:string;exact:string[]|null}>={
  localeInvokesToString:{source:`var w='1';var o={toString(){w='2';return 'x'}};o.toLocaleString();${P}`,exact:null},
  numericConstants:{source:`var w='1';var p={[Symbol.toPrimitive](){w='9';throw 1}};var a=[Number.MIN_VALUE,Number.MAX_VALUE,Number.EPSILON,Math.PI];for(var i=0;i<a.length;i++)a[i].toLocaleString(p);${P}`,exact:["print('1')"]},
  constantWrite:{source:`Math.PI=3;delete Number.EPSILON;var w=Math.PI+':'+Number.EPSILON;${P}`,exact:null},
+ regexpSpeciesIntrinsic:{source:`"use strict";Boolean.prototype.kind=function(){return typeof this};"36.9".split(/\\./);[..."ab".matchAll(/a/g)];var w=true.kind();${P}`,exact:["print('boolean')"]},
+ regexpSpeciesDefined:{source:`var w='1';Object.defineProperty(RegExp,Symbol.species,{get(){return function(){w='4';return /x/}}});try{"a.b".split(/\\./)}catch(e){}${P}`,exact:null},
+ regexpSplitExec:{source:`var w='1';RegExp.prototype.exec=function(){w='5';return null};"a.b".split(/\\./);${P}`,exact:null},
+ regexpSplitLimit:{source:`var w='1';"a.b".split(/\\./,{valueOf(){w='7';return 1}});${P}`,exact:null},
  stress:{source:`var w='1';var m={[Symbol.match](s){return null}};${Array.from({length:256},(_,k)=>['"ab".match(m);','"ab".search({[Symbol.search](){return 0}});','"ab".padStart(4);','"ab".split({[Symbol.split](){return []}});'][k%4]).join('')}${P}`,exact:["print('1')"]},
 };
 
@@ -97,6 +104,9 @@ test('String prototype methods dispatch to their argument protocol, sound agains
  expect(observed[names.indexOf('proxyOwnKeysResult')]).toEqual(["print('13')"]);
  expect(observed[names.indexOf('proxyValuesGetTrap')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('entriesGetterWrites')]).toEqual(["print('2')"]);
+ expect(observed[names.indexOf('regexpSpeciesDefined')]).toEqual(["print('4')"]);
+ expect(observed[names.indexOf('regexpSplitExec')]).toEqual(["print('5')"]);
+ expect(observed[names.indexOf('regexpSplitLimit')]).toEqual(["print('7')"]);
  expect(observed[names.indexOf('constantWrite')]).toEqual(["print('3.141592653589793:2.220446049250313e-16')"]);
  expect(observed[names.indexOf('localeInvokesToString')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('arrayFromGetter')]).toEqual(["print('13')"]);
