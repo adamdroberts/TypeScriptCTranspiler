@@ -648,6 +648,8 @@ class Emitter {
     /** Module `var` bindings are allocated once from a source-tree worklist,
      * independently of the statement that first evaluates a declaration. */
     private moduleVarBindings = new Map<ts.Symbol, ModuleVarBindingPlan>();
+    /** Module-level enum declarations, whose names have module var storage. */
+    private readonly enumStorageDeclarations = new Set<ts.EnumDeclaration>();
     private moduleFunctionDeclarations = new Map<ts.FunctionDeclaration, ModuleFunctionBindingPlan>();
     private readonly sloppyDirectEvalBodies = new Map<ts.Block, boolean>();
     private moduleVarBindingsBySource = new WeakMap<ts.SourceFile, ModuleVarBindingPlan[]>();
@@ -12715,7 +12717,7 @@ class Emitter {
                 }
                 if (ts.isInterfaceDeclaration(inner)) continue;
                 if (ts.isTypeAliasDeclaration(inner)) continue;
-                if (ts.isEnumDeclaration(inner)) continue;
+                if (ts.isEnumDeclaration(inner)) { this.emitModuleEnumDeclaration(initBuf, inner); continue; }
                 if (ts.isImportDeclaration(inner)) continue;
                 if (ts.isExportDeclaration(inner)) continue; // re-exports - metadata only
                 if (ts.isImportEqualsDeclaration(inner)) continue;
@@ -12833,15 +12835,51 @@ class Emitter {
         return !!container && ts.isModuleBlock(container);
     }
 
+    private isConstEnumDeclaration(node: ts.EnumDeclaration): boolean {
+        return (ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Const) !== 0;
+    }
+
+    /** TypeScript's enum declaration emit, `(function (E) { E[E["A"] = 0] =
+     * "A"; E["B"] = "b"; })(E || (E = {}))`, over the module var binding: the
+     * object is created unless a merged declaration already made it, then each
+     * member is stored with [[Set]] in source order (a numeric member also
+     * stores its reverse mapping). Member values are the checker's constant
+     * values; a member whose value is not a compile-time constant fails
+     * closed. Constant member reads stay folded (enumConstantValue). */
+    private emitModuleEnumDeclaration(buf: CBuf, declaration: ts.EnumDeclaration): void {
+        const symbol = this.symbolForIdentifier(declaration.name);
+        const binding = symbol ? this.moduleVarBindings.get(symbol) : undefined;
+        if (!binding) return;
+        const target = binding.cName;
+        buf.line(`if (!tsc_value_is_object(${target})) { ${target} = tsc_value_object(tsc_object_new()); ${binding.gcRoot} = tsc_value_gc_root(${target}); }`);
+        const double = (value: number): string => Number.isNaN(value) ? "NAN" : value === Infinity ? "INFINITY" : value === -Infinity ? "(-INFINITY)"
+            : Object.is(value, -0) ? "(-0.0)" : String(value);
+        const store = (key: string, value: string): void => {
+            buf.line(`if (!tsc_value_set_computed_prop(${target}, ${key}, ${value})) tsc_throw_error(TSC_ERROR_TYPE, tsc_str_from_cstr("enum member assignment failed"));`);
+        };
+        for (const member of declaration.members) {
+            const value = this.checker.getConstantValue(member);
+            if (value === undefined) unsupported(member, "an enum member whose value is not a compile-time constant requires a runtime initializer");
+            const name = this.staticPropertyName(member.name);
+            if (name === null || name === undefined) unsupported(member, "an enum member requires a static name");
+            const key = `tsc_value_string(${this.stringLit(String(name))})`;
+            if (typeof value === "number") {
+                const number = `tsc_value_num(${double(value)})`;
+                store(key, number);
+                store(number, key);
+            } else store(key, `tsc_value_string(${this.stringLit(value)})`);
+        }
+    }
+
     private unsupportedEnumValue(node: ts.Node): never {
         unsupported(node, "a TypeScript enum used as a value requires a runtime enum object; only constant member reads are supported");
     }
 
     private declaredName(name: ts.Identifier): string {
-        // An enum has no runtime storage: constant member reads are folded
-        // (enumConstantValue), and any other value use fails closed rather
-        // than naming a C variable that is never declared.
-        if (ts.isEnumDeclaration(name.parent)) this.unsupportedEnumValue(name);
+        // An enum has storage only as a module-level enum's module var binding;
+        // naming any other enum (in a function or namespace body, or a
+        // Script) fails closed rather than naming an undeclared C variable.
+        if (ts.isEnumDeclaration(name.parent) && !this.enumStorageDeclarations.has(name.parent)) this.unsupportedEnumValue(name);
         const parts = [...this.declarationNamespaceParts(name), name.text];
         const source = name.getSourceFile();
         const moduleId = this.graph.fileToModuleId.get(source.fileName);
@@ -20689,6 +20727,24 @@ class Emitter {
                 node !== sf &&
                 (ts.isFunctionLike(node) || ts.isClassLike(node) || ts.isModuleDeclaration(node))
             ) {
+                return;
+            }
+            // A module-level enum declaration (not `const enum`) is TypeScript's
+            // `var E; (function (E) { ... })(E || (E = {}))`: a var binding,
+            // undefined until a declaration runs, that every merged declaration
+            // of the enum shares.
+            if (ts.isEnumDeclaration(node) && node.parent === sf && !this.isConstEnumDeclaration(node)) {
+                const symbol = this.symbolForIdentifier(node.name);
+                if (!symbol) unsupported(node.name, "Module binding requires a canonical retained cell");
+                this.enumStorageDeclarations.add(node);
+                if (!this.moduleVarBindings.has(symbol)) {
+                    const cName = this.declaredName(node.name);
+                    const plan = { symbol, name: node.name, cName, gcRoot: this.freshTemp(`_${cName}_module_var_gc_root`) };
+                    this.moduleVarBindings.set(symbol, plan);
+                    this.symbolStorageTypes.set(symbol, T_VALUE);
+                    this.globalDynamicRoots.set(symbol, plan.gcRoot);
+                    plans.push(plan);
+                }
                 return;
             }
             if (
@@ -39915,45 +39971,18 @@ class Emitter {
         const sym = this.checker.getSymbolAtLocation(ts.isPropertyAccessExpression(pa.expression) ? pa.expression.name : pa.expression);
         const decl = sym?.getDeclarations()?.find(ts.isEnumDeclaration);
         if (!decl) return undefined;
-
-        let nextValue: number | undefined = 0;
-        for (const member of decl.members) {
-            let value: number | string | undefined;
-            if (member.initializer) {
-                value = ts.isStringLiteralLike(member.initializer)
-                    ? this.stringEnumInitializer(member.initializer)
-                    : this.numericEnumInitializer(member.initializer);
-            } else {
-                value = nextValue;
-            }
-            if (value === undefined) unsupported(member, "enum members after string initializers require explicit values");
-            const name = this.staticPropertyName(member.name);
-            if (name === pa.name.text) {
-                return value;
-            }
-            nextValue = typeof value === "number" ? value + 1 : undefined;
-        }
-        unsupported(pa, `enum member ${pa.name.text} not found`);
-    }
-
-    private numericEnumInitializer(expr: ts.Expression): number {
-        if (ts.isNumericLiteral(expr)) return Number(expr.text);
-        if (ts.isStringLiteralLike(expr)) unsupported(expr, "string enum initializer cannot be used as a number");
-        if (
-            ts.isPrefixUnaryExpression(expr) &&
-            ts.isNumericLiteral(expr.operand) &&
-            (expr.operator === ts.SyntaxKind.MinusToken ||
-                expr.operator === ts.SyntaxKind.PlusToken)
-        ) {
-            const n = Number(expr.operand.text);
-            return expr.operator === ts.SyntaxKind.MinusToken ? -n : n;
-        }
-        unsupported(expr, "only numeric enum initializers are supported");
-    }
-
-    private stringEnumInitializer(expr: ts.Expression): string {
-        if (ts.isStringLiteralLike(expr)) return expr.text;
-        unsupported(expr, "only string literal enum initializers are supported for string enums");
+        // The checker's constant value covers every merged declaration and
+        // constant expressions over earlier members. It is asked of the
+        // member's declaration: on an access expression it answers only once
+        // that expression has been checked.
+        const member = this.checker.getSymbolAtLocation(pa.name)?.valueDeclaration;
+        const constant = member && ts.isEnumMember(member) ? this.checker.getConstantValue(member) : this.checker.getConstantValue(pa);
+        if (constant !== undefined) return constant;
+        // A member without a compile-time value is read from the enum object
+        // when the enum has one (a module-level enum's binding).
+        if (sym && this.moduleVarBindings.has(this.checker.getExportSymbolOfSymbol(sym))) return undefined;
+        if (sym && this.moduleVarBindings.has(sym)) return undefined;
+        unsupported(pa, `enum member ${pa.name.text} has no compile-time value and its enum has no runtime object`);
     }
 
     private emitElementAccess(
