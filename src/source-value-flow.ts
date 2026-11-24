@@ -10215,13 +10215,16 @@ class SourceValueFlow {
                         // @@method, «S») (22.1.3.13, .14, .23). The method is read
                         // through %RegExp.prototype%, which the program may replace,
                         // and the intrinsic one reads exec and the flags there too.
-                        if((regexpMember==="match"||regexpMember==="matchAll"||regexpMember==="search")&&argv&&!objectArgument){
+                        const protocolArgument=argv?argv[0]:invocation.sequence?this.argumentPosition(invocation.sequence,0):undefined;
+                        if(!argv&&protocolArgument)this.watch(rule,protocolArgument);
+                        const protocolKinds=protocolArgument?this.primitiveKinds(protocolArgument):KIND_UNDEFINED;
+                        if((regexpMember==="match"||regexpMember==="matchAll"||regexpMember==="search")&&(argv?!objectArgument:!!invocation.sequence&&!!protocolKinds&&!(protocolKinds&~KIND_PRIMITIVE))){
                             if(pendingArgument||this.stringProtocolCalls.has(node))continue;
                             this.stringProtocolCalls.add(node);
                             if(receiverKinds&(KIND_UNDEFINED|KIND_NULL)){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.nativeException(node,"TypeError"));}
                             const [text]=this.convertList([invocation.receiver],node,"text"),omitted=this.newCell(),flags=this.newCell();
                             this.publish(omitted,this.primitive(undefined));this.publish(flags,regexpMember==="matchAll"?this.primitive("g"):this.primitive(undefined));
-                            const rx=this.regexpConstruct(argv[0]??omitted,flags,node,false),hook=this.property(rx,this.wellKnownSymbols.get(regexpMember)!,node);
+                            const rx=this.regexpConstruct(protocolArgument??omitted,flags,node,false),hook=this.property(rx,this.wellKnownSymbols.get(regexpMember)!,node);
                             this.invoke(node,hook,rx,[{cell:text!,spread:false}],result);
                             continue;
                         }
