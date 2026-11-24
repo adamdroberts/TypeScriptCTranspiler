@@ -195,7 +195,11 @@ test("Number statics share ordinary descriptors, binary64 predicate partitions a
             expect(expected.flatMap((value, index) => actual[index] === value ? [] : [{ index, expected: value, actual: actual[index] }]).slice(0, 12)).toEqual([]);
         }
     } finally { await fs.rm(temporary, { recursive: true, force: true }); }
-}, 180_000);
+    // Budget: each variant's compile solves the source analysis twice (the
+    // compile fixpoint admits the subject's `new Function` sources found by
+    // the first solve), about 45 s per solve on 2026-11-24, plus about 17 s
+    // of C compilation; two variants need about 210 s.
+}, 600_000);
 
 test("Number static descriptors retain their creation Realm and canonical parser aliases", async () => {
     const source = String.raw`
