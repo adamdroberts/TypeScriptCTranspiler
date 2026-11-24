@@ -27,7 +27,9 @@ import {nodeReferenceSync} from './node-reference';
  * calls mapfn but writes only its new array: a generator it consumed keeps
  * its members (exact), and a writing mapfn is listed; its result is an Array of
  * the items' values (iterated, or an array-like's indices), whose elements'
- * toString join runs (listed). The
+ * toString join runs (listed). A join over an array without an exact List
+ * (slice's, Array.from's) converts each Object element with ToString: a plain
+ * object keeps a later eval exact, a writing toString is listed. The
  * stress makes 256
  * dispatching calls. */
 
@@ -47,6 +49,8 @@ const shapes:Record<string,{source:string;exact:string[]|null}>={
  arrayFromMapper:{source:`var w='1';Array.from([1,2],function(v){w='2';return v});${P}`,exact:null},
  arrayFromElements:{source:`var w='1';var o={toString(){w='2';return 'x'}};Array.from([o]).join();${P}`,exact:null},
  arrayFromArrayLike:{source:`var w='1';var o={toString(){w+='3';return 'x'}};Array.from({length:1,0:o}).join();${P}`,exact:null},
+ joinSummaryObject:{source:`var w='1';[{x:1}].slice().join("|");Array.from([{x:1}]).join("|");${P}`,exact:["print('1')"]},
+ joinSummaryWriter:{source:`var w='1';[{toString(){w='2';return 'x'}}].slice().join("|");${P}`,exact:null},
  stress:{source:`var w='1';var m={[Symbol.match](s){return null}};${Array.from({length:256},(_,k)=>['"ab".match(m);','"ab".search({[Symbol.search](){return 0}});','"ab".padStart(4);','"ab".split({[Symbol.split](){return []}});'][k%4]).join('')}${P}`,exact:["print('1')"]},
 };
 
@@ -58,6 +62,7 @@ test('String prototype methods dispatch to their argument protocol, sound agains
  const observed:string[][]=JSON.parse(oracle.stdout.toString());
  expect(observed[names.indexOf('numberRadix')]).toEqual(["print('23')"]);
  expect(observed[names.indexOf('arrayFromMapper')]).toEqual(["print('2')"]);
+ expect(observed[names.indexOf('joinSummaryWriter')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('arrayFromElements')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('arrayFromArrayLike')]).toEqual(["print('13')"]);
  for(const name of ['replaceWrites','replacer','receiverText','splitConverted'])expect({name,observed:observed[names.indexOf(name)]}).toEqual({name,observed:["print('2')"]});

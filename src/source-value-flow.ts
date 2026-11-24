@@ -7083,7 +7083,13 @@ class SourceValueFlow {
             for(const value of domain.getters)this.watch(rule,value);
             const kinds=this.primitiveKinds(values);this.publish(result,this.unknownString);
             if(kinds&KIND_SYMBOL){const caught=this.exceptionHandlers.get(context);if(caught)this.publish(caught,this.nativeException(context,"TypeError"));}
-            if(!opaque&&(domain.opaque||domain.getters.length||kinds&~KIND_PRIMITIVE)){
+            // Join converts each element with ToString (sec-array.prototype.join):
+            // an Object element runs its own toString, valueOf or
+            // @@toPrimitive there, which the conversion models with its
+            // effects. Only an unrepresented key domain or an accessor element
+            // remains unknown code.
+            if(kinds&~KIND_PRIMITIVE&&!domain.opaque&&!domain.getters.length)this.watch(rule,this.stringHintCell(values,context));
+            if(!opaque&&(domain.opaque||domain.getters.length)){
                 opaque=true;const caught=this.exceptionHandlers.get(context);if(caught)this.publish(caught,this.unknown);
                 this.onActive(context,()=>{this.opaqueEffect(context);this.escapeCallableArgument(receiver,context);});
             }
@@ -9713,9 +9719,25 @@ class SourceValueFlow {
                         const plain=[...invocation.receiver.values].every(value=>value.tag==="builtin"&&value.name==="Array")&&
                             (!mapfn||[...mapfn.values].every(value=>value===this.primitive(undefined)));
                         if(plain&&invocation.receiver.values.nonempty){
+                            // As a spread element: a represented List's values,
+                            // otherwise the values its iterator yields.
                             const elements=this.newCell();
-                            this.copy(this.iteratorElements(items,node),elements);
-                            this.copy(this.computedProperty(this.toObject(items,node),this.anyNumberKey(),node),elements);
+                            let listed!:Rule;listed=this.rule([items],()=>{
+                                this.watchList(listed,items,node);
+                                for(const values of this.lists(items,node)){
+                                    if(values)for(const value of values)this.copy(value,elements);
+                                    else this.copy(this.iteratorElements(items,node),elements);
+                                }
+                            });
+                            // The array-like path (index properties) runs only
+                            // when GetMethod(items, @@iterator) is undefined.
+                            const method=this.property(items,this.wellKnownSymbols.get("iterator")!,node);let arrayLike=false;
+                            this.rule([method],()=>{
+                                if(arrayLike)return;
+                                for(const value of method.values)if(value===this.primitive(undefined)||value===this.primitive(null)||value.tag==="unknown"||value.tag==="opaque-object"||value.tag==="pending-source"){
+                                    arrayLike=true;this.copy(this.computedProperty(this.toObject(items,node),this.anyNumberKey(),node),elements);break;
+                                }
+                            });
                             this.copy(this.arrayOfValues(node,"from",elements),result);
                         }else this.publish(result,this.nativeUnknown);
                         const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));
