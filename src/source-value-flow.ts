@@ -9703,9 +9703,21 @@ class SourceValueFlow {
                         // length and indices, and calls mapfn; it writes only
                         // the new array. Those calls are the escape of its
                         // receiver and arguments; nothing writes the items.
-                        // The result is the native's array, as for any
-                        // unrepresented native.
-                        this.publish(result,this.nativeUnknown);
+                        // Called on %Array% without mapfn, the result is a new
+                        // Array of the items' values: those its iterator yields,
+                        // or, for an array-like, its index properties. With a
+                        // mapfn, or another receiver (Construct(C)), the result
+                        // also stays the native's value.
+                        const items=argument(0)??omittedArgument,mapfn=argument(1);
+                        this.watch(rule,invocation.receiver);if(mapfn)this.watch(rule,mapfn);
+                        const plain=[...invocation.receiver.values].every(value=>value.tag==="builtin"&&value.name==="Array")&&
+                            (!mapfn||[...mapfn.values].every(value=>value===this.primitive(undefined)));
+                        if(plain&&invocation.receiver.values.nonempty){
+                            const elements=this.newCell();
+                            this.copy(this.iteratorElements(items,node),elements);
+                            this.copy(this.computedProperty(this.toObject(items,node),this.anyNumberKey(),node),elements);
+                            this.copy(this.arrayOfValues(node,"from",elements),result);
+                        }else this.publish(result,this.nativeUnknown);
                         const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));
                         this.onActive(node,()=>{for(const actual of [invocation.receiver,...(invocation.args??(invocation.sequence?[this.allArgumentValues(invocation.sequence)]:[]))])this.escapeCallableArgument(actual,node);});
                         continue;
