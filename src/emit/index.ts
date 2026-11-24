@@ -650,6 +650,7 @@ class Emitter {
     private moduleVarBindings = new Map<ts.Symbol, ModuleVarBindingPlan>();
     /** Module-level enum declarations, whose names have module var storage. */
     private readonly enumStorageDeclarations = new Set<ts.EnumDeclaration>();
+    private readonly namespaceEnumBindingsBySource = new Map<ts.SourceFile, ModuleVarBindingPlan[]>();
     private moduleFunctionDeclarations = new Map<ts.FunctionDeclaration, ModuleFunctionBindingPlan>();
     private readonly sloppyDirectEvalBodies = new Map<ts.Block, boolean>();
     private moduleVarBindingsBySource = new WeakMap<ts.SourceFile, ModuleVarBindingPlan[]>();
@@ -11916,6 +11917,7 @@ class Emitter {
             if (info) {
                 this.collectCommonJsModuleBinding(info.sf, modId);
                 this.collectModuleVarBindings(info.sf);
+                this.collectNamespaceEnumBindings(info.sf);
                 this.collectModuleLexicalBindings(info.sf);
                 this.collectModuleFunctionBindings(info.sf);
                 this.collectModuleDefaultExportBinding(info.sf, modId);
@@ -12653,7 +12655,7 @@ class Emitter {
                         initializedPtr: initialized ? `&${initialized}` : undefined,
                         lexicalName: symbol.getName(), immutable });
                 };
-                for (const binding of this.collectModuleVarBindings(sf))
+                for (const binding of [...this.collectModuleVarBindings(sf), ...this.collectNamespaceEnumBindings(sf)])
                     addBinding(binding.symbol, binding.cName, binding.gcRoot);
                 for (const binding of this.collectModuleLexicalBindings(sf))
                     addBinding(binding.symbol, binding.cName, binding.gcRoot, binding.initialized, binding.immutable);
@@ -12908,6 +12910,14 @@ class Emitter {
         if (ts.isEnumDeclaration(name.parent) && !this.enumStorageDeclarations.has(name.parent) &&
             !this.isTest262ScriptGlobalEnumDeclaration(name.parent)) this.unsupportedEnumValue(name);
         const parts = [...this.declarationNamespaceParts(name), name.text];
+        // A namespace member that is not exported is local to its own
+        // namespace block (a binding of that block's function in TypeScript's
+        // emit), so each block's member is its own storage.
+        const container = this.topLevelDeclarationContainer(name.parent);
+        if (container && ts.isModuleBlock(container) &&
+            !(ts.getCombinedModifierFlags(name.parent as ts.Declaration) & ts.ModifierFlags.Export)) {
+            parts.push(`block${container.pos}`);
+        }
         const source = name.getSourceFile();
         const moduleId = this.graph.fileToModuleId.get(source.fileName);
         if (!moduleId) unsupported(name, "declaration is missing its canonical module owner");
@@ -20815,8 +20825,49 @@ class Emitter {
         return plans;
     }
 
+    /** A namespace body's enum (not `const enum`) is TypeScript's `let E;
+     * (function (E) { ... })(E || (E = {}))` in that namespace block's
+     * function (`E = N.E || (N.E = {})` when exported). The namespace is not a
+     * runtime object here: an exported member is one storage shared by every
+     * block of the namespace and a local one is its block's own
+     * (declaredName), so the enum is a binding of that storage, undefined
+     * until a declaration runs. */
+    private collectNamespaceEnumBindings(sf: ts.SourceFile): ModuleVarBindingPlan[] {
+        const prepared = this.namespaceEnumBindingsBySource.get(sf);
+        if (prepared) return prepared;
+        const plans: ModuleVarBindingPlan[] = [];
+        this.namespaceEnumBindingsBySource.set(sf, plans);
+        const worklist: ts.Statement[] = [...sf.statements];
+        while (worklist.length > 0) {
+            const statement = worklist.pop()!;
+            if (this.isAmbientDeclaration(statement)) continue;
+            if (ts.isModuleDeclaration(statement)) {
+                if (statement.body && ts.isModuleBlock(statement.body)) worklist.push(...statement.body.statements);
+                else if (statement.body && ts.isModuleDeclaration(statement.body)) worklist.push(statement.body);
+                continue;
+            }
+            if (!ts.isEnumDeclaration(statement) || !ts.isModuleBlock(statement.parent) || this.isConstEnumDeclaration(statement)) continue;
+            const local = this.symbolForIdentifier(statement.name);
+            if (!local) unsupported(statement.name, "Namespace enum requires a canonical retained cell");
+            const exported = this.checker.getExportSymbolOfSymbol(local);
+            this.enumStorageDeclarations.add(statement);
+            let plan = this.moduleVarBindings.get(local) ?? this.moduleVarBindings.get(exported);
+            if (!plan) {
+                const cName = this.declaredName(statement.name);
+                plan = { symbol: local, name: statement.name, cName, gcRoot: this.freshTemp(`_${cName}_namespace_enum_gc_root`) };
+                plans.push(plan);
+            }
+            for (const symbol of new Set([local, exported])) {
+                this.moduleVarBindings.set(symbol, plan);
+                this.symbolStorageTypes.set(symbol, T_VALUE);
+                this.globalDynamicRoots.set(symbol, plan.gcRoot);
+            }
+        }
+        return plans;
+    }
+
     private emitModuleVarDeclarationInstantiation(buf: CBuf, sf: ts.SourceFile): void {
-        for (const binding of this.collectModuleVarBindings(sf)) {
+        for (const binding of [...this.collectModuleVarBindings(sf), ...this.collectNamespaceEnumBindings(sf)]) {
             this.symbolStorageTypes.set(binding.symbol, T_VALUE);
             this.agentStorage.declare("tsc_value_t",binding.cName);
             this.agentStorage.declare("void* volatile",binding.gcRoot);

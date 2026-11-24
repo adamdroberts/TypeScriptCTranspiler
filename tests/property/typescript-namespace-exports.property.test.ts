@@ -12,8 +12,8 @@ import {compile} from '../../src/compile';
 // alias and an exported import alias, in a script-goal and a module-goal file;
 // an export inside an ordinary block of a module stays a SyntaxError. Node's
 // type stripping refuses namespaces with runtime code, so Bun is the oracle.
-// Enum members read through a namespace are folded; an enum used as a value
-// fails closed. One 64-deep namespace nesting is the stress.
+// Enum members read through a namespace are folded (namespace enums as values:
+// typescript-namespace-blocks). One 64-deep namespace nesting is the stress.
 const members=`
     export const constant = "const";
     export let mutable = "let";
@@ -91,14 +91,5 @@ test('TypeScript namespace members and type exports link and run',async()=>{
   const rejected=await compile({entry:invalid,output:join(directory,'invalid.out'),buildDir:join(directory,'invalid-build'),diagnosticWriter:message=>diagnostics.push(message)});
   expect(rejected.exitCode).not.toBe(0);
   expect(diagnostics.join('\n')).toContain('only permitted at the top level of a module');
-  // An enum in a namespace body has no runtime object yet: constant member
-  // reads through the namespace are folded, and a value use fails closed with
-  // one stable diagnostic instead of naming an undeclared C variable.
-  for(const [name,source] of [['alias','namespace Outer { export enum Kind { First = 1 } }\nconst K = Outer.Kind;\nconsole.log(K.First);\n']] as const){
-   const entry=join(directory,`enum-${name}.ts`),messages:string[]=[];
-   await writeFile(entry,source);
-   const built=await compile({entry,output:join(directory,`enum-${name}.out`),buildDir:join(directory,`enum-${name}-build`),diagnosticWriter:message=>messages.push(message)});
-   expect({name,code:built.exitCode,diagnostic:messages.join('\n').includes('requires a runtime enum object')}).toEqual({name,code:3,diagnostic:true});
-  }
  }finally{await rm(directory,{recursive:true,force:true});}
 },600_000);
