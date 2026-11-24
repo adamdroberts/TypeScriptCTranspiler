@@ -7406,19 +7406,21 @@ class SourceValueFlow {
             const atom=pending.pop()!;
             if(atom.tag==="pending-source"){unresolved=true;continue;}
             if(atom.tag==="abrupt"||atom.tag==="primitive"&&(atom.value===null||atom.value===undefined))continue;
-            if(atom.tag==="primitive"&&typeof atom.value==="string"){
-                if(domain!=="index"){opaque=true;generic=true;}
-                for(let index=0;index<atom.value.length;index++)add(String(index));
-                if(domain==="all")add("length");
-                continue;
-            }
+            // A String's own keys are its index keys (one-code-unit Strings)
+            // and `length` (10.4.3); every other key is %String.prototype%'s.
             // A Boolean, Number, BigInt or Symbol wrapper has no own
             // properties: its keys are its kind's prototype chain's. A derived
             // primitive's kinds grow with its parts, whose changes wake the
-            // receiver's rule; one that may be a String keeps unknown indices.
-            const kinds=atom.tag==="primitive"?({boolean:KIND_BOOLEAN,number:KIND_NUMBER,bigint:KIND_BIGINT,symbol:KIND_SYMBOL} as Record<string,number>)[typeof atom.value]??0:
-                atom.tag==="non-string"?atom.kinds??(KIND_PRIMITIVE&~KIND_STRING):atom.tag==="text-operation"?this.primitiveKinds(this.atomCell(atom)):0;
-            if(kinds&&!(kinds&KIND_STRING)){
+            // receiver's rule; one that may be a String of unknown text keeps
+            // unknown indices.
+            const kinds=atom.tag==="primitive"?({string:KIND_STRING,boolean:KIND_BOOLEAN,number:KIND_NUMBER,bigint:KIND_BIGINT,symbol:KIND_SYMBOL} as Record<string,number>)[typeof atom.value]??0:
+                atom.tag==="unknown-string"?KIND_STRING:atom.tag==="non-string"?atom.kinds??(KIND_PRIMITIVE&~KIND_STRING):atom.tag==="text-operation"?this.primitiveKinds(this.atomCell(atom)):0;
+            if(kinds){
+                if(kinds&KIND_STRING){
+                    if(atom.tag==="primitive"&&typeof atom.value==="string")for(let index=0;index<atom.value.length;index++)add(String(index));
+                    else{unknownKeys=true;locations.add(this.stringIndexValues());}
+                    if(domain==="all")add("length");
+                }
                 for(const prototype of this.kindPrototypes(kinds)){
                     this.watch(rule,prototype);for(const parent of prototype.values)pending.push(parent);
                 }
@@ -7446,6 +7448,12 @@ class SourceValueFlow {
             }
         }
         return {keys:[...keys],locations:[...locations],getters:[...getters],pending:unresolved,opaque,nativeOnly:opaque&&!generic,unknownKeys};
+    }
+    /** The value at an index key of a String of unknown text. */
+    private stringIndexCell?:Cell;
+    private stringIndexValues():Cell {
+        if(!this.stringIndexCell){this.stringIndexCell=this.newCell();this.publish(this.stringIndexCell,this.unknownString);}
+        return this.stringIndexCell;
     }
     private propertyDomainKeys(receiver:Cell,context:ts.Node,rule:Rule,domain:"index"|"numeric"):readonly string[]|null|undefined {
         const projection=this.propertyKeyDomain(receiver,context,rule,domain);

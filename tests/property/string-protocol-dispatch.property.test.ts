@@ -47,7 +47,9 @@ import {nodeReferenceSync} from './node-reference';
  * no code (exact), while a member the program stored on a builtin keeps its
  * effects (listed); a String wrapper's members are its prototype's, and
  * Array.prototype[@@unscopables] is a null-prototype object of true flags
- * (exact). The stress makes 256
+ * (exact). A String of unknown text read at an unknown key is a one-code-unit
+ * String, its length or a %String.prototype% member: no unknown code (exact),
+ * and a program member there runs (listed). The stress makes 256
  * dispatching calls. */
 
 const P=`eval("print('"+w+"')");`;
@@ -103,6 +105,8 @@ const shapes:Record<string,{source:string;exact:string[]|null}>={
  nativeDescriptors:{source:`var w='1';for(var ns of [Math,Array.prototype,"ab",5,new String("cd")]){var d=Object.getOwnPropertyDescriptors(ns);Reflect.ownKeys(d).forEach(function(k){var x=d[k];if('value' in x)try{""+x.value}catch(e){}})}var it=new String()[Symbol.iterator]();${P}`,exact:["print('1')"]},
  nativeDescriptorWriter:{source:`var w='1';Math.mine={toString(){w='2';return ''}};var d=Object.getOwnPropertyDescriptors(Math);""+d.mine.value;${P}`,exact:null},
  unscopables:{source:`var u=Array.prototype[Symbol.unscopables];var w=Object.getPrototypeOf(u)+":"+u.flat+":"+u.map;${P}`,exact:["print('null:true:undefined')"]},
+ unknownTextIndex:{source:`var w='1';var s=String(Math.max);var pos=0;while(pos<s.length){var c=s[pos];/[a-z]/.test(c);pos+=1}${P}`,exact:["print('1')"]},
+ textInherited:{source:`var w='1';String.prototype.zz=function(){w='3'};var s=String(Math.max);var k=["zz"];for(var n of k)s[n]();${P}`,exact:null},
  stress:{source:`var w='1';var m={[Symbol.match](s){return null}};${Array.from({length:256},(_,k)=>['"ab".match(m);','"ab".search({[Symbol.search](){return 0}});','"ab".padStart(4);','"ab".split({[Symbol.split](){return []}});'][k%4]).join('')}${P}`,exact:["print('1')"]},
 };
 
@@ -130,6 +134,7 @@ test('String prototype methods dispatch to their argument protocol, sound agains
  expect(observed[names.indexOf('matchIndicesPair')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('regexpTestExec')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('nativeDescriptorWriter')]).toEqual(["print('2')"]);
+ expect(observed[names.indexOf('textInherited')]).toEqual(["print('3')"]);
  expect(observed[names.indexOf('constantWrite')]).toEqual(["print('3.141592653589793:2.220446049250313e-16')"]);
  expect(observed[names.indexOf('localeInvokesToString')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('arrayFromGetter')]).toEqual(["print('13')"]);
