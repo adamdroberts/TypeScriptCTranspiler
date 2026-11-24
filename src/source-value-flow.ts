@@ -292,6 +292,10 @@ type ArrayIterationMode="some"|"every"|"forEach"|"find"|"findLast"|"findIndex"|"
 const ARRAY_ITERATION_MODES:readonly ArrayIterationMode[]=["some","every","forEach","find","findLast","findIndex","findLastIndex","map","filter","flatMap","reduce","reduceRight"];
 // Initial intrinsic member identities, installed on their canonical owners.
 // Source lookups and later writes use the ordinary field graph.
+const BUILTIN_NUMERIC_CONSTANTS:ReadonlyMap<string,readonly (readonly [string,number])[]>=new Map<string,readonly (readonly [string,number])[]>([
+    ["Number",(["EPSILON","MAX_SAFE_INTEGER","MAX_VALUE","MIN_SAFE_INTEGER","MIN_VALUE","NaN","NEGATIVE_INFINITY","POSITIVE_INFINITY"] as const).map(name=>[name,Number[name]] as const)],
+    ["Math",(["E","LN10","LN2","LOG10E","LOG2E","PI","SQRT1_2","SQRT2"] as const).map(name=>[name,Math[name]] as const)],
+]);
 const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operation>> = new Map<string, ReadonlyMap<string, Operation>>([
     ["Error", new Map([["isError", "error-brand"]])],
     ["Array", new Map([["isArray", "array-brand"], ["from", "array-from"]])],
@@ -5606,6 +5610,9 @@ class SourceValueFlow {
                     for(const name of runtimeAtomicsMethods.keys()){const value=this.newCell();this.publish(value,this.operation(`atomics-member:${name}`));this.defineField(fields,name,value,false);}
                     const value=this.newCell();this.publish(value,this.primitive("Atomics"));this.defineField(fields,this.wellKnownSymbols.get("toStringTag")!,value,false);
                 }
+                // Number's (21.1.2) and Math's (21.3.1) value properties are
+                // non-writable, non-enumerable, non-configurable Numbers.
+                for(const [name,number] of BUILTIN_NUMERIC_CONSTANTS.get(key)??[]){const value=this.newCell();this.publish(value,this.primitive(number));this.defineField(fields,name,value,false);this.markReadonly(fields,name);}
                 // Proxy.revocable (ES2026 28.2.2.1): a native operation.
                 if(key==="Proxy"){const value=this.newCell();this.publish(value,this.operation("proxy-revocable"));this.defineField(fields,"revocable",value,false);}
                 if(key==="JSON") {

@@ -29,8 +29,10 @@ import {nodeReferenceSync} from './node-reference';
  * the items' values (iterated, or an array-like's indices), whose elements'
  * toString join runs (listed). A join over an array without an exact List
  * (slice's, Array.from's) converts each Object element with ToString: a plain
- * object keeps a later eval exact, a writing toString is listed. The
- * stress makes 256
+ * object keeps a later eval exact, a writing toString is listed.
+ * Number's and Math's value properties are non-writable Numbers: their
+ * toLocaleString ignores its reserved arguments (exact), and a sloppy write
+ * or delete keeps them. The stress makes 256
  * dispatching calls. */
 
 const P=`eval("print('"+w+"')");`;
@@ -72,6 +74,8 @@ const shapes:Record<string,{source:string;exact:string[]|null}>={
  entriesGetterWrites:{source:`var w='1';var o={};for(var i=0;i<2;i++)Object.defineProperty(o,"k"+i,{enumerable:true,get(){w='2';return 1}});Object.entries(o);${P}`,exact:null},
  localeReserved:{source:`var w='1';var r="ab".toLocaleString({[Symbol.toPrimitive](){w='9';throw 1}});var n=(5).toLocaleString({[Symbol.toPrimitive](){w='8';throw 1}});${P}`,exact:["print('1')"]},
  localeInvokesToString:{source:`var w='1';var o={toString(){w='2';return 'x'}};o.toLocaleString();${P}`,exact:null},
+ numericConstants:{source:`var w='1';var p={[Symbol.toPrimitive](){w='9';throw 1}};var a=[Number.MIN_VALUE,Number.MAX_VALUE,Number.EPSILON,Math.PI];for(var i=0;i<a.length;i++)a[i].toLocaleString(p);${P}`,exact:["print('1')"]},
+ constantWrite:{source:`Math.PI=3;delete Number.EPSILON;var w=Math.PI+':'+Number.EPSILON;${P}`,exact:null},
  stress:{source:`var w='1';var m={[Symbol.match](s){return null}};${Array.from({length:256},(_,k)=>['"ab".match(m);','"ab".search({[Symbol.search](){return 0}});','"ab".padStart(4);','"ab".split({[Symbol.split](){return []}});'][k%4]).join('')}${P}`,exact:["print('1')"]},
 };
 
@@ -93,6 +97,7 @@ test('String prototype methods dispatch to their argument protocol, sound agains
  expect(observed[names.indexOf('proxyOwnKeysResult')]).toEqual(["print('13')"]);
  expect(observed[names.indexOf('proxyValuesGetTrap')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('entriesGetterWrites')]).toEqual(["print('2')"]);
+ expect(observed[names.indexOf('constantWrite')]).toEqual(["print('3.141592653589793:2.220446049250313e-16')"]);
  expect(observed[names.indexOf('localeInvokesToString')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('arrayFromGetter')]).toEqual(["print('13')"]);
  expect(observed[names.indexOf('arrayFromElements')]).toEqual(["print('2')"]);
