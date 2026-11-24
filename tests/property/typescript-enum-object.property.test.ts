@@ -30,8 +30,7 @@ const NODE=process.env.TSC2C_NODE_REFERENCE??'node';
  * initializer, and the enum's own name there, read the declaration's object
  * (TypeScript's function parameter): a module's or namespace's binding, or a
  * Script declaration's static slot, so a later reassignment of the Script's
- * global changes nothing; in a Block enum such a read still fails closed with
- * a diagnostic (Block enums: typescript-local-enum). */
+ * global changes nothing (Block enums: typescript-local-enum). */
 
 const generated=Array.from({length:300},(_,k)=>k%3===0?`M${k} = "s${k}"`:`M${k} = ${k*7-500}`).join(', ');
 const modules:Record<string,string>={
@@ -116,15 +115,5 @@ test('module-level TypeScript enums are runtime objects, as TypeScript emits the
   const scriptNative=Bun.spawnSync([join(scriptRoot,'program')],{stdout:'pipe',stderr:'pipe',timeout:60_000});
   expect({code:scriptNative.exitCode,stderr:scriptNative.stderr.toString()}).toEqual({code:0,stderr:''});
   expect(scriptNative.stdout.toString()).toBe(scriptReference.stdout.toString());
-  // Still fails closed: a member read in a closure inside a Block enum's
-  // initializer.
-  for(const [name,source,message] of [
-   ['closure',`export {};\nfunction f() { enum E { A = 1, C = ((): number => A)() } return Object.keys(E).join(); }\nconsole.log(f());\n`,'enum member read in a function'],
-  ] as const){
-   const entry=join(root,name+'.ts'),failed:string[]=[];
-   await writeFile(entry,source);
-   const result=await compile({entry,output:entry+'.out',buildDir:entry+'.build',diagnosticWriter:message=>failed.push(message)});
-   expect({name,failedClosed:result.exitCode!==0&&failed.join('').includes(message)}).toEqual({name,failedClosed:true});
-  }
  }finally{await rm(root,{recursive:true,force:true});}
 },600_000);

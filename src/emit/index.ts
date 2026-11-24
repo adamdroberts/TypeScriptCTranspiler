@@ -13057,10 +13057,24 @@ class Emitter {
                 const member = this.checker.getSymbolAtLocation(node)?.valueDeclaration;
                 if (member && ts.isEnumMember(member) && !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node) &&
                     this.checker.getSymbolAtLocation(member.parent.name) === owner) {
-                    if (nested && !staticTarget) unsupported(node, "an enum member read in a function or class inside an enum member initializer");
                     const name = this.staticPropertyName(member.name);
                     if (name === null || name === undefined) unsupported(member, "an enum member requires a static name");
-                    overrides.set(node, { c: `tsc_value_get_computed_prop(${target}, tsc_value_string(${this.stringLit(String(name))}))`, ty: T_VALUE });
+                    const key = `tsc_value_string(${this.stringLit(String(name))})`;
+                    if (nested && !staticTarget) {
+                        // A Block enum's binding is assigned once, by the
+                        // scope's first declaration, before any initializer
+                        // runs: a closure reads the object through its
+                        // captured binding (collectClosureCaptures counts the
+                        // member name as a reference to it), resolved when
+                        // the closure body is emitted.
+                        if (!isScopeEnumDeclaration(declaration)) unsupported(node, "an enum member read in a function or class inside an enum member initializer");
+                        const emitter = this;
+                        overrides.set(node, { ty: T_VALUE, get c(): string {
+                            return `tsc_value_get_computed_prop(${emitter.coerce(emitter.emitExpr(declaration.name), T_VALUE, node)}, ${key})`;
+                        } });
+                        return;
+                    }
+                    overrides.set(node, { c: `tsc_value_get_computed_prop(${target}, ${key})`, ty: T_VALUE });
                 }
                 return;
             }
@@ -22758,7 +22772,14 @@ class Emitter {
                     if (!captures.has(symbol)) captures.set(symbol, { symbol, type: T_VALUE, field: `${mangleIdent(node.text)}_${captures.size}`, lexical: null });
                 }
             }
-            if (ts.isIdentifier(node) && !this.isNonValueIdentifier(node)) captureReference(node);
+            if (ts.isIdentifier(node) && !this.isNonValueIdentifier(node)) {
+                // A bare member name in a Block enum's initializer reads the
+                // enum's binding (enumMemberReferenceOverrides).
+                const member = this.checker.getSymbolAtLocation(node)?.valueDeclaration;
+                if (member && ts.isEnumMember(member) && isScopeEnumDeclaration(member.parent)) {
+                    captureReference(member.parent.name, this.symbolForIdentifier(member.parent.name));
+                } else captureReference(node);
+            }
             if (this.sourceEnvironmentEnabled(fn.getSourceFile()) && this.isDirectEvalSyntax(node)) {
                 for (const name of classPrivateNamesInScope(node)) {
                     if (declaredWithin(name.definition)) continue;

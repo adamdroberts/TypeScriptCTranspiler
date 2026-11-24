@@ -17,7 +17,9 @@ const NODE=process.env.TSC2C_NODE_REFERENCE??'node';
  * object; a case clause; a read before the declaration (ReferenceError); an
  * async function, a generator and an async generator with merged
  * declarations across suspensions; an arrow body (a new object per call); a
- * direct eval reading the binding; each in a Script and in a module. The
+ * direct eval reading the binding; closures in member initializers (bare
+ * member names and the enum's name) kept past their activation, in a loop
+ * and an async function; each in a Script and in a module. The
  * reference is TypeScript's own emit. The stress nests 64 blocks, each with
  * its own enum captured by a closure. */
 
@@ -38,9 +40,17 @@ function* generator(): Generator<string> { enum G { M = 1 } yield JSON.stringify
 async function* asyncGenerator(): AsyncGenerator<string> { enum Q { K = 4 } await null; yield JSON.stringify(Q); enum Q { J = 5 } yield JSON.stringify(Q); }
 function direct(): string { enum V { A, B = "b" } return <string>eval("JSON.stringify(V) + typeof V"); }
 const arrow = () => { enum R { Z = "z" } return R; };
+function retained(seed: number): Array<() => number> {
+  const later: Array<() => number> = [];
+  for (let i = 0; i < 2; i++) { enum B { A = seed + i, C = ((): number => { later.push(() => A + B.A); return A * 10; })(), D = [1].map(x => x + C)[0]! } later.push(() => B.D); }
+  return later;
+}
+async function retainedAsync(): Promise<number> { await null; enum Q { A = 7, C = ((): number => A + 1)() } await null; return Q.C; }
 function nested(): string { const out: Array<() => string> = []; ${stress} return out.map(f => f()).join(""); }
 console.log(merged(), loop().map(c => c()).join(" "), clause(1), clause(2), tdz(), [...generator()].join(" "), JSON.stringify(arrow()), arrow() === arrow(), direct());
 console.log(nested());
+console.log(retained(2).map(f => f()).join(), retained(5).map(f => f()).join());
+retainedAsync().then(v => console.log(v));
 (async () => { const out: string[] = [await suspended()]; for await (const v of asyncGenerator()) out.push(v); console.log(out.join(" ")); })();
 `;
 
