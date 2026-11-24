@@ -9739,9 +9739,13 @@ class SourceValueFlow {
                                 }
                             });
                             this.copy(this.arrayOfValues(node,"from",elements),result);
-                        }else this.publish(result,this.nativeUnknown);
+                        }else{
+                            // A mapfn or a constructor receiver runs here: the
+                            // call is the escape of its receiver and arguments.
+                            this.publish(result,this.nativeUnknown);
+                            this.onActive(node,()=>{for(const actual of [invocation.receiver,...(invocation.args??(invocation.sequence?[this.allArgumentValues(invocation.sequence)]:[]))])this.escapeCallableArgument(actual,node);});
+                        }
                         const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));
-                        this.onActive(node,()=>{for(const actual of [invocation.receiver,...(invocation.args??(invocation.sequence?[this.allArgumentValues(invocation.sequence)]:[]))])this.escapeCallableArgument(actual,node);});
                         continue;
                     }
                     if(atom.tag==="operation"&&atom.operation==="array-brand") {
