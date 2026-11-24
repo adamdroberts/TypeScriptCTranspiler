@@ -21,7 +21,7 @@ import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 import { buildProgram, resolvePackageRoot } from "./program";
 import { ecmaParseGoal } from "./ecmascript-source";
-import { sourceUnitFormat } from "./source-unit-format";
+import { sourceUnitFormat, typeScriptModuleFormat } from "./source-unit-format";
 import { buildModuleGraph,moduleLoadFailures } from "./resolve";
 import {
     emitProgram,
@@ -158,6 +158,16 @@ const DYNAMIC_REQUIRE_AOT_MESSAGE =
     "dynamic require(variable) needs a finite AOT specifier proof or --dynamic-require-manifest allow-list";
 const UNKNOWN_EVAL_AOT_MESSAGE =
     "unknown eval() source requires --runtime-code-manifest allow-list or gated --unsafe-eval embedded Node bridge";
+
+/** ECMAScript module code binds no `require` (nor the other CommonJS wrapper
+ * names): a JavaScript module, or a TypeScript file TypeScript emits as an
+ * ECMAScript module (.mts, .ts in a "type": "module" scope). There a call of
+ * `require` is an unbound reference that throws ReferenceError, not a
+ * CommonJS require needing a specifier proof. */
+function unboundModuleRequire(sf: ts.SourceFile): boolean {
+    if (!ts.isExternalModule(sf) || sourceUnitFormat(sf) === "commonjs") return false;
+    return /\.[cm]?jsx?$/i.test(sf.fileName) || typeScriptModuleFormat(sf.fileName) === "module";
+}
 
 interface PermanentLimitDiagnostic {
     node: ts.Node;
@@ -312,7 +322,7 @@ function permanentLimitDiagnostics(
                                 message: UNKNOWN_EVAL_AOT_MESSAGE,
                             });
                         }
-                    } else if (expr.text === "require") {
+                    } else if (expr.text === "require" && !unboundModuleRequire(sf)) {
                         const spec = commonJsRequireSpecifierArgument(node,new Set(),new Set());
                         const literalSpecs = spec ? stringSpecifierTexts(spec) : [];
                         if (literalSpecs.length > 0) {
