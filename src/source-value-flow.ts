@@ -10004,7 +10004,12 @@ class SourceValueFlow {
                         // Its result is of the method's kind (only a RegExp member's
                         // @@-method, dispatched above, returns an arbitrary value);
                         // a conversion or the method itself may throw.
-                        if(kind&&!regexpMember){
+                        // A RegExp member reached here has no Object argument with
+                        // an @@-method of the program's (dispatched above), so
+                        // unless an argument is unknown its result is also the
+                        // native method's kind.
+                        const unknownArgument=!argv||argv.some(input=>[...input.values].some(value=>value.tag==="unknown"&&!(value as {native?:true}).native||value.tag==="opaque-object"));
+                        if(kind&&(!regexpMember||!unknownArgument)){
                             this.publish(result,this.abrupt);
                             if(kind.string)this.publish(result,this.unknownString);
                             if(kind.number){let number=this.numericValues.get(KIND_NUMBER);if(!number){number={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,number);}this.publish(result,number);}
