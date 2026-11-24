@@ -56,6 +56,9 @@ const shapes:Record<string,{source:string;exact:string[]|null}>={
  arrayFromArguments:{source:`var w='1';function f(){return Array.from(arguments).join("|")}f(1,"two",undefined,{x:1});${P}`,exact:["print('1')"]},
  spreadIterator:{source:`var w='1';var r=[...new Set([3]).values()];${P}`,exact:["print('1')"]},
  spreadGetterLength:{source:`var w='1';var o={valueOf(){w='2';return 1}};var r=[...[o]];r.join();${P}`,exact:null},
+ reduceInitial:{source:`var w='1';var r="x:"+[1,2].values().reduce(function(a,b){return a+b},10);${P}`,exact:["print('1')"]},
+ reduceReducer:{source:`var w='1';[1].values().reduce(function(a,b){w='2';return a},0);${P}`,exact:null},
+ reduceNext:{source:`var w='1';var it={next(){w+='3';return {done:true}},__proto__:Iterator.prototype};it.reduce(function(a){return a},0);${P}`,exact:null},
  stress:{source:`var w='1';var m={[Symbol.match](s){return null}};${Array.from({length:256},(_,k)=>['"ab".match(m);','"ab".search({[Symbol.search](){return 0}});','"ab".padStart(4);','"ab".split({[Symbol.split](){return []}});'][k%4]).join('')}${P}`,exact:["print('1')"]},
 };
 
@@ -70,6 +73,8 @@ test('String prototype methods dispatch to their argument protocol, sound agains
  expect(observed[names.indexOf('joinSummaryWriter')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('arrayFromIterator')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('spreadGetterLength')]).toEqual(["print('1')"]);
+ expect(observed[names.indexOf('reduceReducer')]).toEqual(["print('2')"]);
+ expect(observed[names.indexOf('reduceNext')]).toEqual(["print('13')"]);
  expect(observed[names.indexOf('arrayFromGetter')]).toEqual(["print('13')"]);
  expect(observed[names.indexOf('arrayFromElements')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('arrayFromArrayLike')]).toEqual(["print('13')"]);
