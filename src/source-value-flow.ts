@@ -5914,6 +5914,7 @@ class SourceValueFlow {
     }
     /** A match result: an Array of unknown strings (or undefined for an
      * unmatched group) with index, input, groups and indices. */
+    private readonly regexpIndexArrays=new Map<ts.Node,Atom>();
     private regexpMatchResult(context:ts.Node,input:Cell):Cell {
         let calls=this.regexpResults.get(context);if(!calls){calls=new Map();this.regexpResults.set(context,calls);}
         const signature="match:"+input.id,prior=calls.get(signature);if(prior)return prior;
@@ -5926,8 +5927,28 @@ class SourceValueFlow {
         this.publish(nullPrototype,this.primitive(null));this.sourceObjectOwners.add(groupOwner);this.markPropertyAlgorithm(groupOwner,"ordinary");this.ownerCreations.set(groupOwner,context);this.ownerMutation(groupOwner);
         this.publish(groupValues,this.unknownString);this.publish(groupValues,this.primitive(undefined));this.defineField(groupOwner,null,groupValues,true);
         this.publish(groups,this.primitive(undefined));this.publish(groups,{tag:"object",owner:groupOwner});this.defineField(owner,"groups",groups,true);
-        this.publish(indexList,this.primitive(undefined));this.publish(indexList,this.opaqueObject);this.defineField(owner,"indices",indexList,true);
+        this.publish(indexList,this.primitive(undefined));this.publish(indexList,this.regexpMatchIndices(context));this.defineField(owner,"indices",indexList,true);
         this.publish(value,{tag:"object",owner});return value;
+    }
+    /** MakeMatchIndicesIndexPairArray (ES2026 22.2.7.8): an Array whose
+     * elements are undefined or a [start, end] Array of two Numbers, with a
+     * groups property that is undefined or a null-prototype object of such
+     * pairs. Every match at the site shares the one owner, like its result. */
+    private regexpMatchIndices(context:ts.Node):Atom {
+        let atom=this.regexpIndexArrays.get(context);if(atom)return atom;
+        const pair=this.newCell(),pairValues=this.newCell(),pairLength=this.newCell(),elements=this.newCell(),keys=this.newCell(),length=this.newCell(),groups=this.newCell(),groupValues=this.newCell(),nullPrototype=this.newCell();
+        const pairOwner=this.arrayOwner(context,{fields:new Map(),accessors:new Map(),shape:this.newCell()});
+        this.publish(pairValues,this.numberValue());this.publish(pairLength,this.primitive(2));
+        this.copy(pairLength,this.field(pairOwner,"length"));this.defineField(pairOwner,"0",pairValues,true);this.defineField(pairOwner,"1",pairValues,true);
+        this.publish(pair,{tag:"object",owner:pairOwner});
+        const owner=this.arrayOwner(context,{fields:new Map(),accessors:new Map(),shape:this.newCell()});
+        this.publish(elements,this.primitive(undefined));this.copy(pair,elements);this.publish(keys,this.numberValue());this.publish(length,this.numberValue());
+        this.copy(length,this.field(owner,"length"));this.defineField(owner,null,elements,true,keys);
+        const groupOwner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:nullPrototype,ordinary:true};
+        this.publish(nullPrototype,this.primitive(null));this.sourceObjectOwners.add(groupOwner);this.markPropertyAlgorithm(groupOwner,"ordinary");this.ownerCreations.set(groupOwner,context);this.ownerMutation(groupOwner);
+        this.copy(elements,groupValues);this.defineField(groupOwner,null,groupValues,true);
+        this.publish(groups,this.primitive(undefined));this.publish(groups,{tag:"object",owner:groupOwner});this.defineField(owner,"groups",groups,true);
+        atom={tag:"object",owner};this.regexpIndexArrays.set(context,atom);return atom;
     }
     /** An Array of unknown strings (split results, global matches). */
     private regexpStringArray(context:ts.Node,signatureKey:string):Cell {
