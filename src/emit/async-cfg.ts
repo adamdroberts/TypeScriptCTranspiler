@@ -1377,7 +1377,7 @@ export function planAsyncControlFlowGraph(
         // its own synchronous step; the segment's statements follow it.
         // A namespace body has no await (TypeScript rejects it), so each of
         // its statements is one synchronous step as well.
-        if (ts.isModuleDeclaration(statement) || ts.isModuleBlock(statement.parent))
+        if (ts.isModuleDeclaration(statement) || statement.parent && ts.isModuleBlock(statement.parent))
             return setState({ kind: "sync", id: reserve(), statement, next }, context.exceptionTarget);
         if (ts.isWithStatement(statement)) {
             const slot = reserve(), sourceResultSlot = expressionResults.push(statement.expression) - 1;

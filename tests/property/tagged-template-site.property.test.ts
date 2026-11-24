@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import * as vm from "node:vm";
 import { compile } from "../../src/compile";
 import { parseHostObservation } from "../test262/protocol";
+import { nodeReferenceSync } from "./node-reference";
 
 const evaluations = ["(function(){ return function(){return (s => s)`eval-site`;};})()",
     "(s => s)`foreign-site`"];
@@ -37,16 +37,29 @@ const source = "var host = globalThis;\n" + generatedPartitions() + await fs.rea
 
 function input(noGc: boolean): string { return source.replaceAll("NATIVE_GC", noGc ? "false" : "true"); }
 
+/* The oracle is the same program under the reference Node's vm (Bun's vm
+ * fails the program's own retained-template-object check), with $262's
+ * createRealm as a fresh vm context. Each evalScript is its own
+ * ScriptEvaluation and so its own Parse Nodes and template objects
+ * (GetTemplateObject); V8's compilation cache would reuse the first parse of
+ * identical text, so each script's text carries a distinct trailing comment,
+ * which changes nothing else. */
 async function oracle(): Promise<string[]> {
-    const lines: string[] = [];
-    const context = vm.createContext({ print: (line: string) => lines.push(line), $262: {
-        gc() {}, createRealm() {
-            const foreign = vm.createContext({});
-            return { global: new vm.Script("globalThis").runInContext(foreign), evalScript: (text: string) => new vm.Script(text).runInContext(foreign) };
-        },
-    } });
-    await new vm.Script(input(true)).runInContext(context);
-    return lines;
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-template-oracle-"));
+    try {
+        const program = path.join(directory, "program.js");
+        await fs.writeFile(program, input(true));
+        const reference = nodeReferenceSync(["node", "-e", `const vm = require("node:vm"), fs = require("node:fs"); const lines = [];
+const context = vm.createContext({ print: line => lines.push(String(line)), $262: { gc() {}, createRealm() {
+    const foreign = vm.createContext({});
+    let parse = 0;
+    return { global: new vm.Script("globalThis").runInContext(foreign), evalScript: text => new vm.Script(text + "\\n//" + parse++).runInContext(foreign) };
+} } });
+new vm.Script(fs.readFileSync(process.argv[1], "utf8")).runInContext(context);
+setTimeout(() => process.stdout.write(JSON.stringify(lines)), 0);`, program], { stdout: "pipe", stderr: "pipe", timeout: 60_000 });
+        expect({ code: reference.exitCode, stderr: reference.stderr.toString() }).toEqual({ code: 0, stderr: "" });
+        return JSON.parse(reference.stdout.toString());
+    } finally { await fs.rm(directory, { recursive: true, force: true }); }
 }
 
 test("one template-site collection preserves independent engine semantics and retained parse owners", async () => {
