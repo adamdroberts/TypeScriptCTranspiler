@@ -42,7 +42,12 @@ import {nodeReferenceSync} from './node-reference';
  * a match result's named property is that of a data property, though its
  * elements are defined under unknown index keys (exact). RegExp exec on an
  * object literal, an array literal or %RegExp.prototype% throws a TypeError
- * (no [[RegExpMatcher]]) and test runs the receiver's own exec (listed). The stress makes 256
+ * (no [[RegExpMatcher]]) and test runs the receiver's own exec (listed). A
+ * builtin's, a native value's and a primitive's own descriptors and keys run
+ * no code (exact), while a member the program stored on a builtin keeps its
+ * effects (listed); a String wrapper's members are its prototype's, and
+ * Array.prototype[@@unscopables] is a null-prototype object of true flags
+ * (exact). The stress makes 256
  * dispatching calls. */
 
 const P=`eval("print('"+w+"')");`;
@@ -95,6 +100,9 @@ const shapes:Record<string,{source:string;exact:string[]|null}>={
  matchResultDescriptor:{source:`var w='1';var hit=/(a)/dg.exec("a");for(var key of ["index","input","groups","indices"]){var d=Object.getOwnPropertyDescriptor(hit,key);var t=key+":"+d.writable}${P}`,exact:["print('1')"]},
  regexpBrand:{source:`var w='1';var base=Object.getPrototypeOf(/a/);var names=[];for(var receiver of [{},base,[]]){try{base.exec.call(receiver,"a")}catch(e){names.push(e.name)}}try{base.test.call({},"a")}catch(e){}${P}`,exact:["print('1')"]},
  regexpTestExec:{source:`var w='1';var base=Object.getPrototypeOf(/a/);var r={exec(){w='2';return {}}};base.test.call(r,"a");${P}`,exact:null},
+ nativeDescriptors:{source:`var w='1';for(var ns of [Math,Array.prototype,"ab",5,new String("cd")]){var d=Object.getOwnPropertyDescriptors(ns);Reflect.ownKeys(d).forEach(function(k){var x=d[k];if('value' in x)try{""+x.value}catch(e){}})}var it=new String()[Symbol.iterator]();${P}`,exact:["print('1')"]},
+ nativeDescriptorWriter:{source:`var w='1';Math.mine={toString(){w='2';return ''}};var d=Object.getOwnPropertyDescriptors(Math);""+d.mine.value;${P}`,exact:null},
+ unscopables:{source:`var u=Array.prototype[Symbol.unscopables];var w=Object.getPrototypeOf(u)+":"+u.flat+":"+u.map;${P}`,exact:["print('null:true:undefined')"]},
  stress:{source:`var w='1';var m={[Symbol.match](s){return null}};${Array.from({length:256},(_,k)=>['"ab".match(m);','"ab".search({[Symbol.search](){return 0}});','"ab".padStart(4);','"ab".split({[Symbol.split](){return []}});'][k%4]).join('')}${P}`,exact:["print('1')"]},
 };
 
@@ -121,6 +129,7 @@ test('String prototype methods dispatch to their argument protocol, sound agains
  expect(observed[names.indexOf('regexpSplitLimit')]).toEqual(["print('7')"]);
  expect(observed[names.indexOf('matchIndicesPair')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('regexpTestExec')]).toEqual(["print('2')"]);
+ expect(observed[names.indexOf('nativeDescriptorWriter')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('constantWrite')]).toEqual(["print('3.141592653589793:2.220446049250313e-16')"]);
  expect(observed[names.indexOf('localeInvokesToString')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('arrayFromGetter')]).toEqual(["print('13')"]);

@@ -292,6 +292,7 @@ type ArrayIterationMode="some"|"every"|"forEach"|"find"|"findLast"|"findIndex"|"
 const ARRAY_ITERATION_MODES:readonly ArrayIterationMode[]=["some","every","forEach","find","findLast","findIndex","findLastIndex","map","filter","flatMap","reduce","reduceRight"];
 // Initial intrinsic member identities, installed on their canonical owners.
 // Source lookups and later writes use the ordinary field graph.
+const ARRAY_UNSCOPABLE_NAMES:readonly string[]=["at","copyWithin","entries","fill","find","findIndex","findLast","findLastIndex","flat","flatMap","includes","keys","toReversed","toSorted","toSpliced","values"];
 const BUILTIN_NUMERIC_CONSTANTS:ReadonlyMap<string,readonly (readonly [string,number])[]>=new Map<string,readonly (readonly [string,number])[]>([
     ["Number",(["EPSILON","MAX_SAFE_INTEGER","MAX_VALUE","MIN_SAFE_INTEGER","MIN_VALUE","NaN","NEGATIVE_INFINITY","POSITIVE_INFINITY"] as const).map(name=>[name,Number[name]] as const)],
     ["Math",(["E","LN10","LN2","LOG10E","LOG2E","PI","SQRT1_2","SQRT2"] as const).map(name=>[name,Math[name]] as const)],
@@ -689,21 +690,27 @@ const CALL_CONSTRUCTS:ReadonlySet<string>=new Set(["Error","EvalError","RangeErr
  * and the host's stack, an AggregateError's errors; the instances of these
  * other constructors have none (their state is internal slots). Any other
  * builtin's instance may own any key. */
-const NATIVE_INSTANCE_OWN_KEYS:ReadonlyMap<string,ReadonlySet<string>>=new Map([
-    ...["Error","EvalError","RangeError","ReferenceError","SyntaxError","TypeError","URIError"].map(name=>[name,new Set(["message","cause","stack"])] as const),
-    ["AggregateError",new Set(["message","cause","stack","errors"])],
-    ...["Date","WeakRef","FinalizationRegistry","ArrayBuffer","SharedArrayBuffer","DataView"].map(name=>[name,new Set<string>()] as const),
+/** Whether a builtin's instance natively owns a key the analysis does not
+ * represent (an Error's message): its value is then native. */
+const NATIVE_INSTANCE_OWN_KEYS:ReadonlyMap<string,(key:string)=>boolean>=new Map<string,(key:string)=>boolean>([
+    ...["Error","EvalError","RangeError","ReferenceError","SyntaxError","TypeError","URIError"].map(name=>[name,(key:string)=>key==="message"||key==="cause"||key==="stack"] as const),
+    ["AggregateError",(key:string)=>key==="message"||key==="cause"||key==="stack"||key==="errors"],
+    ...["Date","WeakRef","FinalizationRegistry","ArrayBuffer","SharedArrayBuffer","DataView"].map(name=>[name,()=>false] as const),
     // A Number or Boolean wrapper has no own property, only its
     // [[NumberData]] or [[BooleanData]] slot (sec-number-constructor-number-value,
     // sec-boolean-constructor-boolean-value): its members are its prototype's.
-    ...["Number","Boolean"].map(name=>[name,new Set<string>()] as const),
+    ...["Number","Boolean"].map(name=>[name,()=>false] as const),
+    // A String wrapper is a String exotic object (10.4.3): beside its
+    // [[StringData]] it owns `length` and one index key per code unit; every
+    // other member is its prototype's.
+    ["String",(key:string)=>key==="length"||/^(0|[1-9][0-9]*)$/.test(key)&&Number(key)<2**32-1],
     // A Map, Set, WeakMap or WeakSet has no own property either, only its
     // [[MapData]] or [[SetData]] (or weak) slot: its members are its
     // prototype's.
-    ...["Map","Set","WeakMap","WeakSet"].map(name=>[name,new Set<string>()] as const),
+    ...["Map","Set","WeakMap","WeakSet"].map(name=>[name,()=>false] as const),
     // `new Object()` is OrdinaryObjectCreate(%Object.prototype%): its own
     // properties are exactly those the program defines.
-    ["Object",new Set<string>()],
+    ["Object",()=>false],
 ]);
 /** Loop conditions a counter's values are filtered by; each compares the
  * counter with the other operand's values by the host's own operator on
@@ -5116,6 +5123,13 @@ class SourceValueFlow {
         let rule!:Rule;rule=this.rule([objects],()=>{for(const atom of objects.values){
             if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(result,atom);continue;}
             const source=this.ordinaryOwner(atom);
+            // A native object's [[OwnPropertyKeys]] and [[Get]] run no code:
+            // its keys are unknown and its values native.
+            if(!source&&this.isNativeValue(atom)){
+                this.publish(result,{tag:"object",owner});
+                if(projection==="names")incomplete(false);else{this.publish(values,this.nativeUnknown);this.publish(length,unknownNumber);}
+                continue;
+            }
             if(!source){if(atom.tag==="unknown"||atom.tag==="opaque-object"){this.publish(result,{tag:"object",owner});incomplete(true);}else fail();continue;}
             this.publish(result,{tag:"object",owner});this.watch(rule,source.shape);
             if(!this.definitionsReady(source,rule))continue;
@@ -5298,7 +5312,33 @@ class SourceValueFlow {
             if(!escaping){escaping=true;this.onActive(context,()=>this.escapeCallableArgument(opaqueBases,context));}
         };
         const escapeOpaqueBases=()=>{for(const atom of base.values){const owner=this.ordinaryOwner(atom);if(atom.tag==="unknown"||atom.tag==="opaque-object"||owner?.proxy)incomplete(atom);}};
-        let rule!:Rule,extra:{value:Cell;accessor:Cell}|undefined;
+        let rule!:Rule,extra:{value:Cell;accessor:Cell}|undefined,native:Cell|undefined,wrapper=false;
+        // A String wrapper's own `length` and index keys are frozen data
+        // properties holding a Number and one-code-unit Strings.
+        const stringWrapperMembers=()=>{
+            if(wrapper)return;wrapper=true;
+            const descriptor=this.descriptorOwner(context),value=this.newCell(),object=this.newCell(),keys=this.newCell();
+            this.publish(value,this.unknownString);this.publish(value,this.numberValue());this.defineField(descriptor,"value",value);
+            for(const attribute of ["writable","configurable"]){const flag=this.newCell();this.publish(flag,this.primitive(false));this.defineField(descriptor,attribute,flag);}
+            this.defineBooleanField(descriptor,"enumerable");
+            this.publish(object,{tag:"object",owner:descriptor});this.publish(keys,this.unknownString);
+            this.defineField(collection,null,object,true,keys);
+        };
+        const nativeMembers=()=>{
+            if(!native){
+                const descriptor=this.descriptorOwner(context),value=this.newCell();native=this.newCell();
+                this.publish(value,this.nativeUnknown);this.publish(value,this.primitive(undefined));
+                this.publish(native,{tag:"object",owner:descriptor});
+                for(const name of ["value","get","set"])this.defineField(descriptor,name,value);
+                for(const attribute of ["writable","enumerable","configurable"])this.defineBooleanField(descriptor,attribute);
+                if(key)this.publish(result,this.primitive(undefined));
+                else{
+                    const keys=this.newCell();this.publish(keys,this.unknownString);this.publish(keys,{tag:"non-string",kinds:KIND_SYMBOL});
+                    this.defineField(collection,null,native,true,keys);
+                }
+            }
+            if(key)this.copy(native,result);
+        };
         rule=this.rule(key?[base,key]:[base],()=>{
             let keys=key?this.propertyKeys(key,rule,context):undefined;
             if(key && keys===undefined)return;
@@ -5338,9 +5378,9 @@ class SourceValueFlow {
                 if(atom.tag==="primitive"||atom.tag==="non-string"||atom.tag==="unknown-string"||atom.tag==="text-operation"){
                     // ToObject boxes the primitive (sec-object.getownpropertydescriptor);
                     // the wrapper owns nothing but a String's `length` and index keys.
-                    if(!key){incomplete();continue;}
                     const text=atom.tag==="primitive"&&typeof atom.value==="string"?atom.value:null;
                     const stringLike=text!==null||atom.tag==="unknown-string"||atom.tag==="text-operation"||atom.tag==="non-string"&&!!((atom.kinds??(KIND_PRIMITIVE&~KIND_STRING))&KIND_STRING);
+                    if(!key){if(stringLike)stringWrapperMembers();continue;}
                     const virtual=(name:SourcePropertyKey)=>typeof name==="string"&&(name==="length"||/^(0|[1-9][0-9]*)$/.test(name));
                     if(keys!.some(name=>name===null)){incomplete();continue;}
                     for(const name of keys!){
@@ -5358,6 +5398,9 @@ class SourceValueFlow {
                     continue;
                 }
                 const owner=this.ordinaryOwner(atom);
+                // A native object's [[GetOwnProperty]] runs no code and its
+                // unrepresented members are native values.
+                if(this.isNativeValue(atom)){nativeMembers();continue;}
                 if(!owner){incomplete(atom);if(atom.tag==="unknown"||atom.tag==="opaque-object")this.activateOpaqueEffect(context);continue;}
                 this.watch(rule,owner.shape);
                 if(!this.definitionsReady(owner,rule))continue;
@@ -5369,7 +5412,7 @@ class SourceValueFlow {
                 if(key&&names.some(name=>this.unknownDefinitionMayContain(owner,name,rule))){if(owner.proxy)incomplete(atom);incomplete();continue;}
                 // Intrinsic/function metadata and exotic own-key collections
                 // stay incomplete until represented by the shared owner graph.
-                if(!key && atom.tag!=="object")incomplete();
+                if(!key && atom.tag!=="object"){if(atom.tag==="builtin"||atom.tag==="intrinsic"||atom.tag==="operation")nativeMembers();else incomplete();}
                 for(const name of names){
                     if(name===null){incomplete();continue;}
                     const presence=this.propertyPresence(owner,name,context);this.watch(rule,presence);
@@ -7025,7 +7068,16 @@ class SourceValueFlow {
                 const member=this.newCell();this.publish(member,this.operation(operation));this.defineField(fields,descriptor.name,member,false);
             }
             this.defineField(fields,this.wellKnownSymbols.get("iterator")!,this.field(fields,"values"),false);
-            const unscopables=this.newCell();this.publish(unscopables,this.opaqueObject);this.defineField(fields,this.wellKnownSymbols.get("unscopables")!,unscopables,false);
+            // %Array.prototype%[@@unscopables] (23.1.3.41): an ordinary object
+            // with a null prototype whose own enumerable data properties
+            // name the methods a with statement leaves unbound, each true.
+            const unscopables=this.newCell(),nullPrototype=this.newCell(),blocked=this.newCell();
+            const unscopableOwner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:nullPrototype,closedOwn:true,ordinary:true};
+            this.markPropertyAlgorithm(unscopableOwner,"ordinary");this.copy(this.opaqueMutation,unscopableOwner.shape);
+            this.publish(nullPrototype,this.primitive(null));this.publish(blocked,this.primitive(true));
+            for(const name of ARRAY_UNSCOPABLE_NAMES)this.defineField(unscopableOwner,name,blocked,true);
+            this.publish(unscopables,{tag:"object",owner:unscopableOwner});
+            this.defineField(fields,this.wellKnownSymbols.get("unscopables")!,unscopables,false);this.markReadonly(fields,this.wellKnownSymbols.get("unscopables")!);
         }
         return this.ordinaryArrayPrototype;
     }
@@ -8091,7 +8143,7 @@ class SourceValueFlow {
             // A builtin's instance may natively own a member the analysis does
             // not represent (an Error's message): its value is native, beside
             // whatever the program itself stores there.
-            if(owner.nativeInstance!==undefined&&(!NATIVE_INSTANCE_OWN_KEYS.has(owner.nativeInstance)||typeof key==="string"&&NATIVE_INSTANCE_OWN_KEYS.get(owner.nativeInstance)!.has(key)))this.publish(result,this.nativeUnknown);
+            if(owner.nativeInstance!==undefined&&(!NATIVE_INSTANCE_OWN_KEYS.has(owner.nativeInstance)||typeof key==="string"&&NATIVE_INSTANCE_OWN_KEYS.get(owner.nativeInstance)!(key)))this.publish(result,this.nativeUnknown);
             if(ownOnly){if(!presence?.values.has(this.primitive(true)) || presence.values.has(this.primitive(false)))this.publish(result,this.primitive(undefined));continue;}
             if (presence?.values.has(this.primitive(true)) && !presence.values.has(this.primitive(false))) continue;
             inherit();
