@@ -22,7 +22,10 @@ import {nodeReferenceSync} from './node-reference';
  * argument: a non-Number receiver throws without running the radix's valueOf
  * (exact); a valid one runs it (listed). A Number or Boolean wrapper has no own
  * members, so its toString is its prototype's (exact). A call the model answers
- * only as an escape still has its method's result kind (typeof exact). The
+ * only as an escape still has its method's result kind (typeof exact).
+ * Array.from reads its items (their @@iterator, or length and indices) and
+ * calls mapfn but writes only its new array: a generator it consumed keeps
+ * its members (exact), and a writing mapfn is listed. The
  * stress makes 256
  * dispatching calls. */
 
@@ -38,6 +41,8 @@ const shapes:Record<string,{source:string;exact:string[]|null}>={
  numberRadix:{source:`var w='1';(255).toString({valueOf(){w='2';return 16}});new Number(255).toFixed({valueOf(){w+='3';return 1}});${P}`,exact:null},
  wrapperMethod:{source:`var w='1';var radix={valueOf(){return 16}};for(var i=0;i<2;i++){new Number(255).toString(radix);new Boolean(true).toString();}${P}`,exact:["print('1')"]},
  fallbackResult:{source:`var w=typeof (12).toLocaleString(undefined,{});${P}`,exact:["print('string')"]},
+ arrayFromItems:{source:`function* g(){yield 7;yield 8}var w='1';var it=g();Array.from(it);it.next();it[Symbol.iterator]();${P}`,exact:["print('1')"]},
+ arrayFromMapper:{source:`var w='1';Array.from([1,2],function(v){w='2';return v});${P}`,exact:null},
  stress:{source:`var w='1';var m={[Symbol.match](s){return null}};${Array.from({length:256},(_,k)=>['"ab".match(m);','"ab".search({[Symbol.search](){return 0}});','"ab".padStart(4);','"ab".split({[Symbol.split](){return []}});'][k%4]).join('')}${P}`,exact:["print('1')"]},
 };
 
@@ -48,6 +53,7 @@ test('String prototype methods dispatch to their argument protocol, sound agains
  expect({code:oracle.exitCode,stderr:oracle.stderr.toString()}).toEqual({code:0,stderr:''});
  const observed:string[][]=JSON.parse(oracle.stdout.toString());
  expect(observed[names.indexOf('numberRadix')]).toEqual(["print('23')"]);
+ expect(observed[names.indexOf('arrayFromMapper')]).toEqual(["print('2')"]);
  for(const name of ['replaceWrites','replacer','receiverText','splitConverted'])expect({name,observed:observed[names.indexOf(name)]}).toEqual({name,observed:["print('2')"]});
  const directory=await mkdtemp(join(tmpdir(),'tsc2c-string-protocol-'));
  try{

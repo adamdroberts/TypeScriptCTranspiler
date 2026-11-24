@@ -78,7 +78,7 @@ type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpressio
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
 type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-integrity:${"preventExtensions"|"seal"|"freeze"}` | `object-integrity-test:${"isExtensible"|"isSealed"|"isFrozen"}` | `regexp-flag:${string}` | `regexp-member:${string}` | `object-enumerable:${"keys"|"values"|"entries"}` | `object-has-own:${"static"|"prototype"}` | `array-iteration:${ArrayIterationMode}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-typed-array:${string}` | `native-typed-array-static:${string}` | `native-uint8-codec:${string}` | "typed-array-species" | `native-function:${string}` | "throw-type-error" | `legacy-function-accessor:${"caller"|"arguments"}:${"get"|"set"}` | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "proxy-revocable" | "proxy-revoke" | "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | "regexp-string-iterator-next" | `iterator-helper:${string}` | "wrap-iterator:next" | "wrap-iterator:return" | "string-iterator" | "string-iterator-next" | "iterator-helper-next" | "iterator-helper-return" | `collection-member:${string}` | "promise-finally-forward" | "species-getter" | "proto-accessor:get" | "proto-accessor:set" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
+    "proxy-revocable" | "proxy-revoke" | "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "array-from" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | "regexp-string-iterator-next" | `iterator-helper:${string}` | "wrap-iterator:next" | "wrap-iterator:return" | "string-iterator" | "string-iterator-next" | "iterator-helper-next" | "iterator-helper-return" | `collection-member:${string}` | "promise-finally-forward" | "species-getter" | "proto-accessor:get" | "proto-accessor:set" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
 type Primitive = SourcePrimitive;
 /** Callables and collection-iterator cells reachable from one escaping value;
  * a sink forwards them into one escaping call. */
@@ -294,7 +294,7 @@ const ARRAY_ITERATION_MODES:readonly ArrayIterationMode[]=["some","every","forEa
 // Source lookups and later writes use the ordinary field graph.
 const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operation>> = new Map<string, ReadonlyMap<string, Operation>>([
     ["Error", new Map([["isError", "error-brand"]])],
-    ["Array", new Map([["isArray", "array-brand"]])],
+    ["Array", new Map([["isArray", "array-brand"], ["from", "array-from"]])],
     ["JSON", new Map([...jsonMethods.values()].map(descriptor=>[descriptor.name,descriptor.operation]))],
     ["console", new Map([...consoleOperations].map(name=>[name,"host-print" as const]))],
     ["Object", new Map([["is","object-is"],["preventExtensions","object-integrity:preventExtensions"],["seal","object-integrity:seal"],["freeze","object-integrity:freeze"],["isExtensible","object-integrity-test:isExtensible"],["isSealed","object-integrity-test:isSealed"],["isFrozen","object-integrity-test:isFrozen"],["keys","object-enumerable:keys"],["values","object-enumerable:values"],["entries","object-enumerable:entries"],["hasOwn","object-has-own:static"],["getPrototypeOf", "object-get-prototype"], ["setPrototypeOf", "set-prototype:object"], ["create", "create-object"], ["defineProperty", "define-property"], ["defineProperties", "define-properties"],
@@ -7716,12 +7716,12 @@ class SourceValueFlow {
                 const name=this.newCell(),length=this.newCell(),operation=atom.operation.slice("set-composition:".length);this.publish(name,this.primitive([...runtimeSetCompositionMethods].find(([,value])=>value===operation)![0]));this.publish(length,this.primitive(1));this.defineField(owner,"name",name);this.defineField(owner,"length",length);
             }return owner;
         }
-        if(atom.tag==="operation"&&(jsonOperations.has(atom.operation as JSONSourceOperation)||atom.operation==="util-format"||atom.operation==="error-brand"||atom.operation==="array-brand")) {
+        if(atom.tag==="operation"&&(jsonOperations.has(atom.operation as JSONSourceOperation)||atom.operation==="util-format"||atom.operation==="error-brand"||atom.operation==="array-brand"||atom.operation==="array-from")) {
             let owner=this.intrinsicOwners.get(atom);
             if(!owner) {
                 owner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.callablePrototype("ordinary")};this.intrinsicOwners.set(atom,owner);
                 this.copy(this.opaqueMutation,owner.shape);
-                const descriptor=atom.operation==="util-format"?{name:"format",length:1}:atom.operation==="error-brand"?{name:"isError",length:1}:atom.operation==="array-brand"?{name:"isArray",length:1}:jsonOperations.get(atom.operation as JSONSourceOperation)!,name=this.newCell(),length=this.newCell();
+                const descriptor=atom.operation==="util-format"?{name:"format",length:1}:atom.operation==="error-brand"?{name:"isError",length:1}:atom.operation==="array-brand"?{name:"isArray",length:1}:atom.operation==="array-from"?{name:"from",length:1}:jsonOperations.get(atom.operation as JSONSourceOperation)!,name=this.newCell(),length=this.newCell();
                 this.publish(name,this.primitive(descriptor.name));this.publish(length,this.primitive(descriptor.length));
                 this.defineField(owner,"name",name);this.defineField(owner,"length",length);
             }
@@ -9694,6 +9694,20 @@ class SourceValueFlow {
                         this.publish(result,this.primitive(false));
                         const input=argument(0);
                         if(input){this.watch(rule,input);if(this.primitiveKinds(input)&KIND_OBJECT)this.publish(result,this.primitive(true));}
+                        continue;
+                    }
+                    if(atom.tag==="operation"&&atom.operation==="array-from") {
+                        // Array.from (sec-array.from) constructs its result
+                        // (Construct(C) for a constructor receiver), reads the
+                        // items' @@iterator and runs that iterator or reads
+                        // length and indices, and calls mapfn; it writes only
+                        // the new array. Those calls are the escape of its
+                        // receiver and arguments; nothing writes the items.
+                        // The result is the native's array, as for any
+                        // unrepresented native.
+                        this.publish(result,this.nativeUnknown);
+                        const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node));
+                        this.onActive(node,()=>{for(const actual of [invocation.receiver,...(invocation.args??(invocation.sequence?[this.allArgumentValues(invocation.sequence)]:[]))])this.escapeCallableArgument(actual,node);});
                         continue;
                     }
                     if(atom.tag==="operation"&&atom.operation==="array-brand") {
