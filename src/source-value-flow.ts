@@ -1043,6 +1043,7 @@ class SourceValueFlow {
     private readonly symbolAllocations = new Map<ts.Node, Map<string | undefined, symbol>>();
     private readonly symbolDescriptionInputs = new Map<Cell, Cell>();
     private readonly symbolRegistry = new Map<string, symbol>();
+    private readonly stringProtocolCalls = new Set<ts.Node>();
     private readonly wellKnownSymbols = new Map([...runtimeWellKnownSymbolDescriptions].map(([name, description]) => [name, Symbol(description)]));
     private readonly nonString: Atom = { tag: "non-string" };
     private readonly numericValues = new Map<number, Atom>();
@@ -9816,7 +9817,51 @@ class SourceValueFlow {
                             }
                             continue;
                         }
-                        this.publish(result,this.unknown);this.activateOpaqueEffect(node);if(handler)this.publish(handler,this.unknown);continue;
+                        // String.prototype.match, matchAll, replace, replaceAll, search
+                        // and split with an Object argument first read its @@-method
+                        // (GetMethod) and, when there is one, return Call(method,
+                        // argument, «O, ...rest») with O unconverted
+                        // (sec-string.prototype.match and siblings); without one, O and
+                        // the argument are converted (ToString, RegExpCreate) and a new
+                        // RegExp's native method runs. One model per call site.
+                        if(regexpMember&&argv?.length&&[...argv[0]!.values].some(value=>!!this.ordinaryOwner(value)&&!this.regexpOwnerData(value))){
+                            if(this.stringProtocolCalls.has(node))continue;
+                            this.stringProtocolCalls.add(node);
+                            if(receiverKinds&(KIND_UNDEFINED|KIND_NULL)){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.nativeException(node,"TypeError"));}
+                            const argument=argv[0]!,hook=this.property(argument,this.wellKnownSymbols.get(regexpMember)!,node);
+                            const callee=this.newCell(),returned=this.newCell();
+                            this.invoke(node,callee,argument,[{cell:invocation.receiver,spread:false},...argv.slice(1).map(cell=>({cell,spread:false}))],returned);
+                            this.copy(returned,result);
+                            let converted=false;
+                            this.rule([hook],()=>{
+                                for(const value of hook.values){
+                                    if(value===this.primitive(undefined)||value===this.primitive(null)){
+                                        if(converted)continue;converted=true;
+                                        if(kind){
+                                            if(kind.string)this.publish(result,this.unknownString);
+                                            if(kind.number){let number=this.numericValues.get(KIND_NUMBER);if(!number){number={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,number);}this.publish(result,number);}
+                                            if(kind.boolean){this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));}
+                                            if(kind.undefined)this.publish(result,this.primitive(undefined));
+                                            if(kind.strings)this.copy(this.regexpStringArray(node,"split"),result);
+                                        }else this.publish(result,this.unknown);
+                                        if(handler)this.publish(handler,this.nativeException(node));
+                                        this.onActive(node,()=>{for(const actual of [invocation.receiver,...argv])this.escapeCallableArgument(actual,node);});
+                                    }else if(value.tag==="function"||value.tag==="bound")this.publish(callee,value);
+                                    else if(value.tag==="abrupt"||value.tag==="pending-source")this.publish(result,value);
+                                    else{this.publish(result,this.unknown);this.activateOpaqueEffect(node);if(handler)this.publish(handler,this.unknown);}
+                                }
+                            });
+                            continue;
+                        }
+                        // A String, Number or BigInt prototype method runs user code only through
+                        // its receiver's and arguments' own protocol: ToPrimitive's toString,
+                        // valueOf or @@toPrimitive, a RegExp member's @@match, @@matchAll,
+                        // @@replace, @@search or @@split method, and replace's replacer
+                        // (sec-string.prototype.match and siblings). The escape invokes those; the
+                        // method writes no ordinary property and is not unknown code.
+                        this.publish(result,this.unknown);if(handler)this.publish(handler,this.unknown);
+                        this.onActive(node,()=>{for(const actual of [invocation.receiver,...(argv??(invocation.sequence?[this.allArgumentValues(invocation.sequence)]:[]))])this.escapeCallableArgument(actual,node);});
+                        continue;
                     }
                     if(atom.tag==="operation"&&atom.operation.startsWith("math-member:")) {
                         const descriptor=runtimeMathMethods.get(atom.operation.slice("math-member:".length))!;
