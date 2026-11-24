@@ -78,7 +78,7 @@ type CallableDefinition = FunctionNode | ts.ClassDeclaration | ts.ClassExpressio
 type Domain = "constructor" | "prototype" | "instance";
 type CollectionKind = "Map" | "Set";
 type Operation = `set-prototype:${"object"|"reflect"}` | `native-object-static:${string}` | `native-reflect:${string}` | "object-is" | `object-integrity:${"preventExtensions"|"seal"|"freeze"}` | `object-integrity-test:${"isExtensible"|"isSealed"|"isFrozen"}` | `regexp-flag:${string}` | `regexp-member:${string}` | `object-enumerable:${"keys"|"values"|"entries"}` | `object-has-own:${"static"|"prototype"}` | `array-iteration:${ArrayIterationMode}` | "array-push" | "object-own-keys:string" | "object-own-keys:symbol" | "reflect-own-keys" | "reflect-get" | `native-string-static:${string}` | "string-codes:unit" | "string-codes:point" | `native-array:${string}` | `native-typed-array:${string}` | `native-typed-array-static:${string}` | `native-uint8-codec:${string}` | "typed-array-species" | `native-function:${string}` | "throw-type-error" | `legacy-function-accessor:${"caller"|"arguments"}:${"get"|"set"}` | `callback-timer:${string}` | "ordinary-has-instance" | "object-get-prototype" | "reflect-get-prototype" | "eval" | "eval-script" | "agent-start" | "realm" | "host-print" | "host-gc" | "call" | "apply" | "bind" | "reflect-apply" | "construct" |
-    "proxy-revocable" | "proxy-revoke" | "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "array-from" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | "regexp-string-iterator-next" | `iterator-helper:${string}` | "wrap-iterator:next" | "wrap-iterator:return" | "string-iterator" | "string-iterator-next" | "iterator-helper-next" | "iterator-helper-return" | `collection-member:${string}` | "promise-finally-forward" | "species-getter" | "proto-accessor:get" | "proto-accessor:set" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
+    "proxy-revocable" | "proxy-revoke" | "define-property" | "define-properties" | "create-object" | "set-property" | "delete-property" | "own-descriptor" | "own-descriptors" | "function-text" | "object-locale-text" | "object-text" | "symbol-for" | "symbol-key-for" | "array-join" | "array-text" | "array-values" | "array-keys" | "array-entries" | "json-stringify" | "json-parse" | "json-raw" | "json-is-raw" | "error-text" | "error-brand" | "array-brand" | "array-from" | "util-format" | "native-require" | `set-composition:${string}` | `collection-iterator:${string}` | "regexp-string-iterator-next" | `iterator-helper:${string}` | "wrap-iterator:next" | "wrap-iterator:return" | "string-iterator" | "string-iterator-next" | "iterator-helper-next" | "iterator-helper-return" | `collection-member:${string}` | "promise-finally-forward" | "species-getter" | "proto-accessor:get" | "proto-accessor:set" | `promise-member:${string}` | `generator-member:${string}` | `agent-member:${string}` | `primitive-value:${string}` | `primitive-text:${string}` | `math-member:${string}` | `atomics-member:${string}` | `primitive-member:${string}`;
 type Primitive = SourcePrimitive;
 /** Callables and collection-iterator cells reachable from one escaping value;
  * a sink forwards them into one escaping call. */
@@ -213,7 +213,7 @@ const NUMERIC_CONVERSIONS: ReadonlyMap<string, (value: Primitive) => Primitive> 
         return length;
     }],
 ]);
-const SOURCE_OBJECT_PROTOTYPE_OPERATIONS:ReadonlyMap<string,Operation>=new Map([["toString","object-text"],["hasOwnProperty","object-has-own:prototype"]]);
+const SOURCE_OBJECT_PROTOTYPE_OPERATIONS:ReadonlyMap<string,Operation>=new Map([["toString","object-text"],["hasOwnProperty","object-has-own:prototype"],["toLocaleString","object-locale-text"]]);
 /** %TypedArray%'s members outside its traversal collection, as
  * tsc_typed_array.c installs them (ES2026 23.2.2, 23.2.3): the iteration
  * methods, the accessor properties' getters (with @@toStringTag), the static
@@ -10063,7 +10063,11 @@ class SourceValueFlow {
                             if(kind.strings)this.copy(this.regexpStringArray(node,"split"),result);
                         }else this.publish(result,this.unknown);
                         if(handler)this.publish(handler,this.unknown);
-                        this.onActive(node,()=>{for(const actual of [invocation.receiver,...(argv??(invocation.sequence?[this.allArgumentValues(invocation.sequence)]:[]))])this.escapeCallableArgument(actual,node);});
+                        // toLocaleString's parameters are ECMA-402's: without
+                        // it an implementation must not use them, so only the
+                        // receiver's conversion runs.
+                        const reservedArguments=member.endsWith(":toLocaleString");
+                        this.onActive(node,()=>{for(const actual of [invocation.receiver,...(reservedArguments?[]:argv??(invocation.sequence?[this.allArgumentValues(invocation.sequence)]:[]))])this.escapeCallableArgument(actual,node);});
                         continue;
                     }
                     if(atom.tag==="operation"&&atom.operation.startsWith("math-member:")) {
@@ -10471,6 +10475,14 @@ class SourceValueFlow {
                         }
                     } else if (atom.tag === "operation") {
                         if(atom.operation==="object-text"){this.copy(this.objectText(invocation.receiver,node),result);continue;}
+                        // Object.prototype.toLocaleString (sec-object.prototype.tolocalestring):
+                        // Invoke(this, "toString") with no arguments (its locale
+                        // parameters are ECMA-402's), returning what that returns.
+                        if(atom.operation==="object-locale-text"){
+                            if(invocation.construct){this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(node);if(handler)this.publish(handler,this.nativeException(node,"TypeError"));continue;}
+                            if(!handled(atom,signature))this.invoke(node,this.property(invocation.receiver,"toString",node),invocation.receiver,[],result);
+                            continue;
+                        }
                         if(atom.operation.startsWith("primitive-value:")||atom.operation.startsWith("primitive-text:")){this.copy(this.primitiveMethod(atom.operation,invocation.receiver,argument(0)??omittedArgument,node),result);continue;}
                         if(atom.operation==="create-object") {
                             this.copy(this.createObject(argument(0)??omittedArgument,argument(1)??omittedArgument,node),result);
