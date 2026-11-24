@@ -62,6 +62,14 @@ void tsc_gc_stress_tick(void);
 #else
 #  define TSC_GC_STRESS_TICK() ((void)0)
 #endif
+/* A generated function whose C text is several megabytes (see
+ * src/link/large-functions.ts) is optimized at O1: GCC's O2 is superlinear in
+ * one function's size, and such functions are one-time setup code. */
+#if defined(__GNUC__) && !defined(__clang__)
+#  define TSC_LARGE_FUNCTION __attribute__((optimize("O1")))
+#else
+#  define TSC_LARGE_FUNCTION
+#endif
 static inline void* tsc_gc_malloc(size_t n) { TSC_GC_STRESS_TICK(); return tsc_alloc_checked(TSC_GC_TRY_MALLOC(n), n); }
 static inline void* tsc_gc_malloc_uninit(size_t n) { TSC_GC_STRESS_TICK(); return tsc_alloc_checked(TSC_GC_TRY_MALLOC_UNINIT(n), n); }
 static inline void* tsc_gc_malloc_atomic(size_t n) { TSC_GC_STRESS_TICK(); return tsc_alloc_checked(TSC_GC_TRY_MALLOC_ATOMIC(n), n); }

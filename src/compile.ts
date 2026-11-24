@@ -1,3 +1,4 @@
+import { tierLargeFunctions } from "./link/large-functions";
 import {registerProofCompanionRoots} from "./source-file-expression-proof";
 import ts from "typescript";
 import { earlyPrivateStaticSemanticsFailure } from "./emit/private-names";
@@ -1045,7 +1046,7 @@ async function compileWithDiagnostics(opts: CompileOptions, writeDiagnostic: (me
         return { exitCode: 3, buildDir, mainC };
     }
     const mainPath = path.join(buildDir, "main.c");
-    await fs.writeFile(mainPath, mainC, "utf8");
+    await fs.writeFile(mainPath, tierLargeFunctions(mainC), "utf8");
     const netPolicyPath = path.join(buildDir, "tsc_net_policy.c");
     await fs.writeFile(netPolicyPath, emitNetPolicyC(netPolicy), "utf8");
     if (opts.verbose) console.error(`[tsc2c] wrote ${mainPath}`);
