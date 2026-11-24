@@ -56,10 +56,15 @@ test('boxed abstract primitive results remain non-String eval inputs',()=>{
   const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:boxingSources('eval(boxed)===boxed',initial)}]);
   expect({initial,error:graph.error}).toEqual({initial,error:null});expect(graph.directEvalSources).toEqual([]);
  }
- for(const expression of ['Object(opaque())','Object(value).toString()']){
-  const graph=finiteEvalScriptSourceGraph([{path:'main.js',source:'let value=0;value++;eval('+expression+');'}]);
-  expect({expression,error:graph.error}).toMatchObject({error:expect.stringContaining('direct eval source is not a finite static string expression')});
- }
+ // Object(x) is an Object whatever x is (ToObject, or a new object for
+ // undefined and null), and PerformEval returns a non-String argument
+ // unevaluated (19.2.1.1 step 2): even an unknown argument evaluates no source.
+ const object=finiteEvalScriptSourceGraph([{path:'main.js',source:'eval(Object(opaque()));'}]);
+ expect({error:object.error,sources:object.directEvalSources}).toEqual({error:null,sources:[]});
+ // A wrapper's toString is its Number's: after value++ the counter is 1, so
+ // the source is exactly "1".
+ const text=finiteEvalScriptSourceGraph([{path:'main.js',source:'let value=0;value++;eval(Object(value).toString());'}]);
+ expect({error:text.error,sources:text.directEvalSources.map(entry=>entry.source)}).toEqual({error:null,sources:["1"]});
  // Number.prototype.valueOf unboxes to the Number itself: eval returns a
  // non-String argument unchanged and evaluates no source.
  const unboxed=finiteEvalScriptSourceGraph([{path:'main.js',source:'let value=0;value++;eval(Object(value).valueOf());'}]);
