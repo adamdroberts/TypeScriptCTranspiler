@@ -11,9 +11,10 @@ import {nodeReferenceSync} from './node-reference';
  * direct eval and a sloppy global constructor depend on. Generated programs
  * chain random represented methods before an eval of a global holding a
  * literal source. match, matchAll and search given a String create a RegExp
- * and call its overridable methods, which may rewrite that global, so they
- * stay opaque and a program that calls one before the same eval is rejected; split, replace and replaceAll look up a
- * pattern's @@split or @@replace only when the pattern is an Object. */
+ * and invoke its %RegExp.prototype% method (and exec), so they keep the eval
+ * finite unless the program replaced one of those methods with code that
+ * rewrites the global, which is then rejected; split, replace and replaceAll
+ * look up a pattern's @@split or @@replace only when the pattern is an Object. */
 
 function rng(seed:number):()=>number{
  let state=seed>>>0;
@@ -65,10 +66,15 @@ test('represented primitive methods keep a later literal eval and global constru
  }
 },600_000);
 
-test('a RegExp-protocol string method before the eval stays opaque and is rejected',async()=>{
- const result=await compileOnce(program(rng(0x1234),3,true));
- expect(result.code).not.toBe(0);
- expect(result.diagnostics.join('')).toContain('unknown eval() source');
+test('a RegExp-protocol string method runs %RegExp.prototype% methods before the eval',async()=>{
+ const source=program(rng(0x1234),3,true);
+ const result=await compileOnce(source);
+ expect({code:result.code,diagnostics:result.diagnostics}).toEqual({code:0,diagnostics:[]});
+ expect(result.stdout).toBe(nodeOutput(source));
+ const replaced='RegExp.prototype[Symbol.match]=RegExp.prototype[Symbol.matchAll]=RegExp.prototype[Symbol.search]=function(){source=String(Date.now());return null};\n'+source;
+ const rejected=await compileOnce(replaced);
+ expect(rejected.code).not.toBe(0);
+ expect(rejected.diagnostics.join('')).toContain('unknown eval() source');
 },600_000);
 
 test('one long chain of primitive method calls stays finite',async()=>{

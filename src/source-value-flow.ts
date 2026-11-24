@@ -318,7 +318,7 @@ const INITIAL_SOURCE_OPERATIONS: ReadonlyMap<string, ReadonlyMap<string, Operati
  * returns a fresh Array of Strings); match, matchAll and search create a
  * RegExp from a primitive argument and invoke its %RegExp.prototype%
  * @@-method, which the program may replace, so they stay opaque. */
-type PrimitiveMemberResult={string?:true;number?:true;boolean?:true;undefined?:true;strings?:true};
+type PrimitiveMemberResult={string?:true;number?:true;boolean?:true;undefined?:true;strings?:true;matches?:true;iterator?:true};
 const PRIMITIVE_MEMBER_RESULTS:ReadonlyMap<string,PrimitiveMemberResult>=new Map<string,PrimitiveMemberResult>([
     ...["charAt","concat","repeat","padStart","padEnd","slice","substring","substr","trim","trimStart","trimEnd","toLowerCase","toUpperCase","toLocaleLowerCase","toLocaleUpperCase","normalize","toWellFormed","anchor","big","blink","bold","fixed","fontcolor","fontsize","italics","link","small","strike","sub","sup"].map(name=>["string:"+name,{string:true as const}] as const),
     ["string:at",{string:true,undefined:true}],
@@ -10210,6 +10210,21 @@ class SourceValueFlow {
                             if(member.endsWith(":replaceAll")&&handler)this.publish(handler,this.nativeException(node,"TypeError"));
                             this.copy(this.regexpMember(regexpMember,argv[0]!,[text!,...argv.slice(1)],node,false),result);continue;
                         }
+                        // match, matchAll and search with a non-Object argument:
+                        // RegExpCreate(argument, undefined or "g") and Invoke(rx,
+                        // @@method, «S») (22.1.3.13, .14, .23). The method is read
+                        // through %RegExp.prototype%, which the program may replace,
+                        // and the intrinsic one reads exec and the flags there too.
+                        if((regexpMember==="match"||regexpMember==="matchAll"||regexpMember==="search")&&argv&&!objectArgument){
+                            if(pendingArgument||this.stringProtocolCalls.has(node))continue;
+                            this.stringProtocolCalls.add(node);
+                            if(receiverKinds&(KIND_UNDEFINED|KIND_NULL)){this.publish(result,this.abrupt);if(handler)this.publish(handler,this.nativeException(node,"TypeError"));}
+                            const [text]=this.convertList([invocation.receiver],node,"text"),omitted=this.newCell(),flags=this.newCell();
+                            this.publish(omitted,this.primitive(undefined));this.publish(flags,regexpMember==="matchAll"?this.primitive("g"):this.primitive(undefined));
+                            const rx=this.regexpConstruct(argv[0]??omitted,flags,node,false),hook=this.property(rx,this.wellKnownSymbols.get(regexpMember)!,node);
+                            this.invoke(node,hook,rx,[{cell:text!,spread:false}],result);
+                            continue;
+                        }
                         const normalKinds=memberKind==="string"?KIND_PRIMITIVE&~(KIND_UNDEFINED|KIND_NULL|KIND_SYMBOL):memberKind==="number"?KIND_NUMBER:KIND_BIGINT;
                         // An Object receiver: a String method's ToString(this) is
                         // the receiver's own ToPrimitive (its toString, valueOf or
@@ -10246,6 +10261,8 @@ class SourceValueFlow {
                                 if(kind.boolean){this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));}
                                 if(kind.undefined)this.publish(result,this.primitive(undefined));
                                 if(kind.strings)this.copy(this.regexpStringArray(node,"split"),result);
+                                if(kind.matches){this.publish(result,this.primitive(null));this.copy(this.regexpMatchResult(node,this.stringIndexValues()),result);this.copy(this.regexpStringArray(node,"matches"),result);}
+                                if(kind.iterator)this.copy(this.regexpStringIterator(node),result);
                             }
                             continue;
                         }
@@ -10275,6 +10292,8 @@ class SourceValueFlow {
                                             if(kind.boolean){this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));}
                                             if(kind.undefined)this.publish(result,this.primitive(undefined));
                                             if(kind.strings)this.copy(this.regexpStringArray(node,"split"),result);
+                                            if(kind.matches){this.publish(result,this.primitive(null));this.copy(this.regexpMatchResult(node,this.stringIndexValues()),result);this.copy(this.regexpStringArray(node,"matches"),result);}
+                                            if(kind.iterator)this.copy(this.regexpStringIterator(node),result);
                                         }else this.publish(result,this.unknown);
                                         if(handler)this.publish(handler,this.nativeException(node));
                                         this.onActive(node,()=>{for(const actual of [invocation.receiver,...argv])this.escapeCallableArgument(actual,node);});
@@ -10330,7 +10349,11 @@ class SourceValueFlow {
                         // an @@-method of the program's (dispatched above), so
                         // unless an argument is unknown its result is also the
                         // native method's kind.
-                        const unknownArgument=!argv||argv.some(input=>[...input.values].some(value=>value.tag==="unknown"&&!(value as {native?:true}).native||value.tag==="opaque-object"));
+                        // An unlisted argument sequence (`.call`, a spread) is judged
+                        // by its values.
+                        const unknownInput=(input:Cell):boolean=>[...input.values].some(value=>value.tag==="unknown"&&!(value as {native?:true}).native||value.tag==="opaque-object");
+                        const sequenceValues=!argv&&invocation.sequence?this.allArgumentValues(invocation.sequence):undefined;if(sequenceValues)this.watch(rule,sequenceValues);
+                        const unknownArgument=argv?argv.some(unknownInput):sequenceValues?unknownInput(sequenceValues):true;
                         if(kind&&(!regexpMember||!unknownArgument)){
                             this.publish(result,this.abrupt);
                             if(kind.string)this.publish(result,this.unknownString);
@@ -10338,8 +10361,14 @@ class SourceValueFlow {
                             if(kind.boolean){this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));}
                             if(kind.undefined)this.publish(result,this.primitive(undefined));
                             if(kind.strings)this.copy(this.regexpStringArray(node,"split"),result);
+                            if(kind.matches){this.publish(result,this.primitive(null));this.copy(this.regexpMatchResult(node,this.stringIndexValues()),result);this.copy(this.regexpStringArray(node,"matches"),result);}
+                            if(kind.iterator)this.copy(this.regexpStringIterator(node),result);
                         }else this.publish(result,this.unknown);
-                        if(handler)this.publish(handler,this.unknown);
+                        // The receiver and arguments escape below: what their
+                        // callables throw reaches nativeThrown, and the method
+                        // throws native errors. An unknown one may throw anything.
+                        this.watch(rule,invocation.receiver);
+                        if(handler){if(unknownArgument||unknownInput(invocation.receiver))this.publish(handler,this.unknown);else{this.publish(handler,this.nativeException(node));this.copy(this.nativeThrown,handler);}}
                         // toLocaleString's parameters are ECMA-402's: without
                         // it an implementation must not use them, so only the
                         // receiver's conversion runs.
