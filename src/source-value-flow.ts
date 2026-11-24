@@ -9903,7 +9903,18 @@ class SourceValueFlow {
                         // @@replace, @@search or @@split method, and replace's replacer
                         // (sec-string.prototype.match and siblings). The escape invokes those; the
                         // method writes no ordinary property and is not unknown code.
-                        this.publish(result,this.unknown);if(handler)this.publish(handler,this.unknown);
+                        // Its result is of the method's kind (only a RegExp member's
+                        // @@-method, dispatched above, returns an arbitrary value);
+                        // a conversion or the method itself may throw.
+                        if(kind&&!regexpMember){
+                            this.publish(result,this.abrupt);
+                            if(kind.string)this.publish(result,this.unknownString);
+                            if(kind.number){let number=this.numericValues.get(KIND_NUMBER);if(!number){number={tag:"non-string",kinds:KIND_NUMBER};this.numericValues.set(KIND_NUMBER,number);}this.publish(result,number);}
+                            if(kind.boolean){this.publish(result,this.primitive(true));this.publish(result,this.primitive(false));}
+                            if(kind.undefined)this.publish(result,this.primitive(undefined));
+                            if(kind.strings)this.copy(this.regexpStringArray(node,"split"),result);
+                        }else this.publish(result,this.unknown);
+                        if(handler)this.publish(handler,this.unknown);
                         this.onActive(node,()=>{for(const actual of [invocation.receiver,...(argv??(invocation.sequence?[this.allArgumentValues(invocation.sequence)]:[]))])this.escapeCallableArgument(actual,node);});
                         continue;
                     }

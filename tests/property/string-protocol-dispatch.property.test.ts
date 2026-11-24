@@ -21,7 +21,9 @@ import {nodeReferenceSync} from './node-reference';
  * toString and toFixed check thisNumberValue before converting their
  * argument: a non-Number receiver throws without running the radix's valueOf
  * (exact); a valid one runs it (listed). A Number or Boolean wrapper has no own
- * members, so its toString is its prototype's (exact). The stress makes 256
+ * members, so its toString is its prototype's (exact). A call the model answers
+ * only as an escape still has its method's result kind (typeof exact). The
+ * stress makes 256
  * dispatching calls. */
 
 const P=`eval("print('"+w+"')");`;
@@ -35,6 +37,7 @@ const shapes:Record<string,{source:string;exact:string[]|null}>={
  numberReceiverFirst:{source:`var w='1';try{Reflect.apply((1).toString,{},[{valueOf(){w='2';return 10}}])}catch(e){}${P}`,exact:["print('1')"]},
  numberRadix:{source:`var w='1';(255).toString({valueOf(){w='2';return 16}});new Number(255).toFixed({valueOf(){w+='3';return 1}});${P}`,exact:null},
  wrapperMethod:{source:`var w='1';var radix={valueOf(){return 16}};for(var i=0;i<2;i++){new Number(255).toString(radix);new Boolean(true).toString();}${P}`,exact:["print('1')"]},
+ fallbackResult:{source:`var w=typeof (12).toLocaleString(undefined,{});${P}`,exact:["print('string')"]},
  stress:{source:`var w='1';var m={[Symbol.match](s){return null}};${Array.from({length:256},(_,k)=>['"ab".match(m);','"ab".search({[Symbol.search](){return 0}});','"ab".padStart(4);','"ab".split({[Symbol.split](){return []}});'][k%4]).join('')}${P}`,exact:["print('1')"]},
 };
 
