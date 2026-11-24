@@ -447,6 +447,10 @@ class SourceFactEdges extends Map<SourceFacts,"value"|"origin"> {
     }
 }
 const noAtoms:ReadonlySet<Atom>=new Set();
+/** Whether String(BigInt(text)) === text: canonical decimal integer text
+ * (no sign on zero, no leading zeros, no whitespace or radix prefix). A
+ * pattern test, since BigInt throws a SyntaxError for every other text. */
+function canonicalBigIntText(text:string):boolean {return /^(?:0|-?[1-9][0-9]*)$/.test(text);}
 let flattenEpoch=0,captureWalkEpoch=0,hasEpoch=0;
 const flattenStack:SourceFacts[]=[],flattenModes:boolean[]=[],hasStack:SourceFacts[]=[];
 const noEdges:ReadonlyMap<SourceFacts,"value"|"origin">=new Map<SourceFacts,"value"|"origin">();
@@ -3524,7 +3528,7 @@ class SourceValueFlow {
         const keys=this.propertyKeys(input,rule);if(keys===undefined)return false;
         if(keys!==null)return keys.includes(key);
         const domain=this.computedKeyDomain(input);
-        const numeric=typeof key==="string"&&(String(Number(key))===key||(()=>{try{return String(BigInt(key))===key;}catch{return false;}})());
+        const numeric=typeof key==="string"&&(String(Number(key))===key||canonicalBigIntText(key));
         return !domain||numeric||domain.keys.includes(key);
     }
     private borrowUnknownProperty(record:UnknownOwnPropertyRecord,key:SourcePropertyKey,result:Cell):void {
@@ -7199,7 +7203,7 @@ class SourceValueFlow {
             if(domain==="index"){
                 if(Number.isSafeInteger(index)&&index>=0&&String(index)===key)keys.add(key);
             }else if(String(index)===key)keys.add(key);
-            else {try {if(String(BigInt(key))===key)keys.add(key);} catch {}}
+            else if(canonicalBigIntText(key))keys.add(key);
         };
         this.watch(rule,receiver);
         while(pending.length){
