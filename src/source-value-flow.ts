@@ -10519,7 +10519,19 @@ class SourceValueFlow {
                             // OrdinaryCreateFromConstructor: the instance inherits
                             // NewTarget's prototype (the builtin's own for a call);
                             // its own members are native (nativeInstance).
-                            else {owner.nativeInstance??=atom.name;owner.prototype??=this.newCell();this.copy(this.property(invocation.construct?invocation.newTarget??invocation.target:invocation.target,"prototype",node),owner.prototype);}
+                            // GetPrototypeFromConstructor(newTarget): newTarget is this
+                            // builtin unless a distinct one is given, and a prototype
+                            // that is not an Object selects the builtin's intrinsic one.
+                            else {
+                                owner.nativeInstance??=atom.name;owner.prototype??=this.newCell();
+                                const distinct=invocation.construct&&invocation.newTarget&&invocation.newTarget!==invocation.target;
+                                const own=this.property(this.atomCell(atom),"prototype",node),prototype=distinct?this.property(invocation.newTarget!,"prototype",node):own,linked=owner.prototype;
+                                this.rule([prototype],()=>{for(const value of prototype.values){
+                                    if(value.tag==="abrupt"||value.tag==="pending-source")continue;
+                                    if(this.ordinaryOwner(value)||value.tag==="unknown"||value.tag==="opaque-object")this.publish(linked,value);
+                                    else this.copy(own,linked);
+                                }});
+                            }
                         }
                         this.publish(result!,{tag:"object",owner});
                     }
