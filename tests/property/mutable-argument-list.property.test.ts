@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
-import vm from "node:vm";
 import ts from "typescript";
 import { sourceConstructorInvocations } from "../../src/source-value-flow";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { nodeReferenceSync } from "./node-reference";
 
 function program(source: string): ts.Program {
     const filename = "source.js";
@@ -13,11 +16,29 @@ function program(source: string): ts.Program {
     return ts.createProgram([filename], options, host);
 }
 
-function capture(...args: unknown[]): unknown[] { return args; }
-function includesActual(source: string): boolean {
-    const actual = new vm.Script(source).runInNewContext({ Function: capture }).map(String);
-    return sourceConstructorInvocations(program(source)).some(call => call.choices !== null &&
-        call.choices.length === actual.length && call.choices.every((values, index) => values.includes(actual[index])));
+/* The actual List each source passes to Function, observed by the reference
+ * Node: every source runs in a fresh vm context whose Function returns its
+ * arguments (one process for the whole batch). */
+function actualLists(sources: readonly string[]): string[][] {
+    const root = mkdtempSync(join(tmpdir(), "tsc2c-actual-lists-"));
+    try {
+        const input = join(root, "sources.json");
+        writeFileSync(input, JSON.stringify(sources));
+        const result = nodeReferenceSync(["node", "-e", `const vm = require("node:vm"), fs = require("node:fs");
+const out = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).map(source =>
+    new vm.Script(source).runInNewContext({ Function: function (...args) { return args; } }).map(String));
+fs.writeFileSync(1, JSON.stringify(out));`, input], { stdout: "pipe", stderr: "pipe", timeout: 120_000 });
+        if (result.exitCode !== 0) throw new Error(result.stderr.toString());
+        return JSON.parse(result.stdout.toString());
+    } finally { rmSync(root, { recursive: true, force: true }); }
+}
+const pendingActual: string[] = [];
+function includesActual(source: string): boolean { pendingActual.push(source); return true; }
+function checkActualLists(): void {
+    const actuals = actualLists(pendingActual);
+    const missing = pendingActual.flatMap((source, index) => sourceConstructorInvocations(program(source)).some(call => call.choices !== null &&
+        call.choices.length === actuals[index]!.length && call.choices.every((values, position) => values.includes(actuals[index]![position]!))) ? [] : [source]);
+    expect(missing).toEqual([]);
 }
 
 test("actual Lists project mutable length and index locations across every call adapter", () => {
@@ -57,4 +78,5 @@ test("actual Lists project mutable length and index locations across every call 
     // Repeated self-spreading grows the List without a represented bound.
     const cycle = 'var args=["return 73;"];for(let index=0;index<2;index++)args=["x",...args];Function(...args);';
     expect(sourceConstructorInvocations(program(cycle)).every(call => call.choices === null)).toBe(true);
+    checkActualLists();
 });

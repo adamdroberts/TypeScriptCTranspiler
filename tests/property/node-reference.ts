@@ -38,3 +38,23 @@ export function nodeReferenceSync<const In extends Bun.SpawnOptions.Writable = '
         return {...result, stdout: readFileSync(stdout), stderr: readFileSync(stderr)};
     } finally { rmSync(root, {recursive: true, force: true}); }
 }
+
+/** Which of `sources` the reference Node parses as a Script (new vm.Script
+ * succeeds; a SyntaxError rejects), all in one process. A grammar oracle that
+ * runs vm inside the Bun test process would use Bun's parser instead. */
+export function nodeAcceptsScripts(sources: readonly string[]): boolean[] {
+    const root = mkdtempSync(join(tmpdir(), 'tsc2c-node-grammar-'));
+    try {
+        const input = join(root, 'sources.json');
+        writeFileSync(input, JSON.stringify(sources));
+        const result = nodeReferenceSync(['node', '-e', `const vm = require("node:vm"), fs = require("node:fs");
+const out = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).map(source => {
+    try { new vm.Script(source); return true; } catch (error) { if (error instanceof SyntaxError) return false; throw error; }
+});
+fs.writeFileSync(1, JSON.stringify(out));`, input], {stdout: 'pipe', stderr: 'pipe', timeout: 120_000});
+        if (result.exitCode !== 0) throw new Error(`Node grammar oracle failed: ${result.stderr.toString()}`);
+        const accepted = JSON.parse(result.stdout.toString()) as boolean[];
+        if (accepted.length !== sources.length) throw new Error('Node grammar oracle returned a different count');
+        return accepted;
+    } finally { rmSync(root, {recursive: true, force: true}); }
+}

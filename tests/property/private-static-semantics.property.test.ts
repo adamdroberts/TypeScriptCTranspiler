@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
 import ts from 'typescript';
-import * as vm from 'node:vm';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -8,17 +7,17 @@ import { earlyPrivateStaticSemanticsFailure } from '../../src/emit/private-names
 import { createEcmaSourceFile } from '../../src/ecmascript-source';
 import { compile } from '../../src/compile';
 
-function accepted(source:string):boolean { try { new vm.Script(source);return true }catch(error){if(!(error instanceof SyntaxError))throw error;return false} }
+import { nodeAcceptsScripts } from './node-reference';
 function valid(source:string):boolean {
  const file=createEcmaSourceFile('private.js',source,ts.ScriptTarget.ESNext,true,ts.ScriptKind.JS,'script');
  return !(file as ts.SourceFile & {parseDiagnostics?:readonly ts.Diagnostic[]}).parseDiagnostics?.length&&!earlyPrivateStaticSemanticsFailure(file);
 }
 const declarations=['#x;', '#x(){}', 'get #x(){return 1}', 'set #x(value){}'];
+// The reference parser is the reference Node's (one batch, nodeAcceptsScripts).
 test('private early errors follow the canonical lexical name collection',()=>{
- for(const first of declarations)for(const second of declarations)for(const prefix of ['', 'static ']) {
-  const source=`class Owner {${first}${prefix}${second}}`;
-  expect({source,valid:valid(source)}).toEqual({source,valid:accepted(source)});
- }
+ const cases:string[]=[];
+ for(const first of declarations)for(const second of declarations)for(const prefix of ['', 'static '])
+  cases.push(`class Owner {${first}${prefix}${second}}`);
  const references=[
   'class Owner {#constructor;}', 'class Owner {read(){return this.#x}}',
   'class Owner {#x;read(){delete this.#x}}', 'class Owner {#x;read(){delete (this.#x)}}',
@@ -28,7 +27,9 @@ test('private early errors follow the canonical lexical name collection',()=>{
   'class Owner {#x;read(){return class Inner extends (this.#x,Object) {#x}}}',
   'class Owner extends (class Inner {}.#x) {#x}',
  ];
- for(const source of references)expect({source,valid:valid(source)}).toEqual({source,valid:accepted(source)});
+ cases.push(...references);
+ const native=nodeAcceptsScripts(cases);
+ expect(cases.flatMap((source,index)=>valid(source)===native[index]?[]:[{source,native:native[index]}])).toEqual([]);
 });
 
 test('private early errors reject before native code generation',async()=>{

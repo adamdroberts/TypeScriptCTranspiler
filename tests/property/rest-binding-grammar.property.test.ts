@@ -1,20 +1,18 @@
 import { expect, test } from "bun:test";
-import vm from "node:vm";
 import ts from "typescript";
 import { createEcmaSourceFile } from "../../src/ecmascript-source";
 import { earlyControlFlowStaticSemanticsFailure } from "../../src/control-static-semantics";
+import { nodeAcceptsScripts } from "./node-reference";
 
-function nativeAccepts(source: string): boolean {
-    try { new vm.Script(source); return true; }
-    catch (error) { if (error instanceof SyntaxError) return false; throw error; }
-}
 function compilerAccepts(source: string): boolean {
     const tree = createEcmaSourceFile("source.js", source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS, "script");
     const diagnostics = (tree as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics;
     return !diagnostics?.length && earlyControlFlowStaticSemanticsFailure(tree) === null;
 }
 
+// The reference parser is the reference Node's (one batch, nodeAcceptsScripts).
 test("one source-tree validator checks rest grammar at every binding edge", () => {
+    const cases: string[] = [];
     const patterns = [
         "[...x]", "[x,...y]", "[...[x,y]]", "[...{length:x}]", "[x=1,...y]",
         "[...x,]", "[...x,y]", "[...x=1]", "[...[x]=[]]", "[...{x}={}]",
@@ -36,7 +34,7 @@ test("one source-tree validator checks rest grammar at every binding edge", () =
         for (let wrap = 0; wrap < 4; wrap++) {
             for (const owner of owners) for (const strict of [false, true]) {
                 const source = (strict ? '"use strict";' : "") + owner(pattern);
-                expect({ source, accepted: compilerAccepts(source) }).toEqual({ source, accepted: nativeAccepts(source) });
+                cases.push(source);
             }
             state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
             pattern = state & 1 ? `[${pattern}]` : `{p:${pattern}}`;
@@ -44,10 +42,13 @@ test("one source-tree validator checks rest grammar at every binding edge", () =
     }
     for (const parameters of ["...x", "x,...y", "...[x,y]", "...{length:x}", "...x,", "...x,y", "...x=[]", "x,...y={}"]) {
         for (const source of [`function f(${parameters}){}`, `(${parameters})=>0;`, `class C{m(${parameters}){}}`])
-            expect({ source, accepted: compilerAccepts(source) }).toEqual({ source, accepted: nativeAccepts(source) });
+            cases.push(source);
     }
     const deep = "[".repeat(256) + "[...x,y]" + "]".repeat(256);
     const source = `try{}catch(${deep}){}`;
     expect(compilerAccepts(source)).toBe(false);
-    expect(nativeAccepts(source)).toBe(false);
+    cases.push(source);
+    const native = nodeAcceptsScripts(cases);
+    expect(cases.flatMap((source, index) => compilerAccepts(source) === native[index] ? [] : [{ source, native: native[index] }])).toEqual([]);
+    expect(native.at(-1)).toBe(false);
 });

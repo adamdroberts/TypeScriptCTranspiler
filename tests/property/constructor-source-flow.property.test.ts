@@ -2,11 +2,12 @@ import { expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import * as vm from "node:vm";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import ts from "typescript";
 import { compile } from "../../src/compile";
 import { finiteFunctionConstructorSources, functionConstructorSourceKey, type FunctionConstructorSource } from "../../src/function-constructor-source";
 import { parseHostObservation } from "../test262/protocol";
+import { nodeReferenceSync } from "./node-reference";
 
 function program(files: Record<string, string>): ts.Program {
     const options: ts.CompilerOptions = { noLib: true, allowJs: true, noEmit: true, target: ts.ScriptTarget.ESNext };
@@ -75,9 +76,36 @@ function input(noGc: boolean): string {
     return source.replaceAll("NATIVE_GC", String(!noGc)).replace("DEEP_TREE", tree.join("\n")).replaceAll("LAST_OWNER", "owner4096");
 }
 
+/* The independent execution is the reference Node's: each case runs in two
+ * fresh vm contexts (flag true and false) whose constructor of the case's
+ * function kind records its converted arguments, all in one process. */
+function observeConstructorSources(cases: ReadonlyArray<{ kind: FunctionConstructorSource["kind"]; definition: string; text: string }>): FunctionConstructorSource[][] {
+    const root = mkdtempSync(path.join(os.tmpdir(), "tsc2c-constructor-oracle-"));
+    try {
+        const input = path.join(root, "cases.json");
+        writeFileSync(input, JSON.stringify(cases));
+        const result = nodeReferenceSync(["node", "-e", `const vm = require("node:vm"), fs = require("node:fs");
+const out = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).map(({ kind, definition, text }) => {
+    const observed = [];
+    for (const flag of [true, false]) {
+        const context = vm.createContext({ recordSource: (...args) => observed.push({ kind, parameters: args.slice(0, -1).join(","), body: args.at(-1) ?? "" }) });
+        new vm.Script("const definition = (" + definition + "); const original = definition.constructor;" +
+            "Object.defineProperty(Object.getPrototypeOf(definition), 'constructor', { configurable: true, value: function(...args) {" +
+            "const strings = args.map(String); recordSource(...strings); return original(...strings); }});").runInContext(context);
+        context.flag = flag; new vm.Script(text).runInContext(context);
+    }
+    return observed;
+});
+setTimeout(() => fs.writeFileSync(1, JSON.stringify(out)), 0);`, input], { stdout: "pipe", stderr: "pipe", timeout: 120_000 });
+        if (result.exitCode !== 0) throw new Error(result.stderr.toString());
+        return JSON.parse(result.stdout.toString());
+    } finally { rmSync(root, { recursive: true, force: true }); }
+}
+
 test("source graph closes member, result, binding and List dependencies without member type inference", () => {
     // Independent execution records the actual constructor's conversions and
     // joined source key. Static discovery must contain every observed key.
+    const cases: Array<{ kind: FunctionConstructorSource["kind"]; definition: string; text: string }> = [];
     for (const [index, kind] of ["ordinary", "generator", "async", "async-generator"].entries()) {
         const body = kind.includes("generator") ? `yield ${index + 1};` : `return ${index + 1};`;
         const definitions = ["function(){}", "function*(){}", "async function(){}", "async function*(){}"];
@@ -105,19 +133,11 @@ test("source graph closes member, result, binding and List dependencies without 
             async function* unrelated() { yield 1; return 2; }
             unrelated().next();
         `;
-        const observed: FunctionConstructorSource[] = [];
-        const context = vm.createContext({ recordSource: (...args: string[]) => observed.push({ kind: kind as FunctionConstructorSource["kind"], parameters: args.slice(0, -1).join(","), body: args.at(-1) ?? "" }) });
-        new vm.Script(`const definition = (${definitions[index]}); const original = definition.constructor;
-            Object.defineProperty(Object.getPrototypeOf(definition), "constructor", { configurable: true, value: function(...args) {
-                const strings = args.map(String); recordSource(...strings); return original(...strings);
-            }});`).runInContext(context);
-        context.flag = true; new vm.Script(text).runInContext(context);
-        const otherContext = vm.createContext({ recordSource: context.recordSource, flag: false });
-        new vm.Script(`const definition = (${definitions[index]}); const original = definition.constructor;
-            Object.defineProperty(Object.getPrototypeOf(definition), "constructor", { configurable: true, value: function(...args) {
-                const strings = args.map(String); recordSource(...strings); return original(...strings);
-            }});`).runInContext(otherContext);
-        new vm.Script(text).runInContext(otherContext);
+        cases.push({ kind: kind as FunctionConstructorSource["kind"], definition: definitions[index]!, text });
+    }
+    const observations = observeConstructorSources(cases);
+    for (const [index, { text }] of cases.entries()) {
+        const observed = observations[index]!;
         const found = new Set(finiteFunctionConstructorSources(program({ "model.js": text }), []).map(functionConstructorSourceKey));
         expect(observed.length > 0).toBe(true);
         for (const invocation of observed) expect(found.has(functionConstructorSourceKey(invocation))).toBe(true);
