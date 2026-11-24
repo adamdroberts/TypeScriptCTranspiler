@@ -9141,6 +9141,99 @@ class SourceValueFlow {
         }
         return null;
     }
+    /** Inside a branch that `typeof x` selects (`typeof x === "T"` taken, a
+     * `switch (typeof x)` clause or one falling into it, also with the
+     * `x === null ? "null" : typeof x` discriminant), a read of x has one of
+     * the selected types, under the same unchanged-binding conditions as
+     * strictEqualityRefinement. The names are typeof's, plus "null" for the
+     * split discriminant. */
+    private typeofRefinement(node:ts.Identifier):ReadonlySet<string>|null {
+        const symbol=this.bindingSymbol(node),declaration=symbol?.valueDeclaration;
+        if(!symbol||!declaration||declaration.getSourceFile()!==node.getSourceFile())return null;
+        const isConst=ts.isVariableDeclaration(declaration)&&ts.isVariableDeclarationList(declaration.parent)&&(declaration.parent.flags&ts.NodeFlags.Const)!==0;
+        if(!isConst&&(this.bindingWriteSites.get(symbol)?.size??0)>0)return null;
+        if(!ts.isParameter(declaration)&&!ts.isVariableDeclaration(declaration))return null;
+        const sameBinding=(expression:ts.Expression):boolean=>{const value=unwrap(expression);return ts.isIdentifier(value)&&this.bindingSymbol(value)===symbol;};
+        const typeOfBinding=(expression:ts.Expression):boolean=>{const value=unwrap(expression);return ts.isTypeOfExpression(value)&&sameBinding(value.expression);};
+        const name=(expression:ts.Expression):string|null=>{const value=unwrap(expression);return ts.isStringLiteral(value)||ts.isNoSubstitutionTemplateLiteral(value)?value.text:null;};
+        // The discriminant's possible names and whether null is split off.
+        const discriminant=(expression:ts.Expression):{split:boolean}|null=>{
+            const value=unwrap(expression);
+            if(typeOfBinding(value))return {split:false};
+            if(ts.isConditionalExpression(value)&&typeOfBinding(value.whenFalse)&&name(value.whenTrue)==="null"){
+                const test=unwrap(value.condition);
+                if(ts.isBinaryExpression(test)&&test.operatorToken.kind===ts.SyntaxKind.EqualsEqualsEqualsToken&&
+                    (sameBinding(test.left)&&unwrap(test.right).kind===ts.SyntaxKind.NullKeyword||sameBinding(test.right)&&unwrap(test.left).kind===ts.SyntaxKind.NullKeyword))return {split:true};
+            }
+            return null;
+        };
+        const proven=(condition:ts.Expression):ReadonlySet<string>|null=>{
+            const value=unwrap(condition);
+            if(ts.isBinaryExpression(value)&&value.operatorToken.kind===ts.SyntaxKind.AmpersandAmpersandToken)return proven(value.left)??proven(value.right);
+            if(ts.isBinaryExpression(value)&&(value.operatorToken.kind===ts.SyntaxKind.EqualsEqualsEqualsToken||value.operatorToken.kind===ts.SyntaxKind.EqualsEqualsToken)){
+                if(typeOfBinding(value.left)){const text=name(value.right);return text===null?null:new Set([text]);}
+                if(typeOfBinding(value.right)){const text=name(value.left);return text===null?null:new Set([text]);}
+            }
+            return null;
+        };
+        // A clause's statements run when its own test matched or an earlier
+        // clause fell through into it; a default clause matches any value.
+        const exits=(clause:ts.CaseOrDefaultClause):boolean=>{
+            const last=clause.statements[clause.statements.length-1];
+            return !!last&&(ts.isReturnStatement(last)||ts.isBreakStatement(last)||ts.isThrowStatement(last)||ts.isContinueStatement(last));
+        };
+        const clauseNames=(clause:ts.CaseOrDefaultClause):ReadonlySet<string>|null=>{
+            const clauses=clause.parent.clauses,names=new Set<string>();
+            for(let index=clauses.indexOf(clause);index>=0;index--){
+                const current=clauses[index]!;
+                if(index<clauses.indexOf(clause)&&exits(current))break;
+                if(ts.isDefaultClause(current))return null;
+                const text=name(current.expression);if(text===null)return null;names.add(text);
+            }
+            return names;
+        };
+        for(let child:ts.Node=node,parent=node.parent;parent;child=parent,parent=parent.parent){
+            if(functionNode(parent))break;
+            let refined:ReadonlySet<string>|null=null;
+            if(ts.isIfStatement(parent)&&child===parent.thenStatement)refined=proven(parent.expression);
+            else if(ts.isConditionalExpression(parent)&&child===parent.whenTrue)refined=proven(parent.condition);
+            else if(ts.isBinaryExpression(parent)&&parent.operatorToken.kind===ts.SyntaxKind.AmpersandAmpersandToken&&child===parent.right)refined=proven(parent.left);
+            else if(ts.isCaseClause(parent)&&child!==parent.expression){
+                const split=discriminant(parent.parent.parent.expression);
+                if(split){const names=clauseNames(parent);if(names)refined=split.split?names:new Set([...names].map(text=>text==="null"?"":text));}
+            }
+            if(refined)return this.refinementBlocked(declaration)?null:refined;
+        }
+        return null;
+    }
+    /** The values of `source` whose typeof (or "null") is one of `names`. An
+     * unknown value narrows to an unknown value of each selected type; an
+     * unknown or native object may be the host's [[IsHTMLDDA]] object, whose
+     * typeof is "undefined" (B.3.6), so "undefined" keeps it. */
+    private readonly narrowedReads=new WeakMap<Cell,Cell>();
+    private narrowByType(source:Cell,target:Cell,names:ReadonlySet<string>):void {
+        const split=names.has("null"),selected=new Set<Atom>();this.narrowedReads.set(target,source);
+        this.rule([source],()=>{for(const atom of source.values){
+            if(selected.has(atom))continue;selected.add(atom);
+            if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(target,atom);continue;}
+            if(atom.tag==="unknown"){
+                if(names.has("string"))this.publish(target,this.unknownString);
+                if(names.has("number"))this.publish(target,this.numberValue());
+                if(names.has("bigint"))this.publish(target,{tag:"non-string",kinds:KIND_BIGINT});
+                if(names.has("symbol"))this.publish(target,{tag:"non-string",kinds:KIND_SYMBOL});
+                if(names.has("boolean")){this.publish(target,this.primitive(true));this.publish(target,this.primitive(false));}
+                if(names.has("undefined")){this.publish(target,this.primitive(undefined));this.publish(target,atom);}
+                if(names.has("null")||names.has("object")&&!split)this.publish(target,this.primitive(null));
+                if(names.has("object")||names.has("function"))this.publish(target,atom);
+                continue;
+            }
+            const kinds=this.primitiveKinds(this.atomCell(atom));
+            const mask=(names.has("string")?KIND_STRING:0)|(names.has("number")?KIND_NUMBER:0)|(names.has("bigint")?KIND_BIGINT:0)|(names.has("symbol")?KIND_SYMBOL:0)|
+                (names.has("boolean")?KIND_BOOLEAN:0)|(names.has("undefined")?KIND_UNDEFINED|KIND_OBJECT:0)|(names.has("null")||names.has("object")&&!split?KIND_NULL:0)|
+                (names.has("object")?KIND_OBJECT:0)|(names.has("function")?KIND_FUNCTION:0);
+            if(!kinds||kinds&mask)this.publish(target,atom);
+        }});
+    }
     /** Writes the analysis cannot see: a direct eval or `with` anywhere in the
      * declaring scope (nested functions included), or sloppy `arguments`
      * aliasing a parameter. */
@@ -9328,6 +9421,8 @@ class SourceValueFlow {
             const ambient=this.isAmbientIdentifier(node);
             const refined=ambient?null:this.strictEqualityRefinement(node);
             if(refined){for(const atom of refined)this.publish(result,atom);return;}
+            const typeNames=ambient?null:this.typeofRefinement(node);
+            if(typeNames){const narrowed=result;result=this.newCell();this.narrowByType(result,narrowed,typeNames);}
             const binding=this.binding(node);
             if(ambient){let absence!:Rule;absence=this.rule([binding],()=>{
                 if(!this.presenceClosed){this.presenceRules.add(absence);return;}
@@ -11231,6 +11326,9 @@ class SourceValueFlow {
     }
     private sealSourceValue(node:ts.Node,cell:Cell,guardedOnly=false):boolean {
         if(cell.values.nonempty)return false;
+        // A read narrowed by typeof whose every value is of another type is in
+        // a branch that never runs: it completes no value.
+        if(this.narrowedReads.get(cell)?.values.nonempty){this.publish(cell,this.abrupt);return true;}
         const activation=this.enclosingActivation(node);
         if(activation&&!activation.active.values.nonempty)return false;
         const origins=this.sourceOrigins.get(this.sourceFile(node));
