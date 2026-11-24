@@ -5082,8 +5082,8 @@ class SourceValueFlow {
         this.defineField(owner,null,values,true,indices);
         const unknownNumber:Atom={tag:"non-string",kinds:KIND_NUMBER},unknownSymbol:Atom={tag:"non-string",kinds:KIND_SYMBOL};
         let escaped=false;const escapedTrapResults=new Set<Cell>();
-        const incomplete=(effects:boolean):void=>{
-            if(projection==="values"||projection==="entries")this.publish(values,this.unknown);
+        const incomplete=(effects:boolean,valuesKnown=false):void=>{
+            if(projection==="entries"||projection==="values"&&!valuesKnown)this.publish(values,this.unknown);
             else{if(kind!=="symbol")this.publish(values,this.unknownString);if(kind!=="string")this.publish(values,unknownSymbol);}
             this.publish(length,unknownNumber);
             if(effects){this.activateOpaqueEffect(context);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.unknown);
@@ -5132,7 +5132,23 @@ class SourceValueFlow {
                 const nested=[...proxy.target.values].some(value=>!!this.ordinaryOwner(value)?.proxy||value.tag==="unknown"||value.tag==="opaque-object");
                 const method=this.proxyTrapCall(source,"ownKeys",context),returned=this.proxyTrapResults.get(method);
                 if(returned&&!escapedTrapResults.has(returned)){escapedTrapResults.add(returned);this.onActive(context,()=>this.escapeCallableArgument(returned,context));}
-                incomplete(nested);
+                // EnumerableOwnProperties reads each key's descriptor
+                // ([[GetOwnProperty]]: the getOwnPropertyDescriptor trap) and,
+                // for values, its value ([[Get]]: the get trap's result, or
+                // the target's property when the handler has no get trap).
+                let valuesKnown=false;
+                if(projection!=="names"){
+                    this.proxyTrapCall(source,"getOwnPropertyDescriptor",context);
+                    if(projection==="values"&&!nested){
+                        const get=this.proxyTrapCall(source,"get",context),got=this.proxyTrapResults.get(get);
+                        if(got){
+                            this.copy(got,values);valuesKnown=true;
+                            const forwarded=this.newCell();this.publish(forwarded,this.unknownString);this.publish(forwarded,unknownSymbol);
+                            this.rule([get],()=>{for(const atom of get.values)if(atom===this.primitive(undefined)||atom===this.primitive(null)){this.copy(this.computedProperty(proxy.target,forwarded,context),values);break;}});
+                        }
+                    }
+                }
+                incomplete(nested,valuesKnown);
             }else if(uncertain)incomplete(false);else if(!pending)this.publish(length,this.primitive(count));
         }});
         return result;
