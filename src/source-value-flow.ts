@@ -741,21 +741,25 @@ function loopCounterCompare(operator: ts.SyntaxKind, left: Primitive, right: Pri
 /** Solver steps (rule evaluations, initializations, primitive flushes) one
  * source-value solve may perform: a deterministic backstop well above legitimate
  * analyses (ordinary programs use under 50k, the largest property suites
- * a few million); the memory-growth limit bounds runaway ones first.
+ * a few million, the largest Test262 harness programs several million);
+ * the memory-growth limit bounds runaway ones first.
  * TSC2C_SOURCE_ANALYSIS_BUDGET overrides it. */
-const DEFAULT_SOURCE_ANALYSIS_RULE_BUDGET = 20_000_000;
+const DEFAULT_SOURCE_ANALYSIS_RULE_BUDGET = 200_000_000;
 /** Resident-memory growth during one solve above which it stops (checked
- * every 4096 steps).
+ * every 4096 steps). The analysis keeps about 3 KB of live data per value cell
+ * (rules, closures and fact sets), so programs with a few hundred thousand
+ * cells (large Test262 harness programs, property stress inputs) need more
+ * than 3 GB; 32 GB lets them finish on a development workstation.
  * This only ever leaves more dynamic-code sources unproven, which fails
  * closed. TSC2C_SOURCE_ANALYSIS_MEMORY_MB overrides it. */
-const DEFAULT_SOURCE_ANALYSIS_MEMORY_MB = 3072;
+const DEFAULT_SOURCE_ANALYSIS_MEMORY_MB = 32768;
 /** Value cells one solve may allocate before it stops (fail closed like the
  * step budget, and deterministic unlike resident memory): a cascade in which
  * every call site escapes the global object allocates cells without bound,
  * while ordinary programs stay under ten thousand and the largest property
- * stress inputs under four hundred thousand. TSC2C_SOURCE_ANALYSIS_CELLS
- * overrides it. */
-const DEFAULT_SOURCE_ANALYSIS_CELL_BUDGET = 1_000_000;
+ * stress and Test262 harness inputs near or above a million.
+ * TSC2C_SOURCE_ANALYSIS_CELLS overrides it. */
+const DEFAULT_SOURCE_ANALYSIS_CELL_BUDGET = 8_000_000;
 /** Distinct source texts one eval site may contribute before it fails closed
  * as an unknown source (a site enumerating every code unit would otherwise
  * generate tens of thousands of eval code files). TSC2C_EVAL_SOURCE_CHOICES
