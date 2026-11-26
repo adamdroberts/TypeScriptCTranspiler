@@ -40,8 +40,10 @@ function cacheRoot(): string {
 }
 
 /** The cache key covers every input that can change the binary: the two
- * sources, every runtime header they may include, the compiler identity and
- * the exact flags. A stale or foreign binary therefore never matches. */
+ * sources, every runtime header they may include, the compiler identity, the
+ * exact flags and the shared libraries the linker resolves (an ICU upgrade
+ * replaces libicuuc.so.N, which a binary built against the old one cannot
+ * load). A stale or foreign binary therefore never matches. */
 function validatorKey(runtimeDir: string, cc: string): string {
     const hash = crypto.createHash("sha256");
     const headers = fs.readdirSync(runtimeDir).filter((name) => /\.(h|def)$/.test(name)).sort();
@@ -52,6 +54,13 @@ function validatorKey(runtimeDir: string, cc: string): string {
     if (version.status !== 0) throw new RegExpValidatorUnavailableError(`cannot run C compiler ${JSON.stringify(cc)} to validate RegExp literals`);
     hash.update(cc).update("\0").update(version.stdout).update("\0");
     hash.update([...VALIDATOR_FLAGS, ...VALIDATOR_LIBS].join("\0"));
+    for (const lib of VALIDATOR_LIBS) {
+        const resolved = spawnSync(cc, [`-print-file-name=lib${lib}.so`], { encoding: "utf8" });
+        const file = resolved.status === 0 ? resolved.stdout.trim() : "";
+        let identity = file;
+        try { const real = fs.realpathSync(file); identity = `${real}\0${fs.statSync(real).size}`; } catch { /* unresolved: the name alone */ }
+        hash.update("\0lib\0").update(lib).update("\0").update(identity);
+    }
     return hash.digest("hex").slice(0, 32);
 }
 
@@ -100,7 +109,14 @@ function validate(pairs: readonly { pattern: string; flags: string }[]): void {
     if (!pending.length) return;
     const chunks: Buffer[] = [];
     for (const [, { pattern, flags }] of pending) { encodeUnits(pattern, chunks); encodeUnits(flags, chunks); }
-    const run = spawnSync(ensureValidator(), [], { input: Buffer.concat(chunks), maxBuffer: pending.length + 1024 });
+    const input = Buffer.concat(chunks);
+    let run = spawnSync(ensureValidator(), [], { input, maxBuffer: pending.length + 1024 });
+    // A cached binary the loader cannot start (status 127: a shared library
+    // it was linked against is gone) is rebuilt once.
+    if (run.status === 127 && validatorPath) {
+        fs.rmSync(validatorPath, { force: true }); validatorPath = undefined;
+        run = spawnSync(ensureValidator(), [], { input, maxBuffer: pending.length + 1024 });
+    }
     const output = run.stdout ? run.stdout.toString("latin1") : "";
     if (run.status !== 0 || output.length !== pending.length || !/^[kfp]*$/.test(output)) {
         throw new RegExpValidatorUnavailableError(`RegExp literal validator failed (status ${run.status ?? run.signal})`);
