@@ -2711,6 +2711,12 @@ class SourceValueFlow {
         for(let prior=this.capturedAtomInputs.get(source);prior;prior=this.capturedAtomInputs.get(source)){
             constraints=this.captureConstraintSet([...constraints.phases,...prior.constraints.phases]);source=prior.source;
         }
+        // A text operation is projected under one read phase at most: each
+        // composition of phases (an accumulator such as `trace += x` read in
+        // many callbacks, each read re-projecting the others' views) would
+        // otherwise make one view per set of phases. A phase only filters, so
+        // the view under fewer phases, or the operation itself, over-approximates.
+        if(constraints.phases.length>1)return atom;
         let views=this.capturedAtoms.get(source);if(!views){views=new Map();this.capturedAtoms.set(source,views);}
         let projected=views.get(constraints);
         if(!projected){
