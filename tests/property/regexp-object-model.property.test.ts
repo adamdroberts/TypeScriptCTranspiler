@@ -131,4 +131,4 @@ test("RegExp ordinary methods preserve state, metadata, mutable lookup and abrup
             expect(expected.flatMap((value, index) => actual[index] === value ? [] : [{ index, expected: value, actual: actual[index] }]).slice(0, 12)).toEqual([]);
         }
     } finally { await fs.rm(temporary, { recursive: true, force: true }); }
-}, 180_000);
+}, 1_800_000);

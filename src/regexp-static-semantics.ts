@@ -51,7 +51,7 @@ function validatorKey(runtimeDir: string, cc: string): string {
         hash.update(name).update("\0").update(fs.readFileSync(path.join(runtimeDir, name))).update("\0");
     }
     const version = spawnSync(cc, ["--version"], { encoding: "utf8" });
-    if (version.status !== 0) throw new RegExpValidatorUnavailableError(`cannot run C compiler ${JSON.stringify(cc)} to validate RegExp literals`);
+    if (version.status !== 0) throw new RegExpValidatorUnavailableError(`cannot run C compiler ${JSON.stringify(cc)} to validate RegExp literals (${version.error?.message ?? `status ${version.status ?? version.signal}`})`);
     hash.update(cc).update("\0").update(version.stdout).update("\0");
     hash.update([...VALIDATOR_FLAGS, ...VALIDATOR_LIBS].join("\0"));
     for (const lib of VALIDATOR_LIBS) {
