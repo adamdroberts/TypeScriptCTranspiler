@@ -122,6 +122,7 @@ const shapes:Record<string,{source:string;exact:string[]|null}>={
  fallbackThrows:{source:`var w='1';try{"ab".padEnd({valueOf(){throw 'p'}})}catch(e){w=typeof e}${P}`,exact:null},
  sequenceProtocol:{source:`var w='1';RegExp.prototype[Symbol.search]=function(){w='5';return 0};var f=[String.prototype.match,String.prototype.search];for(var g of f){var r=g.call("ab","a")}${P}`,exact:null},
  reviverCycle:{source:`var w='1';try{JSON.parse('[1,[]]',function(k,v){if(k==='0')this[1]=this;return v})}catch(e){w=e instanceof RangeError?'R':'o'}${P}`,exact:null},
+ reviverUnknownIndex:{source:`var w='1';JSON.parse('[1,[]]',function(k,v){if(v===1)this[1].push({toString(){w='2';return ''}});if(k==='0'&&typeof v==='object')String(v);return v});${P}`,exact:null},
  stress:{source:`var w='1';var m={[Symbol.match](s){return null}};${Array.from({length:256},(_,k)=>['"ab".match(m);','"ab".search({[Symbol.search](){return 0}});','"ab".padStart(4);','"ab".split({[Symbol.split](){return []}});'][k%4]).join('')}${P}`,exact:["print('1')"]},
 };
 
@@ -156,6 +157,7 @@ test('String prototype methods dispatch to their argument protocol, sound agains
  expect(observed[names.indexOf('fallbackThrows')]).toEqual(["print('string')"]);
  expect(observed[names.indexOf('sequenceProtocol')]).toEqual(["print('5')"]);
  expect(observed[names.indexOf('reviverCycle')]).toEqual(["print('R')"]);
+ expect(observed[names.indexOf('reviverUnknownIndex')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('constantWrite')]).toEqual(["print('3.141592653589793:2.220446049250313e-16')"]);
  expect(observed[names.indexOf('localeInvokesToString')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('arrayFromGetter')]).toEqual(["print('13')"]);

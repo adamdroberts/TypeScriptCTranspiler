@@ -8531,7 +8531,9 @@ class SourceValueFlow {
         const read=():SourceJSONRecord=>{
             whitespace();const c=text[offset];
             if(c==='{'||c==='['){
-                offset++;const array=c==='[',owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:array?this.arrayPrototype():this.objectPrototype(),ordinary:true};this.copy(this.opaqueMutation,owner.shape);
+                // A parsed object exists from the parse on: an opaque effect
+                // that precedes the JSON.parse call cannot have mutated it.
+                offset++;const array=c==='[',owner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:array?this.arrayPrototype():this.objectPrototype(),ordinary:true};this.ownerCreations.set(owner,context);this.ownerMutation(owner);
                 const record:SourceJSONRecord={value:{tag:"object",owner},children:new Map(),source:null,array};pending.push({record});return record;
             }
             const source=token();return {value:this.primitive(JSON.parse(source)),children:new Map(),source,array:false};
@@ -8560,10 +8562,13 @@ class SourceValueFlow {
         const holderOwner:ObjectOwner={fields:new Map(),accessors:new Map(),shape:this.newCell(),prototype:this.objectPrototype()},holder=this.newCell();this.publish(holder,{tag:"object",owner:holderOwner});this.defineField(holderOwner,"",cell(snapshot.value),true);
         const entries=new Map<string,Cell>(),records=new Map<SourceJSONRecord,number>();let nextRecord=0;
         const fail=(output:Cell)=>{this.publish(output,this.unknown);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.unknown);this.activateOpaqueEffect(context);};
-        const visit=(receiver:Cell,key:string,record:SourceJSONRecord|null,ancestors:ReadonlySet<ObjectOwner>):Cell=>{
+        // A null key is an index the walk cannot name (an array of unknown
+        // length or positions): its value is the element at any index, the
+        // reviver receives some index String, and the write-back goes to any index.
+        const visit=(receiver:Cell,key:string|null,record:SourceJSONRecord|null,ancestors:ReadonlySet<ObjectOwner>):Cell=>{
             if(record&&!records.has(record))records.set(record,nextRecord++);
             const signature=receiver.id+":"+JSON.stringify(key)+":"+(record?records.get(record):"changed")+":"+[...ancestors].map(owner=>owner.shape.id).join(","),prior=entries.get(signature);if(prior)return prior;
-            const result=this.newCell(),read=this.property(receiver,key,context),callbackValue=this.newCell(),callbackContext=this.newCell(),name=this.newCell();entries.set(signature,result);this.publish(name,this.primitive(key));
+            const result=this.newCell(),read=key===null?this.computedProperty(receiver,this.anyNumberKey(),context):this.property(receiver,key,context),callbackValue=this.newCell(),callbackContext=this.newCell(),name=this.newCell();entries.set(signature,result);this.publish(name,key===null?this.unknownString:this.primitive(key));
             this.invoke(context,callee,receiver,[{cell:name,spread:false},{cell:callbackValue,spread:false},{cell:callbackContext,spread:false}],result);
             // An object's context is {} (no source); one serves every object
             // value of this visit. Each chain over an object's keys is built
@@ -8604,14 +8609,20 @@ class SourceValueFlow {
                 // share one visit per key instead of one chain each (their
                 // count is exponential in the uncertain keys, and each
                 // chain's children recurse with fresh receivers).
-                const chain:{key:string;skippable:boolean}[]=[];
+                const chain:{key:string|null;skippable:boolean}[]=[];
                 if(owner.listLength){
                     const length=this.primitiveState(owner.listLength,open,true);if(length.pending&&!length.unresolved)continue;
                     const positions=this.indexedPropertyPositions(cell(atom),context,open);if(positions===undefined)continue;
-                    if(!length.proof.primitiveComplete||positions===null){opened.add(atom);fail(result);continue;}
+                    // An unknown extent or index set: the known indices, then one
+                    // visit standing for every other index, each possibly skipped.
+                    if(!length.proof.primitiveComplete||positions===null){
+                        for(const index of positions??[])chain.push({key:String(index),skippable:true});
+                        chain.push({key:null,skippable:true});
+                    }else{
                     const extents:number[]=[];
                     for(const value of length.proof.values){const extent=Number(value),keys=positions.filter(index=>index<extent);if(!Number.isSafeInteger(extent)||extent<0||keys.length!==extent){fail(result);continue;}extents.push(extent);}
                     if(extents.length){const shortest=Math.min(...extents),longest=Math.max(...extents);for(let index=0;index<longest;index++)chain.push({key:String(index),skippable:index>=shortest});}
+                    }
                 }else {
                     const ownKeys=this.ownerKeys(owner,open);if(ownKeys===undefined)continue;if(ownKeys===null){opened.add(atom);fail(result);continue;}
                     const keys=ownKeys.filter((key):key is string=>typeof key==="string").sort((a,b)=>{const ai=Number(a),bi=Number(b),ia=String(ai)===a&&Number.isInteger(ai)&&ai>=0&&ai<0xffffffff,ib=String(bi)===b&&Number.isInteger(bi)&&bi>=0&&bi<0xffffffff;return ia&&ib?ai-bi:ia?-1:ib?1:0;});
@@ -8641,10 +8652,10 @@ class SourceValueFlow {
                 let current=gate();this.publish(current,atom);
                 for(const {key,skippable} of chain){
                     const selected=current;
-                    const child=visit(selected,key,unmodified?record?.children.get(key)??null:null,path),stored=this.newCell(),removed=this.newCell();
+                    const child=visit(selected,key,unmodified&&key!==null?record?.children.get(key)??null:null,path),stored=this.newCell(),removed=this.newCell();
                     this.rule([child],()=>{for(const value of child.values){if(value.tag==="abrupt"||value.tag==="pending-source")continue;if(value===this.primitive(undefined))this.publish(removed,value);else this.publish(stored,value);}});
-                    this.rule([stored],()=>{if(stored.values.nonempty)this.writeProperty(selected,key,stored,true,"define",context);});
-                    this.rule([removed],()=>{if(removed.values.nonempty)this.writeProperty(selected,key,removed,true,"delete",context);});
+                    this.rule([stored],()=>{if(stored.values.nonempty)this.writeProperty(selected,key,stored,true,"define",context,selected,key===null?this.anyNumberKey():undefined);});
+                    this.rule([removed],()=>{if(removed.values.nonempty)this.writeProperty(selected,key,removed,true,"delete",context,selected,key===null?this.anyNumberKey():undefined);});
                     const next=gate();advance(selected,child,skippable,next);current=next;
                 }
                 const done=current,contextValue=objectContext??=freshContext().value;this.rule([done],()=>{if(done.values.nonempty){this.publish(callbackValue,atom);this.copy(contextValue,callbackContext);}});
