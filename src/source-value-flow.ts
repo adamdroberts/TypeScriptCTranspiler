@@ -8589,7 +8589,11 @@ class SourceValueFlow {
                     opened.add(atom);if(atom.tag==="unknown"||atom.tag==="opaque-object"){fail(result);continue;}
                     this.publish(callbackValue,atom);this.copy(contextValue,callbackContext);continue;
                 }
-                if(ancestors.has(owner)){opened.add(atom);fail(result);continue;}
+                // A value that is one of its own holders makes
+                // InternalizeJSONProperty recurse without end: the walk ends
+                // in stack exhaustion (a RangeError), and its repeated reviver
+                // calls are the (holder, key) visits already modelled.
+                if(ancestors.has(owner)){opened.add(atom);this.publish(result,this.abrupt);const handler=this.exceptionHandlers.get(context);if(handler)this.publish(handler,this.nativeException(context,"RangeError"));continue;}
                 this.watch(open,owner.shape);if(!this.definitionsReady(owner,open))continue;
                 if(this.opaqueShape(owner,context)||owner.proxy||owner.accessors.has(null)){opened.add(atom);fail(result);continue;}
                 // The keys InternalizeJSONProperty may visit, in order, and
