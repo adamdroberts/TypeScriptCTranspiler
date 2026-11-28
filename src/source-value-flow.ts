@@ -4015,6 +4015,20 @@ class SourceValueFlow {
         this.activateConditionalEffect(context, source, atom => !this.isNativeValue(atom) && atom.tag !== "primitive" && atom.tag !== "non-string" && atom.tag !== "unknown-string" &&
             atom.tag !== "text-operation" && atom.tag !== "abrupt" && atom.tag !== "pending-source");
     }
+    /** The receiver of OrdinaryToPrimitive's method calls for one object at
+     * one site and hint. Sharing it across conversions lets an object whose
+     * conversion converts itself (an Array that contains itself, joined by
+     * its toString) meet the same memoized toString and join cells instead
+     * of making new ones at every level. */
+    private readonly conversionReceivers=new WeakMap<object,Map<PrimitiveHint,Map<Atom,Cell>>>();
+    private readonly conversionWithoutContext={};
+    private conversionReceiver(atom:Atom,context:ts.Node|undefined,hint:PrimitiveHint):Cell {
+        const site=context??this.conversionWithoutContext;
+        let hints=this.conversionReceivers.get(site);if(!hints){hints=new Map();this.conversionReceivers.set(site,hints);}
+        let atoms=hints.get(hint);if(!atoms){atoms=new Map();hints.set(hint,atoms);}
+        let receiver=atoms.get(atom);if(!receiver){receiver=this.newCell();this.publish(receiver,atom);atoms.set(atom,receiver);}
+        return receiver;
+    }
     private primitiveConversion(source: Cell, context?: ts.Node, hint: PrimitiveHint = "string"): Cell {
         let contexts = this.hintPrimitives.get(source);
         if (!contexts) { contexts = new Map(); this.hintPrimitives.set(source, contexts); }
@@ -4102,7 +4116,7 @@ class SourceValueFlow {
                 }
                 if (!ready || selected.has(atom)) continue;
                 selected.add(atom);
-                const receiver = this.newCell(); this.publish(receiver, atom);
+                const receiver = this.conversionReceiver(atom, context, hint);
                 const methods = ORDINARY_PRIMITIVE_METHODS.get(hint)!;
                 const scheduled = new Set<number>();
                 const advance = (index: number): void => {

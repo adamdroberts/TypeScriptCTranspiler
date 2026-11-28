@@ -23,7 +23,9 @@ import {nodeReferenceSync} from './node-reference';
  * the text graph (an unproven text) instead of unrolling a join per level: a
  * non-cyclic join stays exact, and the listed texts include what Node prints
  * (its empty String for the cycle, a superset of the spec run, which throws
- * before the eval). */
+ * before the eval). A callback that maps itself over nested Arrays makes
+ * the allocation site's Array an element of itself: its conversion meets
+ * the same receiver at every level and settles. */
 
 const N=(name:string,body:string)=>`t(${JSON.stringify(name)},()=>{${body}});`;
 const runtimeShapes=[
@@ -74,6 +76,7 @@ const analysisShapes:Record<string,{source:string;exact?:string[]}>={
  nestedSeparator:{source:`const b=[1,[3,4]];b[1][0]=b;${P('b.join("-")')}`},
  viaObject:{source:`const a=[];const o={toString(){return "<"+a.join("+")+">"}};a.push(o,2);${P('String(a)')}`},
  sameSite:{source:`function mk(x,inner){return [x,inner]}const p=mk(1,null),q=mk(2,p);${P('String(q)')}`},
+ recursiveMap:{source:`function e(v){if(Array.isArray(v))return v.map(e);return "x"}const r=e([["a"],"b"]);${P('r.join("|")')}`},
  exact:{source:`const a=[1,[2,[3,4]]];${P('a.join("-")+"|"+String(a)+"|"+[5,6].join()')}`,exact:["print('1-2,3,4|1,2,3,4|5,6')"]},
  stress:{source:`let a=[0];${Array.from({length:depth},(_,i)=>`a=[a,${i}];`).join('')}let x=a;${'x=x[0];'.repeat(depth)}x[0]=a;${P('String(a).length')}`},
 };
