@@ -3256,6 +3256,7 @@ class SourceValueFlow {
         return false;
     }
     private bindingDefinitelyInTDZ(node:ts.Identifier):boolean {
+        if(this.forHeadBoundNameReference(node))return true;
         // This syntactic dominance proof is only for captured caller references;
         // general lexical activation/initialization precision stays conservative.
         if(!this.evaluationCallerTargets.has(node))return false;
@@ -3266,6 +3267,24 @@ class SourceValueFlow {
                 ts.isVariableDeclarationList(binding.parent)&&!!(binding.parent.flags&ts.NodeFlags.BlockScoped);
             if(!lexical||binding.getSourceFile()!==this.sourceFile(node)||this.enclosingActivation(binding)!==this.enclosingActivation(node))continue;
             if(node.getEnd()<=binding.getStart())return true;
+        }
+        return false;
+    }
+    /** ForIn/OfHeadEvaluation (14.7.5.6) evaluates the head expression of
+     * `for (let|const names of|in expression)` in a new environment holding
+     * the declaration's bound names, uninitialized: a reference to one of
+     * them in that expression, outside any nested function, is a
+     * ReferenceError. */
+    private forHeadBoundNameReference(node:ts.Identifier):boolean {
+        for(const declaration of this.bindingSymbol(node)?.declarations??[]){
+            let binding:ts.Node=declaration;
+            while(ts.isBindingElement(binding))binding=binding.parent.parent;
+            if(!ts.isVariableDeclaration(binding)||!ts.isVariableDeclarationList(binding.parent)||!(binding.parent.flags&ts.NodeFlags.BlockScoped))continue;
+            const statement=binding.parent.parent;
+            if(!(ts.isForOfStatement(statement)||ts.isForInStatement(statement))||statement.initializer!==binding.parent)continue;
+            const head=statement.expression;
+            if(node.getStart()<head.getStart()||node.getEnd()>head.getEnd()||node.getSourceFile()!==head.getSourceFile())continue;
+            if(this.enclosingActivation(node)===this.enclosingActivation(statement))return true;
         }
         return false;
     }

@@ -6,7 +6,8 @@ import {nodeReferenceSync} from './node-reference';
  * binding to undefined when the declaration is evaluated. Reads before any
  * write, logical assignments that name an anonymous function after the
  * binding, writes in closures, loops and switch cases all start from that
- * undefined. Each generated program evaluates the text of what it read; the
+ * undefined. A for-in/of head expression runs where the loop's own bound
+ * names exist uninitialized, so naming one there is a ReferenceError. Each generated program evaluates the text of what it read; the
  * graph must fail closed or contain every source Node evaluates, and the
  * straight-line forms must stay finite. A 256-deep chain of blocks, each
  * declaring a binding without an initializer and writing it from the
@@ -25,6 +26,9 @@ const shapes:Record<string,string>={
  switchCase:'switch(1){case 1:let x;observe(String(x));}',
  typeofRead:'{let x;observe(typeof x);}',
  forOfHead:'for(let item of ["4;"])observe(item);',
+ forOfHeadSelf:'try{for(let self of self){}}catch(error){observe(error.name+";")}observe("6;");',
+ forInHeadSelf:'try{for(let key in key){}}catch(error){observe(error.name+";")}observe("7;");',
+ forOfHeadPattern:'try{for(const [a,b=a] of a){}}catch(error){observe(error.name+";")}observe("8;");',
 };
 
 test('lexical declarations without initializers start as undefined',()=>{
