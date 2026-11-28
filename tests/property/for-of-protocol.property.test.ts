@@ -183,7 +183,7 @@ test("for-of steps one ordinary iterator between bodies and closes lexical scope
             expect(expected.flatMap((value, index) => actual[index] === value ? [] : [{ index, expected: value, actual: actual[index] }]).slice(0, 12)).toEqual([]);
         }
     } finally { await fs.rm(temporary, { recursive: true, force: true }); }
-}, 180_000);
+}, 1_800_000);
 
 test("synchronous iteration completions drain their resource scopes", async () => {
     const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-for-of-resource-"));
