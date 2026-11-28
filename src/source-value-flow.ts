@@ -671,6 +671,9 @@ const CONDITIONAL_EFFECT_RECORDS = 16;
 /** Iterator.prototype helpers that return an Iterator Helper object. */
 const LAZY_ITERATOR_HELPERS:ReadonlySet<string>=new Set(["map","filter","take","drop","flatMap"].map(name=>`iterator-helper:${name}`));
 const CAPTURE_COMPOSITION_BOUND = 8;
+/** A typeof refinement in the split form (null apart from "object") that
+ * selects no null. */
+const SPLIT_WITHOUT_NULL = "split:no-null";
 /** Read phases one cell or text operation is viewed under. Every view
  * stores the visible values of its source's copy closure, so n reads of a
  * cell holding m values (an array's `length` after m pushes, read by each
@@ -9294,19 +9297,60 @@ class SourceValueFlow {
             }
             return names;
         };
+        // The names an `if` with no else rules out for the statements after
+        // it when its taken branch cannot complete normally: each disjunct
+        // `typeof x === "T"` rules out T (and null with "object"), `x === null`
+        // rules out null. Any break or continue in that branch also leaves
+        // the statement list the read is in.
+        const excluded=(condition:ts.Expression):string[]|null=>{
+            const value=unwrap(condition);
+            if(ts.isBinaryExpression(value)&&value.operatorToken.kind===ts.SyntaxKind.BarBarToken){
+                const left=excluded(value.left),right=excluded(value.right);return left&&right?[...left,...right]:null;
+            }
+            if(ts.isBinaryExpression(value)&&value.operatorToken.kind===ts.SyntaxKind.EqualsEqualsEqualsToken){
+                if(sameBinding(value.left)&&unwrap(value.right).kind===ts.SyntaxKind.NullKeyword||sameBinding(value.right)&&unwrap(value.left).kind===ts.SyntaxKind.NullKeyword)return ["null"];
+            }
+            const names=proven(value);
+            if(!names||value.kind===ts.SyntaxKind.BinaryExpression&&(value as ts.BinaryExpression).operatorToken.kind===ts.SyntaxKind.AmpersandAmpersandToken)return null;
+            return [...names].flatMap(text=>text==="object"?["object","null"]:[text]);
+        };
+        const abrupt=(statement:ts.Statement):boolean=>{
+            if(ts.isReturnStatement(statement)||ts.isThrowStatement(statement))return true;
+            if(!ts.isBlock(statement))return false;
+            const last=statement.statements[statement.statements.length-1];
+            return !!last&&(ts.isReturnStatement(last)||ts.isThrowStatement(last));
+        };
+        const ruledOut=new Set<string>();
+        let positive:ReadonlySet<string>|null=null;
         for(let child:ts.Node=node,parent=node.parent;parent;child=parent,parent=parent.parent){
             if(functionNode(parent))break;
-            let refined:ReadonlySet<string>|null=null;
-            if(ts.isIfStatement(parent)&&child===parent.thenStatement)refined=proven(parent.expression);
-            else if(ts.isConditionalExpression(parent)&&child===parent.whenTrue)refined=proven(parent.condition);
-            else if(ts.isBinaryExpression(parent)&&parent.operatorToken.kind===ts.SyntaxKind.AmpersandAmpersandToken&&child===parent.right)refined=proven(parent.left);
+            if((ts.isBlock(parent)||ts.isSourceFile(parent)||ts.isCaseOrDefaultClause(parent)||ts.isModuleBlock(parent))&&ts.isStatement(child as ts.Node)){
+                const statements=parent.statements as ts.NodeArray<ts.Statement>;
+                for(let index=statements.indexOf(child as ts.Statement)-1;index>=0;index--){
+                    const statement=statements[index]!;
+                    if(!ts.isIfStatement(statement)||statement.elseStatement||!abrupt(statement.thenStatement))continue;
+                    for(const text of excluded(statement.expression)??[])ruledOut.add(text);
+                }
+            }
+            if(positive)continue;
+            if(ts.isIfStatement(parent)&&child===parent.thenStatement)positive=proven(parent.expression);
+            else if(ts.isConditionalExpression(parent)&&child===parent.whenTrue)positive=proven(parent.condition);
+            else if(ts.isBinaryExpression(parent)&&parent.operatorToken.kind===ts.SyntaxKind.AmpersandAmpersandToken&&child===parent.right)positive=proven(parent.left);
             else if(ts.isCaseClause(parent)&&child!==parent.expression){
                 const split=discriminant(parent.parent.parent.expression);
-                if(split){const names=clauseNames(parent);if(names)refined=split.split?names:new Set([...names].map(text=>text==="null"?"":text));}
+                if(split){const names=clauseNames(parent);if(names)positive=split.split?names:new Set([...names].map(text=>text==="null"?"":text));}
             }
-            if(refined)return this.refinementBlocked(declaration)?null:refined;
         }
-        return null;
+        if(!positive&&!ruledOut.size)return null;
+        if(this.refinementBlocked(declaration))return null;
+        if(!ruledOut.size)return positive;
+        // Exclusions use the split form, where "object" names non-null
+        // objects and "null" names null.
+        const universe=positive?[...positive].flatMap(text=>text==="object"&&!positive!.has("null")?["object","null"]:[text]):
+            ["undefined","null","object","boolean","number","bigint","string","symbol","function"];
+        const names=new Set(universe.filter(text=>!ruledOut.has(text)));
+        if(!names.has("null"))names.add(SPLIT_WITHOUT_NULL);
+        return names;
     }
     /** The values of `source` whose typeof (or "null") is one of `names`. An
      * unknown value narrows to an unknown value of each selected type; an
@@ -9314,7 +9358,7 @@ class SourceValueFlow {
      * typeof is "undefined" (B.3.6), so "undefined" keeps it. */
     private readonly narrowedReads=new WeakMap<Cell,Cell>();
     private narrowByType(source:Cell,target:Cell,names:ReadonlySet<string>):void {
-        const split=names.has("null"),selected=new Set<Atom>();this.narrowedReads.set(target,source);
+        const split=names.has("null")||names.has(SPLIT_WITHOUT_NULL),selected=new Set<Atom>();this.narrowedReads.set(target,source);
         this.rule([source],()=>{for(const atom of source.values){
             if(selected.has(atom))continue;selected.add(atom);
             if(atom.tag==="abrupt"||atom.tag==="pending-source"){this.publish(target,atom);continue;}
@@ -9329,9 +9373,11 @@ class SourceValueFlow {
                 if(names.has("object")||names.has("function"))this.publish(target,atom);
                 continue;
             }
-            const kinds=this.primitiveKinds(this.atomCell(atom));
+            // Only a host object can be [[IsHTMLDDA]]; one the program created
+            // has typeof "object".
+            const kinds=this.primitiveKinds(this.atomCell(atom)),host=!this.ordinaryOwner(atom)||this.isNativeValue(atom);
             const mask=(names.has("string")?KIND_STRING:0)|(names.has("number")?KIND_NUMBER:0)|(names.has("bigint")?KIND_BIGINT:0)|(names.has("symbol")?KIND_SYMBOL:0)|
-                (names.has("boolean")?KIND_BOOLEAN:0)|(names.has("undefined")?KIND_UNDEFINED|KIND_OBJECT:0)|(names.has("null")||names.has("object")&&!split?KIND_NULL:0)|
+                (names.has("boolean")?KIND_BOOLEAN:0)|(names.has("undefined")?KIND_UNDEFINED|(host?KIND_OBJECT:0):0)|(names.has("null")||names.has("object")&&!split?KIND_NULL:0)|
                 (names.has("object")?KIND_OBJECT:0)|(names.has("function")?KIND_FUNCTION:0);
             if(!kinds||kinds&mask)this.publish(target,atom);
         }});

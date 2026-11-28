@@ -114,6 +114,10 @@ const shapes:Record<string,{source:string;exact:string[]|null}>={
  textInherited:{source:`var w='1';String.prototype.zz=function(){w='3'};var s=String(Math.max);var k=["zz"];for(var n of k)s[n]();${P}`,exact:null},
  typeofNarrowing:{source:`var w='1';function f(v){switch(v===null?'null':typeof v){case 'string':return JSON.stringify(v);case 'number':return String(v);}if(typeof v==='bigint')return String(v)}f({toJSON(){w='2';return 1},toString(){w='3';return ''}});f("a");f(null);f(1n);${P}`,exact:["print('1')"]},
  typeofFallthrough:{source:`var w='1';function f(v){switch(typeof v){case 'object':v;case 'string':return String(v);}}f({toString(){w='3';return ''}});${P}`,exact:null},
+ typeofExcluded:{source:`var w='1';function f(v){if(v===null)return 'n';if(typeof v==='object'||typeof v==='function')return 'o';return String(v)}f({toString(){w='3';return ''}});f(1);f(null);${P}`,exact:["print('1')"]},
+ typeofExcludedBlock:{source:`var w='1';function f(v){if(typeof v==='object'){var t=v;throw 'x'}return String(v)}try{f({toString(){w='3';return ''}})}catch(e){}f(2);${P}`,exact:["print('1')"]},
+ typeofNotExcluded:{source:`var w='1';function f(v){if(typeof v==='object'){v.k=1}return String(v)}f({toString(){w='3';return ''}});${P}`,exact:null},
+ typeofExcludedRewritten:{source:`var w='1';function f(v){if(typeof v==='object')return 'o';v={toString(){w='3';return ''}};return String(v)}f(1);${P}`,exact:null},
  nativeThrown:{source:`var w='1';var v=Object.getOwnPropertyDescriptors(Math).abs.value;Function.prototype.valueOf=function(){throw 'q'};try{var t=1/v}catch(e){w=typeof e}${P}`,exact:null},
  nativeConversionError:{source:`var w='1';var v=Object.getOwnPropertyDescriptors(Math).abs.value;try{var t=1/v;var u=v.zz}catch(e){w=typeof e}${P}`,exact:["print('1')","print('object')"]},
  mixedWrappers:{source:`var w='1';var o=[Number,Boolean];for(var i=0;i<2;i++){var c=o[i];var x=new c(1);x.valueOf();}${P}`,exact:["print('1')"]},
@@ -152,6 +156,8 @@ test('String prototype methods dispatch to their argument protocol, sound agains
  expect(observed[names.indexOf('nativeDescriptorWriter')]).toEqual(["print('2')"]);
  expect(observed[names.indexOf('textInherited')]).toEqual(["print('3')"]);
  expect(observed[names.indexOf('typeofFallthrough')]).toEqual(["print('3')"]);
+ expect(observed[names.indexOf('typeofNotExcluded')]).toEqual(["print('3')"]);
+ expect(observed[names.indexOf('typeofExcludedRewritten')]).toEqual(["print('3')"]);
  expect(observed[names.indexOf('nativeThrown')]).toEqual(["print('string')"]);
  expect(observed[names.indexOf('nativeConversionError')]).toEqual(["print('1')"]);
  expect(observed[names.indexOf('fallbackThrows')]).toEqual(["print('string')"]);
