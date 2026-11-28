@@ -506,6 +506,8 @@ class SourceFacts implements Iterable<Atom> {
     /** The unknown atoms stored here, in insertion order. */
     ownUnknownValues():IterableIterator<Atom>{return (this.ownUnknown??noAtoms).values();}
     ownHas(atom:Atom):boolean{return this.own.has(atom);}
+    /** How many unknown atoms are stored here. */
+    ownUnknownCount():number{return this.ownUnknown?.size??0;}
     /** The reachable atoms, first-seen order. The traversal runs no other
      * code, so nothing grows during it and the result is always cached. */
     private flatten():readonly Atom[]{
@@ -669,6 +671,20 @@ const CONDITIONAL_EFFECT_RECORDS = 16;
 /** Iterator.prototype helpers that return an Iterator Helper object. */
 const LAZY_ITERATOR_HELPERS:ReadonlySet<string>=new Set(["map","filter","take","drop","flatMap"].map(name=>`iterator-helper:${name}`));
 const CAPTURE_COMPOSITION_BOUND = 8;
+/** Read phases one cell or text operation is viewed under. Every view
+ * stores the visible values of its source's copy closure, so n reads of a
+ * cell holding m values (an array's `length` after m pushes, read by each
+ * push) would store n·m values, and each projected operation adds views of
+ * its parts; past the bound a read takes the source or operation itself,
+ * which over-approximates every one of its filtered views. */
+const CAPTURE_VIEW_BOUND = 16;
+/** Distinct unknown origins one capture view keeps. An origin only lets a
+ * read filter the unknown out where its effect is not yet visible; the
+ * origin-free unknown is visible everywhere, so past the bound it stands
+ * for the rest. A view walking n cells that each hold one origin otherwise
+ * stores n, and every view of a value written along a long call chain
+ * holds the whole chain. */
+const CAPTURE_ORIGIN_BOUND = 32;
 /** Operand combinations one text operation's value proof may enumerate. Each
  * combination is evaluated and its result interned, so a JSON text, join or
  * concatenation over many independent choices (24 two-way properties already
@@ -1214,6 +1230,9 @@ class SourceValueFlow {
     private readonly templateObjects=new Map<ts.TaggedTemplateExpression,Cell>();
     private readonly confinedLiterals=new WeakMap<ts.Node,boolean>();
     private readonly readCaptures = new Map<Cell,Map<SourceCaptureConstraints,Cell>>();
+    /** Per capture source, one relay rule watching the writer activations
+     * its views' walks reach; each view watches the relay's cell. */
+    private readonly captureWriterRelays = new Map<Cell,{cell:Cell;rule:Rule}>();
     private readonly empty = this.newCell();
     private readonly globalMutation = this.newCell();
     private readonly globalReceiver = this.newCell();
@@ -2724,12 +2743,35 @@ class SourceValueFlow {
         let views=this.capturedAtoms.get(source);if(!views){views=new Map();this.capturedAtoms.set(source,views);}
         let projected=views.get(constraints);
         if(!projected){
+            if(views.size>=CAPTURE_VIEW_BOUND)return atom;
             const original=source as Extract<Atom,{tag:"text-operation"}>;
             projected={...original,parts:original.parts.map(part=>this.captureProjection(part,constraints))};views.set(constraints,projected);
             const phases=this.extendPhases(this.projectedAtomPhases.get(source),constraints.phases);if(phases)this.projectedAtomPhases.set(projected,phases);
             this.capturedAtomInputs.set(projected,{source,constraints});
         }
         return projected;
+    }
+    /** The views of one source are one per read phase (n reads of a
+     * value written by m activations), and their walks reach the same
+     * writers. Each view watching each writer's activity and timing holds
+     * O(n·m) subscriptions; the relay holds O(n+m) and reschedules every
+     * view of the source when a writer changes, which is what the views'
+     * own subscriptions did, as all of them walk the same written cells. */
+    private captureWriterRelay(source:Cell):{cell:Cell;rule:Rule} {
+        let relay=this.captureWriterRelays.get(source);
+        if(!relay){
+            const cell=this.newCell();
+            relay={cell,rule:this.rule([],()=>{if(cell.users)for(const user of cell.users)this.schedule(user);})};
+            this.captureWriterRelays.set(source,relay);
+        }
+        return relay;
+    }
+    /** Subscribe a relay without running it: the view adding the input reads
+     * that input's current facts itself, and no other view depends on it
+     * until its own walk reaches it and adds it. */
+    private relayWatch(rule:Rule,cell:Cell):void {
+        if(rule.inputs.has(cell))return;
+        rule.inputs.add(cell);(cell.users??=new Set()).add(rule);
     }
     private captureProjection(from:Cell,input:SourceCapturePhase|SourceCaptureConstraints):Cell {
         const initial=this.captureConstraintSet(input.kind==="capture"?[input]:input.phases);
@@ -2749,6 +2791,7 @@ class SourceValueFlow {
             let views=this.readCaptures.get(source);if(!views){views=new Map();this.readCaptures.set(source,views);}
             let target=views.get(constraints);
             if(!target){
+                if(views.size>=CAPTURE_VIEW_BOUND)return source;
                 target=this.newCell();views.set(constraints,target);
                 this.captureInputs.set(target,{source,constraints});
                 const phases=this.extendPhases(inherited,constraints.phases);if(phases)this.projectedCellPhases.set(target,phases);
@@ -2758,7 +2801,7 @@ class SourceValueFlow {
         };
         const captured=project(from);
         const extend=()=>{while(pending.length){
-            const {source,target,constraints}=pending.pop()!,activations=[...new Set(constraints.phases.map(phase=>phase.activationOnly??this.enclosingActivation(phase.context)).filter((owner):owner is FunctionOwner=>!!owner))];
+            const {source,target,constraints}=pending.pop()!,writers=this.captureWriterRelay(source),activations=[...new Set(constraints.phases.map(phase=>phase.activationOnly??this.enclosingActivation(phase.context)).filter((owner):owner is FunctionOwner=>!!owner))];
             let read!:Rule;
             read=this.rule([source,...activations.flatMap(owner=>[owner.active,this.activationTiming(owner)])],()=>{
                 if(activations.some(owner=>!owner.active.values.nonempty))return;
@@ -2800,7 +2843,7 @@ class SourceValueFlow {
                         const written=this.knownWriteOrigins.get(source);
                         if(written){
                             const actor=this.enclosingActivation(written.origin);
-                            if(actor){this.watch(read,actor.active);this.watch(read,this.activationTiming(actor));}
+                            if(actor){this.watch(read,writers.cell);this.relayWatch(writers.rule,actor.active);this.relayWatch(writers.rule,this.activationTiming(actor));}
                             let visible=true;
                             for(const phase of constraints.phases){
                                 if(!visible)break;
@@ -2829,6 +2872,7 @@ class SourceValueFlow {
                         // target needs no repeated visibility proof on later reruns.
                         if(atom.tag!=="text-operation"&&target.values.ownHas(atom))continue;
                         if(origins&&atom.tag!=="unknown"||constraints.phases.some(phase=>!phase.activationOnly&&!this.effectVisible(atom,phase.context,phase.argumentsRead)))continue;
+                        if(atom.tag==="unknown"&&atom.origin&&target.values.ownUnknownCount()>=CAPTURE_ORIGIN_BOUND){this.publish(target,this.unknown);continue;}
                         this.publish(target,atom.tag==="text-operation"?this.captureAtom(atom,constraints):atom);
                     }
                     for(const [facts,kind]of source.values.sources){cells.push(this.sourceCells.get(facts)!);modes.push(origins||kind==="origin"?1:2);}
@@ -3672,7 +3716,7 @@ class SourceValueFlow {
 
     /** Relative source-tree order is a dominance proof only within the same
      * activation and outside repeated or optional evaluation paths. */
-    private writeDominates(write:ts.Node,read:ts.Node,rule:Rule):boolean {
+    private writeOrderDominates(write:ts.Node,read:ts.Node):boolean {
         const before=this.enclosingActivation(write),after=this.enclosingActivation(read);
         if(before!==after)return false;
         if(this.sourceFile(write)!==this.sourceFile(read)){
@@ -3690,6 +3734,11 @@ class SourceValueFlow {
             if(ts.isBinaryExpression(parent)&&[ts.SyntaxKind.AmpersandAmpersandToken,ts.SyntaxKind.BarBarToken,ts.SyntaxKind.QuestionQuestionToken].includes(parent.operatorToken.kind)&&child===parent.right)return false;
             if((ts.isCallExpression(parent)||ts.isPropertyAccessExpression(parent)||ts.isElementAccessExpression(parent))&&parent.questionDotToken)return false;
         }
+        return true;
+    }
+    /** The write's guards hold wherever the read runs: each one the read
+     * does not share is proven by its condition's complete primitive values. */
+    private writeGuardsHold(write:ts.Node,read:ts.Node,rule:Rule):boolean {
         const readGuards=this.guards(read);
         for(const guard of this.guards(write)){
             if(readGuards.some(candidate=>candidate.condition===guard.condition&&candidate.truthy===guard.truthy))continue;
@@ -3730,11 +3779,17 @@ class SourceValueFlow {
             for(const point of points){
                 let present=record.initial;
                 for(const event of record.writes.values()){
-                    const write=event.context;this.watch(rule,event.base);this.watch(rule,event.receiver);this.watch(rule,event.weak);
+                    const write=event.context;
                     const singleton=(cell:Cell)=>[...cell.values].every(atom=>atom.tag==="abrupt"||this.ordinaryOwner(atom)===owner)&&[...cell.values].some(atom=>this.ordinaryOwner(atom)===owner);
                     const reference=context&&this.enclosingActivation(write)===this.enclosingActivation(context)?context:point;
                     if(event.mode==="delete"){if(this.effectVisible({tag:"unknown",origin:write},reference))present=false;continue;}
-                    if(reference&&!event.weak.values.has(this.primitive(true))&&singleton(event.base)&&singleton(event.receiver)&&this.writeDominates(write,reference,rule))present=true;
+                    // A write's base, receiver and certainty decide presence only
+                    // where its source order already dominates the read, so only
+                    // those writes are watched: n reads of a key written m times
+                    // otherwise subscribe to every write, O(n·m).
+                    if(!reference||!this.writeOrderDominates(write,reference))continue;
+                    this.watch(rule,event.base);this.watch(rule,event.receiver);this.watch(rule,event.weak);
+                    if(!event.weak.values.has(this.primitive(true))&&singleton(event.base)&&singleton(event.receiver)&&this.writeGuardsHold(write,reference,rule))present=true;
                 }
                 if(deleted)present=false;
                 if(typeof key==="symbol"&&this.freshSymbols.has(key))present=false;
