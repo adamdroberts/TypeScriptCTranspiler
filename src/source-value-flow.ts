@@ -4022,6 +4022,35 @@ class SourceValueFlow {
      * of making new ones at every level. */
     private readonly conversionReceivers=new WeakMap<object,Map<PrimitiveHint,Map<Atom,Cell>>>();
     private readonly conversionWithoutContext={};
+    /** The static key of a call `base.key(...)` or `base["key"](...)`. */
+    private staticMemberCallKey(node:ts.Node):string|undefined {
+        if(!ts.isCallExpression(node))return undefined;
+        const callee=unwrap(node.expression);
+        if(ts.isPropertyAccessExpression(callee)&&ts.isIdentifier(callee.name))return callee.name.text;
+        if(ts.isElementAccessExpression(callee)){const key=unwrap(callee.argumentExpression);if(ts.isStringLiteralLike(key))return key.text;}
+        return undefined;
+    }
+    /** The values of `receiver` whose own read of `key` at `node` can be a
+     * native value; a value that is not an ordinary object (a native or
+     * unknown value, a primitive) is kept. Keeping a base whose member is
+     * merely unknown would justify itself: the native's receiver write makes
+     * the base's shape opaque, and an opaque shape makes its member unknown. */
+    private readonly nativeMemberReceivers=new WeakMap<ts.Node,Map<Cell,Map<string,Cell>>>();
+    private nativeMemberReceiver(receiver:Cell,key:string,node:ts.Node):Cell {
+        let cells=this.nativeMemberReceivers.get(node);if(!cells){cells=new Map();this.nativeMemberReceivers.set(node,cells);}
+        let keys=cells.get(receiver);if(!keys){keys=new Map();cells.set(receiver,keys);}
+        const prior=keys.get(key);if(prior)return prior;
+        const result=this.newCell(),seen=new Set<Atom>();keys.set(key,result);
+        this.rule([receiver],()=>{for(const atom of receiver.values){
+            if(seen.has(atom))continue;seen.add(atom);
+            if(!this.ordinaryOwner(atom)||this.isNativeValue(atom)){this.publish(result,atom);continue;}
+            const member=this.property(this.atomCell(atom),key,node);
+            // Only a native member: an unknown one (an opaque shape's) is a
+            // separate callee at this site, whose call writes every receiver.
+            this.rule([member],()=>{if([...member.values].some(value=>this.isNativeValue(value)))this.publish(result,atom);});
+        }});
+        return result;
+    }
     private conversionReceiver(atom:Atom,context:ts.Node|undefined,hint:PrimitiveHint):Cell {
         const site=context??this.conversionWithoutContext;
         let hints=this.conversionReceivers.get(site);if(!hints){hints=new Map();this.conversionReceivers.set(site,hints);}
@@ -7343,7 +7372,9 @@ class SourceValueFlow {
             if(!state.proof.primitiveComplete||state.proof.values.some(value=>Number(value)===0))emptyResult();
             if(state.proof.primitiveComplete&&state.proof.values.every(value=>Number(value)===0))return;
             const domain=this.propertyKeyDomain(objects,step,rule,"index");if(domain.pending)return;
-            if(domain.opaque){this.activateOpaqueEffect(context);if(caught)this.publish(caught,this.unknown);this.onActive(context,()=>this.escapeCallableArgument(objects,context));}
+            // A native receiver's elements are native values: the callback
+            // is called with them, and no other code runs.
+            if(domain.opaque&&!domain.nativeOnly){this.activateOpaqueEffect(context);if(caught)this.publish(caught,this.unknown);this.onActive(context,()=>this.escapeCallableArgument(objects,context));}
             const present=domain.opaque||domain.keys.length||domain.getters.length||domain.locations.some(value=>{this.watch(rule,value);return value.values.nonempty;});
             if(!present){emptyResult();return;}
             if((domain.opaque||domain.getters.length)&&!computedFallback){computedFallback=true;this.copy(this.computedProperty(selected,indices,step),values);}
@@ -7410,8 +7441,12 @@ class SourceValueFlow {
             // @@toPrimitive there, which the conversion models with its
             // effects. Only an unrepresented key domain or an accessor element
             // remains unknown code.
-            if(kinds&~KIND_PRIMITIVE&&!domain.opaque&&!domain.getters.length)this.watch(rule,this.stringHintCell(values,context));
-            if(!opaque&&(domain.opaque||domain.getters.length)){
+            // A receiver that is a native value holds native elements, whose
+            // ToString runs no program code beyond the callables that escaped
+            // to natives (each modelled by its escape).
+            if(domain.nativeOnly)this.publish(values,this.nativeUnknown);
+            if(kinds&~KIND_PRIMITIVE&&(!domain.opaque||domain.nativeOnly)&&!domain.getters.length)this.watch(rule,this.stringHintCell(values,context));
+            if(!opaque&&(domain.opaque&&!domain.nativeOnly||domain.getters.length)){
                 opaque=true;const caught=this.exceptionHandlers.get(context);if(caught)this.publish(caught,this.unknown);
                 this.onActive(context,()=>{this.opaqueEffect(context);this.escapeCallableArgument(receiver,context);});
             }
@@ -10156,7 +10191,13 @@ class SourceValueFlow {
                         const conditioned=!directCallees&&!proxy&&invocation.target===callee&&(atom.tag==="unknown"||atom.tag==="opaque-object")?this.opaqueCallOriginsOf(node,callee):undefined;
                         const origins=conditioned??this.executionOrigins(node);
                         if(!invocation.construct&&!arrayEffect?.receiverResult&&!directCallees)this.copy(origins,result!,"origin");
-                        if (!handled(this.unknown,signature)) this.onActive(node,()=>{
+                        // A native value called as `base.key(...)` was read from the base
+                        // values whose `key` can be a native value: only those are its
+                        // receiver. An ordinary object whose `key` is a program function
+                        // or a modelled builtin is not written or escaped by it.
+                        const memberKey=this.isNativeValue(atom)&&!invocation.construct&&!proxy&&!arrayEffect?this.staticMemberCallKey(node):undefined;
+                        const nativeReceiver=memberKey===undefined?invocation.receiver:this.nativeMemberReceiver(invocation.receiver,memberKey,node);
+                        if (!handled(memberKey===undefined?this.unknown:this.nativeUnknown,signature)) this.onActive(node,()=>{
                             if(!directCallees)this.opaqueEffectFrom(origins);
                             // Unknown code may call anything the global object reaches; a
                             // native (directCallees) reaches only its receiver and arguments.
@@ -10169,7 +10210,7 @@ class SourceValueFlow {
                             // [[Construct]] passes no receiver: the callee creates its own
                             // object (the result above), so the caller's placeholder is
                             // not mutated.
-                            else if(!iteratorHelper&&!typedArrayNative&&!intrinsicCall&&!invocation.construct)this.writeProperty(invocation.receiver,null,this.empty,false,"set",node,invocation.receiver,undefined,conditioned);
+                            else if(!iteratorHelper&&!typedArrayNative&&!intrinsicCall&&!invocation.construct)this.writeProperty(nativeReceiver,null,this.empty,false,"set",node,nativeReceiver,undefined,conditioned);
                             // An Array.prototype native never calls its receiver or the
                             // values it stores; their accessors and methods may run. A
                             // native that calls a callback (sort's comparator) hands it
@@ -10177,7 +10218,7 @@ class SourceValueFlow {
                             // receives unknown native values, so the elements it may be
                             // handed stay direct callees of the escape.
                             const callsCallback=directCallees==="all"||!!directCallees&&directCallees.size>0;
-                            this.escapeCallableArgument(invocation.receiver,node,false,arrayEffect&&!callsCallback?"elements":"direct",conditioned);
+                            this.escapeCallableArgument(nativeReceiver,node,false,arrayEffect&&!callsCallback?"elements":"direct",conditioned);
                             for (const [index,argument] of argumentsEscaping.entries()) {
                                 if(!arrayEffect&&!iteratorHelper&&!typedArrayNative&&!intrinsicCall)this.writeProperty(argument,null,this.empty,false,"set",node,argument,undefined,conditioned);
                                 this.escapeCallableArgument(argument,node,false,!directCallees||directCallees==="all"||directCallees.has(index)?"direct":"argument",conditioned);
